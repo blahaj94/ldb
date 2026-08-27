@@ -1,0 +1,9 @@
+{
+  "name": "@ldb/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "create-app": "node create-app.mjs"
+  }
+}
