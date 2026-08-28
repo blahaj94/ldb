@@ -13,8 +13,8 @@ test("workflow is label-gated, advisory, and excludes privileged PR targets", as
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /labeled/);
   assert.match(workflow, /@ldb-review/);
-  assert.match(workflow, /pull-requests: read/);
-  assert.match(workflow, /issues: write/);
+  assert.match(workflow, /pull-requests: write/);
+  assert.doesNotMatch(workflow, /issues: write/);
   assert.doesNotMatch(workflow, /pull_request_target/);
   assert.doesNotMatch(workflow, /contents: write/);
   assert.doesNotMatch(workflow, /secrets\./);
