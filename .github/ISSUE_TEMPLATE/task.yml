@@ -1,0 +1,79 @@
+name: Development task
+description: AI agent가 구현할 하나의 bounded task를 정의합니다.
+title: "[Task] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        이 Issue는 task의 목적과 acceptance criteria를 정의합니다. 세부 구현 분해는 comment와 PR에서 관리합니다.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: 이 작업이 달성해야 하는 결과를 작성합니다.
+      placeholder: 사용자가 얻어야 하는 결과를 작성하세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: User-visible behavior
+      description: 외부에서 관찰 가능한 동작을 작성합니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Test로 검증할 수 있는 완료 조건을 checklist로 작성합니다.
+      placeholder: |
+        - [ ] 조건 1
+        - [ ] 조건 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: in_scope
+    attributes:
+      label: In scope
+      description: 이번 Issue에서 변경할 범위를 작성합니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: 명시적으로 변경하지 않을 범위를 작성합니다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: rules
+    attributes:
+      label: Related Rule documents
+      description: 관련 Rule document의 repository-relative path를 작성합니다.
+      placeholder: docs/rules/testing.md
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and blockers
+      description: 선행 Issue, 병렬 작업 충돌, 외부 dependency를 작성합니다.
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Known constraints
+      description: 성능, 호환성, UI/UX, 보안 등 이미 결정된 constraint를 작성합니다.
+
+  - type: checkboxes
+    id: sensitive_data
+    attributes:
+      label: Security confirmation
+      options:
+        - label: 이 Issue에 secret, token, credential, 개인정보를 포함하지 않았습니다.
+          required: true
