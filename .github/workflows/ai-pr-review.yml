@@ -21,4 +21,4 @@ jobs:
     timeout-minutes: 1
     steps:
       - name: Emit trusted review signal
-        run: echo "Eligible AI review request for PR #${{ github.event.pull_request.number }}"
+        run: echo "Eligible AI review request"
