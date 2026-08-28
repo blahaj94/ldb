@@ -56,7 +56,8 @@ last-reviewed: 2026-08-28
 
 ### AI PR review
 
-- Workflow: `.github/workflows/ai-pr-review.yml`
+- Unprivileged signal workflow: `.github/workflows/ai-pr-review.yml`
+- Trusted policy/provider workflow: `.github/workflows/ai-pr-review-trusted.yml`
 - Review contract: `.github/ai-review/prompts/review.md`
 - Provider-neutral result schema: `.github/ai-review/schemas/review-result.schema.json`
 - Runtime와 policy check: `scripts/pr-review/src`
@@ -65,9 +66,15 @@ last-reviewed: 2026-08-28
   - `pnpm test:pr-review`
   - `pnpm typecheck:pr-review`
 
-Workflow는 same-repository의 non-draft Pull Request에 `@ldb-review` label이 있을 때만 실행한다. `labeled`, `synchronize`, `ready_for_review`, `reopened` event를 처리하며 fork Pull Request는 제외한다.
+Signal workflow는 same-repository의 non-draft Pull Request에 `@ldb-review` label이 있을 때만 실행한다. `labeled`, `synchronize`, `ready_for_review`, `reopened` event를 처리하며 fork Pull Request는 제외한다. PR code를 checkout하지 않고 write permission과 Secret을 받지 않는다.
 
-현재 provider adapter는 `codex`다. Provider-neutral label을 Codex GitHub integration의 `@codex review` comment로 변환하며, 동일한 head SHA에는 한 번만 요청한다. Built-in Codex review는 `P0`와 `P1` finding만 발행하므로 `P2`와 `P3` summary publication은 향후 direct provider integration 범위다.
+Trusted workflow는 signal workflow가 완료된 뒤 `workflow_run`으로 실행된다. Default branch code만 checkout하고 source workflow result, linked Pull Request, label, draft, fork, current head SHA를 GitHub API로 다시 확인한다. Policy job과 provider trigger job을 분리하며 PAT는 provider trigger job에만 전달한다.
+
+현재 provider adapter는 `codex`다. Provider-neutral label을 Codex GitHub integration의 `@codex review` comment로 변환하며, 동일한 head SHA에는 한 번만 요청한다. Trigger identity는 repository Secret `LDB_REVIEW_TRIGGER_TOKEN`을 사용한다. 이 값은 `ldb` repository만 선택한 expiring fine-grained PAT이며 `Pull requests: Read and write` 이외의 추가 repository permission을 부여하지 않는다.
+
+현재 repository에는 `LDB_REVIEW_TRIGGER_TOKEN`이 등록되어 있지 않다. PR #4 merge 전에 등록하고 merge 후 별도 pilot Pull Request에서 trusted workflow E2E를 확인해야 한다.
+
+Built-in Codex review는 `P0`와 `P1` finding만 발행하므로 `P2`와 `P3` summary publication은 향후 direct provider integration 범위다.
 
 Workflow가 자체적으로 확인하는 policy는 linked Issue, Rule approval, Red-before-Green evidence, approximate logic budget이다. 결과는 하나의 advisory summary comment로 유지되며 merge를 차단하지 않는다.
 
