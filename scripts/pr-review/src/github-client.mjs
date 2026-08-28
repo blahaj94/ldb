@@ -47,6 +47,18 @@ export class GitHubClient {
     return this.paginate(`/repos/${this.repository}/pulls/${number}/commits`);
   }
 
+  async listCommitFiles(sha) {
+    const files = [];
+    for (let page = 1; ; page += 1) {
+      const commit = await this.request(
+        `/repos/${this.repository}/commits/${sha}?per_page=100&page=${page}`,
+      );
+      const pageFiles = commit.files ?? [];
+      files.push(...pageFiles);
+      if (pageFiles.length < 100) return files;
+    }
+  }
+
   createComment(number, body) {
     return this.request(`/repos/${this.repository}/issues/${number}/comments`, {
       method: "POST",

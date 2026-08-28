@@ -78,14 +78,23 @@ function testEvidenceCheck(files, commits) {
   };
 }
 
-function logicBudgetCheck(files) {
-  const lines = files
+function logicLines(files) {
+  return files
     .filter(({ filename }) => isLogicFile(filename))
     .reduce((total, file) => total + file.additions + file.deletions, 0);
+}
+
+function logicBudgetCheck(files, commitFiles) {
+  const changes = commitFiles?.length
+    ? commitFiles
+    : [{ sha: "whole PR fallback", files }];
+  const largest = changes
+    .map(({ sha, files: changedFiles }) => ({ sha, lines: logicLines(changedFiles) }))
+    .sort((left, right) => right.lines - left.lines)[0];
   return {
     name: "logic_budget",
-    status: lines > 300 ? "warning" : "pass",
-    detail: `Approximate logic diff: ${lines} lines (soft budget: 300)`,
+    status: largest.lines > 300 ? "warning" : "pass",
+    detail: `Largest approximate logic diff: ${largest.lines} lines in ${largest.sha.slice(0, 12)} (soft budget: 300 per commit)`,
   };
 }
 
@@ -95,6 +104,7 @@ export function buildPolicyReport({
   files,
   commits,
   comments,
+  commitFiles,
 }) {
   return {
     advisory: true,
@@ -102,7 +112,7 @@ export function buildPolicyReport({
       linkedIssueCheck(pullRequest),
       approvalCheck(files, comments, repositoryOwner),
       testEvidenceCheck(files, commits),
-      logicBudgetCheck(files),
+      logicBudgetCheck(files, commitFiles),
     ],
   };
 }

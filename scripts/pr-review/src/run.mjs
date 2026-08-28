@@ -54,6 +54,12 @@ async function main() {
   const automationComments = comments.filter(
     (comment) => comment.user?.login === "github-actions[bot]",
   );
+  const commitFiles = await Promise.all(
+    commits.map(async (commit) => ({
+      sha: commit.sha,
+      files: await client.listCommitFiles(commit.sha),
+    })),
+  );
 
   const report = buildPolicyReport({
     pullRequest,
@@ -61,6 +67,7 @@ async function main() {
     files,
     commits,
     comments,
+    commitFiles,
   });
   const summary = buildPolicySummary({
     headSha: pullRequest.head.sha,
