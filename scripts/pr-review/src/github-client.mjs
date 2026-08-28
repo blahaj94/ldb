@@ -39,6 +39,10 @@ export class GitHubClient {
     return this.paginate(`/repos/${this.repository}/issues/${number}/comments`);
   }
 
+  getPullRequest(number) {
+    return this.request(`/repos/${this.repository}/pulls/${number}`);
+  }
+
   listFiles(number) {
     return this.paginate(`/repos/${this.repository}/pulls/${number}/files`);
   }

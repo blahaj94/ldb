@@ -1,0 +1,58 @@
+name: AI PR Review Trusted
+
+on:
+  workflow_run:
+    workflows: ["AI PR Review"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: ai-pr-review-trusted-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0].number != null
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Publish advisory policy summary
+        run: node scripts/pr-review/src/run.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_LABEL: "@ldb-review"
+
+  trigger:
+    needs: policy
+    if: needs.policy.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Request provider review with connected user identity
+        run: node scripts/pr-review/src/trigger.mjs
+        env:
+          REVIEW_TRIGGER_TOKEN: ${{ secrets.LDB_REVIEW_TRIGGER_TOKEN }}
+          REVIEW_TRIGGER_ACTOR: ${{ github.repository_owner }}
+          REVIEW_LABEL: "@ldb-review"
+          REVIEW_PROVIDER: codex

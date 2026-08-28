@@ -4,33 +4,21 @@ on:
   pull_request:
     types: [labeled, synchronize, ready_for_review, reopened]
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 concurrency:
   group: ai-pr-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  request-review:
+  signal:
     if: >-
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       contains(github.event.pull_request.labels.*.name, '@ldb-review') &&
       (github.event.action != 'labeled' || github.event.label.name == '@ldb-review')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 1
     steps:
-      - name: Check out the reviewed head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-
-      - name: Check policy and request provider review
-        run: node scripts/pr-review/src/run.mjs
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REVIEW_LABEL: "@ldb-review"
-          REVIEW_PROVIDER: codex
+      - name: Emit trusted review signal
+        run: echo "Eligible AI review request for PR #${{ github.event.pull_request.number }}"
