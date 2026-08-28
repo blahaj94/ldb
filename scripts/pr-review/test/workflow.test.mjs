@@ -24,6 +24,7 @@ test("PR signal workflow is label-gated and has no write authority", async () =>
   assert.doesNotMatch(workflow, /pull_request_target/);
   assert.doesNotMatch(workflow, /contents: write/);
   assert.doesNotMatch(workflow, /secrets\./);
+  assert.doesNotMatch(workflow, /run:.*#\$\{\{/);
 });
 
 test("trusted workflow runs default-branch code and isolates the trigger Secret", async () => {
