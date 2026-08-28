@@ -207,6 +207,8 @@ importers:
 
   .: {}
 
+  apps/api: {}
+
   apps/desktop:
     dependencies:
       '@electron-toolkit/preload':
