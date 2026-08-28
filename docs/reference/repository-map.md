@@ -54,6 +54,23 @@ last-reviewed: 2026-08-28
 - `pnpm create-app`: root에서 생성 script 실행
 - Root `test` script는 현재 placeholder이며 성공하는 validation command가 아니다.
 
+### AI PR review
+
+- Workflow: `.github/workflows/ai-pr-review.yml`
+- Review contract: `.github/ai-review/prompts/review.md`
+- Provider-neutral result schema: `.github/ai-review/schemas/review-result.schema.json`
+- Runtime와 policy check: `scripts/pr-review/src`
+- Test: `scripts/pr-review/test`
+- Command:
+  - `pnpm test:pr-review`
+  - `pnpm typecheck:pr-review`
+
+Workflow는 same-repository의 non-draft Pull Request에 `@ldb-review` label이 있을 때만 실행한다. `labeled`, `synchronize`, `ready_for_review`, `reopened` event를 처리하며 fork Pull Request는 제외한다.
+
+현재 provider adapter는 `codex`다. Provider-neutral label을 Codex GitHub integration의 `@codex review` comment로 변환하며, 동일한 head SHA에는 한 번만 요청한다. Built-in Codex review는 `P0`와 `P1` finding만 발행하므로 `P2`와 `P3` summary publication은 향후 direct provider integration 범위다.
+
+Workflow가 자체적으로 확인하는 policy는 linked Issue, Rule approval, Red-before-Green evidence, approximate logic budget이다. 결과는 하나의 advisory summary comment로 유지되며 merge를 차단하지 않는다.
+
 ## Generated and dependency output
 
 다음 directory는 일반적인 architecture context로 읽지 않는다. 관련 Issue가 직접 다룰 때만 확인한다.
