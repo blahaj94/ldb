@@ -87,3 +87,26 @@ test("warns when the approximate logic diff exceeds 300 lines", () => {
 
   assert.equal(statusFor(report, "logic_budget"), "warning");
 });
+
+test("applies the logic budget to each commit instead of the whole PR", () => {
+  const report = buildPolicyReport(
+    createInput({
+      files: [
+        { filename: "src/first.ts", additions: 200, deletions: 0 },
+        { filename: "src/second.ts", additions: 200, deletions: 0 },
+      ],
+      commitFiles: [
+        {
+          sha: "first",
+          files: [{ filename: "src/first.ts", additions: 200, deletions: 0 }],
+        },
+        {
+          sha: "second",
+          files: [{ filename: "src/second.ts", additions: 200, deletions: 0 }],
+        },
+      ],
+    }),
+  );
+
+  assert.equal(statusFor(report, "logic_budget"), "pass");
+});
