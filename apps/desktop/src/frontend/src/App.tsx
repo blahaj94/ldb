@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPartyOcrWorker } from './ocr'
+import { normalizeNickname } from './recognition'
 
 const SUPPORTED_WIDTH = 1920
 const SUPPORTED_HEIGHT = 1080
 
 function App(): React.JSX.Element {
   const streamRef = useRef<MediaStream | null>(null)
+  const workerRef = useRef<Awaited<ReturnType<typeof createPartyOcrWorker>> | null>(null)
   const [sources, setSources] = useState<{ id: string; name: string }[]>([])
   const [selectedSourceId, setSelectedSourceId] = useState('')
   const [sourceRegistered, setSourceRegistered] = useState(false)
@@ -27,12 +30,16 @@ function App(): React.JSX.Element {
     return () => {
       cancelled = true
       streamRef.current?.getTracks().forEach((track) => track.stop())
+      void workerRef.current?.terminate()
     }
   }, [])
 
   function stopCapture(): void {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
+    const worker = workerRef.current
+    workerRef.current = null
+    void worker?.terminate()
     setStatus('Capture stopped.')
   }
 
@@ -97,8 +104,18 @@ function App(): React.JSX.Element {
         return
       }
 
+      const worker = await createPartyOcrWorker()
+      if (streamRef.current !== stream) {
+        await worker.terminate()
+        return
+      }
+
+      workerRef.current = worker
+      const { data } = await worker.recognize(createOcrProbe())
+      const probeResult = normalizeNickname(data.text)
+
       setStatus(
-        `Capture ready at ${video.videoWidth}×${video.videoHeight}; OCR interval: ${intervalSeconds}s.`
+        `Capture ready at ${video.videoWidth}×${video.videoHeight}; offline OCR: ${probeResult}.`
       )
     } catch (error) {
       stopCapture()
@@ -142,6 +159,21 @@ function App(): React.JSX.Element {
       <pre>{status}</pre>
     </main>
   )
+}
+
+function createOcrProbe(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = 600
+  canvas.height = 100
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Could not create an OCR probe canvas.')
+
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.fillStyle = '#000000'
+  context.font = '48px Dotum'
+  context.fillText('테스트ABC123', 16, 68)
+  return canvas
 }
 
 export default App

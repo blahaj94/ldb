@@ -16,7 +16,10 @@ export default defineConfig({
     root: resolve('src/frontend'),
     build: {
       rollupOptions: {
-        input: resolve('src/frontend/index.html')
+        input: resolve('src/frontend/index.html'),
+        output: {
+          assetFileNames: 'assets/[name][extname]'
+        }
       },
       outDir: 'out/frontend'
     },
