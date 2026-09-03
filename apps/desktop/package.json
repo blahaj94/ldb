@@ -8,18 +8,19 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
+    "prepare:ocr-assets": "node scripts/prepare-ocr-assets.mjs",
     "test": "vitest run",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
-    "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "dev": "npm run prepare:ocr-assets && electron-vite dev",
+    "build": "npm run typecheck && npm run prepare:ocr-assets && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:mac": "npm run prepare:ocr-assets && electron-vite build && electron-builder --mac",
+    "build:linux": "npm run prepare:ocr-assets && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
