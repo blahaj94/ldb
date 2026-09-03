@@ -43,6 +43,7 @@ last-reviewed: 2026-08-28
 - Stack: Electron, React, TypeScript, electron-vite
 - Process boundary: `main`, `preload`, `renderer`
 - Main entry: `src/backend/main.ts` → `out/backend/main.js`
+- Renderer source root: `src/frontend` → `out/frontend`
 - Command:
   - `pnpm --filter @ldb/desktop dev`
   - `pnpm --filter @ldb/desktop typecheck`
