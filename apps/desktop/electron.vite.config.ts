@@ -3,7 +3,14 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      lib: {
+        entry: resolve('src/backend/main.ts')
+      },
+      outDir: 'out/backend'
+    }
+  },
   preload: {},
   renderer: {
     resolve: {
