@@ -16,6 +16,10 @@ function App(): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const workerRef = useRef<Awaited<ReturnType<typeof createPartyOcrWorker>> | null>(null)
   const loopAbortRef = useRef<AbortController | null>(null)
+  const captureGenerationRef = useRef(0)
+  const sourceSelectionGenerationRef = useRef(0)
+  const selectedSourceIdRef = useRef('')
+  const registeredSourceIdRef = useRef<string | null>(null)
   const intervalSecondsRef = useRef(3)
   const slotStabilityRef = useRef<(SlotStability | null)[]>(emptyStabilitySlots())
   const reportedNicknamesRef = useRef<(string | null)[]>(emptySlots())
@@ -42,6 +46,8 @@ function App(): React.JSX.Element {
 
     return () => {
       cancelled = true
+      captureGenerationRef.current += 1
+      sourceSelectionGenerationRef.current += 1
       loopAbortRef.current?.abort()
       streamRef.current?.getTracks().forEach((track) => track.stop())
       videoRef.current?.pause()
@@ -51,6 +57,7 @@ function App(): React.JSX.Element {
   }, [])
 
   function stopCapture(nextStatus = 'Capture stopped.'): void {
+    captureGenerationRef.current += 1
     loopAbortRef.current?.abort()
     loopAbortRef.current = null
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -68,26 +75,39 @@ function App(): React.JSX.Element {
   }
 
   function handleSourceChange(sourceId: string): void {
+    const selectionGeneration = ++sourceSelectionGenerationRef.current
+    selectedSourceIdRef.current = sourceId
+    registeredSourceIdRef.current = null
     setSelectedSourceId(sourceId)
     setSourceRegistered(false)
 
-    if (!sourceId) return
-
     void window.api
       .selectCaptureSource(sourceId)
-      .then(() => setSourceRegistered(true))
+      .then(() => {
+        if (
+          sourceId &&
+          selectionGeneration === sourceSelectionGenerationRef.current &&
+          selectedSourceIdRef.current === sourceId
+        ) {
+          registeredSourceIdRef.current = sourceId
+          setSourceRegistered(true)
+        }
+      })
       .catch((error: unknown) => {
-        setStatus(error instanceof Error ? error.message : 'Could not select the window.')
+        if (selectionGeneration === sourceSelectionGenerationRef.current) {
+          setStatus(error instanceof Error ? error.message : 'Could not select the window.')
+        }
       })
   }
 
   async function startCapture(): Promise<void> {
-    if (!sourceRegistered) {
+    if (!sourceRegistered || registeredSourceIdRef.current !== selectedSourceIdRef.current) {
       setStatus('Wait until the selected window is registered.')
       return
     }
 
     stopCapture()
+    const captureGeneration = ++captureGenerationRef.current
 
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -98,6 +118,11 @@ function App(): React.JSX.Element {
           width: { ideal: SUPPORTED_WIDTH }
         }
       })
+      if (captureGeneration !== captureGenerationRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
+
       const track = stream.getVideoTracks()[0]
       if (!track) throw new Error('The selected window did not provide a video track.')
 
@@ -120,6 +145,7 @@ function App(): React.JSX.Element {
       )
       await video.play()
       await metadataLoaded
+      if (captureGeneration !== captureGenerationRef.current) return
       videoRef.current = video
 
       if (video.videoWidth !== SUPPORTED_WIDTH || video.videoHeight !== SUPPORTED_HEIGHT) {
@@ -129,13 +155,14 @@ function App(): React.JSX.Element {
       }
 
       const worker = await createPartyOcrWorker()
-      if (streamRef.current !== stream) {
+      if (captureGeneration !== captureGenerationRef.current || streamRef.current !== stream) {
         await worker.terminate()
         return
       }
 
       workerRef.current = worker
       const { data } = await worker.recognize(createOcrProbe())
+      if (captureGeneration !== captureGenerationRef.current) return
       const probeResult = normalizeNickname(data.text)
 
       const controller = new AbortController()
@@ -154,6 +181,7 @@ function App(): React.JSX.Element {
         `Capture ready at ${video.videoWidth}×${video.videoHeight}; offline OCR: ${probeResult}.`
       )
     } catch (error) {
+      if (captureGeneration !== captureGenerationRef.current) return
       stopCapture()
       setStatus(error instanceof Error ? error.message : 'Could not start capture.')
     }

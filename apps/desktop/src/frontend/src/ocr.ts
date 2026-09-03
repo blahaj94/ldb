@@ -17,8 +17,11 @@ const coreAssets = [
   coreSimdLstmPath,
   coreSimdLstmWasmPath
 ]
-const corePath = assetDirectory(coreAssets)
-const langPath = assetDirectory([engPath, korPath])
+const rendererUrl = typeof location === 'undefined' ? 'http://localhost/' : location.href
+const corePath = assetDirectory(coreAssets, rendererUrl)
+const langPath = import.meta.env.DEV
+  ? new URL('/ocr-assets', rendererUrl).toString().replace(/\/$/, '')
+  : assetDirectory([engPath, korPath], rendererUrl)
 
 export async function createPartyOcrWorker(): Promise<Worker> {
   const worker = await createWorker(['kor', 'eng'], 1, {
@@ -33,9 +36,10 @@ export async function createPartyOcrWorker(): Promise<Worker> {
   return worker
 }
 
-function assetDirectory(assetPaths: string[]): string {
-  const directory = new URL('.', assetPaths[0]).toString().replace(/\/$/, '')
-  if (!assetPaths.every((assetPath) => assetPath.startsWith(`${directory}/`))) {
+export function assetDirectory(assetPaths: string[], baseUrl = rendererUrl): string {
+  const assetUrls = assetPaths.map((assetPath) => new URL(assetPath, baseUrl).toString())
+  const directory = new URL('.', assetUrls[0]).toString().replace(/\/$/, '')
+  if (!assetUrls.every((assetUrl) => assetUrl.startsWith(`${directory}/`))) {
     throw new Error('OCR assets must be emitted into one directory')
   }
 

@@ -6,6 +6,7 @@ import { findSelectedSource, isCaptureRequestAllowed } from './capture-policy'
 
 let mainWindow: BrowserWindow | null = null
 let selectedSourceId: string | null = null
+let sourceSelectionGeneration = 0
 
 async function getWindowSources(): Promise<Electron.DesktopCapturerSource[]> {
   return desktopCapturer.getSources({
@@ -32,7 +33,14 @@ function registerCaptureIpc(): void {
       throw new Error('Capture source selection denied')
     }
 
+    const selectionGeneration = ++sourceSelectionGeneration
+    if (!sourceId) {
+      selectedSourceId = null
+      return null
+    }
+
     const source = findSelectedSource(await getWindowSources(), sourceId)
+    if (selectionGeneration !== sourceSelectionGeneration) return null
     if (!source) throw new Error('Selected capture source is no longer available')
 
     selectedSourceId = source.id
@@ -106,6 +114,7 @@ function createWindow(): void {
     if (mainWindow === window) {
       mainWindow = null
       selectedSourceId = null
+      sourceSelectionGeneration += 1
     }
   })
 
