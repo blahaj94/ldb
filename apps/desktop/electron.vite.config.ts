@@ -13,9 +13,16 @@ export default defineConfig({
   },
   preload: {},
   renderer: {
+    root: resolve('src/frontend'),
+    build: {
+      rollupOptions: {
+        input: resolve('src/frontend/index.html')
+      },
+      outDir: 'out/frontend'
+    },
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src')
+        '@frontend': resolve('src/frontend/src')
       }
     },
     plugins: [react()]
