@@ -11,11 +11,11 @@ function createEvent(overrides = {}) {
     labels: [{ name: "@ldb-review" }],
     head: {
       sha: "head-sha",
-      repo: { full_name: "dGkdu/ldb" },
+      repo: { full_name: "blahaj94/ldb" },
     },
     base: {
       sha: "base-sha",
-      repo: { full_name: "dGkdu/ldb" },
+      repo: { full_name: "blahaj94/ldb" },
     },
     ...overrides.pull_request,
   };
@@ -23,7 +23,7 @@ function createEvent(overrides = {}) {
   return {
     action: "labeled",
     label: { name: "@ldb-review" },
-    repository: { full_name: "dGkdu/ldb", owner: { login: "dGkdu" } },
+    repository: { full_name: "blahaj94/ldb", owner: { login: "blahaj94" } },
     pull_request: pullRequest,
     ...overrides,
     pull_request: pullRequest,
