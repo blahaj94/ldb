@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/dGkdu/ldb/.github/ai-review/schemas/review-result.schema.json",
+  "$id": "https://github.com/blahaj94/ldb/.github/ai-review/schemas/review-result.schema.json",
   "title": "Provider-neutral AI review result",
   "type": "object",
   "additionalProperties": false,

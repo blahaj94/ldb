@@ -11,12 +11,12 @@ function createInput(overrides = {}) {
     number: 4,
     draft: false,
     labels: [{ name: "@ldb-review" }],
-    head: { sha: "head-sha", repo: { full_name: "dGkdu/ldb" } },
-    base: { repo: { full_name: "dGkdu/ldb" } },
+    head: { sha: "head-sha", repo: { full_name: "blahaj94/ldb" } },
+    base: { repo: { full_name: "blahaj94/ldb" } },
     ...overrides.pullRequest,
   };
   const event = {
-    repository: { full_name: "dGkdu/ldb", owner: { login: "dGkdu" } },
+    repository: { full_name: "blahaj94/ldb", owner: { login: "blahaj94" } },
     workflow_run: {
       conclusion: "success",
       event: "pull_request",
@@ -64,7 +64,7 @@ test("rejects workflow runs without an associated pull request", () => {
 test("rejects an outdated source head", () => {
   const { event, pullRequest } = createInput({
     pullRequest: {
-      head: { sha: "new-head", repo: { full_name: "dGkdu/ldb" } },
+      head: { sha: "new-head", repo: { full_name: "blahaj94/ldb" } },
     },
   });
 

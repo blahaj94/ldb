@@ -10,7 +10,7 @@ function statusFor(report, name) {
 function createInput(overrides = {}) {
   return {
     pullRequest: { body: "Related to #2" },
-    repositoryOwner: "dGkdu",
+    repositoryOwner: "blahaj94",
     files: [
       { filename: "src/service.ts", additions: 20, deletions: 5 },
       { filename: "src/service.test.ts", additions: 30, deletions: 0 },
@@ -71,7 +71,7 @@ test("accepts an exact owner approval for Rule changes", () => {
     createInput({
       files: [{ filename: "docs/rules/testing.md", additions: 2, deletions: 1 }],
       commits: [{ commit: { message: "docs: adjust testing rule" } }],
-      comments: [{ body: "승인", user: { login: "dGkdu" } }],
+      comments: [{ body: "승인", user: { login: "blahaj94" } }],
     }),
   );
 
