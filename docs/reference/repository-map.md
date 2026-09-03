@@ -46,6 +46,7 @@ last-reviewed: 2026-08-28
 - Renderer source root: `src/frontend` → `out/frontend`
 - Command:
   - `pnpm --filter @ldb/desktop dev`
+  - `pnpm --filter @ldb/desktop test`
   - `pnpm --filter @ldb/desktop typecheck`
   - `pnpm --filter @ldb/desktop lint`
   - `pnpm --filter @ldb/desktop build`
