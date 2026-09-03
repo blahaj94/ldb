@@ -1,4 +1,4 @@
-import { resolve } from 'path'
+import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
@@ -16,7 +16,10 @@ export default defineConfig({
     root: resolve('src/frontend'),
     build: {
       rollupOptions: {
-        input: resolve('src/frontend/index.html')
+        input: resolve('src/frontend/index.html'),
+        output: {
+          assetFileNames: 'assets/[name][extname]'
+        }
       },
       outDir: 'out/frontend'
     },
