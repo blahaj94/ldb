@@ -1,17 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPartyOcrWorker } from './ocr'
-import { normalizeNickname } from './recognition'
+import { capturePartyNicknameCrops, PARTY_SLOTS } from './party'
+import {
+  normalizeNickname,
+  runSerialLoop,
+  type SlotStability,
+  updateSlotStability
+} from './recognition'
 
 const SUPPORTED_WIDTH = 1920
 const SUPPORTED_HEIGHT = 1080
 
 function App(): React.JSX.Element {
   const streamRef = useRef<MediaStream | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
   const workerRef = useRef<Awaited<ReturnType<typeof createPartyOcrWorker>> | null>(null)
+  const loopAbortRef = useRef<AbortController | null>(null)
+  const intervalSecondsRef = useRef(3)
+  const slotStabilityRef = useRef<(SlotStability | null)[]>(emptyStabilitySlots())
+  const reportedNicknamesRef = useRef<(string | null)[]>(emptySlots())
+  const stableNicknamesRef = useRef<(string | null)[]>(emptySlots())
   const [sources, setSources] = useState<{ id: string; name: string }[]>([])
   const [selectedSourceId, setSelectedSourceId] = useState('')
   const [sourceRegistered, setSourceRegistered] = useState(false)
   const [intervalSeconds, setIntervalSeconds] = useState(3)
+  const [stableNicknames, setStableNicknames] = useState<(string | null)[]>(emptySlots())
   const [status, setStatus] = useState('Select a game window.')
 
   useEffect(() => {
@@ -29,18 +42,29 @@ function App(): React.JSX.Element {
 
     return () => {
       cancelled = true
+      loopAbortRef.current?.abort()
       streamRef.current?.getTracks().forEach((track) => track.stop())
+      videoRef.current?.pause()
+      videoRef.current = null
       void workerRef.current?.terminate()
     }
   }, [])
 
-  function stopCapture(): void {
+  function stopCapture(nextStatus = 'Capture stopped.'): void {
+    loopAbortRef.current?.abort()
+    loopAbortRef.current = null
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
+    videoRef.current?.pause()
+    videoRef.current = null
     const worker = workerRef.current
     workerRef.current = null
     void worker?.terminate()
-    setStatus('Capture stopped.')
+    slotStabilityRef.current = emptyStabilitySlots()
+    reportedNicknamesRef.current = emptySlots()
+    stableNicknamesRef.current = emptySlots()
+    setStableNicknames(emptySlots())
+    setStatus(nextStatus)
   }
 
   function handleSourceChange(sourceId: string): void {
@@ -82,8 +106,7 @@ function App(): React.JSX.Element {
         'ended',
         () => {
           if (streamRef.current === stream) {
-            streamRef.current = null
-            setStatus('Capture ended.')
+            stopCapture('Capture ended.')
           }
         },
         { once: true }
@@ -97,6 +120,7 @@ function App(): React.JSX.Element {
       )
       await video.play()
       await metadataLoaded
+      videoRef.current = video
 
       if (video.videoWidth !== SUPPORTED_WIDTH || video.videoHeight !== SUPPORTED_HEIGHT) {
         stopCapture()
@@ -114,6 +138,18 @@ function App(): React.JSX.Element {
       const { data } = await worker.recognize(createOcrProbe())
       const probeResult = normalizeNickname(data.text)
 
+      const controller = new AbortController()
+      loopAbortRef.current = controller
+      void runSerialLoop({
+        signal: controller.signal,
+        getIntervalMs: () => intervalSecondsRef.current * 1000,
+        runCycle: () => recognizePartyNicknames()
+      }).catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          stopCapture(error instanceof Error ? error.message : 'Party OCR failed.')
+        }
+      })
+
       setStatus(
         `Capture ready at ${video.videoWidth}×${video.videoHeight}; offline OCR: ${probeResult}.`
       )
@@ -121,6 +157,45 @@ function App(): React.JSX.Element {
       stopCapture()
       setStatus(error instanceof Error ? error.message : 'Could not start capture.')
     }
+  }
+
+  async function recognizePartyNicknames(): Promise<void> {
+    const video = videoRef.current
+    const worker = workerRef.current
+    if (!video || !worker) return
+
+    const crops = capturePartyNicknameCrops(video)
+    const nextStableNicknames = stableNicknamesRef.current.slice()
+
+    for (const [slot, crop] of crops.entries()) {
+      const nickname = crop ? normalizeNickname((await worker.recognize(crop)).data.text) : null
+      const stability = updateSlotStability(slotStabilityRef.current[slot], nickname || null)
+      slotStabilityRef.current[slot] = stability
+
+      if (!stability.stableNickname) {
+        reportedNicknamesRef.current[slot] = null
+        nextStableNicknames[slot] = null
+        continue
+      }
+
+      nextStableNicknames[slot] = stability.stableNickname
+      if (reportedNicknamesRef.current[slot] !== stability.stableNickname) {
+        window.api.reportStableNickname(slot, stability.stableNickname)
+        reportedNicknamesRef.current[slot] = stability.stableNickname
+      }
+    }
+
+    if (
+      nextStableNicknames.some((nickname, slot) => nickname !== stableNicknamesRef.current[slot])
+    ) {
+      stableNicknamesRef.current = nextStableNicknames
+      setStableNicknames(nextStableNicknames)
+    }
+  }
+
+  function handleIntervalChange(nextIntervalSeconds: number): void {
+    intervalSecondsRef.current = nextIntervalSeconds
+    setIntervalSeconds(nextIntervalSeconds)
   }
 
   return (
@@ -143,7 +218,7 @@ function App(): React.JSX.Element {
         OCR interval
         <select
           value={intervalSeconds}
-          onChange={(event) => setIntervalSeconds(Number(event.target.value))}
+          onChange={(event) => handleIntervalChange(Number(event.target.value))}
         >
           <option value={1}>1 second</option>
           <option value={3}>3 seconds</option>
@@ -153,12 +228,27 @@ function App(): React.JSX.Element {
       <button disabled={!sourceRegistered} type="button" onClick={() => void startCapture()}>
         Start
       </button>
-      <button type="button" onClick={stopCapture}>
+      <button type="button" onClick={() => stopCapture()}>
         Stop
       </button>
-      <pre>{status}</pre>
+      <pre>
+        {[
+          status,
+          ...stableNicknames.map((nickname, slot) => nickname && `Slot ${slot + 1}: ${nickname}`)
+        ]
+          .filter(Boolean)
+          .join('\n')}
+      </pre>
     </main>
   )
+}
+
+function emptySlots(): (string | null)[] {
+  return Array.from({ length: PARTY_SLOTS.length }, () => null)
+}
+
+function emptyStabilitySlots(): (SlotStability | null)[] {
+  return Array.from({ length: PARTY_SLOTS.length }, () => null)
 }
 
 function createOcrProbe(): HTMLCanvasElement {
