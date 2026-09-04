@@ -259,6 +259,41 @@ describe('usePartyCapture', () => {
     await hook.unmount()
   })
 
+  it.each(['track ended', 'OCR failed'] as const)(
+    'releases the active session when %s',
+    async (reason) => {
+      const { stream, track, worker } = captureResources()
+      const loop = deferred<void>()
+      getDisplayMedia.mockResolvedValue(stream)
+      moduleMocks.createPartyOcrWorker.mockResolvedValue(worker)
+      moduleMocks.runSerialLoop.mockReturnValue(loop.promise)
+      const hook = await renderPartyCaptureHook()
+      act(() => hook.getCurrent().selectSource('game'))
+      await flushPromises()
+      await act(async () => hook.getCurrent().startCapture())
+      const video = vi.mocked(HTMLMediaElement.prototype.play).mock.contexts[0] as HTMLMediaElement
+      const { signal } = moduleMocks.runSerialLoop.mock.calls[0][0] as LoopOptions
+
+      if (reason === 'track ended') {
+        act(() => track.dispatchEvent(new Event('ended')))
+      } else {
+        await act(async () => loop.reject(new Error('Party OCR failed.')))
+      }
+
+      expect(signal.aborted).toBe(true)
+      expect(track.stop).toHaveBeenCalledOnce()
+      expect(video.pause).toHaveBeenCalledOnce()
+      expect(video.srcObject).toBeNull()
+      expect(worker.terminate).toHaveBeenCalledOnce()
+      expect(hook.getCurrent().status).toBe(
+        reason === 'track ended' ? 'Capture ended.' : 'Party OCR failed.'
+      )
+      await hook.unmount()
+      expect(track.stop).toHaveBeenCalledOnce()
+      expect(worker.terminate).toHaveBeenCalledOnce()
+    }
+  )
+
   it.each(['stop', 'unmount'] as const)(
     'releases a video still waiting for playback on %s',
     async (action) => {
