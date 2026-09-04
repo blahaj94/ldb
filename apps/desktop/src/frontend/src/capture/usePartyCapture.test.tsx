@@ -132,12 +132,6 @@ beforeEach(() => {
   moduleMocks.capturePartyNicknameCrops.mockReturnValue([null, null, null, null])
   moduleMocks.runSerialLoop.mockImplementation(() => new Promise<void>(() => undefined))
 
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-    fillRect: vi.fn(),
-    fillStyle: '',
-    fillText: vi.fn(),
-    font: ''
-  } as unknown as CanvasRenderingContext2D)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function (
     this: HTMLMediaElement
@@ -270,12 +264,10 @@ describe('usePartyCapture', () => {
     async (action) => {
       const { stream, track } = captureResources()
       const playback = deferred<void>()
-      let video!: HTMLMediaElement
       vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(function (
         this: HTMLMediaElement
       ) {
-        video = this
-        loadVideoMetadata(video)
+        loadVideoMetadata(this)
         return playback.promise
       })
       getDisplayMedia.mockResolvedValue(stream)
@@ -288,6 +280,7 @@ describe('usePartyCapture', () => {
         start = hook.getCurrent().startCapture()
       })
       await flushPromises()
+      const video = vi.mocked(HTMLMediaElement.prototype.play).mock.contexts[0] as HTMLMediaElement
       if (action === 'stop') act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
       else await hook.unmount()
 
@@ -308,12 +301,7 @@ describe('usePartyCapture', () => {
 
   it('cancels metadata waiting without requiring a later video event', async () => {
     const { stream, track } = captureResources()
-    let video!: HTMLMediaElement
-    vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(async function (
-      this: HTMLMediaElement
-    ) {
-      video = this
-    })
+    vi.mocked(HTMLMediaElement.prototype.play).mockResolvedValueOnce(undefined)
     getDisplayMedia.mockResolvedValue(stream)
     const hook = await renderPartyCaptureHook()
     act(() => hook.getCurrent().selectSource('game'))
@@ -330,6 +318,7 @@ describe('usePartyCapture', () => {
         })
     })
     await flushPromises()
+    const video = vi.mocked(HTMLMediaElement.prototype.play).mock.contexts[0] as HTMLMediaElement
     act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
     await flushPromises()
 
@@ -434,13 +423,7 @@ describe('usePartyCapture', () => {
 
   it('releases a video when playback fails', async () => {
     const { stream, track } = captureResources()
-    let video!: HTMLMediaElement
-    vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(async function (
-      this: HTMLMediaElement
-    ) {
-      video = this
-      throw new Error('Playback failed.')
-    })
+    vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new Error('Playback failed.'))
     getDisplayMedia.mockResolvedValue(stream)
     const hook = await renderPartyCaptureHook()
     act(() => hook.getCurrent().selectSource('game'))
@@ -448,6 +431,7 @@ describe('usePartyCapture', () => {
 
     await act(async () => hook.getCurrent().startCapture())
 
+    const video = vi.mocked(HTMLMediaElement.prototype.play).mock.contexts[0] as HTMLMediaElement
     expect(track.stop).toHaveBeenCalledOnce()
     expect(video.pause).toHaveBeenCalledOnce()
     expect(video.srcObject).toBeNull()
