@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "create-app": "node scripts/create-app.mjs",
+    "start-task": "node scripts/start-task.mjs",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:pr-review": "node --test scripts/pr-review/test/*.test.mjs",
     "typecheck:pr-review": "find scripts/pr-review -name '*.mjs' -type f -exec node --check {} +"
