@@ -127,3 +127,13 @@ test("renderReport shows Korean scope, role totals, counters, and partial status
   assert.match(body, /gpt-5-mini/);
   assert.match(body, /medium/);
 });
+
+test("renderReport does not infer zero totals when no records were observed", () => {
+  const body = renderReport(snapshot({
+    complete: false,
+    warnings: ["usage_missing"],
+    agents: [],
+  }));
+  assert.match(body, /관측된 usage record가 없습니다/);
+  assert.doesNotMatch(body, /\|\s*0\s*\|/);
+});
