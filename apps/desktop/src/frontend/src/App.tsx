@@ -1,4 +1,4 @@
-import { usePartyCapture } from './usePartyCapture'
+import { usePartyCapture } from './capture/usePartyCapture'
 
 function App(): React.JSX.Element {
   const {
