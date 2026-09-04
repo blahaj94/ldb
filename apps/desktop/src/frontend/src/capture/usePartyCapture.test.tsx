@@ -80,12 +80,38 @@ async function flushPromises(): Promise<void> {
 function deferred<T>(): {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason: Error) => void
 } {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((nextResolve) => {
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((nextResolve, nextReject) => {
     resolve = nextResolve
+    reject = nextReject
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
+}
+
+function captureResources(): {
+  track: EventTarget & { stop: ReturnType<typeof vi.fn> }
+  stream: MediaStream
+  worker: { recognize: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn> }
+} {
+  const track = Object.assign(new EventTarget(), { stop: vi.fn() })
+  const stream = {
+    getTracks: () => [track],
+    getVideoTracks: () => [track]
+  } as unknown as MediaStream
+  const worker = {
+    recognize: vi.fn().mockResolvedValue({ data: { text: 'Alice' } }),
+    terminate: vi.fn().mockResolvedValue(undefined)
+  }
+  return { track, stream, worker }
+}
+
+function loadVideoMetadata(video: HTMLMediaElement): void {
+  Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1920 })
+  Object.defineProperty(video, 'videoHeight', { configurable: true, value: 1080 })
+  video.dispatchEvent(new Event('loadedmetadata'))
 }
 
 beforeEach(() => {
@@ -116,9 +142,7 @@ beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function (
     this: HTMLMediaElement
   ) {
-    Object.defineProperty(this, 'videoWidth', { configurable: true, value: 1920 })
-    Object.defineProperty(this, 'videoHeight', { configurable: true, value: 1080 })
-    this.dispatchEvent(new Event('loadedmetadata'))
+    loadVideoMetadata(this)
   })
 })
 
@@ -165,21 +189,7 @@ describe('usePartyCapture', () => {
   })
 
   it('recognizes stable nicknames and releases capture resources on stop', async () => {
-    const track = {
-      addEventListener: vi.fn(),
-      stop: vi.fn()
-    }
-    const stream = {
-      getTracks: () => [track],
-      getVideoTracks: () => [track]
-    } as unknown as MediaStream
-    const worker = {
-      recognize: vi
-        .fn()
-        .mockResolvedValueOnce({ data: { text: '테스트 ABC123' } })
-        .mockResolvedValue({ data: { text: 'Alice' } }),
-      terminate: vi.fn().mockResolvedValue(undefined)
-    }
+    const { track, stream, worker } = captureResources()
     const nicknameCrop = document.createElement('canvas')
     let loopOptions: LoopOptions | undefined
 
@@ -205,12 +215,15 @@ describe('usePartyCapture', () => {
         width: { ideal: 1920 }
       }
     })
-    expect(hook.getCurrent().status).toBe('Capture ready at 1920×1080; offline OCR: 테스트ABC123.')
+    expect(hook.getCurrent().status).toBe('Capture ready at 1920×1080.')
+    expect(worker.recognize).not.toHaveBeenCalled()
     expect(loopOptions?.getIntervalMs()).toBe(3000)
 
     await act(async () => loopOptions?.runCycle())
     await act(async () => loopOptions?.runCycle())
 
+    expect(worker.recognize).toHaveBeenCalledTimes(2)
+    expect(worker.recognize).toHaveBeenCalledWith(nicknameCrop)
     expect(hook.getCurrent().stableNicknames[0]).toBe('Alice')
     expect(api.notifyStableNicknameDetected).toHaveBeenCalledTimes(1)
     expect(api.notifyStableNicknameDetected).toHaveBeenCalledWith({ nickname: 'Alice', slot: 0 })
@@ -221,19 +234,15 @@ describe('usePartyCapture', () => {
     expect(worker.terminate).toHaveBeenCalledOnce()
     expect(hook.getCurrent().stableNicknames).toEqual([null, null, null, null])
     expect(hook.getCurrent().status).toBe('Capture stopped.')
+    expect(loopOptions?.signal.aborted).toBe(true)
 
     await hook.unmount()
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(worker.terminate).toHaveBeenCalledOnce()
   })
 
   it('stops a stream that resolves after capture was cancelled', async () => {
-    const track = {
-      addEventListener: vi.fn(),
-      stop: vi.fn()
-    }
-    const stream = {
-      getTracks: () => [track],
-      getVideoTracks: () => [track]
-    } as unknown as MediaStream
+    const { track, stream } = captureResources()
     const pendingStream = deferred<MediaStream>()
 
     getDisplayMedia.mockReturnValue(pendingStream.promise)
@@ -253,6 +262,213 @@ describe('usePartyCapture', () => {
     expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
     expect(hook.getCurrent().status).toBe('Capture cancelled.')
 
+    await hook.unmount()
+  })
+
+  it.each(['stop', 'unmount'] as const)(
+    'releases a video still waiting for playback on %s',
+    async (action) => {
+      const { stream, track } = captureResources()
+      const playback = deferred<void>()
+      let video!: HTMLMediaElement
+      vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(function (
+        this: HTMLMediaElement
+      ) {
+        video = this
+        loadVideoMetadata(video)
+        return playback.promise
+      })
+      getDisplayMedia.mockResolvedValue(stream)
+      const hook = await renderPartyCaptureHook()
+      act(() => hook.getCurrent().selectSource('game'))
+      await flushPromises()
+
+      let start!: Promise<void>
+      act(() => {
+        start = hook.getCurrent().startCapture()
+      })
+      await flushPromises()
+      if (action === 'stop') act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
+      else await hook.unmount()
+
+      expect(track.stop).toHaveBeenCalledOnce()
+      expect(video.pause).toHaveBeenCalledOnce()
+      expect(video.srcObject).toBeNull()
+      playback.resolve()
+      await act(async () => start)
+      expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
+      expect(moduleMocks.runSerialLoop).not.toHaveBeenCalled()
+      if (action === 'stop') {
+        expect(hook.getCurrent().status).toBe('Capture cancelled.')
+        await hook.unmount()
+      }
+      expect(video.pause).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('cancels metadata waiting without requiring a later video event', async () => {
+    const { stream, track } = captureResources()
+    let video!: HTMLMediaElement
+    vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(async function (
+      this: HTMLMediaElement
+    ) {
+      video = this
+    })
+    getDisplayMedia.mockResolvedValue(stream)
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+
+    let settled = false
+    let start!: Promise<void>
+    act(() => {
+      start = hook
+        .getCurrent()
+        .startCapture()
+        .then(() => {
+          settled = true
+        })
+    })
+    await flushPromises()
+    act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
+    await flushPromises()
+
+    expect(settled).toBe(true)
+    await start
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(video.srcObject).toBeNull()
+    loadVideoMetadata(video)
+    await flushPromises()
+    expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
+    expect(hook.getCurrent().status).toBe('Capture cancelled.')
+    await hook.unmount()
+  })
+
+  it('releases a late stream without stopping the replacement session', async () => {
+    const previous = captureResources()
+    const current = captureResources()
+    const pendingStream = deferred<MediaStream>()
+    getDisplayMedia.mockReturnValueOnce(pendingStream.promise).mockResolvedValue(current.stream)
+    moduleMocks.createPartyOcrWorker.mockResolvedValue(current.worker)
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+
+    let firstStart!: Promise<void>
+    act(() => {
+      firstStart = hook.getCurrent().startCapture()
+    })
+    await act(async () => hook.getCurrent().startCapture())
+    pendingStream.resolve(previous.stream)
+    await act(async () => firstStart)
+
+    expect(previous.track.stop).toHaveBeenCalledOnce()
+    expect(current.track.stop).not.toHaveBeenCalled()
+    expect(current.worker.terminate).not.toHaveBeenCalled()
+    expect(moduleMocks.runSerialLoop).toHaveBeenCalledOnce()
+    expect(hook.getCurrent().status).toBe('Capture ready at 1920×1080.')
+    await hook.unmount()
+  })
+
+  it.each(['resolve', 'reject'] as const)(
+    'ignores an old worker initialization that later %ss after restart',
+    async (outcome) => {
+      const previous = captureResources()
+      const current = captureResources()
+      const pendingWorker = deferred<typeof previous.worker>()
+      getDisplayMedia.mockResolvedValueOnce(previous.stream).mockResolvedValue(current.stream)
+      moduleMocks.createPartyOcrWorker
+        .mockReturnValueOnce(pendingWorker.promise)
+        .mockResolvedValue(current.worker)
+      const hook = await renderPartyCaptureHook()
+      act(() => hook.getCurrent().selectSource('game'))
+      await flushPromises()
+
+      let firstStart!: Promise<void>
+      act(() => {
+        firstStart = hook.getCurrent().startCapture()
+      })
+      await flushPromises()
+      expect(moduleMocks.createPartyOcrWorker).toHaveBeenCalledOnce()
+      await act(async () => hook.getCurrent().startCapture())
+      if (outcome === 'resolve') pendingWorker.resolve(previous.worker)
+      else pendingWorker.reject(new Error('Old worker failed.'))
+      await act(async () => firstStart)
+
+      expect(previous.track.stop).toHaveBeenCalledOnce()
+      expect(previous.worker.terminate).toHaveBeenCalledTimes(outcome === 'resolve' ? 1 : 0)
+      expect(previous.worker.recognize).not.toHaveBeenCalled()
+      expect(current.track.stop).not.toHaveBeenCalled()
+      expect(current.worker.terminate).not.toHaveBeenCalled()
+      expect(moduleMocks.runSerialLoop).toHaveBeenCalledOnce()
+      expect(hook.getCurrent().status).toBe('Capture ready at 1920×1080.')
+      previous.track.dispatchEvent(new Event('ended'))
+      expect(current.track.stop).not.toHaveBeenCalled()
+      await hook.unmount()
+    }
+  )
+
+  it('terminates a worker that finishes initialization after unmount', async () => {
+    const { stream, track, worker } = captureResources()
+    const pendingWorker = deferred<typeof worker>()
+    getDisplayMedia.mockResolvedValue(stream)
+    moduleMocks.createPartyOcrWorker.mockReturnValue(pendingWorker.promise)
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+
+    let start!: Promise<void>
+    act(() => {
+      start = hook.getCurrent().startCapture()
+    })
+    await flushPromises()
+    await hook.unmount()
+    pendingWorker.resolve(worker)
+    await act(async () => start)
+
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(worker.terminate).toHaveBeenCalledOnce()
+    expect(worker.recognize).not.toHaveBeenCalled()
+    expect(moduleMocks.runSerialLoop).not.toHaveBeenCalled()
+  })
+
+  it('releases a video when playback fails', async () => {
+    const { stream, track } = captureResources()
+    let video!: HTMLMediaElement
+    vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(async function (
+      this: HTMLMediaElement
+    ) {
+      video = this
+      throw new Error('Playback failed.')
+    })
+    getDisplayMedia.mockResolvedValue(stream)
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+
+    await act(async () => hook.getCurrent().startCapture())
+
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(video.pause).toHaveBeenCalledOnce()
+    expect(video.srcObject).toBeNull()
+    expect(hook.getCurrent().status).toBe('Playback failed.')
+    expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
+    await hook.unmount()
+  })
+
+  it('releases all stream tracks when no video track is available', async () => {
+    const { stream, track } = captureResources()
+    stream.getVideoTracks = () => []
+    getDisplayMedia.mockResolvedValue(stream)
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+
+    await act(async () => hook.getCurrent().startCapture())
+
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(hook.getCurrent().status).toBe('The selected window did not provide a video track.')
+    expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
     await hook.unmount()
   })
 })
