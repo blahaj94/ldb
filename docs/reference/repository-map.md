@@ -3,7 +3,7 @@ type: reference
 status: active
 enforcement: autonomous
 scope: repository
-last-reviewed: 2026-08-28
+last-reviewed: 2026-09-05
 ---
 
 # Repository Map
@@ -55,6 +55,9 @@ last-reviewed: 2026-08-28
 
 - `scripts/create-app.mjs`: 새 app workspace 생성 script
 - `pnpm create-app`: root에서 생성 script 실행
+- `scripts/start-task.mjs`: OPEN Issue 확인 후 최신 main 기반 Issue branch와 worktree 생성
+- `pnpm start-task <Issue 번호> <새 worktree 경로>`: root에서 작업 준비; GitHub CLI 인증 필요
+- 작업 준비와 workspace별 native validation 예제: [`scripts/README.md`](../../scripts/README.md)
 - Root `test` script는 현재 placeholder이며 성공하는 validation command가 아니다.
 
 ### AI PR review
