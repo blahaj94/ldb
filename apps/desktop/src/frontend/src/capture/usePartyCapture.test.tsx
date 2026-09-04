@@ -77,20 +77,6 @@ async function flushPromises(): Promise<void> {
   })
 }
 
-function deferred<T>(): {
-  promise: Promise<T>
-  resolve: (value: T) => void
-  reject: (reason: Error) => void
-} {
-  let resolve!: (value: T) => void
-  let reject!: (reason: Error) => void
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve
-    reject = nextReject
-  })
-  return { promise, resolve, reject }
-}
-
 function captureResources(): {
   track: EventTarget & { stop: ReturnType<typeof vi.fn> }
   stream: MediaStream
@@ -150,8 +136,8 @@ describe('usePartyCapture', () => {
       { id: 'old', name: 'Old window' },
       { id: 'new', name: 'New window' }
     ])
-    const oldSelection = deferred<null>()
-    const newSelection = deferred<null>()
+    const oldSelection = Promise.withResolvers<null>()
+    const newSelection = Promise.withResolvers<null>()
     api.selectCaptureSource.mockImplementation((sourceId: string) =>
       sourceId === 'old' ? oldSelection.promise : newSelection.promise
     )
@@ -237,7 +223,7 @@ describe('usePartyCapture', () => {
 
   it('stops a stream that resolves after capture was cancelled', async () => {
     const { track, stream } = captureResources()
-    const pendingStream = deferred<MediaStream>()
+    const pendingStream = Promise.withResolvers<MediaStream>()
 
     getDisplayMedia.mockReturnValue(pendingStream.promise)
     const hook = await renderPartyCaptureHook()
@@ -263,7 +249,7 @@ describe('usePartyCapture', () => {
     'releases the active session when %s',
     async (reason) => {
       const { stream, track, worker } = captureResources()
-      const loop = deferred<void>()
+      const loop = Promise.withResolvers<void>()
       getDisplayMedia.mockResolvedValue(stream)
       moduleMocks.createPartyOcrWorker.mockResolvedValue(worker)
       moduleMocks.runSerialLoop.mockReturnValue(loop.promise)
@@ -298,7 +284,7 @@ describe('usePartyCapture', () => {
     'releases a video still waiting for playback on %s',
     async (action) => {
       const { stream, track } = captureResources()
-      const playback = deferred<void>()
+      const playback = Promise.withResolvers<void>()
       vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(function (
         this: HTMLMediaElement
       ) {
@@ -371,7 +357,7 @@ describe('usePartyCapture', () => {
   it('releases a late stream without stopping the replacement session', async () => {
     const previous = captureResources()
     const current = captureResources()
-    const pendingStream = deferred<MediaStream>()
+    const pendingStream = Promise.withResolvers<MediaStream>()
     getDisplayMedia.mockReturnValueOnce(pendingStream.promise).mockResolvedValue(current.stream)
     moduleMocks.createPartyOcrWorker.mockResolvedValue(current.worker)
     const hook = await renderPartyCaptureHook()
@@ -399,7 +385,7 @@ describe('usePartyCapture', () => {
     async (outcome) => {
       const previous = captureResources()
       const current = captureResources()
-      const pendingWorker = deferred<typeof previous.worker>()
+      const pendingWorker = Promise.withResolvers<typeof previous.worker>()
       getDisplayMedia.mockResolvedValueOnce(previous.stream).mockResolvedValue(current.stream)
       moduleMocks.createPartyOcrWorker
         .mockReturnValueOnce(pendingWorker.promise)
@@ -434,7 +420,7 @@ describe('usePartyCapture', () => {
 
   it('terminates a worker that finishes initialization after unmount', async () => {
     const { stream, track, worker } = captureResources()
-    const pendingWorker = deferred<typeof worker>()
+    const pendingWorker = Promise.withResolvers<typeof worker>()
     getDisplayMedia.mockResolvedValue(stream)
     moduleMocks.createPartyOcrWorker.mockReturnValue(pendingWorker.promise)
     const hook = await renderPartyCaptureHook()
