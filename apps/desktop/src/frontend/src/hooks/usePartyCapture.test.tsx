@@ -11,18 +11,18 @@ const moduleMocks = vi.hoisted(() => ({
   runSerialLoop: vi.fn()
 }))
 
-vi.mock('./ocr', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./ocr')>()),
+vi.mock('../utils/ocr', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/ocr')>()),
   createPartyOcrWorker: moduleMocks.createPartyOcrWorker
 }))
 
-vi.mock('./party', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./party')>()),
+vi.mock('../utils/party', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/party')>()),
   capturePartyNicknameCrops: moduleMocks.capturePartyNicknameCrops
 }))
 
-vi.mock('./recognition', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./recognition')>()),
+vi.mock('../utils/recognition', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/recognition')>()),
   runSerialLoop: moduleMocks.runSerialLoop
 }))
 
