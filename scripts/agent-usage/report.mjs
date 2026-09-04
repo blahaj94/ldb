@@ -127,15 +127,22 @@ function row(label, usage) {
 
 export function renderReport(value) {
   const snapshot = validateSnapshot(value);
-  const main = totals(snapshot.agents.filter(({ role }) => role === "main"));
-  const subagents = totals(snapshot.agents.filter(({ role }) => role === "subagent"));
-  const all = totals(snapshot.agents);
   const status = snapshot.complete
     ? "완전"
     : `부분 관측 (${snapshot.warnings.join(", ")})`;
-  const details = snapshot.agents.length
-    ? snapshot.agents.map((agent) => row(`${agent.role} / ${agent.agent} / ${agent.model} / ${agent.effort}`, agent))
-    : ["| 관측된 record 없음 | — | — | — | — | — | — |"];
+  const usage = snapshot.agents.length ? [
+    "Reasoning output은 output의 부분집합이며 total에 별도로 더하지 않았습니다.",
+    "",
+    "| 구분 | 입력 | 캐시 입력 | 출력 | Reasoning output | 전체 | 캐시 입력 제외 |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    row("본 에이전트", totals(snapshot.agents.filter(({ role }) => role === "main"))),
+    row("서브 에이전트", totals(snapshot.agents.filter(({ role }) => role === "subagent"))),
+    row("전체", totals(snapshot.agents)),
+    "",
+    "| Agent / model / effort | 입력 | 캐시 입력 | 출력 | Reasoning output | 전체 | 캐시 입력 제외 |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...snapshot.agents.map((agent) => row(`${agent.role} / ${agent.agent} / ${agent.model} / ${agent.effort}`, agent)),
+  ] : ["관측된 usage record가 없습니다. Token 수치를 추정하지 않았습니다."];
 
   return [
     "## Agent 사용량 보고",
@@ -145,17 +152,7 @@ export function renderReport(value) {
     `- 상태: ${status}`,
     `- 기준 head: \`${snapshot.headSha}\``,
     "",
-    "Reasoning output은 output의 부분집합이며 total에 별도로 더하지 않았습니다.",
-    "",
-    "| 구분 | 입력 | 캐시 입력 | 출력 | Reasoning output | 전체 | 캐시 입력 제외 |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-    row("본 에이전트", main),
-    row("서브 에이전트", subagents),
-    row("전체", all),
-    "",
-    "| Agent / model / effort | 입력 | 캐시 입력 | 출력 | Reasoning output | 전체 | 캐시 입력 제외 |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ...details,
+    ...usage,
   ].join("\n");
 }
 
