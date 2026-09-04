@@ -224,4 +224,35 @@ describe('usePartyCapture', () => {
 
     await hook.unmount()
   })
+
+  it('stops a stream that resolves after capture was cancelled', async () => {
+    const track = {
+      addEventListener: vi.fn(),
+      stop: vi.fn()
+    }
+    const stream = {
+      getTracks: () => [track],
+      getVideoTracks: () => [track]
+    } as unknown as MediaStream
+    const pendingStream = deferred<MediaStream>()
+
+    getDisplayMedia.mockReturnValue(pendingStream.promise)
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+
+    let startCapture!: Promise<void>
+    act(() => {
+      startCapture = hook.getCurrent().startCapture()
+      hook.getCurrent().stopCapture('Capture cancelled.')
+    })
+    pendingStream.resolve(stream)
+    await act(async () => startCapture)
+
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
+    expect(hook.getCurrent().status).toBe('Capture cancelled.')
+
+    await hook.unmount()
+  })
 })
