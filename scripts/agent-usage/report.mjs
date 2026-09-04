@@ -47,12 +47,9 @@ function tokenCount(value) {
 }
 
 function utcTimestamp(value) {
-  if (typeof value !== "string" || value.length > 30 || !value.endsWith("Z")) return false;
-  try {
-    return new Date(value).toISOString() === value;
-  } catch {
-    return false;
-  }
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)
+    && Number.isFinite(Date.parse(value));
 }
 
 function safeIdentifier(value, maximum, pattern) {
@@ -67,7 +64,7 @@ export function validateSnapshot(value) {
     if (typeof value.headSha !== "string" || !/^[a-fA-F0-9]{40}$/.test(value.headSha)) fail();
     if (!isObject(value.period) || !hasKeys(value.period, PERIOD_KEYS)) fail();
     if (!utcTimestamp(value.period.startedAt) || !utcTimestamp(value.period.capturedAt)) fail();
-    if (value.period.startedAt > value.period.capturedAt) fail();
+    if (Date.parse(value.period.startedAt) > Date.parse(value.period.capturedAt)) fail();
     if (typeof value.complete !== "boolean" || !Array.isArray(value.warnings)) fail();
     if (value.warnings.length > WARNINGS.size || new Set(value.warnings).size !== value.warnings.length) fail();
     if (!value.warnings.every((warning) => WARNINGS.has(warning))) fail();
