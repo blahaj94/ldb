@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPartyOcrWorker } from '../utils/ocr'
-import { capturePartyNicknameCrops, PARTY_SLOTS } from '../utils/party'
+import { createPartyOcrWorker } from './ocr'
+import { capturePartyNicknameCrops, PARTY_SLOTS } from './party'
 import {
   normalizeNickname,
   runSerialLoop,
   type SlotStability,
   updateSlotStability
-} from '../utils/recognition'
+} from './recognition'
 
 const SUPPORTED_WIDTH = 1920
 const SUPPORTED_HEIGHT = 1080
