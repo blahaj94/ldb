@@ -113,7 +113,9 @@ beforeEach(() => {
     font: ''
   } as unknown as CanvasRenderingContext2D)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
-  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function () {
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function (
+    this: HTMLMediaElement
+  ) {
     Object.defineProperty(this, 'videoWidth', { configurable: true, value: 1920 })
     Object.defineProperty(this, 'videoHeight', { configurable: true, value: 1080 })
     this.dispatchEvent(new Event('loadedmetadata'))
@@ -183,12 +185,7 @@ describe('usePartyCapture', () => {
 
     getDisplayMedia.mockResolvedValue(stream)
     moduleMocks.createPartyOcrWorker.mockResolvedValue(worker)
-    moduleMocks.capturePartyNicknameCrops.mockReturnValue([
-      nicknameCrop,
-      null,
-      null,
-      null
-    ])
+    moduleMocks.capturePartyNicknameCrops.mockReturnValue([nicknameCrop, null, null, null])
     moduleMocks.runSerialLoop.mockImplementation((options: LoopOptions) => {
       loopOptions = options
       return new Promise<void>(() => undefined)
@@ -208,9 +205,7 @@ describe('usePartyCapture', () => {
         width: { ideal: 1920 }
       }
     })
-    expect(hook.getCurrent().status).toBe(
-      'Capture ready at 1920×1080; offline OCR: 테스트ABC123.'
-    )
+    expect(hook.getCurrent().status).toBe('Capture ready at 1920×1080; offline OCR: 테스트ABC123.')
     expect(loopOptions?.getIntervalMs()).toBe(3000)
 
     await act(async () => loopOptions?.runCycle())
