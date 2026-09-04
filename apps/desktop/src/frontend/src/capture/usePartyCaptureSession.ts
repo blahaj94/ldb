@@ -1,11 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { createPartyOcrWorker } from './ocr'
-import { normalizeNickname, runSerialLoop } from './recognition'
+import { runSerialLoop } from './recognition'
 
 const SUPPORTED_WIDTH = 1920
 const SUPPORTED_HEIGHT = 1080
 
 type Worker = Awaited<ReturnType<typeof createPartyOcrWorker>>
+
+type CaptureSession = {
+  controller: AbortController
+  stream: MediaStream | null
+  video: HTMLVideoElement | null
+  worker: Worker | null
+}
 
 type Options = {
   isSelectedSourceRegistered: () => boolean
@@ -25,35 +32,19 @@ export function usePartyCaptureSession({
   startCapture: () => Promise<void>
   stopCapture: (nextStatus?: string) => void
 } {
-  const streamRef = useRef<MediaStream | null>(null)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const workerRef = useRef<Worker | null>(null)
-  const loopAbortRef = useRef<AbortController | null>(null)
-  const captureGenerationRef = useRef(0)
+  const sessionRef = useRef<CaptureSession | null>(null)
 
   function stopCapture(nextStatus = 'Capture stopped.'): void {
-    captureGenerationRef.current += 1
-    loopAbortRef.current?.abort()
-    loopAbortRef.current = null
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    streamRef.current = null
-    videoRef.current?.pause()
-    videoRef.current = null
-    const worker = workerRef.current
-    workerRef.current = null
-    void worker?.terminate()
+    releaseSession(sessionRef.current)
+    sessionRef.current = null
     resetRecognition()
     setStatus(nextStatus)
   }
 
   useEffect(() => {
     return () => {
-      captureGenerationRef.current += 1
-      loopAbortRef.current?.abort()
-      streamRef.current?.getTracks().forEach((track) => track.stop())
-      videoRef.current?.pause()
-      videoRef.current = null
-      void workerRef.current?.terminate()
+      releaseSession(sessionRef.current)
+      sessionRef.current = null
     }
   }, [])
 
@@ -64,7 +55,14 @@ export function usePartyCaptureSession({
     }
 
     stopCapture()
-    const captureGeneration = ++captureGenerationRef.current
+    const session: CaptureSession = {
+      controller: new AbortController(),
+      stream: null,
+      video: null,
+      worker: null
+    }
+    sessionRef.current = session
+    const { signal } = session.controller
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
         audio: false,
@@ -74,85 +72,66 @@ export function usePartyCaptureSession({
           width: { ideal: SUPPORTED_WIDTH }
         }
       })
-      if (captureGeneration !== captureGenerationRef.current) {
-        stream.getTracks().forEach((track) => track.stop())
-        return
-      }
+      session.stream = stream
+      signal.throwIfAborted()
       const track = stream.getVideoTracks()[0]
       if (!track) throw new Error('The selected window did not provide a video track.')
 
-      streamRef.current = stream
-      track.addEventListener(
-        'ended',
-        () => {
-          if (streamRef.current === stream) stopCapture('Capture ended.')
-        },
-        { once: true }
-      )
+      track.addEventListener('ended', () => stopCapture('Capture ended.'), { once: true, signal })
 
       const video = document.createElement('video')
+      session.video = video
       video.muted = true
+      const metadataLoaded = new Promise<void>((resolve) => {
+        video.addEventListener('loadedmetadata', () => resolve(), { once: true, signal })
+        signal.addEventListener('abort', () => resolve(), { once: true })
+      })
       video.srcObject = stream
-      const metadataLoaded = new Promise<void>((resolve) =>
-        video.addEventListener('loadedmetadata', () => resolve(), { once: true })
-      )
       await video.play()
       await metadataLoaded
-      if (captureGeneration !== captureGenerationRef.current) return
-      videoRef.current = video
+      signal.throwIfAborted()
       if (video.videoWidth !== SUPPORTED_WIDTH || video.videoHeight !== SUPPORTED_HEIGHT) {
-        stopCapture()
-        setStatus(`Unsupported capture layout: ${video.videoWidth}×${video.videoHeight}.`)
-        return
+        throw new Error(`Unsupported capture layout: ${video.videoWidth}×${video.videoHeight}.`)
       }
 
       const worker = await createPartyOcrWorker()
-      if (captureGeneration !== captureGenerationRef.current || streamRef.current !== stream) {
-        await worker.terminate()
-        return
-      }
-      workerRef.current = worker
-      const { data } = await worker.recognize(createOcrProbe())
-      if (captureGeneration !== captureGenerationRef.current) return
+      session.worker = worker
+      signal.throwIfAborted()
 
-      const controller = new AbortController()
-      loopAbortRef.current = controller
       void runSerialLoop({
-        signal: controller.signal,
+        signal,
         getIntervalMs: () => intervalSecondsRef.current * 1000,
-        runCycle: () => {
-          const video = videoRef.current
-          const worker = workerRef.current
-          return video && worker ? recognizePartyNicknames(video, worker) : Promise.resolve()
-        }
+        runCycle: () => recognizePartyNicknames(video, worker)
       }).catch((error: unknown) => {
-        if (!controller.signal.aborted) {
+        if (!signal.aborted) {
           stopCapture(error instanceof Error ? error.message : 'Party OCR failed.')
         }
       })
-      setStatus(
-        `Capture ready at ${video.videoWidth}×${video.videoHeight}; offline OCR: ${normalizeNickname(data.text)}.`
-      )
+      setStatus(`Capture ready at ${video.videoWidth}×${video.videoHeight}.`)
     } catch (error) {
-      if (captureGeneration !== captureGenerationRef.current) return
-      stopCapture()
-      setStatus(error instanceof Error ? error.message : 'Could not start capture.')
+      if (signal.aborted) {
+        // 취소 후 반환된 stream/worker도 이 session에서 정리한다.
+        releaseSession(session)
+      } else {
+        stopCapture(error instanceof Error ? error.message : 'Could not start capture.')
+      }
     }
   }
 
   return { startCapture, stopCapture }
 }
 
-function createOcrProbe(): HTMLCanvasElement {
-  const canvas = document.createElement('canvas')
-  canvas.width = 600
-  canvas.height = 100
-  const context = canvas.getContext('2d')
-  if (!context) throw new Error('Could not create an OCR probe canvas.')
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, canvas.width, canvas.height)
-  context.fillStyle = '#000000'
-  context.font = '48px Dotum'
-  context.fillText('테스트ABC123', 16, 68)
-  return canvas
+function releaseSession(session: CaptureSession | null): void {
+  if (!session) return
+  const { controller, stream, video, worker } = session
+  session.stream = null
+  session.video = null
+  session.worker = null
+  controller.abort()
+  stream?.getTracks().forEach((track) => track.stop())
+  if (video) {
+    video.pause()
+    video.srcObject = null
+  }
+  void worker?.terminate()
 }
