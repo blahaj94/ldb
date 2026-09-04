@@ -118,6 +118,38 @@ Worker의 Draft PR은 다음 정보를 제공한다.
 
 전체 reasoning history와 shell history는 handoff에 포함하지 않는다.
 
+## PR 사용량 보고
+
+PR이 merge되면 연결된 same-repository Issue에 작업 사용량 보고를 남긴다. 보고는 local에서 수집한 snapshot을 기준으로 하며, merge는 게시 trigger다. GitHub Actions 실행 지연을 허용하고 merge 시점까지의 과금 총액으로 해석하지 않는다.
+
+### 작업 범위와 수집 책임
+
+- Worker는 작업 시작 시 Issue와 root task의 시작 turn을 명시적으로 연결하고, handoff 시 집계 종료 범위를 기록한다. 이 연결 정보는 tracked source 밖의 local manifest에 둔다.
+- 같은 대화의 이전 Issue 작업, 보고를 위한 후속 질의, 다른 작업의 subagent turn을 현재 PR 비용에 포함하지 않는다. 작업 범위가 불명확하면 시간 간격이나 대화 내용을 추측해 합산하지 않는다.
+- PR을 최종 handoff하기 전에 deterministic command로 사용량 snapshot을 PR comment에 저장한다. 후속 작업으로 PR head가 바뀌면 snapshot도 갱신한다.
+- Snapshot에는 대상 PR/head, 집계 범위와 시각, 본 에이전트와 서브 에이전트별 사용량, 실제 모델과 reasoning effort를 기록한다. 같은 agent의 모델 설정 변경도 보존한다.
+- Snapshot 이후의 마무리 응답과 보고 자체 사용량은 제외될 수 있으며, 보고서에서 집계 시점을 명시한다.
+- Model과 effort는 실행 사실을 보고하기 위한 metadata다. Execution Issue의 worker tier를 특정 provider/model로 고정하는 근거로 사용하지 않는다.
+
+### 집계와 정보 경계
+
+- 집계와 보고서 생성은 dependency 없는 Node.js ESM command로 수행한다. 매번 AI가 raw 로그를 읽거나 임시 script를 작성해 수동 합산하지 않는다.
+- 입력, 캐시 입력, 출력, 전체 토큰과 캐시 입력 제외 수치를 구분한다. 출력에 포함된 reasoning 토큰을 다시 더하지 않는다.
+- Response별 usage record를 dedup하며 turn/thread 누적 counter를 반복 합산하지 않는다. 대상 root turn과 연결된 descendant만 재귀적으로 포함한다.
+- 사용량·모델·descendant 기록 누락, 잘린 로그 또는 검증할 수 없는 범위는 incomplete/unknown으로 표시한다. 누락을 0으로 채우거나 완전한 집계로 보고하지 않는다.
+- Raw 대화, reasoning, tool input/output, credential, 개인 filesystem 경로와 내부 task/turn ID는 local에만 둔다. GitHub에는 보고에 필요한 aggregate field만 allowlist로 내보낸다.
+- 구체적인 command와 file 위치는 `scripts/README.md`와 `docs/reference/repository-map.md`에서 관리한다.
+
+### Merge 후 게시
+
+- GitHub workflow는 merged 상태와 linked Issue metadata를 확인하고, 검증된 snapshot으로 보고서를 생성한다. 단순 close, fork PR, 다른 repository Issue에는 게시하지 않는다.
+- Snapshot의 작성자, schema, 대상 PR과 head를 검증한다. Snapshot 누락·오래된 head·불완전 집계는 보고 불가 또는 불완전 사유를 명시하며 수치를 추정하지 않는다.
+- 보고 comment는 PR별 식별자를 사용하며 재실행 시 기존 자동 보고를 갱신한다. 다른 작성자의 comment를 덮어쓰지 않는다.
+- Workflow는 trusted default branch code와 필요한 최소 GitHub permission만 사용한다. Local 로그 접근을 위해 새 Secret, 외부 서버 또는 상시 polling process를 추가하지 않는다.
+- 보고 실패는 retry 가능한 실행 결과로 남기며 merge를 되돌리거나 AI가 추가 merge를 수행하지 않는다.
+
 ## Automation boundary
 
 Dispatch eligibility, dependency scheduling, retry bookkeeping, label transition, stale-head cancellation, deduplication은 입력 contract가 안정된 뒤 deterministic automation으로 옮길 수 있다. v0에서는 existing GitHub workflow와 수동 Issue/PR lifecycle을 사용하며 runtime, dispatcher, queue, model API, automatic merge를 추가하지 않는다.
+
+PR 사용량 수집과 merge 후 보고 게시에는 위 contract에 한해 local command와 GitHub workflow를 사용한다. 이를 agent 실행 scheduler나 model API runtime으로 확장하지 않는다.
