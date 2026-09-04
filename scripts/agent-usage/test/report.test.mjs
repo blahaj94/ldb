@@ -104,6 +104,21 @@ test("validateSnapshot enforces token math and complete state", () => {
   );
 });
 
+test("validateSnapshot rejects aggregate counters that exceed safe integers", () => {
+  const row = {
+    ...snapshot().agents[0],
+    inputTokens: Number.MAX_SAFE_INTEGER - 20,
+    cachedInputTokens: 0,
+    outputTokens: 20,
+    reasoningOutputTokens: 0,
+    totalTokens: Number.MAX_SAFE_INTEGER,
+  };
+  assert.throws(
+    () => validateSnapshot(snapshot({ agents: [row, { ...row, agent: "root-2" }] })),
+    /Invalid usage snapshot/,
+  );
+});
+
 test("snapshot comments round-trip only marked, validated JSON", () => {
   const value = snapshot();
   const body = snapshotComment(value);
