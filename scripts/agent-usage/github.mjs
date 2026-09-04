@@ -44,7 +44,7 @@ function sameRepository(reference, repository) {
 function linkedIssues(pr, repository) {
   const seen = new Set();
   return (pr.closingIssuesReferences ?? []).filter((reference) => {
-    if (!sameRepository(reference, repository) || !Number.isSafeInteger(reference.number)) return false;
+    if (!sameRepository(reference, repository) || !Number.isSafeInteger(reference.number) || reference.number < 1) return false;
     if (seen.has(reference.number)) return false;
     seen.add(reference.number);
     return true;
@@ -80,15 +80,15 @@ function writeComment(repository, number, body, marker, actor, call) {
     && comment.body.includes(marker)
     && commentAuthor(comment)?.toLowerCase() === actor.toLowerCase());
   if (own) {
-    const result = call([
+    call([
       "api", "--method", "PATCH", `repos/${repository}/issues/comments/${own.id}`, "--input", "-",
     ], { body });
-    return { status: "updated", ...(typeof result?.html_url === "string" ? { url: result.html_url } : {}) };
+    return { status: "updated" };
   }
-  const result = call([
+  call([
     "api", "--method", "POST", `repos/${repository}/issues/${number}/comments`, "--input", "-",
   ], { body });
-  return { status: "created", ...(typeof result?.html_url === "string" ? { url: result.html_url } : {}) };
+  return { status: "created" };
 }
 
 function matchesSnapshot(snapshot, repository, pr) {
@@ -182,7 +182,7 @@ export function publishReport(repository, number, call = ghJson) {
     for (const issue of issues) {
       writeComment(repository, issue.number, body, marker, actor, call);
     }
-    return { status, issues: issues.map(({ url }) => url) };
+    return { status, issues: issues.map(({ number: issue }) => `https://github.com/${repository}/issues/${issue}`) };
   } catch {
     throw new Error("Unable to publish usage report");
   }

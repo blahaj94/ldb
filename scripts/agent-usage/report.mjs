@@ -87,6 +87,9 @@ export function validateSnapshot(value) {
       tuples.add(tuple);
       return Object.fromEntries(AGENT_KEYS.map((key) => [key, agent[key]]));
     });
+    for (const key of AGENT_KEYS.slice(4)) {
+      if (!Number.isSafeInteger(agents.reduce((sum, agent) => sum + agent[key], 0))) fail();
+    }
 
     return {
       schemaVersion: 1,
