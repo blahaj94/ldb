@@ -208,7 +208,7 @@ function App(): React.JSX.Element {
 
       nextStableNicknames[slot] = stability.stableNickname
       if (reportedNicknamesRef.current[slot] !== stability.stableNickname) {
-        window.api.reportStableNickname(slot, stability.stableNickname)
+        window.api.notifyStableNicknameDetected({ nickname: stability.stableNickname, slot })
         reportedNicknamesRef.current[slot] = stability.stableNickname
       }
     }
