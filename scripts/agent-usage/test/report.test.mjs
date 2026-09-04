@@ -59,6 +59,16 @@ test("validateSnapshot returns a fresh allowlisted snapshot", () => {
   assert.notEqual(result.agents[0], source.agents[0]);
 });
 
+test("validateSnapshot accepts UTC ISO timestamps without fractional seconds", () => {
+  const value = snapshot({
+    period: {
+      startedAt: "2026-09-05T00:00:00Z",
+      capturedAt: "2026-09-05T01:00:00Z",
+    },
+  });
+  assert.deepEqual(validateSnapshot(value).period, value.period);
+});
+
 test("validateSnapshot rejects unknown keys, unsafe strings, and excessive rows", () => {
   assert.throws(() => validateSnapshot({ ...snapshot(), secret: "no" }), /Invalid usage snapshot/);
   assert.throws(
