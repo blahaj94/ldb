@@ -1,13 +1,15 @@
 import { contextBridge } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import {
+  listCaptureSources,
+  selectCaptureSource,
+  notifyStableNicknameDetected
+} from './api/capture'
 
 const api = {
-  listCaptureSources: (): Promise<{ id: string; name: string }[]> =>
-    electronAPI.ipcRenderer.invoke('capture:list-sources'),
-  selectCaptureSource: (sourceId: string): Promise<{ id: string; name: string }> =>
-    electronAPI.ipcRenderer.invoke('capture:select-source', sourceId),
-  reportStableNickname: (slot: number, nickname: string): void =>
-    electronAPI.ipcRenderer.send('capture:stable-nickname', { slot, nickname })
+  listCaptureSources,
+  selectCaptureSource,
+  notifyStableNicknameDetected
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
