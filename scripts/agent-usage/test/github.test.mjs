@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 
 import { publishReport, saveSnapshot } from "../github.mjs";
 import { SNAPSHOT_MARKER, snapshotComment } from "../report.mjs";
 
 const REPOSITORY = "owner/repo";
 const HEAD = "a".repeat(40);
+const originalGitHubActions = process.env.GITHUB_ACTIONS;
+process.env.GITHUB_ACTIONS = "false";
+after(() => {
+  if (originalGitHubActions === undefined) delete process.env.GITHUB_ACTIONS;
+  else process.env.GITHUB_ACTIONS = originalGitHubActions;
+});
 
 function snapshot(overrides = {}) {
   return {
@@ -100,6 +106,20 @@ test("saveSnapshot creates a comment instead of overwriting another author", () 
   assert.equal(result.status, "created");
   assert.ok(mock.calls.some(({ args }) => args.includes("POST")));
   assert.ok(!mock.calls.some(({ args }) => args.includes("PATCH")));
+});
+
+test("saveSnapshot recognizes the default workflow token actor", () => {
+  process.env.GITHUB_ACTIONS = "true";
+  try {
+    const mock = apiMock({
+      prComments: [{ id: 3, body: SNAPSHOT_MARKER, user: { login: "github-actions[bot]" } }],
+    });
+    assert.equal(saveSnapshot(snapshot(), mock.call).status, "updated");
+    assert.ok(mock.calls.some(({ args }) => args.includes("PATCH")));
+    assert.ok(!mock.calls.some(({ args }) => args.join(" ") === "api user"));
+  } finally {
+    process.env.GITHUB_ACTIONS = "false";
+  }
 });
 
 test("publishReport skips unmerged and fork PRs without writing", () => {
