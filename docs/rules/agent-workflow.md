@@ -1,8 +1,9 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: repository
+last-reviewed: 2026-09-05
 rationale: 큰 요청을 작은 GitHub Issue로 분해하고 agent 사이의 context와 비용을 제한한다.
 evidence: "GitHub Issue #26"
 exceptions: 긴급 작업도 change-control approval boundary와 사용자 merge 권한은 생략하지 않는다.
@@ -38,7 +39,7 @@ review-after: Execution Issue 10개 적용 후
 - Issue의 acceptance criteria, diff, validation result, concise worker summary를 기준으로 consequential defect를 찾는다.
 - Worker의 conversation, 전체 reasoning, shell history를 요구하지 않는다.
 - Low-cost first-pass review를 기본으로 하고 아래 escalation 조건에 해당할 때만 high-capability reviewer 또는 사람에게 넘긴다.
-- Approve와 merge는 수행하지 않는다.
+- Agent Reviewer는 Approve와 merge를 수행하지 않는다.
 
 ## Issue 종류
 

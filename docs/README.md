@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-08-28
+last-reviewed: 2026-09-05
 ---
 
 # LDB Document Guide

@@ -12,9 +12,10 @@
 - 예상 및 실제 logic 규모:
 - Parallel 작업 충돌:
 
-## Changes
+## Worker handoff
 
-- 변경 내용:
+- Acceptance criteria mapping:
+- Concise implementation summary:
 - 변경 이유:
 - Architecture 또는 domain 영향:
 - 사람이 집중해서 확인할 부분:
@@ -48,6 +49,13 @@
 | `pnpm --filter <package> build`     |        |
 
 실행하지 못했거나 실패한 command와 이유:
+
+## Review
+
+- First-pass review 결과:
+- Finding과 처리 결과:
+- Escalation 필요 여부와 이유:
+- High-capability 또는 human review 결과:
 
 ## Risk and follow-up
 
