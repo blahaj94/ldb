@@ -13,6 +13,12 @@ interface DatabaseConfiguration {
 interface DatabaseModuleExports {
   createDatabaseDataSource(configuration: DatabaseConfiguration): DataSource
   createDatabaseOptions(configuration: DatabaseConfiguration): DataSourceOptions
+  readDatabaseConfiguration(env: NodeJS.ProcessEnv): DatabaseConfiguration
+  createNestDatabaseOptions(configuration: DatabaseConfiguration): DataSourceOptions & {
+    retryAttempts: number
+    verboseRetryLog: boolean
+    toRetry(error: unknown): boolean
+  }
   initialAuthSchema: new () => MigrationInterface
   runMigrationCommand(
     command: 'up' | 'down' | 'show',
@@ -62,6 +68,52 @@ test('database factory returns an uninitialized TypeORM data source', async () =
 
   assert.equal(dataSource.isInitialized, false)
   assert.equal(dataSource.options.type, 'postgres')
+})
+
+test('database configuration accepts only complete discrete connection fields', async () => {
+  const { readDatabaseConfiguration } = await loadDatabaseModule()
+  assert.deepEqual(
+    readDatabaseConfiguration({
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '5432',
+      DB_USERNAME: 'user',
+      DB_PASSWORD: 'password',
+      DB_NAME: 'database',
+    }),
+    {
+      host: '127.0.0.1',
+      port: 5432,
+      username: 'user',
+      password: 'password',
+      database: 'database',
+    },
+  )
+
+  for (const env of [
+    {},
+    { DB_HOST: '', DB_PORT: '5432', DB_USERNAME: 'user', DB_PASSWORD: 'secret', DB_NAME: 'db' },
+    { DB_HOST: 'host', DB_PORT: '+5432', DB_USERNAME: 'user', DB_PASSWORD: 'secret', DB_NAME: 'db' },
+    { DB_HOST: 'host', DB_PORT: '0', DB_USERNAME: 'user', DB_PASSWORD: 'secret', DB_NAME: 'db' },
+  ]) {
+    assert.throws(() => readDatabaseConfiguration(env), (error: unknown) => {
+      assert(error instanceof Error)
+      assert.equal(error.message, 'Invalid database configuration')
+      assert.equal(error.message.includes('secret'), false)
+      return true
+    })
+  }
+})
+
+test('Nest lifecycle disables retry logging and automatic schema changes', async () => {
+  const { createNestDatabaseOptions } = await loadDatabaseModule()
+  const options = createNestDatabaseOptions(configuration)
+
+  assert.equal(options.synchronize, false)
+  assert.equal(options.migrationsRun, false)
+  assert.equal(options.logging, false)
+  assert.equal(options.retryAttempts, 1)
+  assert.equal(options.verboseRetryLog, false)
+  assert.equal(options.toRetry(new Error('secret database detail')), false)
 })
 
 test('migration command uses one all-migrations transaction and always destroys its connection', async () => {
@@ -122,4 +174,29 @@ test('migration command destroys its connection after a database failure', async
     return true
   })
   assert.equal(destroyed, true)
+})
+
+test('migration status reads metadata without asking TypeORM to create its history table', async () => {
+  const { runMigrationCommand } = await loadDatabaseModule()
+  const queries: string[] = []
+  const fakeDataSource = {
+    isInitialized: false,
+    initialize: async () => {
+      fakeDataSource.isInitialized = true
+      return fakeDataSource
+    },
+    query: async (sql: string) => {
+      queries.push(sql)
+      return [{ exists: false }]
+    },
+    showMigrations: async () => assert.fail('showMigrations creates the history table on a fresh database'),
+    destroy: async () => {
+      fakeDataSource.isInitialized = false
+    },
+  }
+
+  const result = await runMigrationCommand('show', () => fakeDataSource as unknown as DataSource)
+
+  assert.equal(result, 'Database migrations pending')
+  assert.deepEqual(queries, ["SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"])
 })

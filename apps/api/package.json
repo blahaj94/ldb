@@ -12,7 +12,10 @@
     "test": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('.test-dist', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node --import reflect-metadata --test \".test-dist/test/**/*.test.js\"",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "start": "node --import reflect-metadata dist/main.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:migrate:up": "pnpm run build && node --import reflect-metadata dist/database/cli.js up",
+    "db:migrate:down": "pnpm run build && node --import reflect-metadata dist/database/cli.js down",
+    "db:migrate:show": "pnpm run build && node --import reflect-metadata dist/database/cli.js show"
   },
   "dependencies": {
     "@nestjs/common": "12.0.1",
