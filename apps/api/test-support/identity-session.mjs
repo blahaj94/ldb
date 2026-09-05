@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout } from 'node:timers/promises'
 import { AuthRefreshTokenSchema } from '../dist/database/schemas/auth-refresh-tokens.js'
