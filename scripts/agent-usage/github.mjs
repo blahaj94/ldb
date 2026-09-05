@@ -143,7 +143,9 @@ function latestTrustedSnapshot(comments, trusted) {
     .filter((comment) => typeof comment.body === "string"
       && comment.body.includes(SNAPSHOT_MARKER)
       && trusted.has(commentAuthor(comment)?.toLowerCase()))
-    .sort((left, right) => Date.parse(right.created_at ?? 0) - Date.parse(left.created_at ?? 0));
+    .sort((left, right) =>
+      Date.parse(right.updated_at ?? right.created_at ?? 0)
+      - Date.parse(left.updated_at ?? left.created_at ?? 0));
   if (candidates.length === 0) return { reason: "신뢰할 수 있는 snapshot이 없습니다." };
   try {
     return { snapshot: parseSnapshotComment(candidates[0].body) };
@@ -174,6 +176,8 @@ export function publishReport(repository, number, call = ghJson) {
       body = unavailableBody(marker, number, selected.reason);
     } else if (!matchesSnapshot(selected.snapshot, repository, pr)) {
       body = unavailableBody(marker, number, "snapshot이 현재 PR head 또는 merge 시점과 일치하지 않습니다.");
+    } else if (!issues.some(({ number: issue }) => issue === selected.snapshot.issue)) {
+      body = unavailableBody(marker, number, "snapshot의 manifest Issue가 현재 PR에 연결된 Issue가 아닙니다.");
     } else {
       status = selected.snapshot.complete ? "published" : "unavailable";
       body = [marker, renderReport(selected.snapshot)].join("\n");

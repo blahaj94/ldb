@@ -47,9 +47,15 @@ function tokenCount(value) {
 }
 
 function utcTimestamp(value) {
-  return typeof value === "string"
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)
-    && Number.isFinite(Date.parse(value));
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?Z$/.exec(value);
+  if (!match || !Number.isFinite(Date.parse(value))) return false;
+  const date = new Date(value);
+  const fields = [
+    date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(),
+    date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
+  ];
+  return fields.every((field, index) => field === Number(match[index + 1]));
 }
 
 function safeIdentifier(value, maximum, pattern) {
@@ -75,7 +81,7 @@ export function validateSnapshot(value) {
     const agents = value.agents.map((agent) => {
       if (!isObject(agent) || !hasKeys(agent, AGENT_KEYS) || !ROLES.has(agent.role)) fail();
       if (!safeIdentifier(agent.agent, 64, /^[A-Za-z0-9][A-Za-z0-9_-]*$/)) fail();
-      if (agent.model !== "unknown" && !safeIdentifier(agent.model, 80, /^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/)) fail();
+      if (agent.model !== "unknown" && !safeIdentifier(agent.model, 80, /^[A-Za-z0-9._:-]+$/)) fail();
       if (!EFFORTS.has(agent.effort)) fail();
       if (!AGENT_KEYS.slice(4).every((key) => tokenCount(agent[key]))) fail();
       if (agent.cachedInputTokens > agent.inputTokens) fail();
@@ -90,6 +96,7 @@ export function validateSnapshot(value) {
     for (const key of AGENT_KEYS.slice(4)) {
       if (!Number.isSafeInteger(agents.reduce((sum, agent) => sum + agent[key], 0))) fail();
     }
+    if (value.complete && !agents.some(({ role }) => role === "main")) fail();
 
     return {
       schemaVersion: 1,
@@ -125,18 +132,27 @@ function row(label, usage) {
   return `| ${label} | ${usage.inputTokens} | ${usage.cachedInputTokens} | ${usage.outputTokens} | ${usage.reasoningOutputTokens} | ${usage.totalTokens} | ${usage.totalTokens - usage.cachedInputTokens} |`;
 }
 
+function roleRow(label, agents, complete) {
+  if (!complete && agents.length === 0) {
+    return `| ${label} | 미관측 | 미관측 | 미관측 | 미관측 | 미관측 | 미관측 |`;
+  }
+  return row(label, totals(agents));
+}
+
 export function renderReport(value) {
   const snapshot = validateSnapshot(value);
   const status = snapshot.complete
     ? "완전"
     : `부분 관측 (${snapshot.warnings.join(", ")})`;
+  const main = snapshot.agents.filter(({ role }) => role === "main");
+  const subagents = snapshot.agents.filter(({ role }) => role === "subagent");
   const usage = snapshot.agents.length ? [
     "Reasoning output은 output의 부분집합이며 total에 별도로 더하지 않았습니다.",
     "",
     "| 구분 | 입력 | 캐시 입력 | 출력 | Reasoning output | 전체 | 캐시 입력 제외 |",
     "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-    row("본 에이전트", totals(snapshot.agents.filter(({ role }) => role === "main"))),
-    row("서브 에이전트", totals(snapshot.agents.filter(({ role }) => role === "subagent"))),
+    roleRow("본 에이전트", main, snapshot.complete),
+    roleRow("서브 에이전트", subagents, snapshot.complete),
     row("전체", totals(snapshot.agents)),
     "",
     "| Agent / model / effort | 입력 | 캐시 입력 | 출력 | Reasoning output | 전체 | 캐시 입력 제외 |",
