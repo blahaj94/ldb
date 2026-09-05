@@ -1,4 +1,5 @@
 import { EntitySchema } from 'typeorm'
+import type { AuthProvider } from '../../types/auth.js'
 import type { Buffer } from 'node:buffer'
 import { authLoginRequestColumns } from './auth-login-request.columns.js'
 import {
@@ -10,7 +11,7 @@ import {
 export interface AuthLoginRequest {
   id: string
   purpose: 'login'
-  provider: 'google' | 'discord'
+  provider: AuthProvider
   clientId: 'desktop'
   providerConfigVersion: string
   returnTargetId: string

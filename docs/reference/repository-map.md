@@ -28,6 +28,8 @@ last-reviewed: 2026-09-06
 - 필수 runtime 설정: `PORT`의 ASCII 십진 정수 `1`~`65535`
 - Test compile: `src`, `test` → `.test-dist`; 제품 endpoint 없이 test module의 loopback HTTP로 runtime을 검증한다.
 - Database: `src/database/schemas`의 typed EntitySchema가 ORM mapping과 Migration 생성의 시작점이다. 작성 순서·생성 한계는 [`database-development.md`](database-development.md)를 참고한다. `src/database/data-source.ts`의 compiled ESM DataSource와 `src/database/cli.ts`의 정제된 CLI가 `src/database/migrations`의 auth 초기 Migration을 명시 실행한다. 기본 `AppModule`은 DB module을 연결하지 않는다.
+- Auth 정의: `src/constants/auth.ts`의 provider·오류·nickname·refresh 값에서 `src/types/auth.ts`의 공통 타입을 파생한다. Identity session 오류는 `src/errors/identity-session.ts`가 관리한다.
+- Identity session: `src/auth/identity-session.ts`가 검증된 provider identity에서 회원·독립 session·최초 refresh를 생성한다. 호출자의 active READ COMMITTED manager에 합성하며 commit 성공 이후에만 token을 전달한다. 사용 경계와 실제 DB 검증은 [`database-development.md`](database-development.md)의 Identity session 절을 참고한다. HTTP/OAuth/JWT는 연결하지 않는다.
 - Database CLI 설정: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`. 이 값은 DB command와 DB module을 실제 연결할 때만 필요하다.
 - Migration 설정: `synchronize:false`, `migrationsRun:false`, `migrationsTransactionMode:'all'`. TypeORM은 최초 up에서 내부 history table을 먼저 준비하고, auth DDL과 해당 history row는 Migration의 active transaction 안에서 적용한다. `db:migrate:show`는 fresh DB에 history table을 만들지 않는 read-only 조회다.
 - Docker integration: `test-support/database-integration.mjs`가 고정 PostgreSQL image를 native platform의 isolated container·named volume·loopback dynamic port에서 검증하고 run ownership이 일치하는 exact resource만 정리한다.
