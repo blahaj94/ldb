@@ -101,6 +101,7 @@ function matchesSnapshot(snapshot, repository, pr) {
 export function saveSnapshot(value, call = ghJson) {
   try {
     const snapshot = validateSnapshot(value);
+    const body = snapshotComment(snapshot);
     const pr = getPullRequest(snapshot.repository, snapshot.pullRequest, call);
     const issueIsLinked = linkedIssues(pr, snapshot.repository)
       .some(({ number }) => number === snapshot.issue);
@@ -114,12 +115,13 @@ export function saveSnapshot(value, call = ghJson) {
     return writeComment(
       snapshot.repository,
       snapshot.pullRequest,
-      snapshotComment(snapshot),
+      body,
       SNAPSHOT_MARKER,
       actor,
       call,
     );
-  } catch {
+  } catch (error) {
+    if (error?.code === "COMMENT_TOO_LONG") throw error;
     throw new Error("Unable to save usage snapshot");
   }
 }

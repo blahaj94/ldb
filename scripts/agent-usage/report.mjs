@@ -1,4 +1,5 @@
 export const SNAPSHOT_MARKER = "<!-- ldb-agent-usage-snapshot:v1 -->";
+const COMMENT_LIMIT = 65_536;
 
 const WARNINGS = new Set([
   "usage_missing",
@@ -27,6 +28,15 @@ const AGENT_KEYS = [
 
 function fail() {
   throw new Error("Invalid usage snapshot");
+}
+
+function enforceCommentLimit(body) {
+  if (typeof body === "string" && body.length > COMMENT_LIMIT) {
+    const error = new Error("Usage snapshot comment exceeds GitHub's 65536 character limit");
+    error.code = "COMMENT_TOO_LONG";
+    throw error;
+  }
+  return body;
 }
 
 function isObject(value) {
@@ -174,7 +184,7 @@ export function renderReport(value) {
 
 export function snapshotComment(value) {
   const snapshot = validateSnapshot(value);
-  return [
+  return enforceCommentLimit([
     SNAPSHOT_MARKER,
     renderReport(snapshot),
     "",
@@ -184,12 +194,13 @@ export function snapshotComment(value) {
     JSON.stringify(snapshot, null, 2),
     "```",
     "</details>",
-  ].join("\n");
+  ].join("\n"));
 }
 
 export function parseSnapshotComment(body) {
+  enforceCommentLimit(body);
   try {
-    if (typeof body !== "string" || body.length > 500_000 || !body.includes(SNAPSHOT_MARKER)) fail();
+    if (typeof body !== "string" || !body.includes(SNAPSHOT_MARKER)) fail();
     const match = body.match(/```json\s*\n([\s\S]*?)\n```/);
     if (!match) fail();
     return validateSnapshot(JSON.parse(match[1]));
