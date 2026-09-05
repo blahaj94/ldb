@@ -33,8 +33,8 @@ Registry의 고정 version 근거: [@nestjs/typeorm](https://registry.npmjs.org/
 
 | 상태 항목 | 현재 값 |
 | --- | --- |
-| 선택 상태 | **승인 대기 proposal** |
-| 선택 승인 evidence | 없음 — PR #50의 명시적인 사용자 승인 comment 대기 |
+| 선택 상태 | **승인됨** |
+| 선택 승인 evidence | [PR #50 사용자 승인](https://github.com/blahaj94/ldb/pull/50#issuecomment-5552245712) (2026-09-05T13:48:26Z) |
 
 이 표가 선택 상태와 evidence의 단일 기준이다. 선택 상태가 승인 대기이면 아래 값은 proposal이며 active Rule이 아니다. Draft PR의 명시적인 사용자 승인을 확인하고 evidence를 기록해 선택 상태를 승인됨으로 바꾼 revision부터 선택 gate만 해소된다. 선택 승인은 image pull·DB 실행·구현 authority나 실제 compatibility·운영 검증 완료를 뜻하지 않으며 기존 승인 metadata와 아래 Migration 계약은 그대로 유지한다.
 
