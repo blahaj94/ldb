@@ -1,3 +1,4 @@
+import { AUTH_PROVIDERS } from '../../constants/auth.js'
 import type { EntitySchemaOptions } from 'typeorm'
 import type { AuthLoginRequest } from './auth-login-requests.js'
 
@@ -8,7 +9,7 @@ const activeClientProof = `"code_challenge" IS NOT NULL AND "method" IS NOT NULL
 const browserClaimFields = `${activeClientProof}
       AND "launch_ticket_hash" IS NULL
       AND "state_hash" IS NOT NULL AND "browser_binding_hash" IS NOT NULL
-      AND ("provider" <> 'google' OR "oidc_nonce_hash" IS NOT NULL)
+      AND ("provider" <> '${AUTH_PROVIDERS.GOOGLE}' OR "oidc_nonce_hash" IS NOT NULL)
       AND "provider_pkce_ciphertext" IS NOT NULL AND "provider_pkce_iv" IS NOT NULL
       AND "provider_pkce_tag" IS NOT NULL AND "provider_pkce_key_id" IS NOT NULL
       AND "verified_subject" IS NULL AND "exchange_code_hash" IS NULL
@@ -22,7 +23,7 @@ const terminalClearedFields = `"code_challenge" IS NULL AND "method" IS NULL AND
 
 export const authLoginRequestValueChecks = [
   { name: 'ck_auth_login_requests_purpose', expression: `"purpose" = 'login'` },
-  { name: 'ck_auth_login_requests_provider', expression: `"provider" IN ('google', 'discord')` },
+  { name: 'ck_auth_login_requests_provider', expression: `"provider" IN ('${AUTH_PROVIDERS.GOOGLE}', '${AUTH_PROVIDERS.DISCORD}')` },
   { name: 'ck_auth_login_requests_client', expression: `"client_id" = 'desktop'` },
   { name: 'ck_auth_login_requests_config_nonempty', expression: `char_length("provider_config_version") > 0` },
   { name: 'ck_auth_login_requests_return_target_nonempty', expression: `char_length("return_target_id") > 0` },

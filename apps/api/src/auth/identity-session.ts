@@ -3,67 +3,43 @@ import type { EntityManager } from 'typeorm'
 import { AuthRefreshTokenSchema } from '../database/schemas/auth-refresh-tokens.js'
 import { AuthSessionSchema } from '../database/schemas/auth-sessions.js'
 import { UserSchema } from '../database/schemas/users.js'
-import type { User } from '../database/schemas/users.js'
+import { AUTH_ERRORS, AUTH_PROVIDERS, INITIAL_NICKNAME, REFRESH_TOKEN } from '../constants/auth.js'
+import { IdentitySessionFailure } from '../errors/identity-session.js'
+import type { IdentitySession, IdentitySessionEntropy, VerifiedIdentity } from '../types/auth.js'
 
-/** 서버의 provider 검증을 마친 identity만 전달한다. HTTP 입력 검증기는 아니다. */
-export interface VerifiedIdentity {
-  readonly provider: User['provider']
-  readonly subject: string
-}
+export { IdentitySessionFailure } from '../errors/identity-session.js'
+export type { IdentitySession, VerifiedIdentity } from '../types/auth.js'
 
-export interface IdentitySession {
-  user: Pick<User, 'id' | 'nickname'>
-  session: { id: string; createdAt: Date; lastActiveAt: Date }
-  refreshToken: string
-  isNewUser: boolean
-}
-
-interface Entropy {
-  uuid(): string
-  nicknameNumber(min: number, max: number): number
-  refreshBytes(size: number): Buffer
-}
-
-const nativeEntropy: Entropy = {
+const nativeEntropy: IdentitySessionEntropy = {
   uuid: randomUUID,
   nicknameNumber: randomInt,
   refreshBytes: randomBytes,
 }
 
-export class IdentitySessionFailure extends Error {
-  readonly status: number
-
-  constructor(readonly code: 'AUTH_INTERNAL_ERROR' | 'AUTH_UNAVAILABLE') {
-    super(code === 'AUTH_INTERNAL_ERROR'
-      ? '인증 요청을 처리하지 못했습니다.'
-      : '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.')
-    this.name = 'IdentitySessionFailure'
-    this.status = code === 'AUTH_INTERNAL_ERROR' ? 500 : 503
-  }
-}
+const databaseTimeExpression = 'to_timestamp(floor(extract(epoch from clock_timestamp())))'
 
 function generate<T>(operation: () => T): T {
   try {
     return operation()
   } catch {
-    throw new IdentitySessionFailure('AUTH_INTERNAL_ERROR')
+    throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
   }
 }
 
 async function create(
   manager: EntityManager,
   identity: VerifiedIdentity,
-  entropy: Entropy,
+  entropy: IdentitySessionEntropy,
 ): Promise<IdentitySession> {
   try {
     if (!manager.queryRunner?.isTransactionActive ||
-      (identity.provider !== 'google' && identity.provider !== 'discord') ||
+      !Object.values(AUTH_PROVIDERS).some((provider) => provider === identity.provider) ||
       typeof identity.subject !== 'string' || identity.subject.length === 0) {
-      throw new IdentitySessionFailure('AUTH_INTERNAL_ERROR')
+      throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
     }
     const [isolation] = await manager.query('SHOW transaction_isolation') as Array<{ transaction_isolation: string }>
     if (isolation?.transaction_isolation !== 'read committed') {
-      throw new IdentitySessionFailure('AUTH_INTERNAL_ERROR')
+      throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
     }
 
     const users = manager.getRepository(UserSchema)
@@ -75,21 +51,34 @@ async function create(
     let isNewUser = false
     if (!user) {
       const id = generate(() => entropy.uuid())
-      const nickname = generate(() => `모험가${String(entropy.nicknameNumber(0, 1_000_000)).padStart(6, '0')}`)
-      // 기존 nickname을 쓰지 않는 명시적 conflict target. 경합 후보 중 winner만 저장된다.
-      const inserted = await manager.query(`
-        INSERT INTO users (id, provider, provider_subject, nickname, created_at)
-        VALUES ($1, $2, $3, $4, to_timestamp(floor(extract(epoch from clock_timestamp()))))
-        ON CONFLICT (provider, provider_subject) DO NOTHING RETURNING id
-      `, [id, identity.provider, identity.subject, nickname]) as Array<{ id: string }>
-      isNewUser = inserted.length === 1
+      const nickname = generate(() => {
+        const digits = String(entropy.nicknameNumber(0, 10 ** INITIAL_NICKNAME.digits))
+        return `${INITIAL_NICKNAME.prefix}${digits.padStart(INITIAL_NICKNAME.digits, '0')}`
+      })
+      // 빈 overwrite 목록은 명시한 identity 충돌에만 DO NOTHING을 생성한다.
+      const inserted = await users.createQueryBuilder()
+        .insert()
+        .values({
+          id,
+          provider: identity.provider,
+          providerSubject: identity.subject,
+          nickname,
+          createdAt: () => databaseTimeExpression,
+        })
+        .orUpdate([], ['provider', 'provider_subject'])
+        .returning(['id'])
+        // 기존 raw INSERT처럼 hook·입력 entity 자동 갱신·추가 조회를 수행하지 않는다.
+        .callListeners(false)
+        .updateEntity(false)
+        .execute()
+      isNewUser = (inserted.raw as Array<{ id: string }>).length === 1
       // READ COMMITTED의 다음 statement로 insert 대기 중 commit된 winner를 읽는다.
       user = await users.findOne(lookup)
-      if (!user) throw new IdentitySessionFailure('AUTH_UNAVAILABLE')
+      if (!user) throw new IdentitySessionFailure(AUTH_ERRORS.UNAVAILABLE)
     }
 
     const [clock] = await manager.query(
-      'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now',
+      `SELECT ${databaseTimeExpression} AS now`,
     ) as Array<{ now: Date }>
     const issuedAt = clock.now
     if (isNewUser) {
@@ -97,9 +86,9 @@ async function create(
       await users.update({ id: user.id }, { createdAt: issuedAt })
     }
     const sessionId = generate(() => entropy.uuid())
-    const bytes = generate(() => entropy.refreshBytes(32))
-    const refreshToken = bytes.toString('base64url')
-    const tokenHash = createHash('sha256').update(bytes).digest()
+    const bytes = generate(() => entropy.refreshBytes(REFRESH_TOKEN.byteLength))
+    const refreshToken = bytes.toString(REFRESH_TOKEN.encoding)
+    const tokenHash = createHash(REFRESH_TOKEN.hashAlgorithm).update(bytes).digest()
     await manager.getRepository(AuthSessionSchema).insert({
       id: sessionId,
       userId: user.id,
@@ -123,7 +112,7 @@ async function create(
   } catch (error) {
     // QueryFailedError의 SQL/parameters·identity를 호출자나 log에 전달하지 않는다.
     if (error instanceof IdentitySessionFailure) throw error
-    throw new IdentitySessionFailure('AUTH_UNAVAILABLE')
+    throw new IdentitySessionFailure(AUTH_ERRORS.UNAVAILABLE)
   }
 }
 
@@ -140,7 +129,7 @@ export function createIdentitySession(manager: EntityManager, identity: Verified
 export function createIdentitySessionForTest(
   manager: EntityManager,
   identity: VerifiedIdentity,
-  entropy: Partial<Entropy>,
+  entropy: Partial<IdentitySessionEntropy>,
 ): Promise<IdentitySession> {
   return create(manager, identity, { ...nativeEntropy, ...entropy })
 }

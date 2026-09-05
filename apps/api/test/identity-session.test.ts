@@ -34,7 +34,23 @@ function fixture(options: { existing?: boolean; missing?: boolean; isolation?: s
   const refresh: Record<string, unknown>[] = []
   const events: string[] = []
   let inserted: Record<string, unknown> | undefined
+  const insertBuilder = {
+    insert: () => insertBuilder,
+    values: (value: Record<string, unknown>) => {
+      inserted = { ...value, createdAt: time }
+      return insertBuilder
+    },
+    orUpdate: () => insertBuilder,
+    returning: () => insertBuilder,
+    callListeners: () => insertBuilder,
+    updateEntity: () => insertBuilder,
+    execute: async () => {
+      events.push('user-insert')
+      return { raw: options.missing ? [] : [{ id: inserted?.id }] }
+    },
+  }
   const userRepository = {
+    createQueryBuilder: () => insertBuilder,
     findOne: async (query: { where: unknown; lock: unknown }) => {
       assert.deepEqual(query.where, { provider: identity.provider, providerSubject: identity.subject })
       assert.deepEqual(query.lock, { mode: 'pessimistic_write' })
@@ -48,14 +64,8 @@ function fixture(options: { existing?: boolean; missing?: boolean; isolation?: s
   }
   const manager = {
     queryRunner: { isTransactionActive: options.active ?? true },
-    query: async (sql: string, values?: unknown[]) => {
+    query: async (sql: string) => {
       if (sql.startsWith('SHOW')) return [{ transaction_isolation: options.isolation ?? 'read committed' }]
-      if (sql.includes('INSERT INTO')) {
-        events.push('user-insert')
-        assert.match(sql, /ON CONFLICT\s*\(provider, provider_subject\) DO NOTHING RETURNING id/)
-        inserted = { id: values?.[0], nickname: values?.[3], createdAt: time }
-        return options.missing ? [] : [{ id: values?.[0] }]
-      }
       assert.match(sql, /floor\(extract\(epoch from clock_timestamp\(\)\)\)/)
       events.push('fresh-time')
       return [{ now: time }]
