@@ -40,8 +40,8 @@ const configuration: DatabaseConfiguration = {
   database: 'test-database',
 }
 
-test('database options register one explicit migration without automatic schema changes', async () => {
-  const { createDatabaseOptions, initialAuthSchema } = await loadDatabaseModule()
+test('database options discover compiled migrations without automatic schema changes', async () => {
+  const { createDatabaseOptions } = await loadDatabaseModule()
   const options = createDatabaseOptions(configuration)
 
   assert.equal(options.type, 'postgres')
@@ -50,7 +50,8 @@ test('database options register one explicit migration without automatic schema 
   assert.equal(options.logging, false)
   assert.equal(options.migrationsTransactionMode, 'all')
   assert.equal(options.migrationsTableName, 'typeorm_migrations')
-  assert.deepEqual(options.migrations, [initialAuthSchema])
+  assert(Array.isArray(options.migrations))
+  assert.match(String(options.migrations[0]), /\/database\/migrations\/\*\.js$/)
   assert.deepEqual(
     {
       host: options.host,

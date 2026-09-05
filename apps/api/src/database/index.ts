@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { Module } from '@nestjs/common'
 import type { DynamicModule } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
@@ -6,6 +7,8 @@ import { DataSource } from 'typeorm'
 import type { DataSourceOptions } from 'typeorm'
 import type { DatabaseConfiguration } from './configuration.js'
 import { InitialAuthSchema1788600000000 } from './migrations/1788600000000-initial-auth-schema.js'
+
+import { authSchemas } from './schemas/index.js'
 
 export { readDatabaseConfiguration } from './configuration.js'
 export type { DatabaseConfiguration } from './configuration.js'
@@ -21,7 +24,8 @@ export function createDatabaseOptions(configuration: DatabaseConfiguration): Dat
     logging: false,
     migrationsTransactionMode: 'all',
     migrationsTableName: 'typeorm_migrations',
-    migrations: [initialAuthSchema],
+    entities: authSchemas,
+    migrations: [fileURLToPath(new URL('./migrations/*.js', import.meta.url))],
   }
 }
 
@@ -81,10 +85,11 @@ export async function runMigrationCommand(
         result = 'Database migrations pending'
       } else {
         const history = (await dataSource.query(
-          'SELECT name FROM "typeorm_migrations" WHERE name = $1',
-          [new initialAuthSchema().name],
+          'SELECT name FROM "typeorm_migrations"',
         )) as Array<{ name: string }>
-        result = history.length === 1 ? 'Database migrations current' : 'Database migrations pending'
+        const applied = new Set(history.map(({ name }) => name))
+        result = dataSource.migrations.every((migration) => applied.has(migration.name ?? migration.constructor.name))
+          ? 'Database migrations current' : 'Database migrations pending'
       }
     }
   } catch {
