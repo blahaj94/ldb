@@ -1,16 +1,16 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/desktop secure storage protocol and validation
 last-reviewed: 2026-09-06
 rationale: 지원 환경의 관측 사실과 OS 보장·배포 gate를 구분하고 불명확한 token의 재사용을 차단한다.
-evidence: "Issue #55; main a82547c; Electron 39.8.10 공식 문서"
+evidence: "PR #60 사용자 승인: https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475 ; 설계 근거: Issue #55; main a82547c; Electron 39.8.10 공식 문서"
 exceptions: 실제 credential/keychain·protocol registry·OAuth app 설정과 packaged E2E는 수행하지 않는다.
 review-after: 출시 OS 및 package 선택, Electron 변경, 최초 저장·protocol E2E 시
 ---
 
-# Desktop Authentication Platform — 승인 대기
+# Desktop Authentication Platform
 
 승인 상태·IPC/화면은 [Desktop contract](desktop-auth.md), 상태 전이는 [lifecycle](desktop-auth-lifecycle.md)을 따른다. 이 문서는 OS 동작을 이미 구현·검증했다는 주장이 아니다.
 
@@ -138,10 +138,10 @@ Single-instance의 범위는 동일 app profile이며 서로 다른 dev/prod app
 
 | 구분 | 필요한 결정·evidence | 현재 처리 |
 | --- | --- | --- |
-| Rule 승인 | 3개 문서의 main/IPC/UI·lifecycle·저장/protocol 권장안에 대한 Draft PR `승인` | 미승인 proposal. 제품 구현 0 |
+| Rule 승인 | 3개 문서의 main/IPC/UI·lifecycle·저장/protocol contract에 대한 [PR #60 사용자 승인](https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475) | 승인됨, PR #60 사용자 merge 완료. 제품 구현·실제 OS 검증과 별개 |
 | 사용자 배포 선택 | 최초 출시 OS·minimum version·architecture와 Linux 포함 시 package 종류 | 세 OS build 설정은 관측했지만 실제 지원 약속은 미결정. Windows 우선 등을 게임 맥락만으로 추정하지 않음 |
 | 실제 등록값 | API HTTPS origin, provider HTTPS callbacks/config version, owned scheme/target, app/bundle identity·서명/공증, dev/prod 분리 | Placeholder 채택 금지. Server registry와 OS package의 동일 tuple 확인 필요 |
 | OS 실행 evidence | secret backend/권한/prompt·durability·protocol association·업데이트/복구 | 모든 native 인증 동작 미검증. 실패 platform을 성공 matrix에 포함하지 않음 |
 | 서버 선행 | login request/exchange/provider/refresh/logout/`GET /me` 구현·연동, Discord PKCE gate | PR #53은 DB 기반 완료이며 endpoint 전체 구현 완료로 해석하지 않음. #54와 후속 task의 결과 필요 |
 
-설계 승인과 실제 등록값 결정은 구분한다. 등록값이 없어도 mock 기반 후속 task를 구체화할 수 있지만 실제 browser/packaged release gate는 해소되지 않는다. 후속 task 배정과 부모 전체 상태 관리는 총괄에게 맡기고 이 Draft PR은 사용자가 squash merge한다.
+설계 승인과 실제 등록값 결정은 구분한다. 등록값이 없어도 mock 기반 후속 task를 구체화할 수 있지만 실제 browser/packaged release gate는 해소되지 않는다. 후속 task 배정과 부모 전체 상태 관리는 총괄에게 맡기며 향후 PR도 사용자가 squash merge한다.

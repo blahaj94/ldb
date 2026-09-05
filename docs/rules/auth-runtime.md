@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: apps/api authentication dependencies and database operations
-last-reviewed: 2026-09-05
+last-reviewed: 2026-09-06
 rationale: 인증·DB dependency와 Migration을 승인된 API runtime에 연결하고 미확인 gate를 남긴다.
 evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
 exceptions: Exact dependency 역할·version 승인과 별개로 사용자 지시에 따라 설치·lockfile 변경·DB 실행을 허용하지 않는다.
@@ -93,7 +93,7 @@ API/security/schema/보관·key 주기·활동 분류·admission/DB 장애·body
 
 - 운영 deployment topology와 single process 조건, clock 동기화·역행 감지, 실제 cleanup 시각·key 운영 절차
 - 더 넓은 dependency 허용 범위, 승인된 version의 compiled ESM/TypeScript/runtime compatibility
-- 실제 client/HTTPS callback/protocol 등록값·provider config snapshot, Electron OS 저장/IPC 및 실제 browser/OS 연동
+- 실제 client/HTTPS callback/protocol 등록값·provider config snapshot, Electron OS 저장/IPC의 실제 구현·browser/OS 검증. Desktop 설계와 남은 platform gate는 승인된 [Desktop contract](desktop-auth.md)를 따름
 - Discord 일반 confidential OAuth PKCE의 공식 적용 근거와 후속 wrong/missing verifier·downgrade 거절 E2E
 - 공개 ingress/pending-request·인증 전 abuse·서비스 전체 limiter 수치와 기존 quota와의 통합 순서
 - 탈퇴 별도 state·삭제와 pending login/재가입 경합·provider revoke 복구·백업 복원 후 삭제 회원 방지

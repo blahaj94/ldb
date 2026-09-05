@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-09-05
+last-reviewed: 2026-09-06
 ---
 
 # LDB Document Guide
@@ -75,11 +75,11 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 | 검색 admission/quota·활동 commit·residual JWT·DB 장애·계정 기능 경합 | [`rules/auth-activity.md`](rules/auth-activity.md) |
 | 승인된 exact dependency·Migration·운영/플랫폼 미결정 gate | [`rules/auth-runtime.md`](rules/auth-runtime.md) |
 
-### Desktop authentication proposal routing
+### Desktop authentication contract routing
 
-다음은 Issue #55의 **승인 대기 Rule proposal**이며 기존 서버 contract 승인과 구분한다. 기존 Desktop 미결정 gate를 아직 해소하지 않으며 제품 구현·실제 OAuth/OS 등록 또는 credential 저장소 변경을 허용하지 않는다. Draft PR의 명시적인 사용자 승인과 후속 착수 범위를 별도로 확인한다.
+다음은 Issue #55 설계에 대한 [PR #60 사용자 승인](https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475)을 반영한다. Desktop 설계 선택은 승인됐으며 실제 지원 OS·등록값·native 검증 gate는 유지한다. 설계 승인은 제품 구현·실제 OAuth/OS 등록 또는 credential 저장소 변경의 착수 지시가 아니므로 후속 작업의 범위와 실행 조건을 별도로 확인한다.
 
-| 필요한 topic | Proposed Rule |
+| 필요한 topic | Canonical Rule |
 | --- | --- |
 | Process 책임·기존 capture 연결·최소 IPC·화면 | [`rules/desktop-auth.md`](rules/desktop-auth.md) |
 | Pending/PKCE·브라우저→exchange·refresh·취소/실패·재시작 | [`rules/desktop-auth-lifecycle.md`](rules/desktop-auth-lifecycle.md) |
