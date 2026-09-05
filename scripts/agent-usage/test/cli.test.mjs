@@ -78,6 +78,35 @@ test('다른 Issue가 시작된 turn까지 기존 Issue 범위를 자동 확장�
   await assert.rejects(runUsage(['snapshot', '--issue', '1', '--pr', '3', '--until', end], options), /겹/);
 });
 
+test('snapshot 재실행은 저장한 종료 범위를 유지하며 merged PR backfill도 재생성한다', async (t) => {
+  const { options, output } = await setup(t);
+  await runUsage(['begin', '--issue', '1', '--from-turn', 'first'], options);
+  const args = ['snapshot', '--issue', '1', '--pr', '3', '--json'];
+  await runUsage([...args, '--through-turn', 'first', '--until', end], options);
+  const original = JSON.parse(output.at(-1));
+  await runUsage(args, options);
+  assert.deepEqual(JSON.parse(output.at(-1)), original);
+  const call = options.call;
+  options.call = (arguments_) => arguments_[0] === 'pr'
+    ? { ...call(arguments_), state: 'MERGED', mergedAt: end }
+    : call(arguments_);
+  await runUsage(args, options);
+  assert.deepEqual(JSON.parse(output.at(-1)), original);
+});
+
+test('추가 작업은 --refresh로 명시한 경우에만 종료 범위를 확장한다', async (t) => {
+  const { options, output } = await setup(t);
+  await runUsage(['begin', '--issue', '1', '--from-turn', 'first'], options);
+  const args = ['snapshot', '--issue', '1', '--pr', '3', '--json'];
+  await runUsage([...args, '--through-turn', 'first', '--until', end], options);
+  await runUsage([...args, '--refresh'], options);
+  const refreshed = JSON.parse(output.at(-1));
+  assert.equal(refreshed.agents[0].totalTokens, 24);
+  assert.ok(Date.parse(refreshed.period.capturedAt) > Date.parse(end));
+  await runUsage(args, options);
+  assert.deepEqual(JSON.parse(output.at(-1)), refreshed);
+});
+
 test('PR의 linked Issue가 다르면 snapshot을 저장하지 않는다', async (t) => {
   const { options } = await setup(t);
   await runUsage(['begin', '--issue', '2', '--from-turn', 'first'], options);
