@@ -174,7 +174,7 @@ export async function assertServerAndContainer(
   const inspected = await runDocker([
     'container', 'inspect', resources.containerName, '--format', '{{json .Image}} {{json .Platform}}',
   ])
-  assert.equal(inspected.stdout.trim(), `${JSON.stringify(POSTGRES_INDEX_DIGEST)} "linux"`)
+  assert.equal(inspected.stdout.trim(), `${JSON.stringify(image.imageId)} "linux"`)
   currentStage = 'container architecture'
   const architecture = await runDocker(['exec', resources.containerName, 'uname', '-m'])
   assert.equal(architecture.stdout.trim(), image.platform.includes('arm64') ? 'aarch64' : 'x86_64')
