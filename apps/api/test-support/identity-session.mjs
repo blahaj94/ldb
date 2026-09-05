@@ -69,6 +69,35 @@ async function consumeFixture(manager, request) {
   )
 }
 
+async function assertUserInsertSql(source, create) {
+  const runner = source.createQueryRunner()
+  const query = runner.query.bind(runner)
+  const inserts = []
+  runner.query = async (sql, parameters, ...options) => {
+    if (/^\s*INSERT INTO "?users"?(?:\s|\()/.test(sql)) inserts.push({ sql, parameters })
+    return query(sql, parameters, ...options)
+  }
+  try {
+    await runner.connect()
+    await runner.startTransaction('READ COMMITTED')
+    const input = identity()
+    const result = await create(runner.manager, input)
+    assert.equal(inserts.length, 1)
+    // b40055c의 raw INSERT를 독립 기준으로 고정한다. Quoting/미사용 alias/공백만 무시한다.
+    const originalSql = `
+      INSERT INTO users (id, provider, provider_subject, nickname, created_at)
+      VALUES ($1, $2, $3, $4, to_timestamp(floor(extract(epoch from clock_timestamp()))))
+      ON CONFLICT (provider, provider_subject) DO NOTHING RETURNING id
+    `
+    const normalize = (sql) => sql.replace(/\s+AS\s+"User"/g, '').replaceAll('"', '').replace(/\s+/g, '')
+    assert.equal(normalize(inserts[0].sql), normalize(originalSql))
+    assert.deepEqual(inserts[0].parameters, [result.user.id, input.provider, input.subject, result.user.nickname])
+  } finally {
+    if (runner.isTransactionActive) await runner.rollbackTransaction()
+    await runner.release()
+  }
+}
+
 async function assertStored(source, result) {
   const user = await source.getRepository(UserSchema).findOneByOrFail({ id: result.user.id })
   const session = await source.getRepository(AuthSessionSchema).findOneByOrFail({ id: result.session.id })
@@ -93,6 +122,9 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   const { createIdentitySession: create, createIdentitySessionForTest: createForTest } =
     await import('../dist/auth/identity-session.js')
   const original = await rows(source)
+
+  mark('user INSERT matches original SQL and parameters')
+  await assertUserInsertSql(source, create)
 
   mark('new and existing data preservation')
   const input = identity()
@@ -216,7 +248,21 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   const rollbackRequest = loginRequest('exchange_ready', randomUUID(), { exchange_code_hash: randomBytes(32) })
   await insertLogin(source, rollbackRequest)
   const beforeFailures = await rows(source)
+  let userPkViolation = false
   const variants = [
+    { code: 'AUTH_UNAVAILABLE', run: async (manager) => {
+      const runner = manager.queryRunner
+      const query = runner.query.bind(runner)
+      runner.query = async (...args) => {
+        try { return await query(...args) } catch (error) {
+          userPkViolation = error.driverError?.constraint === 'pk_users'
+          throw error
+        }
+      }
+      try {
+        return await createForTest(manager, identity(), { uuid: () => first.user.id })
+      } finally { runner.query = query }
+    } },
     { code: 'CALLER_FAILURE', run: async (manager) => { await create(manager, identity()); throw Object.assign(new Error('caller failed'), { code: 'CALLER_FAILURE' }) } },
     { code: 'AUTH_UNAVAILABLE', run: async (manager) => {
       let calls = 0
@@ -233,6 +279,7 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     }), variant.code)
     assert.deepEqual(await rows(source), beforeFailures)
   }
+  assert.equal(userPkViolation, true)
   // 충돌 후 새 transaction과 새 entropy로 정상 발급한다.
   await assertStored(source, await login(source, create, identity()))
 
@@ -249,5 +296,5 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     const ids = new Set(original[table].map((row) => String(row[key])))
     assert.deepEqual(final[table].filter((row) => ids.has(String(row[key]))), original[table])
   }
-  return { scenarios: 9, rollbackVariants: variants.length }
+  return { scenarios: 10, rollbackVariants: variants.length }
 }
