@@ -294,16 +294,27 @@ test('malformed JSON uses HTTP fallback while body read and transport failures a
   )
 })
 
-test('completion at the exact deadline after projection is a timeout and clears its timer', async () => {
-  const times = [0, 4_999, 4_999, 5_000]
+test('full body completion at the exact deadline is a timeout and schedules 5,000ms', async () => {
+  let now = 0
   let cleared = 0
+  let scheduledDelay: number | undefined
   const search = createNeopleCharacterSearchForTest('fake-key', {
     fetch: async () =>
-      jsonResponse({
-        rows: [{ characterId: 'id', characterName: '이름', serverId: 'cain', fame: 1 }],
-      }),
-    now: () => times.shift() ?? 5_000,
-    setTimer: () => Symbol('timer'),
+      ({
+        status: 200,
+        ok: true,
+        text: async () => {
+          now = 5_000
+          return JSON.stringify({
+            rows: [{ characterId: 'id', characterName: '이름', serverId: 'cain', fame: 1 }],
+          })
+        },
+      }) as Response,
+    now: () => now,
+    setTimer: (_callback, delay) => {
+      scheduledDelay = delay
+      return Symbol('timer')
+    },
     clearTimer: () => {
       cleared += 1
     },
@@ -315,7 +326,45 @@ test('completion at the exact deadline after projection is a timeout and clears 
     'NEOPLE_TIMEOUT',
     '캐릭터 검색 응답 시간이 초과됐습니다. 다시 시도해 주세요.',
   )
+  assert.equal(scheduledDelay, 5_000)
   assert.equal(cleared, 1)
+})
+
+test('a fully parsed and projected response at 4,999ms succeeds', async () => {
+  let now = 0
+  let scheduledDelay: number | undefined
+  const search = createNeopleCharacterSearchForTest('fake-key', {
+    fetch: async () =>
+      ({
+        status: 200,
+        ok: true,
+        text: async () => {
+          now = 4_999
+          return JSON.stringify({
+            rows: [{ characterId: 'id', characterName: '이름', serverId: 'cain', fame: 1 }],
+          })
+        },
+      }) as Response,
+    now: () => now,
+    setTimer: (_callback, delay) => {
+      scheduledDelay = delay
+      return Symbol('timer')
+    },
+    clearTimer: () => undefined,
+  })
+
+  assert.deepEqual(await search(input), {
+    rows: [
+      {
+        characterId: 'id',
+        characterName: '이름',
+        serverId: 'cain',
+        serverName: '카인',
+        fame: 1,
+      },
+    ],
+  })
+  assert.equal(scheduledDelay, 5_000)
 })
 
 test('deadline aborts the request, wins over a late known code, and performs no retry', async () => {

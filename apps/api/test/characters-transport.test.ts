@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
+import { setTimeout as delay } from 'node:timers/promises'
 import test from 'node:test'
 import {
   createNeopleCharacterSearchForTest,
@@ -137,9 +138,16 @@ test('malformed loopback JSON keeps the upstream 503 fallback', async () => {
 test('deadline aborts native fetch while the loopback body is still incomplete', async () => {
   let now = 0
   let capturedSignal: AbortSignal | null = null
+  let deadlineCallback: (() => void) | undefined
+  let scheduledDelay: number | undefined
   let requests = 0
+  let markResponseClosed: (() => void) | undefined
+  const responseClosed = new Promise<void>((resolve) => {
+    markResponseClosed = resolve
+  })
   const loopback = await startLoopback((_request, response) => {
     requests += 1
+    response.once('close', () => markResponseClosed?.())
     response.writeHead(200, { 'content-type': 'application/json' })
     response.flushHeaders()
     response.write('{"rows":[')
@@ -149,16 +157,27 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
         capturedSignal = init?.signal ?? null
-        return fetch(request, init)
+        const response = await fetch(request, init)
+        return {
+          status: response.status,
+          ok: response.ok,
+          text: async () => {
+            const body = response.text()
+            now = 5_000
+            assert(deadlineCallback)
+            deadlineCallback()
+            return body
+          },
+        } as Response
       },
       origin: loopback.origin,
       now: () => now,
-      setTimer: (callback) =>
-        setTimeout(() => {
-          now = 5_000
-          callback()
-        }, 30),
-      clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+      setTimer: (callback, timeout) => {
+        deadlineCallback = callback
+        scheduledDelay = timeout
+        return Symbol('timer')
+      },
+      clearTimer: () => undefined,
     })
 
     const error = await expectStatus(
@@ -167,7 +186,12 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
     )
     assert.equal(error.body.error.code, 'NEOPLE_TIMEOUT')
     assert.equal(capturedSignal?.aborted, true)
+    assert.equal(scheduledDelay, 5_000)
     assert.equal(requests, 1)
+    await Promise.race([
+      responseClosed,
+      delay(1_000).then(() => assert.fail('upstream response was not closed after abort')),
+    ])
   } finally {
     await closeLoopback(loopback.server)
   }
