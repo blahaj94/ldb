@@ -3,10 +3,10 @@ type: rule
 status: active
 enforcement: approval-required
 scope: apps/api apps/desktop authentication HTTP boundary
-last-reviewed: 2026-09-05
+last-reviewed: 2026-09-06
 rationale: 로그인과 계정 API의 입력·오류·credential 노출 경계를 구현 전에 고정한다.
 evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: 사용자 구현 금지 조건을 유지하며 실제 client 등록과 OS 저장은 별도 gate다.
+exceptions: 사용자 구현 금지 조건을 유지하며 실제 client 등록과 OS 저장 실행·검증은 별도 gate다.
 review-after: 최초 인증 integration validation 또는 client boundary 변경 시
 ---
 
@@ -17,7 +17,7 @@ review-after: 최초 인증 integration validation 또는 client boundary 변경
 ## Client와 transport
 
 - Desktop은 public client이며 자체 `clientId`는 `"desktop"`만 허용한다. 등록 항목 선택값이지 인증 secret·정품 앱 증명·provider OAuth client ID가 아니다. Web/mobile client나 요청자가 제공하는 provider client ID를 추가하지 않는다.
-- Provider별 OAuth client configuration은 서버에 하나씩 등록하고 API가 선택한다. Electron main은 OAuth 요청 상태·verifier·token 보관을, renderer는 표시 요청을 담당한다. Main↔preload IPC와 OS 보안 저장 구현은 미정이다.
+- Provider별 OAuth client configuration은 서버에 하나씩 등록하고 API가 선택한다. Electron main은 OAuth 요청 상태·verifier·token 보관을, renderer는 표시 요청을 담당한다. Main↔preload IPC와 OS 보안 저장 설계는 승인된 [Desktop contract](desktop-auth.md)를 따른다. 실제 구현 착수·OS 저장 검증·등록값은 별도 gate다.
 - 외부 browser는 provider 화면과 API callback/완료 화면을 담당한다. Provider secret과 token 교환은 API에서만 처리한다. 모든 제품 API는 HTTPS다.
 - 자체 JSON request는 표의 key만 가진 object다. Unknown key·array·null·wrong type을 거절하고 string/boolean을 coercion하지 않는다. 기존 검색 raw query contract는 [`character-search.md`](character-search.md)를 유지한다.
 - 기능 API의 인증은 정확히 하나의 `Authorization: Bearer <access JWT>`다. Header 중복·잘못된 scheme·body/query의 token 대체 전달은 인증 성공으로 취급하지 않는다. Refresh는 JSON body로만, 앱 복귀 URL에는 자체 exchange code 하나만 전달한다.

@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/desktop authentication lifecycle and recovery
 last-reviewed: 2026-09-06
 rationale: callback·재시작·rotation·취소 경합에서 중복 credential 사용과 거짓 로그인 성공을 막는다.
-evidence: "Issue #55; docs/rules/auth-api.md, auth-oauth.md, auth-session.md"
-exceptions: 설계만 제출하며 서버 grace·취소/status endpoint 또는 session 정책을 추가하지 않는다.
+evidence: "PR #60 사용자 승인: https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475 ; 설계 근거: Issue #55; docs/rules/auth-api.md, auth-oauth.md, auth-session.md"
+exceptions: 설계 승인은 구현 착수가 아니며 서버 grace·취소/status endpoint 또는 session 정책을 추가하지 않는다.
 review-after: 최초 로그인·refresh·저장 실패 integration validation 시
 ---
 
-# Desktop Authentication Lifecycle — 승인 대기
+# Desktop Authentication Lifecycle
 
-승인 상태와 process/IPC/화면은 [Desktop contract](desktop-auth.md), OS·durable write protocol은 [platform](desktop-auth-platform.md)이 canonical source다. 아래 상태는 제안이며 현재 구현·실행 evidence가 아니다. 서버의 [auth API](auth-api.md)·[OAuth](auth-oauth.md)·[session](auth-session.md)·[활동](auth-activity.md) 계약을 그대로 소비한다.
+승인 상태와 process/IPC/화면은 [Desktop contract](desktop-auth.md), OS·durable write protocol은 [platform](desktop-auth-platform.md)이 canonical source다. 아래 상태는 승인된 contract이며 현재 구현·실행 evidence가 아니다. 서버의 [auth API](auth-api.md)·[OAuth](auth-oauth.md)·[session](auth-session.md)·[활동](auth-activity.md) 계약을 그대로 소비한다.
 
 ## 상태·credential 수명
 
@@ -77,7 +77,7 @@ sequenceDiagram
 ## Main HTTP 계약
 
 - Trusted 배포 설정의 exact HTTPS API origin과 고정 endpoint만 사용한다. Renderer URL/redirect/proxy 선택을 받지 않는다. 인증 JSON fetch는 credential cookie를 보내지 않고 redirect를 따라가지 않는다. TLS certificate 오류를 무시하지 않는다.
-- Login-request/exchange/refresh/logout/`GET /me` 호출 각각은 시작부터 header·body 전체까지 **단일 15초 deadline**, 자동 network retry 0회다. 이는 Desktop 대기 예산 제안이며 서버 TTL·provider 10초·검색 deadline을 바꾸지 않는다. Abort/timeout은 서버 rollback 증거가 아니다. 검색의 별도 예산은 후속 검색 task가 기존 contract에 맞춰 정한다.
+- Login-request/exchange/refresh/logout/`GET /me` 호출 각각은 시작부터 header·body 전체까지 **단일 15초 deadline**, 자동 network retry 0회다. 이는 승인된 Desktop 대기 예산이며 서버 TTL·provider 10초·검색 deadline을 바꾸지 않는다. Abort/timeout은 서버 rollback 증거가 아니다. 검색의 별도 예산은 후속 검색 task가 기존 contract에 맞춰 정한다.
 - JSON 성공은 최대 16,384-byte stream, strict UTF-8·JSON object·해당 endpoint의 exact field/type을 검사한다. TokenType은 Bearer, refresh는 canonical 32-byte base64url, request/user ID는 UUID, 날짜는 유효 UTC ISO다. accessToken은 nonempty ASCII compact JWS 형태이며 최대 8,192 byte만 허용한다. isNewUser는 boolean으로 검사한다. Nickname은 well-formed string인지 확인하되 서버의 trim/grapheme 결과를 client Unicode version으로 재정의하거나 OCR normalizer로 수정하지 않고 그대로 text 출력한다. Raw 오류는 버린다. Desktop의 응답 size/shape 상한은 서버 request parser와 별개인 새 client 소비 제약이다. 실서버 fixture가 이 상한을 넘으면 임의로 잘라 쓰지 말고 client 계약을 재검토한다.
 - JWT 서명 검증/권한 판정은 서버가 수행한다. Main은 HTTPS 응답의 expiry를 scheduling hint로만 쓰고 JWT claim에서 user/session을 복원하지 않는다. 204 logout은 body 없이 처리한다. 알 수 없는 HTTP/code, malformed/truncated response는 성공이 아니다.
 - Exchange/refresh에 200을 받았어도 parsing/저장 실패면 새 credential 사용을 중단한다. Raw refresh를 안전하게 식별한 경우에만 아래 폐기를 1회 시도한다. 불완전 body에서 임의 field를 추출해 credential로 사용하지 않는다.

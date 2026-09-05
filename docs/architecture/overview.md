@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: architecture
-last-reviewed: 2026-09-05
+last-reviewed: 2026-09-06
 ---
 
 # Architecture Overview
@@ -36,7 +36,7 @@ scripts/
 PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상태·evidence는 [`../rules/auth-runtime.md`](../rules/auth-runtime.md)의 PostgreSQL 선택 구간만 따른다. 선택 승인은 실제 dependency/ESM/DB/platform compatibility 검증이나 운영 architecture를 확정하지 않는다. 다음 사항은 아직 결정되지 않았다.
 
 - PostgreSQL 운영 deployment·volume·backup/restore 절차
-- Web/mobile client와 실제 Desktop OS 저장·IPC·callback/protocol 등록
+- Web/mobile client, 실제 Desktop 지원 OS·배포 identity·callback/protocol 등록값 및 native 저장/복귀 검증
 - Shared package의 종류와 dependency direction
 - 탈퇴 state·삭제/재가입·백업 복원 및 provider별 미확인 gate
 - Production deployment topology
@@ -47,7 +47,9 @@ PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상
 
 [PR #48 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)으로 중앙 API의 provider 교환·PostgreSQL identity/session과 Desktop public client의 외부 browser 로그인 contract가 승인됐다. HTTP/앱 boundary는 [`../rules/auth-api.md`](../rules/auth-api.md), OAuth는 [`../rules/auth-oauth.md`](../rules/auth-oauth.md), session은 [`../rules/auth-session.md`](../rules/auth-session.md), DB는 [`../rules/auth-database.md`](../rules/auth-database.md), 검색 활동은 [`../rules/auth-activity.md`](../rules/auth-activity.md), dependency·미결정 gate는 [`../rules/auth-runtime.md`](../rules/auth-runtime.md)가 canonical Rule이다.
 
-이 승인은 연결된 서버 인증/DB contract 범위이며 현재 구현·검증 성공을 뜻하지 않는다. 새 shared package/import direction, Web/mobile client, 실제 OS 저장/IPC·domain/protocol, deployment topology, 탈퇴 state/삭제·재가입·백업 복원은 계속 미정이다. 사용자의 미결정 gate 유지와 구현 금지 조건에 따라 별도 착수 지시 전에는 구현하지 않는다.
+위 승인은 서버 인증/DB contract 범위다. 추가로 [PR #60 사용자 승인](https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475)으로 Desktop main/IPC/화면, 인증 lifecycle, OS 저장·protocol 설계가 승인됐다. Canonical contract는 [`../rules/desktop-auth.md`](../rules/desktop-auth.md), [`../rules/desktop-auth-lifecycle.md`](../rules/desktop-auth-lifecycle.md), [`../rules/desktop-auth-platform.md`](../rules/desktop-auth-platform.md)다.
+
+설계 승인은 현재 구현·검증 성공을 뜻하지 않는다. 새 shared package/import direction, Web/mobile client, 실제 Desktop 지원 OS·domain/protocol 등록값·native 검증, deployment topology, 탈퇴 state/삭제·재가입·백업 복원은 계속 미정이다. 사용자의 미결정 gate 유지와 구현 금지 조건에 따라 별도 착수 지시 전에는 구현하지 않는다.
 
 ## Architecture change
 

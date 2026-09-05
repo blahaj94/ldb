@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/desktop authentication process IPC and screens
 last-reviewed: 2026-09-06
 rationale: renderer가 credential이나 인증 성공을 소유하지 않고 후속 구현자가 process 경계를 추측하지 않도록 한다.
-evidence: "Issue #55; 서버 기반 PR #48 승인, PR #53 merge"
-exceptions: 설계 제출만 허용됐으며 제품 구현·실제 OAuth 및 OS 등록·credential 저장소 변경은 포함하지 않는다.
+evidence: "PR #60 사용자 승인: https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475 ; 설계 근거: Issue #55; 서버 기반 PR #48 승인, PR #53 merge"
+exceptions: 설계 승인은 제품 구현 착수·실제 OAuth 및 OS 등록·credential 저장소 변경을 포함하지 않는다.
 review-after: 최초 Desktop 인증 구현 및 packaged platform validation 시
 ---
 
-# Desktop Authentication Contract — 승인 대기
+# Desktop Authentication Contract
 
-이 문서와 [lifecycle](desktop-auth-lifecycle.md), [platform·저장·검증](desktop-auth-platform.md)은 하나의 Desktop Rule 제안이다. Draft PR의 명시적인 사용자 `승인` 전에는 implementation authority가 아니다. 승인은 실제 OS/배포 검증 성공이나 후속 구현 착수 지시를 대체하지 않는다. 기존 [architecture](../architecture/overview.md)의 Desktop 미결정 gate는 승인 전까지 유지한다.
+이 문서와 [lifecycle](desktop-auth-lifecycle.md), [platform·저장·검증](desktop-auth-platform.md)은 [PR #60의 명시적 사용자 승인](https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475)을 받은 Desktop contract다. PR #60은 2026-09-05T18:13:24Z에 사용자 squash merge됐으며 merge commit은 `97b9903`다. 설계 승인은 실제 OS/배포 검증 성공이나 후속 구현 착수 지시를 대체하지 않는다. [Architecture](../architecture/overview.md)의 실제 지원 환경·등록값·native 검증 gate는 유지한다.
 
 서버의 [API](auth-api.md), [OAuth](auth-oauth.md), [session](auth-session.md), [활동](auth-activity.md), [runtime gate](auth-runtime.md)를 전제로 한다. Endpoint, TTL, JWT/refresh/session 정책, provider 설정과 DB를 변경하지 않는다. `clientId:"desktop"`은 public 등록 선택값이다. 실제 운영 URL·app identity·protocol 값은 platform 문서의 미확인 gate다.
 
@@ -41,7 +41,7 @@ Main은 OS 사용자·app profile당 현재 계정/session 하나만 활성화�
 
 후속 구현의 feature 위치는 `apps/desktop/src/backend/auth/**`, `apps/desktop/src/preload/api/auth.ts`, `apps/desktop/src/preload/common/types/auth.ts`, `apps/desktop/src/frontend/src/auth/**`를 권장한다. Shared IPC contract에는 아래 명령 type을 추가하고 backend/preload는 거기서 파생한다. `main.ts`/preload `index.ts`에는 생성·등록·노출만 둔다. 새 package나 dependency, 범용 service framework는 필요하지 않다.
 
-인증 경계를 연결할 때 `contextIsolation:true`, `nodeIntegration:false`, `sandbox:true`를 명시하고 isolation-off fallback·범용 `window.electron` 노출을 제거한다. 기존 capture 전용 API는 유지한다. Renderer navigation/새 window는 차단하고 외부 browser 열기는 검증한 로그인 launch 전용 main 경로로만 허용한다. OAuth 화면을 BrowserWindow/webview에 넣거나 인증을 위해 CSP/webSecurity를 완화하지 않는다. Preload bundle·OCR worker·capture가 sandbox에서 작동하는지는 후속 회귀 검증 대상이며 검증 전 현재 기능과의 호환성을 주장하지 않는다. 이 항목은 현재 구현 설명이 아닌 승인 대상 변경안이다. [Electron security 근거](https://www.electronjs.org/docs/latest/tutorial/security)
+인증 경계를 연결할 때 `contextIsolation:true`, `nodeIntegration:false`, `sandbox:true`를 명시하고 isolation-off fallback·범용 `window.electron` 노출을 제거한다. 기존 capture 전용 API는 유지한다. Renderer navigation/새 window는 차단하고 외부 browser 열기는 검증한 로그인 launch 전용 main 경로로만 허용한다. OAuth 화면을 BrowserWindow/webview에 넣거나 인증을 위해 CSP/webSecurity를 완화하지 않는다. Preload bundle·OCR worker·capture가 sandbox에서 작동하는지는 후속 회귀 검증 대상이며 검증 전 현재 기능과의 호환성을 주장하지 않는다. 이 항목은 현재 구현 설명이 아닌 승인된 변경 contract다. [Electron security 근거](https://www.electronjs.org/docs/latest/tutorial/security)
 
 ## 최소 IPC 계약
 
@@ -107,7 +107,7 @@ Capture component는 signedIn home에서 mount한다. 로그인 이탈 시 unmou
 
 이 연결 경로의 기존 raw OCR nickname log도 제거하고 비민감 counter만 허용한다. 화면의 nickname text 표시와 진단 log 보관은 별개다. Auth 경계 밖의 무관한 module refactoring을 요구하는 것은 아니다.
 
-## 승인 대상과 서버 별도 결정
+## 승인된 선택과 서버 별도 결정
 
 권장안은 main 단독 소유 + feature IPC + memory-only pending/access + 암호화 refresh 보관 + 등록 private protocol + 최소 welcome/home이다. Renderer token 보관은 bridge 노출면을 늘리고, provider embedded login은 승인된 외부 browser 경계와 다르므로 채택하지 않는다. 저장/protocol의 실질 대안 비교는 platform 문서에 둔다.
 
