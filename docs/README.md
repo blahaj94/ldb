@@ -35,6 +35,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 | 큰 작업 분해 또는 agent handoff  | `docs/rules/agent-workflow.md`                                                        |
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
 | 실행 command 또는 file 위치 확인 | `docs/reference/repository-map.md`                                                    |
+| API runtime·검색 설계안 검토 | `docs/rules/api-runtime.md`, `docs/rules/character-search.md` — proposed, 구현 근거로 사용 전 별도 승인 필요 |
 | 기획·domain 작업                 | 향후 `docs/product/**`, `docs/domain/**`에서 task 관련 document만 선택                |
 
 ## Document maintenance
@@ -56,6 +57,13 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
 - [`architecture/overview.md`](architecture/overview.md): 현재 system boundary와 architecture approval 지점
+
+### Proposed Rule — 승인 전 결정안
+
+- [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 제안
+- [`rules/character-search.md`](rules/character-search.md): 검색 query·응답·오류·계정 제한 제안
+
+위 문서는 현재 implementation authority가 아니다. 각 제안의 명시적 승인 범위는 [`rules/change-control.md`](rules/change-control.md)에 따라 확인한다.
 
 ### Reference
 
