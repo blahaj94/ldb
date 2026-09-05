@@ -14,6 +14,8 @@ review-after: 실제 provider flow의 최초 검증 또는 provider 규격 변�
 
 이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 현재 구현·검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다. HTTP/노출 경계는 [`auth-api.md`](auth-api.md), transient schema·정리는 [`auth-database.md`](auth-database.md), 실행 gate는 [`auth-runtime.md`](auth-runtime.md)를 따른다. Provider별 identity는 `provider+subject`이고 Google/Discord는 같은 email 여부와 무관하게 별도 계정이다. 이름·email·사진은 영구 보관하지 않는다.
 
+아래 Exchange code entropy 보완절은 기존 승인에 포함되지 않은 **미승인 proposal**이다. 해당 절의 명시적 승인 gate를 기존 Rule의 active 상태와 구분한다.
+
 ## Proof와 등록 snapshot
 
 앱은 매 로그인 독립적인 32-byte CSPRNG verifier를 canonical base64url(43자, padding 없음)로 생성·보관한다. `codeChallenge=BASE64URL(SHA256(ASCII(codeVerifier)))`이며 S256만 허용한다. 비canonical 인코딩·plain을 거절하고 요청 사이 verifier를 재사용하지 않는다. 앱 재시작으로 verifier를 잃으면 새 로그인한다. 자체 교환 구간에 [RFC 7636 S256](https://www.rfc-editor.org/rfc/rfc7636.html)을 적용한 프로젝트 정책이다.
@@ -40,6 +42,15 @@ Request 전체 TTL은 생성부터 최대 **600초**다. 정확한 만료에서 
 Rollback이 확실하면 code는 미소비다. Commit 응답 유실이면 성공/실패를 추정해 token을 재발급하지 않고 새 로그인을 안내한다. 미수신 session은 logout할 수 없을 수 있으며 30일 미사용으로 끝난다. 절대 수명이나 자동 복구를 추가하지 않는다. Proof 불일치처럼 자격 미증명 실패는 valid request/code를 소비하거나 session을 생성·폐기하지 않는다.
 
 Cancel/provider 실패/만료/crash는 성공이 아니다. Provider code는 재사용하지 않고 새 로그인한다. 남은 processing도 TTL 뒤 terminal 정리 대상이다. 정상 terminal commit의 secret/proof/subject 삭제와 물리 보관 지연은 [`auth-database.md`](auth-database.md)의 승인된 contract를 따른다.
+
+## Exchange code entropy 보완 — 미승인 proposal
+
+이 절은 [exchange code entropy 리뷰](https://github.com/blahaj94/ldb/pull/48#discussion_r3940472415)의 명세 누락을 보완하는 제안이다. 기존 8개 Rule 승인을 이 세부 규격의 승인으로 소급하지 않는다. [`change-control.md`](change-control.md)에 따른 이 보완 범위의 명시적 `승인` 전에는 exchange code 생성·검증 구현을 착수하지 않으며, 기존 명세의 누락을 짧은 code 선택 허용으로 해석하지 않는다. 사용자 구현 금지 조건도 계속 적용한다.
+
+- Raw exchange code는 provider identity 검증 완료 뒤 **독립적인 새 32-byte CSPRNG 값**을 생성해 canonical unpadded base64url **43자**로 인코딩한다. 앱/provider verifier, launch ticket, state/nonce, request ID, provider code, 이전 exchange code를 재사용하거나 이 값들에서 파생하지 않는다.
+- `POST /auth/exchange`의 code는 string이며 길이가 정확히 43자, 모든 문자가 `[A-Za-z0-9_-]`에 속해야 한다. Strict base64url decode 결과가 정확히 32byte이고 이를 unpadded base64url로 다시 인코딩한 값이 입력과 정확히 같아야 한다. Padding·공백·잘린 값·비canonical 인코딩을 자동 보정하지 않는다. **SHA-256 입력은 decode한 원래 32byte**이며 인코딩된 ASCII string을 hash하지 않는다. 생성·검증 모두 그 32byte digest를 `exchange_code_hash`로 저장·비교한다.
+- 기존 `processing → exchange_ready` 원자 전이에서 검증 subject·위 hash·기존 code deadline을 함께 저장한다. Raw code는 완료 HTML의 등록 앱 복귀 버튼을 만드는 처리 동안만 보유하고 DB에 저장/복원하지 않는다. 완료 HTML에는 이 code만 전달하며 verifier/token은 넣지 않는다. API/proxy/APM/Desktop의 URL/body/HTML log·capture 제외는 [`auth-api.md`](auth-api.md)를 그대로 따른다.
+- 기존 JSON pre-parser와 field validation 순서를 유지한다. Code 형식 실패는 `400 INVALID_AUTH_REQUEST`, 형식이 유효한 code의 hash/request/client/verifier 불일치·소비·만료는 `400 LOGIN_EXCHANGE_INVALID`다. 새 error code를 추가하지 않는다. 기존 `min(검증 완료 시각+60초,requestExpiresAt)`·전체 600초 TTL, request/client/S256 binding, 단일 소비·동시 exchange 하나만 성공·실패 시 다른 session 미변경을 유지한다.
 
 ## Google identity
 
