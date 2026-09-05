@@ -33,6 +33,8 @@ import {
   verifyApprovedImage,
 } from './docker-postgres.mjs'
 
+import { assertSchemaFirst } from './schema-first.mjs'
+
 const scriptPath = fileURLToPath(import.meta.url)
 const apiDirectory = fileURLToPath(new URL('..', import.meta.url))
 let currentStage = 'startup'
@@ -468,6 +470,8 @@ async function primaryScenario() {
     assert.equal(failedCli.signal, null)
     assert.equal(failedCli.stdout, '')
     assert.equal(failedCli.stderr, 'Database migration failed\n')
+
+    await assertSchemaFirst(resources.configuration, (part) => (currentStage = `Schema First ${part}`))
 
     currentStage = 'fresh database rollback'
     await assertFreshDatabaseRollback(resources)

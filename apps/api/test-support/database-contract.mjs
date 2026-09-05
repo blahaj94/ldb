@@ -226,7 +226,7 @@ const expectedForeignKeys = [
   ['auth_sessions', 'fk_auth_sessions_user', ['user_id'], 'users', ['id'], 'c'],
 ]
 
-export async function assertSchema(dataSource, mark = () => undefined) {
+export async function assertSchema(dataSource, mark = () => undefined, migrationNames = ['InitialAuthSchema1788600000000']) {
   const snapshot = await databaseSnapshot(dataSource)
   mark('relations')
   assert.deepEqual(
@@ -307,7 +307,7 @@ export async function assertSchema(dataSource, mark = () => undefined) {
   const history = await dataSource.query(
     `SELECT name FROM "${MIGRATIONS_TABLE}" ORDER BY id`,
   )
-  assert.deepEqual(history, [{ name: 'InitialAuthSchema1788600000000' }])
+  assert.deepEqual(history, migrationNames.map((name) => ({ name })))
   return snapshot
 }
 
