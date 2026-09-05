@@ -43,7 +43,9 @@ node scripts/agent-usage.mjs begin --issue 123 --thread ROOT_TASK_ID --from-turn
 node scripts/agent-usage.mjs snapshot --issue 123 --pr 124 --publish
 ```
 
-`--publish`를 생략하면 GitHub 조회와 local snapshot 저장만 수행합니다. `--json`은 Markdown 대신 공개 가능한 aggregate JSON을 출력합니다. 기본 종료 범위는 command 실행 시각까지의 마지막 root turn이며, `--through-turn END_TURN_ID`와 `--until UTC_TIMESTAMP`로 고정할 수 있습니다. 저장된 제외 turn은 이후 실행에도 유지됩니다. 다른 Issue의 시작 범위를 포함하려 하면 실패하므로 앞선 Issue의 종료를 명시합니다. PR head가 변경되면 push 후 snapshot을 다시 저장합니다.
+`--publish`를 생략하면 GitHub 조회와 local snapshot 저장만 수행합니다. `--json`은 Markdown 대신 공개 가능한 aggregate JSON을 출력합니다. 최초 종료 범위는 command 실행 시각까지의 마지막 root turn이며, `--through-turn END_TURN_ID`와 `--until UTC_TIMESTAMP`로 지정할 수 있습니다. 재실행은 저장된 종료 시각·turn·제외 turn을 유지합니다. 다른 Issue의 시작 범위를 포함하려 하면 실패하므로 앞선 Issue의 종료를 명시합니다.
+
+추가 작업 후 PR head가 변경되면 push 후 `snapshot --issue 123 --pr 124 --refresh --publish`로 현재까지 범위를 명시적으로 확장합니다. `--refresh`와 종료 옵션을 함께 주면 명시한 옵션이 우선합니다. Merge된 PR의 backfill 재시도에는 `--refresh` 없이 저장된 범위를 사용합니다.
 
 로그는 기본적으로 `$CODEX_HOME/sessions` 또는 `~/.codex/sessions`에서 읽으며 `--sessions-dir PATH`로 바꿀 수 있습니다. `--repo OWNER/REPO`와 `--thread ROOT_TASK_ID`로 repository와 root task를 명시할 수 있습니다. `turns`의 내부 ID 출력과 manifest는 local 경계 선택용이며 GitHub 보고에는 포함하지 않습니다.
 
