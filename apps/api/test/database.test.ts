@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { EntitySchema } from 'typeorm'
 import type { DataSource, DataSourceOptions, MigrationInterface } from 'typeorm'
 
 interface DatabaseConfiguration {
@@ -215,4 +216,27 @@ test('migration status reads metadata without asking TypeORM to create its histo
 
   assert.equal(result, 'Database migrations pending')
   assert.deepEqual(queries, ["SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"])
+})
+
+test('database options register four typed schemas before migrations are generated', async () => {
+  const { createDatabaseOptions } = await loadDatabaseModule()
+  const options = createDatabaseOptions(configuration)
+  assert(Array.isArray(options.entities))
+  assert.deepEqual(options.entities.map((schema) => { assert(schema instanceof EntitySchema); return schema.options.tableName }).sort(), [
+    'auth_login_requests', 'auth_refresh_tokens', 'auth_sessions', 'users',
+  ])
+})
+
+test('migration status reports a newly registered migration as pending', async () => {
+  const { runMigrationCommand, initialAuthSchema } = await loadDatabaseModule()
+  const source = {
+    isInitialized: false,
+    migrations: [new initialAuthSchema(), { name: 'NextMigration1788690000000' }],
+    initialize: async () => { source.isInitialized = true },
+    query: async (sql: string) => sql.includes('to_regclass')
+      ? [{ exists: true }]
+      : [{ name: new initialAuthSchema().name }],
+    destroy: async () => { source.isInitialized = false },
+  }
+  assert.equal(await runMigrationCommand('show', () => source as unknown as DataSource), 'Database migrations pending')
 })
