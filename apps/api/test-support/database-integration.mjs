@@ -210,12 +210,12 @@ async function assertFreshDatabaseRollback(resources) {
   }
 }
 
-async function runFailureScenario(scenario, platform) {
+async function runFailureScenario(scenario, image) {
   const runId = newRunId(scenario.replaceAll('-', ''))
   announceRecovery(runId)
   const result = await command(process.execPath, [scriptPath], {
     cwd: apiDirectory,
-    env: nodeEnvironment({ LDB_DB_SCENARIO: scenario, LDB_DB_RUN_ID: runId, LDB_DB_PLATFORM: platform }),
+    env: nodeEnvironment({ LDB_DB_SCENARIO: scenario, LDB_DB_RUN_ID: runId, LDB_DB_PLATFORM: image.platform, LDB_DB_IMAGE_ID: image.imageId }),
     timeoutMs: 30_000,
   })
   assert.equal(result.code, 1)
@@ -225,7 +225,7 @@ async function runFailureScenario(scenario, platform) {
   await assertResourcesAbsent(runId)
 }
 
-async function runSignalScenario(signal, stage, platform) {
+async function runSignalScenario(signal, stage, image) {
   const runId = newRunId(`${signal.toLowerCase()}${stage}`)
   announceRecovery(runId)
   const child = spawn(process.execPath, [scriptPath], {
@@ -233,7 +233,8 @@ async function runSignalScenario(signal, stage, platform) {
     env: nodeEnvironment({
       LDB_DB_SCENARIO: 'signal',
       LDB_DB_RUN_ID: runId,
-      LDB_DB_PLATFORM: platform,
+      LDB_DB_PLATFORM: image.platform,
+      LDB_DB_IMAGE_ID: image.imageId,
       LDB_DB_SIGNAL_STAGE: stage,
     }),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -304,7 +305,8 @@ async function childScenario() {
   const runId = process.env.LDB_DB_RUN_ID
   const platform = process.env.LDB_DB_PLATFORM
   const signalStage = process.env.LDB_DB_SIGNAL_STAGE
-  assert(runId && platform)
+  const imageId = process.env.LDB_DB_IMAGE_ID
+  assert(runId && platform && imageId)
   announceRecovery(runId)
   let receivedSignal
   let resolveSignal
@@ -331,7 +333,7 @@ async function childScenario() {
 
   let resources
   try {
-    resources = await createPostgres(runId, platform, {
+    resources = await createPostgres(runId, { platform, imageId }, {
       afterVolumeCreated: async () => {
         if (scenario === 'signal' && signalStage === 'volume') {
           process.stdout.write('CHILD_RESOURCE_READY\n')
@@ -400,7 +402,7 @@ async function primaryScenario() {
   let resources
   try {
     currentStage = 'primary resource creation'
-    resources = await createPostgres(runId, image.platform)
+    resources = await createPostgres(runId, image)
     checkSignal()
     currentStage = 'authenticated readiness'
     await waitForAuthenticatedReadiness(createReadinessDataSource, resources.configuration)
@@ -479,16 +481,16 @@ async function primaryScenario() {
   if (finishSignal()) return
 
   currentStage = 'failure teardown'
-  await runFailureScenario('failure', image.platform)
+  await runFailureScenario('failure', image)
   if (finishSignal()) return
   currentStage = 'timeout teardown'
-  await runFailureScenario('timeout', image.platform)
+  await runFailureScenario('timeout', image)
   if (finishSignal()) return
   currentStage = 'SIGINT teardown'
-  await runSignalScenario('SIGINT', 'volume', image.platform)
+  await runSignalScenario('SIGINT', 'volume', image)
   if (finishSignal()) return
   currentStage = 'SIGTERM teardown'
-  await runSignalScenario('SIGTERM', 'container', image.platform)
+  await runSignalScenario('SIGTERM', 'container', image)
   if (finishSignal()) return
   currentStage = 'ownership protection'
   await assertOwnershipProtection()

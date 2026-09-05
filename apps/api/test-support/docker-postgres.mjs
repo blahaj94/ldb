@@ -143,9 +143,9 @@ export async function verifyApprovedImage() {
     'inspect',
     POSTGRES_IMAGE,
     '--format',
-    '{{json .RepoDigests}} {{json .Os}} {{json .Architecture}} {{json .Config.Volumes}}',
+    '{{json .RepoDigests}} {{json .Os}} {{json .Architecture}} {{json .Config.Volumes}} {{json .Id}}',
   ])
-  const imageMatch = imageResult.stdout.trim().match(/^(\[[^\n]+\]) "([^"]+)" "([^"]+)" (\{[^\n]+\})$/)
+  const imageMatch = imageResult.stdout.trim().match(/^(\[[^\n]+\]) "([^"]+)" "([^"]+)" (\{[^\n]+\}) "([^"]+)"$/)
   if (!imageMatch) throw new Error('Docker image metadata could not be determined')
   const repoDigests = JSON.parse(imageMatch[1])
   const volumes = JSON.parse(imageMatch[4])
@@ -159,6 +159,7 @@ export async function verifyApprovedImage() {
 
   return {
     platform,
+    imageId: imageMatch[5],
     childDigest: expectedChildDigest,
     configDigest: expectedConfigDigest,
     dockerServerVersion: match[3],
@@ -188,7 +189,7 @@ async function savedImageConfigDigest() {
           const manifest = JSON.parse(content.toString('utf8'))
           const configPath = manifest[0]?.Config
           if (typeof configPath !== 'string') throw new Error('Saved image config is missing')
-          return `sha256:${basename(configPath)}`
+          return archiveConfigDigest(configPath)
         }
         offset += 512 + Math.ceil(size / 512) * 512
       }
@@ -209,7 +210,20 @@ export function newRunId(prefix = 'run') {
   return `${prefix}${randomUUID().replaceAll('-', '')}`
 }
 
-export async function createPostgres(runId, platform, hooks = {}) {
+export function archiveConfigDigest(configPath) {
+  const hash = basename(configPath).replace(/\.json$/, '')
+  assert.match(hash, /^[a-f0-9]{64}$/)
+  return `sha256:${hash}`
+}
+
+export function assertContainerImageId(containerImageId, verifiedImage) {
+  // Classic store는 config ID, containerd store는 index ID를 반환할 수 있다.
+  assert.match(verifiedImage.imageId, /^sha256:[a-f0-9]{64}$/)
+  assert.equal(containerImageId, verifiedImage.imageId)
+}
+
+export async function createPostgres(runId, verifiedImage, hooks = {}) {
+  const { platform } = verifiedImage
   validateRunId(runId)
   const suffix = runId.slice(0, 48)
   const containerName = `ldb-db-${suffix}`
@@ -263,7 +277,7 @@ export async function createPostgres(runId, platform, hooks = {}) {
     ])
     const metadataMatch = containerMetadata.stdout.trim().match(/^("[^"]+") ("[^"]+") (\[[^\n]+\])$/)
     if (!metadataMatch) throw new Error('Database container metadata could not be determined')
-    assert.equal(JSON.parse(metadataMatch[1]), POSTGRES_INDEX_DIGEST)
+    assertContainerImageId(JSON.parse(metadataMatch[1]), verifiedImage)
     assert.equal(JSON.parse(metadataMatch[2]), 'linux')
     const mounts = JSON.parse(metadataMatch[3])
     assert.equal(
