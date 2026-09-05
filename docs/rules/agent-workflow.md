@@ -73,6 +73,8 @@ Worker가 원래 사용자 대화 없이 실행할 수 있는 task contract다. 
 
 Metadata의 source of truth는 Issue body다. 현재 작업 유형·상태·실행 조건과 승인 evidence를 한 곳에 모으고, 과거 상태는 comment 이력으로 남긴다. Label은 `@ldb-review`처럼 실제 automation trigger 또는 아래 `in process`·`done` 상태 표시에만 사용한다.
 
+`Ready`·`Blocked`는 Issue body의 실행 조건값으로만 사용하며 GitHub label로 추가하지 않는다. `Ready`는 명시된 단계의 착수 검토 후보, `Blocked`는 미해결 조건이 있음을 뜻한다. 실행 조건은 배정·완료 상태와 별도로 기록하며 실행 허용이나 Rule 승인 evidence를 대신하지 않는다.
+
 ## Planning과 dispatch
 
 - Issue당 담당 Worker는 한 명이다. 독립 구현 결과를 병렬화하려면 별도 Issue로 나누며, 같은 Issue의 Scout·Reviewer는 별도 구현 담당자가 아니다.
@@ -98,7 +100,7 @@ Metadata의 source of truth는 Issue body다. 현재 작업 유형·상태·실�
 | `done` 또는 Closed | 신규 배정에서 제외한다. Closed만으로 성공 완료를 추정하지 않는다. |
 | 두 상태 label 동시 존재 또는 body·label·evidence 불일치 | 상태 복구 전 배정을 보류한다. |
 
-부모 추적·아직 task contract를 갖추지 않은 RFC·장기 제안은 무라벨이어도 Worker 배정 대상이 아니다. 위 Execution contract를 갖춘 bounded Design task는 본문에 작업 유형과 허용 단계를 명시하고 배정 절차를 따른다. `Ready`는 명시된 단계의 후보라는 뜻이며 실행·Rule 승인 evidence가 아니다.
+부모 추적·아직 task contract를 갖추지 않은 RFC·장기 제안은 무라벨이어도 Worker 배정 대상이 아니다. 위 Execution contract를 갖춘 bounded Design task는 본문에 작업 유형과 허용 단계를 명시하고 배정 절차를 따른다.
 
 부모 추적 Issue는 완료 전 `in process`·`done`을 모두 사용하지 않고 body와 자식 Issue pointer로 진행을 추적한다. 부모 자체의 완료 조건을 충족했을 때만 `done`을 붙인다. 부모에게 Worker를 배정하거나 자식의 `in process`를 부모에 복사하지 않는다.
 
@@ -128,7 +130,9 @@ Planner는 완료 evidence와 acceptance criteria를 확인하고 body에 결과
 
 ### 기존 Issue에 도입
 
-이 Rule 승인 후 최초 신규 배정 전에 Planner가 기존 Open Issue의 body·preflight·PR과 담당자를 확인한다. 배정 가능한 설계·구현의 진행 작업은 기존 담당을 연결해 `in process`로 표시하고, 부모는 위 부모 추적 label 기준을 따른다. 완료·취소·미배정을 구분해 현재 body와 label을 일치시킨다. 오래된 상태 문구는 이력으로 옮기며 실행 허용이나 승인 범위를 새로 만들지 않는다. 확인하지 못한 작업은 미배정으로 간주하지 않는다.
+이 Rule 승인 후 최초 신규 배정 전에 Planner가 기존 Open Issue의 body·preflight·PR과 담당자를 확인한다. 배정 가능한 설계·구현의 진행 작업은 기존 담당을 연결해 `in process`로 표시하고, 부모는 위 부모 추적 규칙을 따른다. 완료·취소·미배정을 구분해 현재 body와 label을 일치시킨다. 오래된 상태 문구는 이력으로 옮기며 실행 허용이나 승인 범위를 새로 만들지 않는다. 확인하지 못한 작업은 미배정으로 간주하지 않는다.
+
+기존 `Ready`·`Blocked` label을 발견하면 dependency·단계 실행 허용·승인 evidence를 확인해 현재 실행 조건을 body에 기록하고, 반영을 확인한 뒤 해당 label을 제거한다. Label만으로 실행 조건을 추정하지 않으며 근거를 확인할 수 없으면 정리와 배정을 보류한다. 이 정리로 담당 배정이나 실행 허용을 변경하지 않는다.
 
 ## Context contract
 
