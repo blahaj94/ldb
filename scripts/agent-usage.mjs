@@ -27,7 +27,8 @@ export async function runUsage(args, { cwd = process.cwd(), env = process.env, c
     repo: { type: 'string' }, issue: { type: 'string' }, pr: { type: 'string' },
     thread: { type: 'string' }, 'from-turn': { type: 'string' }, 'through-turn': { type: 'string' },
     until: { type: 'string' }, 'exclude-turn': { type: 'string', multiple: true },
-    'sessions-dir': { type: 'string' }, publish: { type: 'boolean' }, json: { type: 'boolean' }
+    'sessions-dir': { type: 'string' }, publish: { type: 'boolean' }, json: { type: 'boolean' },
+    refresh: { type: 'boolean' }
   } });
   const [command] = positionals;
   if (positionals.length !== 1 || !['begin', 'snapshot', 'publish', 'turns'].includes(command)) {
@@ -41,13 +42,13 @@ export async function runUsage(args, { cwd = process.cwd(), env = process.env, c
     return result.status === 'unavailable' ? 1 : 0;
   }
   const sessions = values['sessions-dir'] ?? join(env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions');
-  const until = values.until ?? new Date().toISOString();
-  if (!Number.isFinite(Date.parse(until)) || Date.parse(until) > Date.now()) throw new Error('과거 또는 현재의 유효한 종료 시각이 필요합니다.');
+  const now = new Date().toISOString();
   const git = (arguments_) => execFileSync('git', arguments_, { cwd, encoding: 'utf8' }).trim();
   const state = resolve(cwd, git(['rev-parse', '--git-common-dir']), 'agent-usage');
   await mkdir(state, { recursive: true, mode: 0o700 });
   const catalog = await catalogSessions(sessions);
-  const rootLog = async (thread) => {
+  const rootLog = async (thread, until = values.until ?? now) => {
+    if (!Number.isFinite(Date.parse(until)) || Date.parse(until) > Date.now()) throw new Error('과거 또는 현재의 유효한 종료 시각이 필요합니다.');
     const meta = catalog.get(thread);
     if (!meta || meta.parent) throw new Error('Root task log가 필요합니다. --thread를 확인하세요.');
     return readSession(meta.file, until);
@@ -81,8 +82,9 @@ export async function runUsage(args, { cwd = process.cwd(), env = process.env, c
   if (!existing || existing.schemaVersion !== 1 || existing.repository !== repository) {
     throw new Error('해당 Issue의 local 작업 기록이 없습니다. 먼저 begin을 실행하세요.');
   }
-  const log = await rootLog(existing.thread);
-  const throughTurn = values['through-turn'] ?? log.turns.at(-1)?.id;
+  const until = values.until ?? (values.refresh ? undefined : existing.until) ?? now;
+  const log = await rootLog(existing.thread, until);
+  const throughTurn = values['through-turn'] ?? (values.refresh ? undefined : existing.throughTurn) ?? log.turns.at(-1)?.id;
   const first = log.turns.findIndex((turn) => turn.id === existing.fromTurn);
   const last = log.turns.findIndex((turn) => turn.id === throughTurn);
   const excludeTurns = values['exclude-turn'] ?? existing.excludeTurns ?? [];
