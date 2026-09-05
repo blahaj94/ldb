@@ -471,6 +471,14 @@ async function primaryScenario() {
     assert.equal(failedCli.stdout, '')
     assert.equal(failedCli.stderr, 'Database migration failed\n')
 
+    currentStage = 'compiled generation CLI no-op'
+    const generation = await command(process.execPath, [
+      '--import', 'reflect-metadata', 'dist/database/generate-cli.js', 'NoChanges',
+    ], { cwd: apiDirectory, env: databaseEnvironment(resources.configuration) })
+    assert.equal(generation.code, 0)
+    assert.equal(generation.stdout, 'Database schema is current\n')
+    assert.equal(generation.stderr, '')
+
     await assertSchemaFirst(resources.configuration, (part) => (currentStage = `Schema First ${part}`))
 
     currentStage = 'fresh database rollback'

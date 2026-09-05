@@ -111,8 +111,8 @@ export async function assertSchemaFirst(configuration, mark) {
     mark('subsequent generation')
     const nextDirectory = await mkdtemp(join(directory, 'next-'))
     assert.match(await generateMigration('AddProbe', changedFactory, nextDirectory), /generated:/)
-    const Next = await compileGenerated(nextDirectory)
-    const nextFactory = () => new DataSource({ ...createDatabaseOptions(generatedConfiguration), entities, migrations: [Initial, Next] })
+    await compileGenerated(nextDirectory)
+    const nextFactory = () => new DataSource({ ...createDatabaseOptions(generatedConfiguration), entities, migrations: [join(directory, '*/migration.mjs')] })
     await withDataSource(nextFactory, generatedConfiguration, async (source) => {
       mark('subsequent apply and rollback')
       assert.equal((await source.runMigrations()).length, 1)
