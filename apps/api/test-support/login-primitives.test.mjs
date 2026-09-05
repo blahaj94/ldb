@@ -80,10 +80,13 @@ test('registry validates exact trusted URLs and freezes historical snapshot sema
 
 test('provider PKCE encryption binds request/provider/purpose and supports retained keys', () => {
   const key = randomBytes(32)
-  const keys = new crypto.ProviderPkceKeys({ activeKeyId: 'new', keys: [{ id: 'old', key: randomBytes(32) }, { id: 'new', key }] })
+  const oldKey = randomBytes(32)
+  const keys = new crypto.ProviderPkceKeys({ activeKeyId: 'new', keys: [{ id: 'old', key: oldKey }, { id: 'new', key }] })
   const context = { id: randomUUID(), provider: 'google', purpose: 'login' }
   const verifier = opaque()
   const sealed = keys.encrypt(verifier, context)
+  const historical = new crypto.ProviderPkceKeys({ activeKeyId: 'old', keys: [{ id: 'old', key: oldKey }] }).encrypt(verifier, context)
+  assert.equal(keys.decrypt({ ...context, ...historical }), verifier)
   assert.equal(sealed.providerPkceIv.length, 12)
   assert.equal(sealed.providerPkceTag.length, 16)
   assert.equal(sealed.providerPkceKeyId, 'new')
