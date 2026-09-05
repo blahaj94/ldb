@@ -139,11 +139,11 @@ export async function collectUsage(directory, {
     const safeTask = /^[a-zA-Z0-9_-]{1,40}$/.test(task ?? '') ? task : 'unknown';
     const agent = meta === root ? 'main' : `subagent_${++childIndex}_${safeTask}`;
     if (meta !== root && safeTask === 'unknown') warnings.add('unsafe_metadata');
-    const paths = new Set(family.map((entry) => entry.agentPath));
     for (const expected of log.expected.filter((entry) => selectedTurns.has(entry.turn))) {
       const path = expected.target.startsWith('/') ? expected.target : `${meta.agentPath}/${expected.target}`;
-      const child = family.find((entry) => entry.agentPath === path);
-      if (!paths.has(path) || !child) warnings.add('descendant_missing');
+      const child = family.find((entry) => entry.id === expected.target)
+        ?? family.find((entry) => entry.agentPath === path);
+      if (!child) warnings.add('descendant_missing');
       else {
         const childLog = await readSession(child.file, until);
         if (!childLog.records.some((p) => selected.has(p.root_turn_id))) warnings.add('usage_missing');
