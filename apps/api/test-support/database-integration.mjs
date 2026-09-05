@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import process from 'node:process'
 import { clearTimeout, setTimeout } from 'node:timers'
-import { URL, fileURLToPath } from 'node:url'
+import { URL, fileURLToPath, pathToFileURL } from 'node:url'
 import { Test } from '@nestjs/testing'
 import { DataSource } from 'typeorm'
 import {
@@ -160,22 +160,24 @@ async function assertNestLifecycle(configuration) {
   assert.deepEqual(after, before)
 }
 
-async function assertServerAndContainer(resources, platform) {
+export async function assertServerAndContainer(
+  resources, image, { createDataSource = createDatabaseDataSource, runDocker = docker } = {},
+) {
   currentStage = 'PostgreSQL server metadata'
-  await withDataSource(createDatabaseDataSource, resources.configuration, async (dataSource) => {
+  await withDataSource(createDataSource, resources.configuration, async (dataSource) => {
     const [version] = await dataSource.query('SHOW server_version')
     const [directory] = await dataSource.query('SHOW data_directory')
     assert.equal(version.server_version, '18.6 (Debian 18.6-1.pgdg13+2)')
     assert.equal(directory.data_directory, POSTGRES_DATA.pgdata)
   })
   currentStage = 'container image metadata'
-  const inspected = await docker([
+  const inspected = await runDocker([
     'container', 'inspect', resources.containerName, '--format', '{{json .Image}} {{json .Platform}}',
   ])
   assert.equal(inspected.stdout.trim(), `${JSON.stringify(POSTGRES_INDEX_DIGEST)} "linux"`)
   currentStage = 'container architecture'
-  const architecture = await docker(['exec', resources.containerName, 'uname', '-m'])
-  assert.equal(architecture.stdout.trim(), platform.includes('arm64') ? 'aarch64' : 'x86_64')
+  const architecture = await runDocker(['exec', resources.containerName, 'uname', '-m'])
+  assert.equal(architecture.stdout.trim(), image.platform.includes('arm64') ? 'aarch64' : 'x86_64')
 }
 
 async function assertFreshDatabaseRollback(resources) {
@@ -411,7 +413,7 @@ async function primaryScenario() {
     await waitForAuthenticatedReadiness(createReadinessDataSource, resources.configuration)
     checkSignal()
     currentStage = 'server and container metadata'
-    await assertServerAndContainer(resources, image.platform)
+    await assertServerAndContainer(resources, image)
     currentStage = 'compiled data source'
     await assertCompiledDataSource(resources.configuration)
     checkSignal()
@@ -530,10 +532,12 @@ async function primaryScenario() {
   process.removeAllListeners('SIGTERM')
 }
 
-try {
-  if (process.env.LDB_DB_SCENARIO) await childScenario()
-  else await primaryScenario()
-} catch {
-  process.stderr.write(`Database integration failed at ${currentStage}\n`)
-  process.exitCode = 1
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  try {
+    if (process.env.LDB_DB_SCENARIO) await childScenario()
+    else await primaryScenario()
+  } catch {
+    process.stderr.write(`Database integration failed at ${currentStage}\n`)
+    process.exitCode = 1
+  }
 }
