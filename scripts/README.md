@@ -87,6 +87,8 @@ Desktop `build`는 `typecheck`를 포함하므로 위 조합에서 별도로 반
 
 API의 `test`는 build entry를 실행하므로 위 순차 command처럼 `build`를 먼저 실행합니다. Root `test`는 성공 evidence가 아닙니다. Web에는 별도 test script가 없으며, 문서만 변경할 때 app build를 반복할 필요는 없습니다. 실제 validation 범위와 실행하지 못한 항목은 [`testing.md`](../docs/rules/testing.md)에 따라 PR에 기록합니다.
 
+Schema First 작성·생성·적용 순서는 [`database-development.md`](../docs/reference/database-development.md)를 따른다. `db:migrate:generate`는 현재 EntitySchema와 접속한 개발 DB를 비교해 compiled ESM 계약의 Migration source를 생성하며 DB를 변경하지 않는다.
+
 API의 `test:database`는 Docker daemon이 없거나 고정 image·native platform을 검증할 수 없으면 skip하지 않고 실패합니다. Run마다 생성한 credential, `127.0.0.1` dynamic port, ownership label이 붙은 container와 named volume만 사용하며 정상·오류·timeout·처리 가능한 signal 뒤 exact resource 부재를 확인합니다. 자원을 만들기 전에 stdout에 secret이나 연결 정보가 없는 recovery run ID와 exact container·volume 이름을 기록합니다.
 
 `SIGKILL`, host crash, Docker daemon 장애 뒤 자원이 남으면 출력된 exact 이름을 `docker container inspect NAME --format '{{ index .Config.Labels "com.ldb.database-test.run" }}'`과 `docker volume inspect NAME --format '{{ index .Labels "com.ldb.database-test.run" }}'`로 각각 확인합니다. 두 결과가 출력된 run ID와 정확히 같을 때만 `docker rm --force NAME`과 `docker volume rm --force NAME`으로 회수합니다. 일치하지 않거나 inspect 자체가 실패하면 삭제하지 않습니다. 이 command는 운영 database에 사용하지 않습니다.
