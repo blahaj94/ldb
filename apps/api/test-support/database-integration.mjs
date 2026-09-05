@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { assertIdentitySessions } from './identity-session.mjs'
+import { assertCommonLogin } from './login-database.mjs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import process from 'node:process'
@@ -469,6 +470,11 @@ async function primaryScenario() {
       assertIdentitySessions(source, (part) => (currentStage = `identity session ${part}`)),
     )
     process.stdout.write(`Identity session matrix: ${identityMatrix.scenarios} scenarios, ${identityMatrix.rollbackVariants} rollback variants\n`)
+    currentStage = 'common login flow'
+    const loginMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertCommonLogin(source, (part) => (currentStage = `common login ${part}`)),
+    )
+    process.stdout.write(`Common login matrix: ${loginMatrix.scenarios} scenarios\n`)
     currentStage = 'migrated Nest lifecycle'
     await assertNestLifecycle(resources.configuration)
     checkSignal()
