@@ -24,11 +24,11 @@ async function fixture(t, sessions) {
   const directory = await mkdtemp(join(tmpdir(), 'ldb-usage-test-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await mkdir(join(directory, 'nested'));
-  for (const [id, parent, events] of sessions) {
+  for (const [id, parent, events, agentPath = `/root/${id}`] of sessions) {
     const meta = record('session_meta', {
       id, parent_thread_id: parent,
       source: parent ? { subagent: { thread_spawn: {
-        parent_thread_id: parent, agent_path: `/root/${id}`
+        parent_thread_id: parent, agent_path: agentPath
       } } } : 'vscode'
     });
     await writeFile(join(directory, 'nested', `${id}.jsonl`),
@@ -94,6 +94,40 @@ test('다른 작업에서 생성한 subagent를 재사용해도 현재 root turn
   const result = await collectUsage(directory, { thread: 'root', fromTurn: 'work', until: end });
   assert.equal(result.agents.length, 2);
   assert.equal(result.agents[1].totalTokens, 120);
+});
+
+for (const target of ['child-id', '/root/worker', 'worker']) {
+  test(`followup target ${target}은 ID를 우선하고 경로로 재사용한 child도 확인한다`, async (t) => {
+    const directory = await fixture(t, [
+      ['root', null, [context('work'),
+        record('response_item', { type: 'function_call', name: 'followup_task',
+          call_id: 'reuse', arguments: JSON.stringify({ target }) }), usage('root', 'work', 'r')]],
+      ['child-id', 'root', [context('old', before), usage('child-id', 'old', 'c0', 'old', before),
+        done('old'), context('now'), usage('child-id', 'now', 'c1', 'work'), done('now')], '/root/worker'],
+      ['a-decoy', 'root', [context('old', before), usage('a-decoy', 'old', 'd0', 'old', before),
+        done('old')], '/root/child-id']
+    ]);
+    const result = await collectUsage(directory, { thread: 'root', fromTurn: 'work', until: end });
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.warnings, []);
+    assert.deepEqual(result.agents.map(({ agent, totalTokens }) => [agent, totalTokens]),
+      [['main', 120], ['subagent_1_worker', 120]]);
+  });
+}
+
+test('followup target ID가 다른 root의 agent이면 현재 descendant로 인정하지 않는다', async (t) => {
+  const directory = await fixture(t, [
+    ['root', null, [context('work'),
+      record('response_item', { type: 'function_call', name: 'followup_task',
+        call_id: 'reuse', arguments: JSON.stringify({ target: 'foreign-id' }) }), usage('root', 'work', 'r')]],
+    ['other-root', null, []],
+    ['foreign-id', 'other-root', [context('c'), usage('foreign-id', 'c', 'c', 'work'), done('c')]]
+  ]);
+  const result = await collectUsage(directory, { thread: 'root', fromTurn: 'work', until: end });
+  assert.equal(result.complete, false);
+  assert.deepEqual(result.warnings, ['descendant_missing']);
+  assert.equal(result.agents.length, 1);
+  assert.equal(result.agents[0].role, 'main');
 });
 
 test('누락된 model과 충돌 duplicate, 잘못된 counter는 불완전 집계로 표시한다', async (t) => {
