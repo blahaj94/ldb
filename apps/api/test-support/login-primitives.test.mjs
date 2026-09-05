@@ -30,7 +30,9 @@ test('strict creation/exchange shapes reject injected identity, redirect and non
   }
   const exchange = { requestId: randomUUID(), clientId: 'desktop', code: opaque(), codeVerifier: verifier }
   assert.deepEqual(parseExchange(exchange), exchange)
-  for (const bad of [{ ...exchange, userId: randomUUID() }, { ...exchange, clientId: 'web' },
+  // String client 불일치는 구조 오류가 아니라 service의 LOGIN_EXCHANGE_INVALID다.
+  assert.equal(parseExchange({ ...exchange, clientId: 'web' }).clientId, 'web')
+  for (const bad of [{ ...exchange, userId: randomUUID() }, { ...exchange, clientId: 1 },
     { ...exchange, requestId: 'not-uuid' }, { ...exchange, code: 'A'.repeat(42) + 'B' },
     { ...exchange, codeVerifier: verifier + '=' }]) {
     assert.throws(() => parseExchange(bad), { code: 'INVALID_AUTH_REQUEST' })
