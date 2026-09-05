@@ -5,7 +5,7 @@ enforcement: approval-required
 scope: apps/api OAuth login transaction
 last-reviewed: 2026-09-05
 rationale: 공개 Desktop client와 browser·provider callback의 연결 및 일회용 소비를 명시한다.
-evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
+evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; entropy 보완 추가 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551875298 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
 exceptions: 사용자 구현 금지 조건을 유지하며 Discord 일반 OAuth PKCE·실제 등록값은 별도 gate다.
 review-after: 실제 provider flow의 최초 검증 또는 provider 규격 변경 시
 ---
@@ -14,7 +14,7 @@ review-after: 실제 provider flow의 최초 검증 또는 provider 규격 변�
 
 이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 현재 구현·검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다. HTTP/노출 경계는 [`auth-api.md`](auth-api.md), transient schema·정리는 [`auth-database.md`](auth-database.md), 실행 gate는 [`auth-runtime.md`](auth-runtime.md)를 따른다. Provider별 identity는 `provider+subject`이고 Google/Discord는 같은 email 여부와 무관하게 별도 계정이다. 이름·email·사진은 영구 보관하지 않는다.
 
-아래 Exchange code entropy 보완절은 기존 승인에 포함되지 않은 **미승인 proposal**이다. 해당 절의 명시적 승인 gate를 기존 Rule의 active 상태와 구분한다.
+아래 Exchange code entropy 보완절은 기존 8개 Rule 승인과 별도로 [추가 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551875298)을 받았다. 기존 승인과 보완절의 승인 근거를 구분한다.
 
 ## Proof와 등록 snapshot
 
@@ -43,9 +43,9 @@ Rollback이 확실하면 code는 미소비다. Commit 응답 유실이면 성공
 
 Cancel/provider 실패/만료/crash는 성공이 아니다. Provider code는 재사용하지 않고 새 로그인한다. 남은 processing도 TTL 뒤 terminal 정리 대상이다. 정상 terminal commit의 secret/proof/subject 삭제와 물리 보관 지연은 [`auth-database.md`](auth-database.md)의 승인된 contract를 따른다.
 
-## Exchange code entropy 보완 — 미승인 proposal
+## Exchange code entropy 보완 — 승인됨
 
-이 절은 [exchange code entropy 리뷰](https://github.com/blahaj94/ldb/pull/48#discussion_r3940472415)의 명세 누락을 보완하는 제안이다. 기존 8개 Rule 승인을 이 세부 규격의 승인으로 소급하지 않는다. [`change-control.md`](change-control.md)에 따른 이 보완 범위의 명시적 `승인` 전에는 exchange code 생성·검증 구현을 착수하지 않으며, 기존 명세의 누락을 짧은 code 선택 허용으로 해석하지 않는다. 사용자 구현 금지 조건도 계속 적용한다.
+이 절은 [exchange code entropy 리뷰](https://github.com/blahaj94/ldb/pull/48#discussion_r3940472415)의 명세 누락을 보완한 승인된 contract다. 기존 8개 승인을 소급한 것이 아니라 위 별도 추가 승인으로 이 세부 규격을 확정했다. 기존 명세의 누락을 짧은 code 선택 허용으로 해석하지 않는다. 이번 Rule-only 작업에 구현을 추가하지 않으며, 다음 작업은 별도 Issue·착수 지시·dependency와 미결정 gate를 확인하고 [`change-control.md`](change-control.md)를 따른다.
 
 - Raw exchange code는 provider identity 검증 완료 뒤 **독립적인 새 32-byte CSPRNG 값**을 생성해 canonical unpadded base64url **43자**로 인코딩한다. 앱/provider verifier, launch ticket, state/nonce, request ID, provider code, 이전 exchange code를 재사용하거나 이 값들에서 파생하지 않는다.
 - `POST /auth/exchange`의 code는 string이며 길이가 정확히 43자, 모든 문자가 `[A-Za-z0-9_-]`에 속해야 한다. Strict base64url decode 결과가 정확히 32byte이고 이를 unpadded base64url로 다시 인코딩한 값이 입력과 정확히 같아야 한다. Padding·공백·잘린 값·비canonical 인코딩을 자동 보정하지 않는다. **SHA-256 입력은 decode한 원래 32byte**이며 인코딩된 ASCII string을 hash하지 않는다. 생성·검증 모두 그 32byte digest를 `exchange_code_hash`로 저장·비교한다.
