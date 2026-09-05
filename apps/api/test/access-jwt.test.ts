@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { decodeJwt, decodeProtectedHeader, importSPKI, jwtVerify } from 'jose'
+import { CompactSign, decodeJwt, decodeProtectedHeader, importPKCS8, importSPKI, jwtVerify } from 'jose'
 import { createAccessJwtIssuer, createAccessJwtVerifier } from '../src/auth/access-jwt/index.js'
 import { AccessJwtError } from '../src/auth/access-jwt/errors.js'
 import {
@@ -135,6 +135,11 @@ for (const values of [
 
 test('비허용 alg와 token 제공 key/URL은 등록 key를 대체하지 못한다', async () => {
   const verify = await createAccessJwtVerifier(configuration())
+  // 유효한 HMAC 서명이라도 verifier의 EC public key를 shared secret으로 재해석하지 않는다.
+  const confused = await new CompactSign(new TextEncoder().encode(JSON.stringify(claims())))
+    .setProtectedHeader({ ...header(), alg: 'HS256' })
+    .sign(new TextEncoder().encode(active.publicKeyPem))
+  await assert.rejects(verify(confused, now), isInvalidToken)
   const token = await signed()
   const parts = token.split('.')
   for (const alg of ['none', 'HS256', 'ES384', 'RS256', undefined]) {
@@ -151,9 +156,10 @@ test('미지원 crit 및 JSON object가 아닌 payload를 거절한다', async (
   for (const payload of [null, [], 'text', 42]) {
     await assert.rejects(verify(await signed(payload), now), isInvalidToken)
   }
-  const parts = (await signed()).split('.')
-  parts[0] = Buffer.from(JSON.stringify({ ...header(), crit: ['unknown'], unknown: true })).toString('base64url')
-  await assert.rejects(verify(parts.join('.'), now), isInvalidToken)
+  const critical = await new CompactSign(new TextEncoder().encode(JSON.stringify(claims())))
+    .setProtectedHeader({ ...header(), crit: ['unknown'], unknown: true })
+    .sign(await importPKCS8(active.privateKeyPem, 'ES256'), { crit: { unknown: true } })
+  await assert.rejects(verify(critical, now), isInvalidToken)
 })
 
 test('verify 시간은 server의 정수 초이고 추가 claim은 principal에 전파하지 않는다', async () => {
