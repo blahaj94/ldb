@@ -34,8 +34,9 @@ export async function runUsage(args, { cwd = process.cwd(), env = process.env, c
   if (positionals.length !== 1 || !['begin', 'snapshot', 'publish', 'turns'].includes(command)) {
     throw new Error('사용법: node scripts/agent-usage.mjs begin|snapshot|publish|turns [options]');
   }
-  const repository = values.repo ?? call(['repo', 'view', '--json', 'nameWithOwner'])?.nameWithOwner;
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '')) throw new Error('Repository를 확인할 수 없습니다.');
+  const requestedRepository = values.repo ?? call(['repo', 'view', '--json', 'nameWithOwner'])?.nameWithOwner;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(requestedRepository ?? '')) throw new Error('Repository를 확인할 수 없습니다.');
+  const repository = requestedRepository.toLowerCase();
   if (command === 'publish') {
     const result = publishReport(repository, number(values.pr), call);
     write(JSON.stringify(result));
@@ -63,13 +64,14 @@ export async function runUsage(args, { cwd = process.cwd(), env = process.env, c
   const manifests = await Promise.all((await readdir(state)).filter((file) => /^issue-\d+\.json$/.test(file))
     .map(async (file) => JSON.parse(await readFile(join(state, file), 'utf8'))));
   const existing = manifests.find((entry) => entry.issue === issue);
+  const sameRepository = typeof existing?.repository === 'string' && existing.repository.toLowerCase() === repository;
   if (command === 'begin') {
     const thread = values.thread ?? env.CODEX_THREAD_ID;
     const log = await rootLog(thread);
     const fromTurn = values['from-turn'] ?? log.turns.at(-1)?.id;
     if (!fromTurn || !log.turns.some((turn) => turn.id === fromTurn)) throw new Error('시작 turn을 확인할 수 없습니다.');
     const manifest = { schemaVersion: 1, repository, issue, thread, fromTurn };
-    if (existing && ['repository', 'thread', 'fromTurn'].some((key) => existing[key] !== manifest[key])) {
+    if (existing && (!sameRepository || ['thread', 'fromTurn'].some((key) => existing[key] !== manifest[key]))) {
       throw new Error('이미 기록된 작업 시작 범위를 덮어쓸 수 없습니다.');
     }
     if (manifests.some((entry) => entry.issue !== issue && entry.thread === thread && entry.fromTurn === fromTurn)) {
@@ -79,7 +81,7 @@ export async function runUsage(args, { cwd = process.cwd(), env = process.env, c
     write(`Issue #${issue}의 작업 시작 범위를 기록했습니다.`);
     return 0;
   }
-  if (!existing || existing.schemaVersion !== 1 || existing.repository !== repository) {
+  if (!existing || existing.schemaVersion !== 1 || !sameRepository) {
     throw new Error('해당 Issue의 local 작업 기록이 없습니다. 먼저 begin을 실행하세요.');
   }
   const until = values.until ?? (values.refresh ? undefined : existing.until) ?? now;
