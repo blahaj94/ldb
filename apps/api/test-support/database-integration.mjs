@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { assertIdentitySessions } from './identity-session.mjs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import process from 'node:process'
@@ -463,6 +464,11 @@ async function primaryScenario() {
     currentStage = 'AuthLoginRequest state matrix'
     const stateMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, assertLoginRequestStateMatrix)
     process.stdout.write(`AuthLoginRequest matrix: ${stateMatrix.accepted} accepted, ${stateMatrix.rejected} rejected\n`)
+    currentStage = 'identity session module'
+    const identityMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertIdentitySessions(source, (part) => (currentStage = `identity session ${part}`)),
+    )
+    process.stdout.write(`Identity session matrix: ${identityMatrix.scenarios} scenarios, ${identityMatrix.rollbackVariants} rollback variants\n`)
     currentStage = 'migrated Nest lifecycle'
     await assertNestLifecycle(resources.configuration)
     checkSignal()
