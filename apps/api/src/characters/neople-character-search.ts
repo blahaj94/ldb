@@ -197,7 +197,12 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
       controller.abort()
       rejectTimeout(failure('timeout'))
     }, DEADLINE_MS)
-    const deadlineReached = (): boolean => didTimeout || dependencies.now() >= deadline
+    const deadlineReached = (): boolean => {
+      if (!didTimeout && dependencies.now() < deadline) return false
+      didTimeout = true
+      controller.abort()
+      return true
+    }
 
     const request = async (): Promise<CharacterSearchResult> => {
       let response: Response
