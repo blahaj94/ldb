@@ -23,9 +23,17 @@ last-reviewed: 2026-09-05
 
 - Package: `@ldb/api`
 - Type: ESM
-- 현재 `dev`, `build`, `test` script는 비어 있다.
-- 선언된 validation script: `typecheck`, `lint`
-- 현재 tracked source implementation은 없다.
+- Stack: Node 24, NestJS 12, TypeScript
+- Entry: `src/main.ts` → `dist/main.js`
+- 필수 runtime 설정: `PORT`의 ASCII 십진 정수 `1`~`65535`
+- Test compile: `src`, `test` → `.test-dist`; 제품 endpoint 없이 test module의 loopback HTTP로 runtime을 검증한다.
+- Command:
+  - `pnpm --filter @ldb/api dev`
+  - `pnpm --filter @ldb/api start`
+  - `pnpm --filter @ldb/api test`
+  - `pnpm --filter @ldb/api typecheck`
+  - `pnpm --filter @ldb/api lint`
+  - `pnpm --filter @ldb/api build`
 
 ### `apps/web`
 

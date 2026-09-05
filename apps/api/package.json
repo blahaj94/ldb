@@ -3,11 +3,31 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
   "scripts": {
-    "dev": "",
-    "build": "",
-    "test": "",
-    "typecheck": "tsc --noEmit",
+    "dev": "pnpm run build && pnpm run start",
+    "build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "test": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('.test-dist', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node --import reflect-metadata --test \".test-dist/test/**/*.test.js\"",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "start": "node --import reflect-metadata dist/main.js",
     "lint": "eslint ."
+  },
+  "dependencies": {
+    "@nestjs/common": "12.0.1",
+    "@nestjs/core": "12.0.1",
+    "@nestjs/platform-express": "12.0.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@nestjs/testing": "12.0.1",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.3",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.69.0"
   }
 }
