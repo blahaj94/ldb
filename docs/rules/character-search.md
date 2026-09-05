@@ -120,6 +120,12 @@ Node 내장 `fetch`와 abort signal로 body 수신까지 취소하고 timer를 �
 
 **인증 설계와 조정할 제안:** 인증 → query 검증 → 계정 예약 → upstream 순서로 평가한다. 인증 실패와 invalid query가 겹치면 401, 인증된 invalid query와 계정 제한이 겹치면 400이다. Session 활동 갱신·만료 판정·폐기된 session의 잔여 JWT 검색·DB 실패 순서는 로그인/session Rule에서 승인해야 한다. 이 문서로 activity write나 계정 조회를 새로 추가하지 않는다. 전체 서비스 limiter가 추가되면 계정 예약과의 순서·환불 여부도 별도 결정한다.
 
+### Authentication activity proposal — 미승인 추가 제안
+
+위 미결정 통합의 상세 승인안은 [`auth-activity.md`](auth-activity.md)다. Account admission 직렬화·DB 활동 commit 후 기존 quota를 예약하는 순서와 총 2초 내부 대기, 정상 DB의 revoked/없는 session은 residual 검색·활동 0, DB 장애는 기존 검색 500·upstream/예약 0을 제안한다. JWT/session 시간은 [`auth-session.md`](auth-session.md)를 따른다.
+
+이 추가 절은 위 승인된 **“대기열은 없다”**를 내부 DB 직렬화 대기까지 허용하는 것으로 확정하지 않는다. Quota가 풀릴 때까지 기다리는 queue는 없으나 admission 대기 허용 여부 자체는 명시적 사용자 승인 대상이다. 내부 대기를 금지하기로 결정하면 대안을 재선택한다. 기존 예약 window·시각·즉시 upstream·무환불·단일 process 한계는 유지하고 이 proposal로 인증·DB 구현을 착수하지 않는다.
+
 ## 간결한 경계 예시
 
 아래는 승인된 검색 계약의 기대값이다. Upstream 횟수는 유효한 인증·설정과 여유 quota를 전제로 한다.

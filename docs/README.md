@@ -36,6 +36,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
 | 실행 command 또는 file 위치 확인 | `docs/reference/repository-map.md`                                                    |
 | API runtime·검색 작업 | `docs/rules/api-runtime.md`, `docs/rules/character-search.md` |
+| 인증·session·DB 설계/승인 검토 | 아래 Authentication proposal routing에서 관련 topic 선택. 전부 미승인이며 구현 authority 없음 |
 | 기획·domain 작업                 | 향후 `docs/product/**`, `docs/domain/**`에서 task 관련 document만 선택                |
 
 ## Document maintenance
@@ -60,6 +61,19 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 
 - [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 계약
 - [`rules/character-search.md`](rules/character-search.md): 검색 query·응답·오류·계정 제한 계약
+
+### Authentication proposal routing — 미승인 추가 제안
+
+이 routing과 연결된 Rule은 #39 최종 설계의 승인용 proposal이다. 기존 active Rule의 승인 범위를 확대하지 않으며 사용자의 명시적 `승인`과 별도 구현 착수 범위 확인 전 구현·설치·DB 실행에 사용하지 않는다.
+
+| 필요한 topic | Canonical proposal |
+| --- | --- |
+| Endpoint·parser·오류·nickname·log sink | [`rules/auth-api.md`](rules/auth-api.md) |
+| Client/provider binding·OAuth 상태·TTL·provider 검증 | [`rules/auth-oauth.md`](rules/auth-oauth.md) |
+| JWT/key·30일·refresh/logout 최종 경합 | [`rules/auth-session.md`](rules/auth-session.md) |
+| 4개 테이블·constraint·잠금·정리/물리 보관·삭제 경계 | [`rules/auth-database.md`](rules/auth-database.md) |
+| 검색 admission/quota·활동 commit·residual JWT·DB 장애·계정 기능 경합 | [`rules/auth-activity.md`](rules/auth-activity.md) |
+| Exact dependency 후보·Migration·운영/플랫폼 미결정 gate | [`rules/auth-runtime.md`](rules/auth-runtime.md) |
 
 ### Reference
 

@@ -77,3 +77,7 @@ Runtime acceptance에는 test HTTP 응답, metadata가 필요한 constructor DI,
 검색 adapter는 fake transport 또는 loopback upstream으로 검증한다. 외부 domain·네오플 credential·인증·DB가 필요하지 않아야 한다. 계정당 제한과 session 활동의 통합 검증은 해당 인증 Rule 승인 후 진행한다. Search query 길이의 외부 규격 미확인은 credential 없는 runtime 검증을 막지 않는다.
 
 설계 검토 시에는 문서 대조와 `git diff --check`만 수행한다. 위 command, dependency 설치, API·DB·부하 검증은 설계 단계에서 실행하지 않는다. Runtime/test 조합의 첫 실행이 실패하면 engine·peer·metadata·ESM 원인을 공개하고, 이를 피하려고 승인 범위 밖 도구를 추가하지 않는다.
+
+## Authentication runtime proposal — 미승인 추가 제안
+
+인증·DB의 exact dependency 후보와 Migration은 [`auth-runtime.md`](auth-runtime.md), HTTP/parser 경계는 [`auth-api.md`](auth-api.md)를 참조한다. 이 routing과 후보는 위 승인된 직접 dependency 목록에 포함되지 않으며 새로운 설치·구현 authority를 만들지 않는다. 승인된 Node/Nest/ESM/tsc→Node 계약을 유지한 채 역할·후보와 남은 compatibility/운영 gate를 별도로 승인받아야 한다.

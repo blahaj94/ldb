@@ -41,6 +41,12 @@ scripts/
 
 미정 사항을 구현해야 하면 AI는 임의로 architecture를 확정하지 않고 사용자에게 대안과 trade-off를 제시한다.
 
+## Authentication boundary proposal — 미승인 추가 제안
+
+중앙 API의 provider 교환·PostgreSQL identity/session과 Desktop public client의 외부 browser 로그인을 제안한다. HTTP/앱 boundary는 [`../rules/auth-api.md`](../rules/auth-api.md), OAuth는 [`../rules/auth-oauth.md`](../rules/auth-oauth.md), session은 [`../rules/auth-session.md`](../rules/auth-session.md), DB는 [`../rules/auth-database.md`](../rules/auth-database.md), 검색 활동은 [`../rules/auth-activity.md`](../rules/auth-activity.md), dependency·미결정 gate는 [`../rules/auth-runtime.md`](../rules/auth-runtime.md)가 canonical proposal이다.
+
+이 절과 연결된 문서는 위 Approved boundary를 확대하지 않는다. 새 shared package/import direction, Web/mobile client, 실제 OS 저장/IPC·domain/protocol, deployment topology, 탈퇴 state/삭제·재가입·백업 복원은 여기서 확정하지 않는다. 명시적 Rule 승인과 후속 task 범위 확인 전에 구현하지 않는다.
+
 ## Architecture change
 
 다음은 architecture 변경으로 취급한다.
