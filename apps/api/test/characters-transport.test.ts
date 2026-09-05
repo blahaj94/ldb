@@ -137,7 +137,7 @@ test('malformed loopback JSON keeps the upstream 503 fallback', async () => {
 
 test('deadline aborts native fetch while the loopback body is still incomplete', async () => {
   let now = 0
-  let capturedSignal: AbortSignal | null = null
+  const captured: { signal?: AbortSignal } = {}
   let deadlineCallback: (() => void) | undefined
   let scheduledDelay: number | undefined
   let requests = 0
@@ -156,7 +156,7 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
-        capturedSignal = init?.signal ?? null
+        if (init?.signal !== null && init?.signal !== undefined) captured.signal = init.signal
         const response = await fetch(request, init)
         return {
           status: response.status,
@@ -185,7 +185,7 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
       504,
     )
     assert.equal(error.body.error.code, 'NEOPLE_TIMEOUT')
-    assert.equal(capturedSignal?.aborted, true)
+    assert.equal(captured.signal?.aborted, true)
     assert.equal(scheduledDelay, 5_000)
     assert.equal(requests, 1)
     await Promise.race([
