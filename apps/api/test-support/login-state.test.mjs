@@ -6,6 +6,7 @@ import { opaque } from './login-fixtures.mjs'
 import { digest } from './login-database.mjs'
 
 const { completeLoginCallback } = await import('../dist/auth/login/callback.js')
+const { exchangeLogin } = await import('../dist/auth/login/exchange.js')
 
 test('expired processing callback read commits terminal cleanup after an uncertain prior claim', async () => {
   const state = opaque(), binding = opaque(), time = new Date('2026-09-06T00:10:00Z')
@@ -31,4 +32,20 @@ test('expired processing callback read commits terminal cleanup after an uncerta
   assert.equal(updates, 1)
   assert.equal(stored.status, 'failed')
   assert.equal(stored.stateHash, null)
+})
+
+test('expired active request read by exchange clears secrets while terminal consumed state is preserved', async () => {
+  for (const status of ['created', 'processing', 'consumed']) {
+    const time = new Date('2026-09-06T00:10:00Z')
+    const stored = { id: randomUUID(), status, expiresAt: time, clientId: 'desktop' }
+    let updates = 0
+    const manager = {
+      query: async () => [{ now: time }],
+      getRepository: () => ({ findOne: async () => stored, update: async (_where, patch) => { updates++; Object.assign(stored, patch) } }),
+    }
+    await assert.rejects(() => exchangeLogin({ dataSource: { transaction: async (_isolation, operation) => operation(manager) } },
+      { requestId: stored.id, clientId: 'desktop', code: opaque(), codeVerifier: opaque() }), { code: 'LOGIN_EXCHANGE_INVALID' })
+    assert.equal(updates, status === 'consumed' ? 0 : 1)
+    assert.equal(stored.status, status === 'consumed' ? 'consumed' : 'failed')
+  }
 })
