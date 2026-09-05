@@ -50,6 +50,20 @@ function snapshot(overrides = {}) {
   };
 }
 
+function manyAgents(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    role: index === 0 ? "main" : "subagent",
+    agent: `agent-${index}-${"x".repeat(50)}`,
+    model: "m".repeat(80),
+    effort: "ultra",
+    inputTokens: 900_719_925,
+    cachedInputTokens: 123_456_789,
+    outputTokens: 123_456_789,
+    reasoningOutputTokens: 12_345_678,
+    totalTokens: 1_024_176_714,
+  }));
+}
+
 test("validateSnapshot returns a fresh allowlisted snapshot", () => {
   const source = snapshot();
   const result = validateSnapshot(source);
@@ -151,6 +165,22 @@ test("snapshot comments round-trip only marked, validated JSON", () => {
   assert.throws(
     () => parseSnapshotComment(body.replace('"schemaVersion": 1', '"schemaVersion": 2')),
     /Invalid/,
+  );
+});
+
+test("snapshot comments enforce GitHub's rendered comment length", () => {
+  const withinLimit = snapshot({ agents: manyAgents(80) });
+  const body = snapshotComment(withinLimit);
+  assert.ok(body.length <= 65_536);
+  assert.deepEqual(parseSnapshotComment(body), withinLimit);
+
+  assert.throws(
+    () => snapshotComment(snapshot({ agents: manyAgents(100) })),
+    /65536 character limit/,
+  );
+  assert.throws(
+    () => parseSnapshotComment(`${SNAPSHOT_MARKER}${"x".repeat(65_536)}`),
+    /65536 character limit/,
   );
 });
 

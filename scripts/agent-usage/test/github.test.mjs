@@ -41,6 +41,20 @@ function snapshot(overrides = {}) {
   };
 }
 
+function manyAgents(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    role: index === 0 ? "main" : "subagent",
+    agent: `agent-${index}-${"x".repeat(50)}`,
+    model: "m".repeat(80),
+    effort: "ultra",
+    inputTokens: 900_719_925,
+    cachedInputTokens: 123_456_789,
+    outputTokens: 123_456_789,
+    reasoningOutputTokens: 12_345_678,
+    totalTokens: 1_024_176_714,
+  }));
+}
+
 function pullRequest(overrides = {}) {
   return {
     number: 35,
@@ -85,6 +99,15 @@ test("saveSnapshot requires current same-repository PR head and linked manifest 
   ]) {
     assert.throws(() => saveSnapshot(snapshot(), apiMock({ pr }).call), /Unable to save usage snapshot/);
   }
+});
+
+test("saveSnapshot rejects oversized rendered comments before GitHub calls", () => {
+  const mock = apiMock();
+  assert.throws(
+    () => saveSnapshot(snapshot({ agents: manyAgents(100) }), mock.call),
+    /65536 character limit/,
+  );
+  assert.deepEqual(mock.calls, []);
 });
 
 test("saveSnapshot updates only the current actor's marked comment", () => {
