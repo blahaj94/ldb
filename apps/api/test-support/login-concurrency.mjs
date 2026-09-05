@@ -61,7 +61,8 @@ async function assertSingleConsumer(source, kind) {
     const attempts = [settled(operation()), settled(operation())]
     try {
       await bounded(observed.promise)
-      for (const waiter of pids) await blockedBy(source, waiter, pid)
+      // 두 번째 waiter는 원 blocker 대신 앞 waiter의 tuple lock 뒤에 줄을 설 수 있다.
+      for (const waiter of pids) await blockedBy(source, waiter, [pid, ...pids.filter((candidate) => candidate !== waiter)])
       await unlock()
       const results = await Promise.all(attempts)
       assert.equal(results.filter((result) => result.value).length, 1)
@@ -173,6 +174,36 @@ async function assertCallbackExpiryAndCompletionTime(source) {
   assert.equal((await row(source, short.request.requestId)).code_expires_at.getTime(), expiry.getTime())
 }
 
+async function assertCompletionLockTime(source) {
+  const entered = Promise.withResolvers(), release = Promise.withResolvers()
+  const f = await fixture(source, { verifyProvider: async () => {
+    entered.resolve(); await release.promise
+    return { provider: 'google', subject: randomUUID() }
+  } })
+  const flow = await started(f.service)
+  const pending = settled(f.service.callback('google', callbackQuery(flow), flow.cookie))
+  await bounded(entered.promise)
+  await locked(source, 'auth_login_requests', flow.request.requestId, async ({ pid, unlock }) => {
+    const observed = Promise.withResolvers()
+    const restore = instrument(source, { query: async ({ sql, query, run }) => {
+      if (sql.includes('"auth_login_requests"') && sql.includes('FOR UPDATE')) observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
+      return run()
+    } })
+    const earliest = Math.floor(Date.now() / 1000) * 1000
+    release.resolve()
+    try {
+      await blockedBy(source, await bounded(observed.promise), pid)
+      const latest = Math.floor(Date.now() / 1000) * 1000
+      await waitUntil(source, new Date(latest + 2000))
+      await unlock()
+      assert.equal((await pending).error, undefined)
+      const expiry = (await row(source, flow.request.requestId)).code_expires_at.getTime()
+      assert(expiry >= earliest + 60_000)
+      assert(expiry <= latest + 60_000)
+    } finally { restore() }
+  })
+}
+
 async function assertTwoIdentityExchanges(source) {
   const entered = Promise.withResolvers(), release = Promise.withResolvers(), secondInsert = Promise.withResolvers()
   let signer, signCalls = 0
@@ -217,6 +248,7 @@ export async function assertLoginConcurrency(source, mark) {
     ['user row wait crosses code deadline', () => assertFreshAfterWait(source, 'users')],
     ['exact request and code expiration', () => assertExactExpiration(source)],
     ['callback request expiry and capped code TTL', () => assertCallbackExpiryAndCompletionTime(source)],
+    ['completion row wait cannot extend code TTL', () => assertCompletionLockTime(source)],
     ['distinct exchanges share one identity and independent sessions', () => assertTwoIdentityExchanges(source)],
     ['single ten-second provider deadline and late result rejection', () => assertCallbackDeadline(source)],
   ]

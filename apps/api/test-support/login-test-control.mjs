@@ -31,9 +31,10 @@ export function instrument(source, hooks) {
 
 export async function blockedBy(source, waiter, blocker) {
   const deadline = Date.now() + 5000
+  const expected = Array.isArray(blocker) ? blocker : [blocker]
   while (Date.now() < deadline) {
-    const [state] = await source.query('SELECT $2::int = ANY(pg_blocking_pids($1::int)) AS blocked', [waiter, blocker])
-    if (state.blocked) return
+    const [state] = await source.query('SELECT pg_blocking_pids($1::int) AS blockers', [waiter])
+    if (expected.some((pid) => state.blockers.includes(pid))) return
     await delay(10)
   }
   assert.fail('expected actual PostgreSQL lock contention')
