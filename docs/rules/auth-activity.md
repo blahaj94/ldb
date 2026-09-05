@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/api authenticated search and account activity
 last-reviewed: 2026-09-05
 rationale: 인증·입력·quota 거절과 활동 기록 및 DB 장애의 순서를 함께 정의한다.
-evidence: "Issue #39 Proposal Revision 2: https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: 기존 no-queue의 내부 admission 대기 허용 여부는 명시적 사용자 승인 전까지 미구현 선택 지점이다.
+evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
+exceptions: 내부 admission 대기만 승인됐으며 quota 재시도 대기열은 금지하고 사용자 구현 금지 조건을 유지한다.
 review-after: 최초 DB latency·취소·동시성 integration validation 시
 ---
 
-# Authentication Activity Proposal
+# Authentication Activity Contract
 
-이 문서 전체는 미승인 추가 proposal이다. [`character-search.md`](character-search.md)의 기존 예약 시각·60초 window·무환불·즉시 upstream·단일 process 한계를 유지하면서 인증/활동을 통합할 승인안이다. **기존 “대기열은 없다”가 아래 내부 DB 직렬화 대기까지 허용한다는 해석은 아직 승인되지 않았다.** 이를 금지하는 의미로 결정하면 아래 권고안을 구현하지 않고 대안을 다시 선택한다. 현재 code와 승인 Rule의 behavior 충돌을 발견했다는 뜻은 아니다.
+이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. [`character-search.md`](character-search.md)의 기존 예약 시각·60초 window·무환불·즉시 upstream·단일 process 한계를 유지하면서 인증/활동을 통합한다. **내부 DB admission 직렬화 대기는 아래 총 2초 경계 안에서 승인됐으며 quota가 풀리기를 기다리는 대기열은 계속 금지한다.** 승인된 contract는 현재 구현·검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다.
 
 JWT/시간은 [`auth-session.md`](auth-session.md), API/입력은 [`auth-api.md`](auth-api.md), 잠금/정리는 [`auth-database.md`](auth-database.md)를 따른다. Authentication guard에 user 존재/revocation DB 조회를 추가하지 않으며 순수 search adapter는 인증·DB·활동을 import하지 않는다. 검색 결과는 저장/캐싱하지 않는다.
 
@@ -36,15 +36,15 @@ DB read/write/commit 실패·timeout은 `500 INTERNAL_SERVER_ERROR`와 기존 �
 
 ## 내부 deadline과 resource
 
-내부 직렬화 대기 시작부터 DB lock/write/commit까지 **총 2초 deadline 하나**를 제안한다. 매 단계 새 2초를 시작하지 않는다. 만료는 위 500·미예약이며 기다리는 요청을 즉시 취소·연결 해제한다. 뒤늦은 DB callback이 quota 예약/upstream을 시작하지 못하게 한다. DB cancel/rollback·connection 종료는 별도로 완료하고 commit 불명은 위 contract로 처리한다. 대기 뒤 권한은 fresh post-lock T로 판단한다.
+내부 직렬화 대기 시작부터 DB lock/write/commit까지 **총 2초 deadline 하나**를 적용한다. 매 단계 새 2초를 시작하지 않는다. 만료는 위 500·미예약이며 기다리는 요청을 즉시 취소·연결 해제한다. 뒤늦은 DB callback이 quota 예약/upstream을 시작하지 못하게 한다. DB cancel/rollback·connection 종료는 별도로 완료하고 commit 불명은 위 contract로 처리한다. 대기 뒤 권한은 fresh post-lock T로 판단한다.
 
 Account entry는 최근 60초 reservation 또는 살아 있는 admission 요청이 있는 동안만 유지한다. Deadline/연결 취소 시 waiter 참조를 제거하고 둘 다 없으면 삭제한다. 대기 중 quota prune이 entry를 교체해 같은 account lock을 둘 만들지 않는다.
 
-2초는 대기 시간 상한이며 동시 유입량·memory의 고정 상한이 아니다. Ingress/pending-request 수 제한은 별도 운영 gate이고 전체 서비스 한도 수치는 미정이다. 내부 admission 대기 허용과 resource/cancel validation을 승인받아야 하며 quota retry queue는 만들지 않는다.
+2초는 대기 시간 상한이며 동시 유입량·memory의 고정 상한이 아니다. Ingress/pending-request 수 제한은 별도 운영 gate이고 전체 서비스 한도 수치는 미정이다. 내부 admission 대기는 승인됐으며 resource/cancel validation은 후속 검증으로 남는다. Quota retry queue는 만들지 않는다.
 
 ## 계정 API 활동과 기능 단계
 
-`GET /me`, `PATCH /me/nickname`을 계정 기능 활동으로 인정하는 분류를 제안한다. JWT → 입력 → 해당 endpoint에 향후 승인된 제한 → user/session lock → 활성·미만료 확인 → 활동 commit → 기능 처리 순서다. Nickname 횟수/cooldown 제한은 없고 검색 quota를 공유하지 않는다.
+`GET /me`, `PATCH /me/nickname`을 계정 기능 활동으로 인정하는 분류가 승인됐다. JWT → 입력 → 해당 endpoint에 향후 승인된 제한 → user/session lock → 활성·미만료 확인 → 활동 commit → 기능 처리 순서다. Nickname 횟수/cooldown 제한은 없고 검색 quota를 공유하지 않는다.
 
 최초 admission의 인증/입력 거절은 활동 0이다. 이후 기능 실패에도 인정한 활동을 유지하므로 nickname update 실패와 함께 activity commit을 임의 rollback하지 않는다. 계정 조회/nickname mutation 기능 단계는 다시 user/session 유효성을 잠금 안에서 확인해 logout/삭제 뒤 조회·변경을 막는다.
 
@@ -52,8 +52,8 @@ Account entry는 최근 60초 reservation 또는 살아 있는 admission 요청�
 
 Health/refresh/logout/login 상태 확인은 기존 session 활동이 아니다. 계정/인증 기능의 DB 장애는 auth용 503이며 검색 DB 장애의 500과 구분한다.
 
-## 승인 선택과 검증 경계
+## 승인된 선택과 검증 경계
 
-권고는 admission+DB commit 뒤 reserve다. 활동 best effort는 장애 중 사용해도 30일 deadline이 연장되지 않는 대안이다. Reserve 뒤 DB 실패에도 예약 유지는 upstream 없는 실패 차감 정책을 추가하고, activity 뒤 quota는 429도 활동으로 만들며, DB quota는 승인된 memory 저장 범위를 바꾼다. 어느 대안도 구현자가 묵시 선택하지 않는다.
+승인된 순서는 admission+DB commit 뒤 reserve다. 활동 best effort는 장애 중 사용해도 30일 deadline이 연장되지 않는 대안이다. Reserve 뒤 DB 실패에도 예약 유지는 upstream 없는 실패 차감 정책을 추가하고, activity 뒤 quota는 429도 활동으로 만들며, DB quota는 승인된 memory 저장 범위를 바꾼다. 어느 대안도 구현자가 묵시 선택하지 않는다.
 
-관련 validation은 401/400/429 우선순위, 정확한 만료, 11개 동시 요청의 최대 10 upstream, DB 실패/commit 불명·residual row 없음, 최종 예약 시각, 단일 2초와 late completion/취소/entry 수명, 활동 commit 뒤 logout/삭제 경합의 최종 상태를 포함한다. 상세 예상 matrix와 실행 evidence는 Execution Issue/PR에 두고 이 proposal의 검토를 runtime 성공으로 표시하지 않는다.
+관련 validation은 401/400/429 우선순위, 정확한 만료, 11개 동시 요청의 최대 10 upstream, DB 실패/commit 불명·residual row 없음, 최종 예약 시각, 단일 2초와 late completion/취소/entry 수명, 활동 commit 뒤 logout/삭제 경합의 최종 상태를 포함한다. 상세 예상 matrix와 실행 evidence는 Execution Issue/PR에 두고 이 Rule 승인을 runtime 성공으로 표시하지 않는다.

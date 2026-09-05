@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/api OAuth login transaction
 last-reviewed: 2026-09-05
 rationale: 공개 Desktop client와 browser·provider callback의 연결 및 일회용 소비를 명시한다.
-evidence: "Issue #39 Proposal Revision 2: https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: 미승인 proposal이며 Discord 일반 OAuth PKCE·실제 등록값은 별도 gate다.
+evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
+exceptions: 사용자 구현 금지 조건을 유지하며 Discord 일반 OAuth PKCE·실제 등록값은 별도 gate다.
 review-after: 실제 provider flow의 최초 검증 또는 provider 규격 변경 시
 ---
 
-# OAuth Login Proposal
+# OAuth Login Contract
 
-이 문서 전체는 미승인 proposal이다. HTTP/노출 경계는 [`auth-api.md`](auth-api.md), transient schema·정리는 [`auth-database.md`](auth-database.md), 실행 gate는 [`auth-runtime.md`](auth-runtime.md)를 따른다. Provider별 identity는 `provider+subject`이고 Google/Discord는 같은 email 여부와 무관하게 별도 계정이다. 이름·email·사진은 영구 보관하지 않는다.
+이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 현재 구현·검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다. HTTP/노출 경계는 [`auth-api.md`](auth-api.md), transient schema·정리는 [`auth-database.md`](auth-database.md), 실행 gate는 [`auth-runtime.md`](auth-runtime.md)를 따른다. Provider별 identity는 `provider+subject`이고 Google/Discord는 같은 email 여부와 무관하게 별도 계정이다. 이름·email·사진은 영구 보관하지 않는다.
 
 ## Proof와 등록 snapshot
 
@@ -39,7 +39,7 @@ Request 전체 TTL은 생성부터 최대 **600초**다. 정확한 만료에서 
 
 Rollback이 확실하면 code는 미소비다. Commit 응답 유실이면 성공/실패를 추정해 token을 재발급하지 않고 새 로그인을 안내한다. 미수신 session은 logout할 수 없을 수 있으며 30일 미사용으로 끝난다. 절대 수명이나 자동 복구를 추가하지 않는다. Proof 불일치처럼 자격 미증명 실패는 valid request/code를 소비하거나 session을 생성·폐기하지 않는다.
 
-Cancel/provider 실패/만료/crash는 성공이 아니다. Provider code는 재사용하지 않고 새 로그인한다. 남은 processing도 TTL 뒤 terminal 정리 대상이다. 정상 terminal commit의 secret/proof/subject 삭제와 물리 보관 지연은 [`auth-database.md`](auth-database.md)의 별도 승인 대상이다.
+Cancel/provider 실패/만료/crash는 성공이 아니다. Provider code는 재사용하지 않고 새 로그인한다. 남은 processing도 TTL 뒤 terminal 정리 대상이다. 정상 terminal commit의 secret/proof/subject 삭제와 물리 보관 지연은 [`auth-database.md`](auth-database.md)의 승인된 contract를 따른다.
 
 ## Google identity
 
@@ -57,9 +57,9 @@ Cancel/provider 실패/만료/crash는 성공이 아니다. Provider code는 재
 
 ## Provider token과 revoke
 
-서명/JWT 검증은 승인받을 `jose` library에 맡기고 자체 parser/crypto를 만들지 않는다. Provider token·raw 응답·provider code는 해당 callback 메모리에서만 사용하고 성공/실패/취소/timeout 모두 finally에서 참조를 해제한다. DB/log/file/queue에 쓰지 않고 JS string의 즉각 zeroization을 보장하지 않는다. Discord refresh와 예상치 않은 Google refresh도 보관/사용하지 않는다. Provider PKCE verifier만 별도 암호화 transient field에 둔다.
+서명/JWT 검증은 승인된 `jose` library에 맡기고 자체 parser/crypto를 만들지 않는다. Provider token·raw 응답·provider code는 해당 callback 메모리에서만 사용하고 성공/실패/취소/timeout 모두 finally에서 참조를 해제한다. DB/log/file/queue에 쓰지 않고 JS string의 즉각 zeroization을 보장하지 않는다. Discord refresh와 예상치 않은 Google refresh도 보관/사용하지 않는다. Provider PKCE verifier만 별도 암호화 transient field에 둔다.
 
-로그인 직후나 기기 logout에 provider revoke를 자동 실행하지 않는다. 폐기와 grant revoke는 다르고 revoke는 다른 grant/token에도 영향을 줄 수 있다. Provider 설정에서 동의 철회가 발생해도 자체 JWT/session 자동 폐기를 추정하지 않는다. 자체 idle/logout/reuse 정책을 유지하고 다음 소셜 로그인에서 다시 provider 검증하는 안을 승인 요청한다. 즉각 연동 폐기는 별도 event/계정 정책 대안이다.
+로그인 직후나 기기 logout에 provider revoke를 자동 실행하지 않는다. 폐기와 grant revoke는 다르고 revoke는 다른 grant/token에도 영향을 줄 수 있다. Provider 설정에서 동의 철회가 발생해도 자체 JWT/session 자동 폐기를 추정하지 않는다. 자체 idle/logout/reuse 정책을 유지하고 다음 소셜 로그인에서 다시 provider 검증하는 정책이 승인됐다. 즉각 연동 폐기는 별도 event/계정 정책 대안이다.
 
 연결 해제 endpoint/UI는 범위 밖이다. 탈퇴의 재인증→동일 계정 확인→새 token revoke→DB 삭제 원칙은 별도 설계 근거이며 삭제 상태·동시 로그인·백업 복원 gate를 해결하기 전 구현 authority가 없다.
 

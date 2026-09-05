@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/api access JWT refresh and session lifecycle
 last-reviewed: 2026-09-05
 rationale: 기기별 만료·rotation·재사용의 최종 상태를 시간과 transaction 경합까지 정의한다.
-evidence: "Issue #39 Proposal Revision 2: https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: 미승인 proposal이며 key 주기와 활동 분류도 승인 대상이다.
+evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
+exceptions: 사용자 구현 금지 조건을 유지하며 실제 key 운영 교체 절차는 별도 gate다.
 review-after: 최초 session 경합 validation 또는 key 정책 변경 시
 ---
 
-# Session and Token Proposal
+# Session and Token Contract
 
-이 문서 전체는 미승인 proposal이다. API는 [`auth-api.md`](auth-api.md), DB/잠금/보관은 [`auth-database.md`](auth-database.md), 활동·잔여 JWT 검색은 [`auth-activity.md`](auth-activity.md)가 canonical contract다. 각 성공 로그인은 별도 기기 session을 만들고 한 session의 활동/logout/reuse가 다른 기기를 변경하지 않는다.
+이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 현재 구현·검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다. API는 [`auth-api.md`](auth-api.md), DB/잠금/보관은 [`auth-database.md`](auth-database.md), 활동·잔여 JWT 검색은 [`auth-activity.md`](auth-activity.md)가 canonical contract다. 각 성공 로그인은 별도 기기 session을 만들고 한 session의 활동/logout/reuse가 다른 기기를 변경하지 않는다.
 
 ## 시간과 idle 만료
 
@@ -36,9 +36,9 @@ JWT verify 자체는 session revocation DB 조회를 하지 않는다. 검색 �
 
 ## Signing key lifecycle
 
-Key를 boot마다 생성하지 않는다. 운영 secret 저장소/배포 secret file에 두고 source·DB·image layer·log에 넣지 않는다. **90일마다 새 signing key**와 충분히 임의인 새 kid, active signing key 하나·verify key 여러 개를 제안한다.
+Key를 boot마다 생성하지 않는다. 운영 secret 저장소/배포 secret file에 두고 source·DB·image layer·log에 넣지 않는다. **90일마다 새 signing key**와 충분히 임의인 새 kid, active signing key 하나·verify key 여러 개를 사용한다.
 
-새 public key를 verifier에 먼저 배포 → signer 전환 → 이전 key의 마지막 발급 후 최소 900초 경과와 이전 token 만료 확인 → 이전 private/public key 제거 순서다. 침해 시 해당 kid를 즉시 제거해 JWT를 거절하며 정상 logout의 지연 허용과 구분한다. Refresh hash를 signing key에 결합하지 않는다. Key 누락·중복 kid·알고리즘 불일치는 listen 전 정제 실패다. 90일 주기와 실제 운영 교체 절차는 승인 대상이다.
+새 public key를 verifier에 먼저 배포 → signer 전환 → 이전 key의 마지막 발급 후 최소 900초 경과와 이전 token 만료 확인 → 이전 private/public key 제거 순서다. 침해 시 해당 kid를 즉시 제거해 JWT를 거절하며 정상 logout의 지연 허용과 구분한다. Refresh hash를 signing key에 결합하지 않는다. Key 누락·중복 kid·알고리즘 불일치는 listen 전 정제 실패다. 90일 주기는 승인됐으며 실제 운영 교체 절차는 별도 gate다.
 
 ## Refresh transaction
 

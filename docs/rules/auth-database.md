@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/api core authentication database
 last-reviewed: 2026-09-05
 rationale: identity uniqueness·단일 소비·경합·보관 정책을 DB invariant와 연결한다.
-evidence: "Issue #39 Proposal Revision 2: https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: 미승인 schema proposal이며 탈퇴 state·삭제/재가입·백업 복원은 이 schema로 해결하지 않는다.
+evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
+exceptions: 사용자 구현 금지 조건을 유지하며 탈퇴 state·삭제/재가입·백업 복원은 이 schema로 해결하지 않는다.
 review-after: 최초 Docker constraint·migration·cleanup 경합 validation 시
 ---
 
-# Authentication Database Proposal
+# Authentication Database Contract
 
-이 문서 전체는 신규 승인 대상 proposal이다. OAuth 상태는 [`auth-oauth.md`](auth-oauth.md), 시간/refresh는 [`auth-session.md`](auth-session.md), 활동은 [`auth-activity.md`](auth-activity.md), dependency/Migration 실행은 [`auth-runtime.md`](auth-runtime.md)를 따른다. 기본 영구 3개 테이블에 회원 생성 전 로그인용 transient table 하나를 추가하는 안이다.
+이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 현재 schema 구현·DB 검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다. OAuth 상태는 [`auth-oauth.md`](auth-oauth.md), 시간/refresh는 [`auth-session.md`](auth-session.md), 활동은 [`auth-activity.md`](auth-activity.md), dependency/Migration 실행은 [`auth-runtime.md`](auth-runtime.md)를 따른다. 승인된 schema는 기본 영구 3개 테이블과 회원 생성 전 로그인용 transient table 하나다.
 
 ## 공통 schema 규격
 
@@ -53,7 +53,7 @@ Status는 created/browser_started/processing/exchange_ready/consumed/failed다. 
 
 매 요청 별도 32 random byte verifier를 S256으로 사용하고 AES-256-GCM으로 transient row에 저장한다. 매 암호화 독립 96-bit IV, request ID/provider/purpose AAD, 128-bit tag를 사용한다. 암호화 key는 DB 밖 secret으로 JWT key와 분리한다.
 
-Key 교체 시 이전 pending request 최대 10분이 끝날 때까지 decrypt key를 유지하거나 해당 request를 명시적으로 실패 처리한다. 복호화 실패는 로그인 실패이며 plaintext를 로그/저장해 복구하지 않는다. 추가 secret/field가 승인 대상이다. Memory-only proof는 재시작 시 request 무효화를 수용하는 대안으로 별도 결정 없이 바꾸지 않는다.
+Key 교체 시 이전 pending request 최대 10분이 끝날 때까지 decrypt key를 유지하거나 해당 request를 명시적으로 실패 처리한다. 복호화 실패는 로그인 실패이며 plaintext를 로그/저장해 복구하지 않는다. 이 transient secret/field도 승인 범위에 포함된다. Memory-only proof는 재시작 시 request 무효화를 수용하는 대안으로 별도 결정 없이 바꾸지 않는다.
 
 ## Transaction과 잠금 순서
 
@@ -66,11 +66,11 @@ Raw token hash의 잠금 없는 조회는 ID hint다. Lock 뒤 FK·소유관계�
 ## 종료 session과 OAuth 정리
 
 - Refresh 가능한 활성 session의 모든 발급·소비 hash를 유지한다. 최근 N개, issued_at+30일, rotation 즉시 old row 삭제는 금지한다. 오래 활성인 session의 이력은 계속 늘며 이를 줄이려 absolute lifetime을 추가하지 않는다.
-- Revoked_at 이후 또는 정확한 idle deadline 이후 session은 **별도 보관 유예 없이 다음 cleanup에서 session+refresh 전체 삭제**를 제안한다. 이후 old token은 unknown이며 대상 session이 없으므로 재발급하지 않는다. 늦은 유효 JWT는 residual 검색, 새 session은 다른 UUID다. 조사용 추가 보관은 목적/기한 별도 승인 대상이다.
-- Cleanup은 dependency 없는 기존 실행 기반 command로 시작 시 1회+운영 하루 1회를 제안한다. 주기/실제 시각은 운영 승인 대상이다. 실패하면 삭제가 지연되지만 매 요청 TTL/idle/revoked 거절은 유지한다. 24시간 내 삭제를 보장하지 않는다.
+- Revoked_at 이후 또는 정확한 idle deadline 이후 session은 **별도 보관 유예 없이 다음 cleanup에서 session+refresh 전체 삭제**가 승인된 정책이다. 이후 old token은 unknown이며 대상 session이 없으므로 재발급하지 않는다. 늦은 유효 JWT는 residual 검색, 새 session은 다른 UUID다. 조사용 추가 보관은 목적/기한 별도 승인 대상이다.
+- Cleanup은 dependency 없는 기존 실행 기반 command로 시작 시 1회+운영 하루 1회가 승인됐다. 실제 실행 시각과 실패 대응은 별도 운영 gate다. 실패하면 삭제가 지연되지만 매 요청 TTL/idle/revoked 거절은 유지한다. 24시간 내 삭제를 보장하지 않는다.
 - Cleanup도 session lock 뒤 fresh T로 종료 조건을 재확인한다. 활동이 먼저 deadline 연장을 commit했으면 보존하고 cleanup이 만료를 먼저 판정하면 대기한 활동/refresh가 부활시키지 못한다. Batch SKIP LOCKED는 구현 선택일 수 있으나 종료 재판정을 생략하지 않는다.
 - OAuth 성공/실패 terminal commit 때 secret/proof/subject를 즉시 null 처리한다. 만료 request를 읽으면 가능한 transaction에서 민감 field도 정리하고 terminal/만료/중단 row는 다음 성공 cleanup에서 삭제한다.
-- **교환 자격 TTL은 물리 보관 상한이 아니다.** Exchange_ready subject/code proof는 소비 또는 TTL까지만 기능상 필요하지만 만료/crash/DB 장애 뒤 실제 subject/암호화 PKCE가 남을 수 있다. 시작+하루 1회 권고는 10분 또는 24시간 내 물리 삭제 보장이 아니며 cleanup 실패는 더 지연시킨다. 이 보관 잔여/지연을 승인받아야 한다. 더 짧은 물리 상한은 별도 reliable cleanup·운영 설계가 필요하다. 지연이 만료 후 exchange 자격을 늘리지는 않는다.
+- **교환 자격 TTL은 물리 보관 상한이 아니다.** Exchange_ready subject/code proof는 소비 또는 TTL까지만 기능상 필요하지만 만료/crash/DB 장애 뒤 실제 subject/암호화 PKCE가 남을 수 있다. 승인된 시작+하루 1회 주기는 10분 또는 24시간 내 물리 삭제 보장이 아니며 cleanup 실패는 더 지연시킨다. 이 보관 잔여/지연 가능성은 승인된 한계다. 더 짧은 물리 상한은 별도 reliable cleanup·운영 설계가 필요하다. 지연이 만료 후 exchange 자격을 늘리지는 않는다.
 
 ## 삭제 경계
 

@@ -5,14 +5,14 @@ enforcement: approval-required
 scope: apps/api
 last-reviewed: 2026-09-05
 rationale: 검색 구현이 runtime과 검증 도구를 추측해 추가하지 않도록 승인 경계를 정한다.
-evidence: "PR #42 사용자 승인: https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698"
+evidence: "PR #42 runtime 승인: https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698 ; PR #48 인증/DB 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519"
 exceptions: 사용자 승인 전에는 dependency 설치와 실행 기반 구현을 허용하지 않는다.
 review-after: API 실행 기반의 첫 validation 완료 또는 지원 major 변경 시
 ---
 
 # API Runtime Contract
 
-이 문서는 [PR #42의 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)을 반영한 Rule이다. API runtime·아래 dependency·검증 계약이 승인 범위이며, 구현은 해당 Execution Issue와 [`change-control.md`](change-control.md)의 Red→Green 절차를 따른다. 승인 범위 밖 dependency·architecture 변경은 별도 승인 대상이다.
+이 문서는 [PR #42의 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)을 반영한 Rule이다. API runtime·아래 dependency·검증 계약이 승인 범위이며 인증/DB 추가 승인 범위는 아래 Authentication runtime contract를 따른다. 구현은 해당 Execution Issue와 [`change-control.md`](change-control.md)의 Red→Green 절차를 따른다. 승인 범위 밖 dependency·architecture 변경은 별도 승인 대상이다.
 
 ## 결정의 상태
 
@@ -20,7 +20,8 @@ review-after: API 실행 기반의 첫 validation 완료 또는 지원 major 변
 | --- | --- |
 | RFC에서 논의한 방향 | `apps/api`의 NestJS, 중앙 API, 검색 DB 저장·캐싱 없음 |
 | 승인된 실행 계약 | Node 24 LTS, Nest 12, ESM과 TypeScript build, 아래 dependency·test 방식 |
-| 이번 안에서 결정하지 않음 | 인증·session·DB·운영 배포, 실제 credential과 domain, 전체 서비스 한도 |
+| 인증·session·DB 추가 승인 | 아래 Authentication runtime contract와 연결된 canonical Rule. 실제 구현·검증 성공은 별개 |
+| 남은 미결정 | 운영 배포, PostgreSQL major/image, 실제 credential과 domain, 전체 서비스 한도 및 `auth-runtime.md`의 gate |
 
 설계 작성 시점의 `apps/api/package.json`은 ESM이며 `dev`, `build`, `test`는 비어 있고 API source·test·tsconfig가 없다. 아래 command와 경로는 **향후 구현 계약**이며 현재 실행 가능한 command나 검증 성공 evidence가 아니다.
 
@@ -28,7 +29,7 @@ review-after: API 실행 기반의 첫 validation 완료 또는 지원 major 변
 
 API만 Node `>=24.15.0 <25`를 호환 floor/major 범위로 두며, 실제 선택은 해당 major의 최신 보안 patch로 한다. `@types/node`는 24.x로 맞춘다. Node 24는 확인 시점 LTS이며 기존 `pnpm@11.23.0`의 지원 Node 범위에 들어간다. 다른 app의 Node/types 버전이나 workspace package manager를 변경하지 않는다. [Node release 상태](https://nodejs.org/en/about/previous-releases), [pnpm 호환 표](https://pnpm.io/installation#compatibility)
 
-다음 목록은 API workspace의 승인된 직접 dependency 목록이다. Nest package는 동일한 12.x release로 맞추며 확인 기준은 12.0.1이다. 후속 구현은 아래 major 범위 안에서 공개 package의 engine·peer를 재확인하고 실제 해결된 version을 lockfile에 기록한다. Major·역할 변경이나 목록 밖 직접 dependency가 필요하면 승인을 다시 받는다.
+다음 목록은 PR #42에서 승인된 API workspace 직접 dependency다. 인증/DB의 추가 승인된 exact dependency·역할은 [`auth-runtime.md`](auth-runtime.md)가 canonical 목록이다. Nest package는 동일한 12.x release로 맞추며 확인 기준은 12.0.1이다. 후속 구현은 아래 major 범위 안에서 공개 package의 engine·peer를 재확인하고 실제 해결된 version을 lockfile에 기록한다. Major·역할 변경이나 두 승인 목록 밖 직접 dependency가 필요하면 승인을 다시 받는다.
 
 | 종류 | Package / 허용 범위 | 필요한 역할과 호환 근거 |
 | --- | --- | --- |
@@ -74,10 +75,10 @@ App 생성은 port를 열지 않는 factory로 분리하고, `main.ts`만 설정
 
 Runtime acceptance에는 test HTTP 응답, metadata가 필요한 constructor DI, app 시작·종료 후 열린 handle 없음, child process의 build entry 실행과 종료, `PORT` 누락·빈 값·잘못된 값에서 nonzero exit·미listen을 포함한다. 검색 module 연결 후에는 해당 필수 설정 누락도 검증한다. Test의 child process는 허용한 fake environment만 받아 실제 credential을 상속하지 않는다. Build entry 검증에는 위 `build`가 선행해야 한다.
 
-검색 adapter는 fake transport 또는 loopback upstream으로 검증한다. 외부 domain·네오플 credential·인증·DB가 필요하지 않아야 한다. 계정당 제한과 session 활동의 통합 검증은 해당 인증 Rule 승인 후 진행한다. Search query 길이의 외부 규격 미확인은 credential 없는 runtime 검증을 막지 않는다.
+검색 adapter는 fake transport 또는 loopback upstream으로 검증한다. 외부 domain·네오플 credential·인증·DB가 필요하지 않아야 한다. 계정당 제한과 session 활동의 통합 검증은 승인된 [`auth-activity.md`](auth-activity.md)의 contract와 미결정 gate를 확인하고 별도 구현 착수 지시 후 진행한다. Search query 길이의 외부 규격 미확인은 credential 없는 runtime 검증을 막지 않는다.
 
 설계 검토 시에는 문서 대조와 `git diff --check`만 수행한다. 위 command, dependency 설치, API·DB·부하 검증은 설계 단계에서 실행하지 않는다. Runtime/test 조합의 첫 실행이 실패하면 engine·peer·metadata·ESM 원인을 공개하고, 이를 피하려고 승인 범위 밖 도구를 추가하지 않는다.
 
-## Authentication runtime proposal — 미승인 추가 제안
+## Authentication runtime contract
 
-인증·DB의 exact dependency 후보와 Migration은 [`auth-runtime.md`](auth-runtime.md), HTTP/parser 경계는 [`auth-api.md`](auth-api.md)를 참조한다. 이 routing과 후보는 위 승인된 직접 dependency 목록에 포함되지 않으며 새로운 설치·구현 authority를 만들지 않는다. 승인된 Node/Nest/ESM/tsc→Node 계약을 유지한 채 역할·후보와 남은 compatibility/운영 gate를 별도로 승인받아야 한다.
+인증·DB의 exact dependency·역할과 Migration은 [PR #48 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 [`auth-runtime.md`](auth-runtime.md), HTTP/parser 경계는 [`auth-api.md`](auth-api.md)를 따른다. 이 추가 승인으로 더 넓은 version 범위나 compatibility/운영 gate가 해결된 것으로 간주하지 않는다. 승인된 Node/Nest/ESM/tsc→Node 계약을 유지하며 사용자의 구현 금지 조건에 따라 별도 착수 지시 전에는 설치·구현·DB 실행하지 않는다.

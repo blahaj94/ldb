@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: apps/api apps/desktop authentication HTTP boundary
 last-reviewed: 2026-09-05
 rationale: 로그인과 계정 API의 입력·오류·credential 노출 경계를 구현 전에 고정한다.
-evidence: "Issue #39 Proposal Revision 2: https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: 명시적 사용자 승인 전에는 implementation authority가 없으며 실제 client 등록과 OS 저장은 별도 gate다.
+evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
+exceptions: 사용자 구현 금지 조건을 유지하며 실제 client 등록과 OS 저장은 별도 gate다.
 review-after: 최초 인증 integration validation 또는 client boundary 변경 시
 ---
 
-# Authentication API Proposal
+# Authentication API Contract
 
-이 문서 전체는 미승인 Rule proposal이다. [`change-control.md`](change-control.md)의 명시적 `승인` 전에는 구현 근거로 사용하지 않는다. 이 Rule-only 제안의 검토·승인으로 후속 구현 착수를 자동 허용하지 않는다. OAuth는 [`auth-oauth.md`](auth-oauth.md), token/session은 [`auth-session.md`](auth-session.md), 활동은 [`auth-activity.md`](auth-activity.md), schema는 [`auth-database.md`](auth-database.md), dependency·운영 gate는 [`auth-runtime.md`](auth-runtime.md)가 canonical contract다.
+이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 승인된 contract는 현재 구현·검증 성공을 뜻하지 않는다. 사용자가 미결정 gate 유지와 구현 금지를 명시했으므로 후속 착수 지시 전에는 구현하지 않으며 [`change-control.md`](change-control.md)를 따른다. OAuth는 [`auth-oauth.md`](auth-oauth.md), token/session은 [`auth-session.md`](auth-session.md), 활동은 [`auth-activity.md`](auth-activity.md), schema는 [`auth-database.md`](auth-database.md), dependency·운영 gate는 [`auth-runtime.md`](auth-runtime.md)가 canonical contract다.
 
 ## Client와 transport
 
@@ -24,7 +24,7 @@ review-after: 최초 인증 integration validation 또는 client boundary 변경
 
 ## JSON pre-parser 우선순위
 
-다음 순서는 JSON endpoint의 추가 보안 정책 제안이다. Nickname grapheme 제한과 독립적이며 긴 결합문자 입력도 byte 상한으로 거절할 수 있다.
+다음 순서는 승인된 JSON endpoint 보안 정책이다. Nickname grapheme 제한과 독립적이며 긴 결합문자 입력도 byte 상한으로 거절할 수 있다.
 
 1. `Content-Type: application/json`과 charset 생략/UTF-8, `Content-Encoding` 생략/identity만 허용한다. 그 외에는 body parse 없이 415다.
 2. 실제 body stream payload 합을 세어 최대 **16,384 byte**만 buffer한다. Chunked·Content-Length 없음/거짓에도 동일하며 선언 길이만 신뢰하지 않는다. 선언 길이 초과는 조기 413이 가능하고, 누적 초과 즉시 추가 buffer/parse를 중단해 413 응답 뒤 연결을 닫는다.
@@ -79,7 +79,7 @@ API의 `Intl.Segmenter('und',{granularity:'grapheme'})` 결과가 최종 기준�
 - 모든 인증 응답은 `Cache-Control: no-store`, browser 응답은 추가로 `Referrer-Policy: no-referrer`다. Third-party asset/analytics를 두지 않는다. Provider callback URL의 OAuth code와 access/refresh token URL 전달은 구분한다.
 - API access/error/application log, proxy/gateway, APM/trace/redirect capture, Desktop main/renderer/IPC/deep-link 진단을 같은 경계로 검증한다. Launch ticket, 자체/provider code, 앱/provider verifier, state/nonce, 자체/provider access·refresh·ID token, Cookie/Set-Cookie/Authorization 및 이를 포함한 URL/body/완료 HTML 원문을 기록하지 않는다.
 - Structured log는 route template·HTTP status·정제 error code·duration·credential과 별개인 임의 correlation ID 같은 비민감 field만 allowlist로 출력한다. User/provider subject·nickname도 제외하고 불신 request/response/error object를 통째로 serialization하지 않는다. Redaction이 불명확하면 원문을 생략하고 비민감 실패 counter만 남긴다. 설정/callback/oversize/parse 실패도 같다.
-- 완료 HTML은 등록 복귀 버튼에 필요한 code만 담고 verifier/token을 DOM에 두지 않는다. 자체 response-body/DOM snapshot·protocol URL 진단 수집을 끈다. Script·외부 연결·third-party resource·frame embedding을 CSP로 금지하는 정적 화면을 제안한다.
-- Browser/OS의 callback/deep-link history·외부 진단까지 서버가 지운다고 보장하지 않는다. 이 노출 한계는 짧은 TTL·single-use·앱 proof와 함께 승인 대상이다. Code 사본도 TTL 뒤 교환할 수 없고 verifier 없이 교환할 수 없다. TTL만으로 만료 전 노출·불필요한 보관을 정당화하지 않는다.
+- 완료 HTML은 등록 복귀 버튼에 필요한 code만 담고 verifier/token을 DOM에 두지 않는다. 자체 response-body/DOM snapshot·protocol URL 진단 수집을 끈다. Script·외부 연결·third-party resource·frame embedding을 CSP로 금지하는 정적 화면을 사용한다.
+- Browser/OS의 callback/deep-link history·외부 진단까지 서버가 지운다고 보장하지 않는다. 이 노출 한계는 짧은 TTL·single-use·앱 proof와 함께 승인됐다. Code 사본도 TTL 뒤 교환할 수 없고 verifier 없이 교환할 수 없다. TTL만으로 만료 전 노출·불필요한 보관을 정당화하지 않는다.
 
 표준 근거는 #39가 2026-09-05에 검토한 [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252.html), [ECMA-402 Segmenter](https://tc39.es/ecma402/#sec-intl.segmenter)다. 실제 browser/OS/provider 검증 성공 evidence가 아니다.
