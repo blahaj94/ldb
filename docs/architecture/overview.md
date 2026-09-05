@@ -31,15 +31,21 @@ scripts/
 
 ## Approved boundary
 
-현재 workspace·app boundary와 API runtime·검증 기반이 승인됐다. 검색의 입력·응답·오류·계정 제한은 [`../rules/character-search.md`](../rules/character-search.md)를 따른다. 근거는 [PR #42 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)이다. 다음 사항은 아직 결정되지 않았다.
+현재 workspace·app boundary와 API runtime·검증 기반이 승인됐다. 검색의 입력·응답·오류·계정 제한은 [`../rules/character-search.md`](../rules/character-search.md)를 따른다. 근거는 [PR #42 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)이다. 인증·핵심 DB·서버 통신의 추가 승인 범위는 아래 Authentication boundary contract를 따른다. 다음 사항은 아직 결정되지 않았다.
 
-- Database와 schema 관리 방식
-- Web, desktop, API 사이의 인증·앱 통신 통합 contract와 transport
+- PostgreSQL server major·image digest와 실제 운영 배포/복구 절차
+- Web/mobile client와 실제 Desktop OS 저장·IPC·callback/protocol 등록
 - Shared package의 종류와 dependency direction
-- Authentication과 authorization 구조
+- 탈퇴 state·삭제/재가입·백업 복원 및 provider별 미확인 gate
 - Production deployment topology
 
 미정 사항을 구현해야 하면 AI는 임의로 architecture를 확정하지 않고 사용자에게 대안과 trade-off를 제시한다.
+
+## Authentication boundary contract
+
+[PR #48 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)으로 중앙 API의 provider 교환·PostgreSQL identity/session과 Desktop public client의 외부 browser 로그인 contract가 승인됐다. HTTP/앱 boundary는 [`../rules/auth-api.md`](../rules/auth-api.md), OAuth는 [`../rules/auth-oauth.md`](../rules/auth-oauth.md), session은 [`../rules/auth-session.md`](../rules/auth-session.md), DB는 [`../rules/auth-database.md`](../rules/auth-database.md), 검색 활동은 [`../rules/auth-activity.md`](../rules/auth-activity.md), dependency·미결정 gate는 [`../rules/auth-runtime.md`](../rules/auth-runtime.md)가 canonical Rule이다.
+
+이 승인은 연결된 서버 인증/DB contract 범위이며 현재 구현·검증 성공을 뜻하지 않는다. 새 shared package/import direction, Web/mobile client, 실제 OS 저장/IPC·domain/protocol, deployment topology, 탈퇴 state/삭제·재가입·백업 복원은 계속 미정이다. 사용자의 미결정 gate 유지와 구현 금지 조건에 따라 별도 착수 지시 전에는 구현하지 않는다.
 
 ## Architecture change
 

@@ -5,14 +5,14 @@ enforcement: approval-required
 scope: apps/api character search
 last-reviewed: 2026-09-05
 rationale: 검색 입력·응답·실패·호출 제한을 후속 구현자가 추측하지 않게 한다.
-evidence: "PR #42 사용자 승인: https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698"
+evidence: "PR #42 검색 승인: https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698 ; PR #48 인증 통합 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519"
 exceptions: 미확인 외부 규격과 새 정책은 사용자 결정 없이 구현하지 않는다.
 review-after: 검색 adapter 첫 validation 완료 또는 네오플 공식 규격 변경 시
 ---
 
 # Character Search Contract
 
-이 문서는 [PR #42의 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)을 반영한 Rule이다. 요청·응답·오류·deadline과 code point 입력 정책, 단일 process memory quota 및 명시된 한계가 승인 범위다. 인증/session과 조정할 통합 규격은 아래 별도 결정으로 남긴다. 검색 결과 저장·캐싱, OCR 보정, 인증·DB 구현과 전체 서비스 한도는 이 문서의 범위 밖이다. 구현은 해당 Execution Issue와 [`change-control.md`](change-control.md)를 따른다.
+이 문서는 [PR #42의 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)을 반영한 Rule이다. 요청·응답·오류·deadline과 code point 입력 정책, 단일 process memory quota 및 명시된 한계가 승인 범위다. 인증/session 통합 규격은 PR #48에서 승인됐으며 아래 Authentication activity contract가 canonical Rule을 연결한다. 검색 결과 저장·캐싱, OCR 보정, 인증·DB 구현과 전체 서비스 한도는 이 문서의 범위 밖이다. 구현은 해당 Execution Issue와 [`change-control.md`](change-control.md)를 따른다.
 
 ## 요청과 성공 응답
 
@@ -85,7 +85,7 @@ Body는 `{"error":{"code":"<CODE>","message":"<MESSAGE>"}}`만 사용한다. Ups
 
 | 순서 | 조건 | 결과 |
 | --- | --- | --- |
-| Local | 우리 query 오류 / 로그인 정보 누락·무효·만료 / 계정 제한 초과 | 각각 400 / 401 / 429; upstream 없음. 이 셋의 통합 우선순위는 아래 별도 제안. |
+| Local | 우리 query 오류 / 로그인 정보 누락·무효·만료 / 계정 제한 초과 | 각각 400 / 401 / 429; upstream 없음. 이 셋의 통합 우선순위는 아래 승인된 인증 contract. |
 | Local | 우리 설정·내부 오류 | 500; upstream 여부는 오류 발생 지점에 따름. |
 | Upstream 1 | 호출 deadline 도달 | 504; 도착이 늦은 response나 code로 결과를 바꾸지 않음. |
 | Upstream 2 | 식별한 `API000`, `API003`, `API004`, `API005` | Upstream HTTP와 관계없이 500. |
@@ -112,13 +112,19 @@ Node 내장 `fetch`와 abort signal로 body 수신까지 취소하고 timer를 �
 
 - 검증된 내부 account ID로 합산한다. 요청이 보낸 account/session ID나 IP를 계정의 대체값으로 사용하지 않는다.
 - Query 검증을 통과하고 호출에 필요한 설정이 유효한 뒤, upstream 호출 직전에 1회를 원자적으로 예약한다. 성공·0건·upstream 실패·timeout 모두 유지하고 환불하지 않는다. 잘못된 query·인증 실패·제한 거절·호출 전 설정 실패는 차감하지 않는다.
-- 서버가 정한 단조 clock의 예약 시각 `t`에서 `(t - 60,000ms, t]`에 든 이전 예약만 센다. 정확히 60초 전 예약은 만료다. 10개 미만이면 같은 원자 연산 안에서 새 시각을 추가하고 즉시 호출한다. 대기열은 없다.
+- 서버가 정한 단조 clock의 예약 시각 `t`에서 `(t - 60,000ms, t]`에 든 이전 예약만 센다. 정확히 60초 전 예약은 만료다. 10개 미만이면 같은 원자 연산 안에서 새 시각을 추가하고 즉시 호출한다. Quota가 풀리기를 기다리는 대기열은 없다. 내부 admission 대기는 아래 승인된 통합 contract를 따른다.
 - 이미 10개면 `Retry-After = max(1, ceil((oldest + 60,000 - t) / 1,000))`인 십진 정수 초를 header에 보낸다. 429는 새 예약을 추가하거나 기존 시각을 갱신하지 않는다.
 - 같은 계정의 prune·count·reserve 사이에 다른 요청이 끼어들지 않게 한다. 같은 시각의 11개 동시 요청은 최대 10개만 통과하고 1개는 429다. 서로 다른 계정은 독립적이다. 초과 요청 자체가 제한 창을 연장하지 않는다.
 
 **승인된 저장 범위:** 단일 Node process의 memory에 최근 예약만 유지하고 만료 entry를 정리한다. 여러 기기는 동일 process의 account key로 합산한다. 재시작 시 제한 이력이 사라져 60초 안에 추가 호출이 허용될 수 있고, 여러 process/replica에서는 10회 보장이 성립하지 않는다. 승인된 memory 방식은 위 단일 process·재시작 한계 안에서만 사용한다. 대안은 공유 저장소의 원자 예약이지만 새 dependency·운영 state/DB 계약이 필요하므로 별도 설계 대상이다. 검색 결과를 저장하는 안은 아니다.
 
-**인증 설계와 조정할 제안:** 인증 → query 검증 → 계정 예약 → upstream 순서로 평가한다. 인증 실패와 invalid query가 겹치면 401, 인증된 invalid query와 계정 제한이 겹치면 400이다. Session 활동 갱신·만료 판정·폐기된 session의 잔여 JWT 검색·DB 실패 순서는 로그인/session Rule에서 승인해야 한다. 이 문서로 activity write나 계정 조회를 새로 추가하지 않는다. 전체 서비스 limiter가 추가되면 계정 예약과의 순서·환불 여부도 별도 결정한다.
+**승인된 인증 통합:** 인증 실패와 invalid query가 겹치면 401, 인증된 invalid query와 계정 제한이 겹치면 400이다. Query/config 검증 이후 admission capacity 확인·활동 commit·계정 예약·upstream의 상세 순서와 session 만료·잔여 JWT·DB 실패는 아래 canonical contract를 따른다. 전체 서비스 limiter가 추가되면 계정 예약과의 순서·환불 여부는 별도 결정한다.
+
+### Authentication activity contract
+
+[PR #48 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 [`auth-activity.md`](auth-activity.md)가 상세 contract다. Account admission 직렬화·DB 활동 commit 후 기존 quota를 예약하는 순서와 총 2초 내부 대기, 정상 DB의 revoked/없는 session은 residual 검색·활동 0, DB 장애는 기존 검색 500·upstream/예약 0이 승인됐다. JWT/session 시간은 [`auth-session.md`](auth-session.md)를 따른다.
+
+**Quota 대기열 금지와 총 2초 내부 admission 대기 허용**을 구분한다. 기존 예약 window·시각·즉시 upstream·무환불·단일 process 한계를 유지한다. 이 승인은 현재 인증·DB 통합 구현이나 검증 성공을 뜻하지 않으며 사용자의 구현 금지 조건과 별도 미결정 gate를 유지한다.
 
 ## 간결한 경계 예시
 
@@ -139,4 +145,4 @@ Node 내장 `fetch`와 abort signal로 body 수신까지 취소하고 timer를 �
 | 예약 10개가 t=0, 요청 t=59,999ms | 429 / `SEARCH_RATE_LIMITED`, `Retry-After: 1` | 0 |
 | 같은 상태, 요청 t=60,000ms | 허용 후 upstream 결과, 이전 10개 만료 | 1 |
 
-상세 acceptance matrix와 실행 evidence는 해당 Execution Issue/PR에 둔다. Runtime 도구와 실제 실행 계획은 [`api-runtime.md`](api-runtime.md), Red→Green 순서는 [`testing.md`](testing.md)를 따른다. 길이·raw decoding·deadline·quota 정책의 변경과 미결정 인증 통합을 후속 구현자의 일반 선택으로 숨기지 않는다.
+상세 acceptance matrix와 실행 evidence는 해당 Execution Issue/PR에 둔다. Runtime 도구와 실제 실행 계획은 [`api-runtime.md`](api-runtime.md), Red→Green 순서는 [`testing.md`](testing.md)를 따른다. 길이·raw decoding·deadline·quota 정책과 승인된 인증 통합의 변경을 후속 구현자의 일반 선택으로 숨기지 않는다.

@@ -36,6 +36,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
 | 실행 command 또는 file 위치 확인 | `docs/reference/repository-map.md`                                                    |
 | API runtime·검색 작업 | `docs/rules/api-runtime.md`, `docs/rules/character-search.md` |
+| 인증·session·DB 작업 | 아래 Authentication contract routing에서 관련 topic 선택. 승인된 contract와 미결정 gate·구현 착수 조건을 함께 확인 |
 | 기획·domain 작업                 | 향후 `docs/product/**`, `docs/domain/**`에서 task 관련 document만 선택                |
 
 ## Document maintenance
@@ -60,6 +61,19 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 
 - [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 계약
 - [`rules/character-search.md`](rules/character-search.md): 검색 query·응답·오류·계정 제한 계약
+
+### Authentication contract routing
+
+이 Rule은 #39 최종 설계에 대한 [PR #48 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한다. 승인된 contract는 현재 구현·검증 성공과 구분한다. 사용자가 미결정 gate 유지와 구현 금지를 명시했으므로 별도 착수 지시 전에는 구현·설치·DB 실행을 진행하지 않는다.
+
+| 필요한 topic | Canonical Rule |
+| --- | --- |
+| Endpoint·parser·오류·nickname·log sink | [`rules/auth-api.md`](rules/auth-api.md) |
+| Client/provider binding·OAuth 상태·TTL·provider 검증 | [`rules/auth-oauth.md`](rules/auth-oauth.md) |
+| JWT/key·30일·refresh/logout 최종 경합 | [`rules/auth-session.md`](rules/auth-session.md) |
+| 4개 테이블·constraint·잠금·정리/물리 보관·삭제 경계 | [`rules/auth-database.md`](rules/auth-database.md) |
+| 검색 admission/quota·활동 commit·residual JWT·DB 장애·계정 기능 경합 | [`rules/auth-activity.md`](rules/auth-activity.md) |
+| 승인된 exact dependency·Migration·운영/플랫폼 미결정 gate | [`rules/auth-runtime.md`](rules/auth-runtime.md) |
 
 ### Reference
 
