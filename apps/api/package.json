@@ -10,6 +10,7 @@
     "dev": "pnpm run build && pnpm run start",
     "build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
     "test": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('.test-dist', { recursive: true, force: true })\" && tsc -p tsconfig.test.json && node --import reflect-metadata --test \".test-dist/test/**/*.test.js\"",
+    "test:database": "pnpm run build && node --import reflect-metadata test-support/database-integration.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "start": "node --import reflect-metadata dist/main.js",
     "lint": "eslint .",
