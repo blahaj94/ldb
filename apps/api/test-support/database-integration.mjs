@@ -33,6 +33,7 @@ import {
   verifyApprovedImage,
 } from './docker-postgres.mjs'
 
+import { assertLoginRequestStateMatrix } from './auth-login-request-contract.mjs'
 import { assertSchemaFirst } from './schema-first.mjs'
 
 const scriptPath = fileURLToPath(import.meta.url)
@@ -457,6 +458,9 @@ async function primaryScenario() {
     )
     currentStage = 'constraint behavior verification'
     await withDataSource(createDatabaseDataSource, resources.configuration, assertConstraintBehavior)
+    currentStage = 'AuthLoginRequest state matrix'
+    const stateMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, assertLoginRequestStateMatrix)
+    process.stdout.write(`AuthLoginRequest matrix: ${stateMatrix.accepted} accepted, ${stateMatrix.rejected} rejected\n`)
     currentStage = 'migrated Nest lifecycle'
     await assertNestLifecycle(resources.configuration)
     checkSignal()

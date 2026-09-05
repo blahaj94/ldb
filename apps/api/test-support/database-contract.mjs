@@ -311,7 +311,7 @@ export async function assertSchema(dataSource, mark = () => undefined, migration
   return snapshot
 }
 
-async function rejectConstraint(dataSource, expectedConstraint, operation) {
+export async function rejectConstraint(dataSource, expectedConstraint, operation) {
   const queryRunner = dataSource.createQueryRunner()
   await queryRunner.connect()
   await queryRunner.startTransaction()
@@ -342,7 +342,7 @@ const loginColumns = [
   'exchange_code_hash', 'code_expires_at', 'consumed_at',
 ]
 
-function loginRequest(status, id, overrides = {}) {
+export function loginRequest(status, id, overrides = {}) {
   const common = {
     id,
     purpose: 'login',
@@ -392,7 +392,7 @@ function loginRequest(status, id, overrides = {}) {
   return { ...common, ...stateFields[status], ...overrides }
 }
 
-async function insertLogin(dataSource, request) {
+export async function insertLogin(dataSource, request) {
   const values = loginColumns.map((column) => request[column])
   const identifiers = loginColumns.map((column) => `"${column}"`).join(', ')
   const parameters = values.map((_, index) => `$${index + 1}`).join(', ')

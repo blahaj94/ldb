@@ -14,6 +14,7 @@ import { UserSchema } from '../dist/database/schemas/users.js'
 import { AuthSessionSchema } from '../dist/database/schemas/auth-sessions.js'
 import { AuthRefreshTokenSchema } from '../dist/database/schemas/auth-refresh-tokens.js'
 import { AuthLoginRequestSchema } from '../dist/database/schemas/auth-login-requests.js'
+import { assertLoginRequestStateMatrix } from './auth-login-request-contract.mjs'
 import { assertConstraintBehavior, assertSchema, databaseSnapshot, withDataSource } from './database-contract.mjs'
 
 async function compileGenerated(directory) {
@@ -98,6 +99,7 @@ export async function assertSchemaFirst(configuration, mark) {
       await assertSchema(source, mark, [new Initial().name])
       assert.deepEqual(await constraintDefinitions(source), originalDefinitions)
       await assertConstraintBehavior(source)
+      await assertLoginRequestStateMatrix(source)
       await assertOrmRoundTrip(source)
     })
     assert.equal(await generateMigration('NoChanges', sourceFactory, directory), 'Database schema is current')
