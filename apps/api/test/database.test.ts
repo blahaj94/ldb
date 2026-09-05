@@ -176,6 +176,22 @@ test('migration command destroys its connection after a database failure', async
   assert.equal(destroyed, true)
 })
 
+test('migration command sanitizes configuration factory failures', async () => {
+  const { runMigrationCommand } = await loadDatabaseModule()
+
+  await assert.rejects(
+    runMigrationCommand('up', () => {
+      throw new Error('secret configuration value')
+    }),
+    (error: unknown) => {
+      assert(error instanceof Error)
+      assert.equal(error.message, 'Database migration failed')
+      assert.equal(error.stack?.includes('secret configuration value'), false)
+      return true
+    },
+  )
+})
+
 test('migration status reads metadata without asking TypeORM to create its history table', async () => {
   const { runMigrationCommand } = await loadDatabaseModule()
   const queries: string[] = []

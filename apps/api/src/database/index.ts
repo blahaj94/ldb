@@ -61,10 +61,11 @@ export async function runMigrationCommand(
   command: MigrationCommand,
   createDataSource: () => DataSource,
 ): Promise<string> {
-  const dataSource = createDataSource()
+  let dataSource: DataSource | undefined
   let result: string | undefined
   let failed = false
   try {
+    dataSource = createDataSource()
     await dataSource.initialize()
     if (command === 'up') {
       const applied = await dataSource.runMigrations({ transaction: 'all' })
@@ -89,7 +90,7 @@ export async function runMigrationCommand(
   } catch {
     failed = true
   }
-  if (dataSource.isInitialized) {
+  if (dataSource?.isInitialized) {
     try {
       await dataSource.destroy()
     } catch {
