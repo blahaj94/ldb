@@ -4,8 +4,8 @@ status: active
 enforcement: approval-required
 scope: repository
 last-reviewed: 2026-09-05
-rationale: 큰 요청을 작은 GitHub Issue로 분해하고 agent 사이의 context와 비용을 제한한다.
-evidence: "GitHub Issue #26"
+rationale: 작은 GitHub Issue의 handoff와 배정·완료를 명확히 하여 중복 착수와 agent 사이의 context·비용을 제한한다.
+evidence: "GitHub Issue #26, #44"
 exceptions: 긴급 작업도 change-control approval boundary와 사용자 merge 권한은 생략하지 않는다.
 review-after: Execution Issue 10개 적용 후
 ---
@@ -31,7 +31,7 @@ review-after: Execution Issue 10개 적용 후
 
 - 하나의 Execution Issue만 수행하고 필요한 context를 점진적으로 읽는다.
 - Issue 범위, approval boundary, dependency가 충족되었는지 확인한 뒤 [`change-control.md`](change-control.md)의 preflight와 worktree 절차를 따른다.
-- Acceptance criteria를 test와 validation evidence로 검증하고 Draft PR로 handoff한다.
+- Acceptance criteria를 작업 유형에 맞는 validation evidence로 검증하고 Issue 또는 Draft PR로 handoff한다.
 - Scope를 임의로 늘리거나 architecture ambiguity를 추측으로 해결하지 않는다.
 
 ### Reviewer
@@ -47,6 +47,12 @@ review-after: Execution Issue 10개 적용 후
 
 Workflow, Rule, architecture의 대안, trade-off, open question, decision history를 기록한다. 재사용 가치가 있는 Proposal Revision, Decision, Rejected Alternative만 comment로 남기고 모든 reasoning step을 복사하지 않는다.
 
+설계안 작성 자체를 Worker에게 배정하려면 아래 Execution contract의 범위·acceptance criteria·실행 조건을 갖춘 bounded Design task로 구체화한다. 설계 완료와 Rule 승인·구현 허용은 별개다.
+
+### 부모 추적 Issue
+
+여러 자식 작업의 결과와 dependency를 추적한다. 제목이 Execution이어도 부모 전체를 구현 Worker에게 배정하지 않는다. 부모·자식 관계는 실행 순서를 뜻하지 않으며 선행 dependency를 별도로 확인한다. 부모의 완료는 등록된 자식 수가 아니라 부모 자체의 acceptance criteria로 판단한다.
+
 ### Execution Issue
 
 Worker가 원래 사용자 대화 없이 실행할 수 있는 task contract다. 하나의 bounded outcome을 다루며 최소한 다음 정보를 포함한다.
@@ -59,24 +65,74 @@ Worker가 원래 사용자 대화 없이 실행할 수 있는 task contract다. 
 - Uncertainty: `low | medium | high`
 - Risk: `low | medium | high`
 - Worker model tier: `low | standard | high`
-- Worker count: 기본값 `1`
+- Worker count: `1` 고정 (`worker_count: 1`). 누락되거나 다른 값이면 contract를 정정하기 전 dispatch하지 않는다.
 - Scout 필요 여부와 조사 범위
 - Validation command와 manual evidence
 - Dependency: `Blocked by #123`, `Blocks #456` 형식
 - Escalation condition
 
-Metadata의 source of truth는 Issue body다. Label은 `@ldb-review`처럼 실제 automation trigger가 있을 때만 사용한다.
+Metadata의 source of truth는 Issue body다. 현재 작업 유형·상태·실행 조건과 승인 evidence를 한 곳에 모으고, 과거 상태는 comment 이력으로 남긴다. Label은 `@ldb-review`처럼 실제 automation trigger 또는 아래 `in process`·`done` 상태 표시에만 사용한다.
+
+`Ready`·`Blocked`는 Issue body의 실행 조건값으로만 사용하며 GitHub label로 추가하지 않는다. `Ready`는 명시된 단계의 착수 검토 후보, `Blocked`는 미해결 조건이 있음을 뜻한다. 실행 조건은 배정·완료 상태와 별도로 기록하며 실행 허용이나 Rule 승인 evidence를 대신하지 않는다.
 
 ## Planning과 dispatch
 
-- Worker count는 `1`이 기본이다. File과 state를 공유하지 않는 독립 task가 명확할 때만 늘린다.
+- Issue당 담당 Worker는 한 명이다. 독립 구현 결과를 병렬화하려면 별도 Issue로 나누며, 같은 Issue의 Scout·Reviewer는 별도 구현 담당자가 아니다.
 - 단순히 여러 의견을 얻기 위해 같은 implementation을 여러 Worker에게 중복시키지 않는다.
-- Uncertainty가 높으면 Worker를 늘리기 전에 좁은 질문과 종료 조건을 가진 low-tier Scout 한 명을 검토한다.
+- Uncertainty가 높으면 좁은 질문과 종료 조건을 가진 low-tier Scout 한 명을 검토한다.
 - `low` tier는 repository 탐색, 반복 작업, 단순 refactor와 first-pass review에 사용한다.
 - `standard` tier는 명확한 acceptance criteria가 있는 일반 implementation과 test의 기본값이다.
 - `high` tier는 큰 작업 planning, architecture/security ambiguity, high-risk final review와 escalation에 사용한다.
 - Provider 또는 model 이름은 Issue contract에 고정하지 않는다. 실행 환경이 capability tier를 실제 model에 매핑한다.
-- Dependency가 남은 Issue는 dispatch하지 않는다. v0에서는 사람이 GitHub reference를 확인하며 scheduler를 구현하지 않는다.
+- Dependency가 남은 Issue는 dispatch하지 않는다. Native dependency와 Issue body의 reference 및 완료 evidence를 확인하며, 불일치는 배정 전에 정리한다. Dependency 완료, 해당 단계 실행 허용, Rule 승인은 각각 확인한다.
+
+### 배정 책임과 상태
+
+- 사용자가 지정한 repository 전체의 활성 Planner 한 명이 배정과 상태 전이를 순서대로 관리한다. 대화·terminal마다 별도 Planner를 자동으로 두지 않는다. 작은 작업에서는 같은 agent가 Planner와 Worker 역할을 겸할 수 있다.
+- Planner 교체는 기존 Planner의 배정 중단과 진행 작업 인계를 확인한 뒤 사용자가 정한다. 담당이 불명확하면 Worker를 새로 배정하지 않는다.
+- Worker는 직접 미배정 Issue를 선점하지 않는다. Planner가 배정한 범위만 수행하며 상태 변경과 handoff evidence를 Planner에게 전달한다.
+- Label 조회·추가는 동시 선점을 보장하는 기술적 lock이 아니다. 중복 착수 방지는 단일 Planner의 순차 배정과 기존 작업 확인을 전제로 한다.
+
+| Issue 상태 | 의미와 신규 배정 |
+| --- | --- |
+| Open, 두 상태 label 없음 | 미배정 후보. 작업 유형·기존 진행 기록·실행 조건 확인 후 배정한다. |
+| Open, `in process` | 담당 Worker가 배정된 상태. 구현·설계·review·승인·merge 대기·blocker를 포함하며 새 Worker를 배정하지 않는다. |
+| `done` 또는 Closed | 신규 배정에서 제외한다. Closed만으로 성공 완료를 추정하지 않는다. |
+| 두 상태 label 동시 존재 또는 body·label·evidence 불일치 | 상태 복구 전 배정을 보류한다. |
+
+부모 추적·아직 task contract를 갖추지 않은 RFC·장기 제안은 무라벨이어도 Worker 배정 대상이 아니다. 위 Execution contract를 갖춘 bounded Design task는 본문에 작업 유형과 허용 단계를 명시하고 배정 절차를 따른다.
+
+부모 추적 Issue는 완료 전 `in process`·`done`을 모두 사용하지 않고 body와 자식 Issue pointer로 진행을 추적한다. 부모 자체의 완료 조건을 충족했을 때만 `done`을 붙인다. 부모에게 Worker를 배정하거나 자식의 `in process`를 부모에 복사하지 않는다.
+
+### 배정 절차
+
+1. 최신 Issue body·comment·관련 PR을 읽는다. 기존 담당 기록이나 preflight가 있으면 종료·해제 여부를 확인하며, 무라벨이나 PR 부재만으로 미착수를 추정하지 않는다.
+2. 배정 가능한 bounded 작업인지, dependency·단계 허용·필요한 승인이 충족됐는지 확인한다. 같은 core module 또는 공유 state를 변경할 가능성이 있는 작업은 병렬 배정하지 않는다. 진행 중 충돌은 [`change-control.md`](change-control.md)를 따른다.
+3. Issue body에 담당 Planner와 배정마다 새로 정한 공개용 Worker 식별자, 현재 상태, 필요한 branch·PR pointer를 기록하고 `in process`를 추가한다. 예를 들어 `issue-123-attempt-1`을 공개 식별자로 사용할 수 있다. GitHub assignee만으로 여러 agent를 구분하지 않는다.
+4. Body의 배정 기록과 label이 모두 반영됐음을 재조회로 확인한 뒤 Worker를 시작한다. 쓰기 실패나 결과 불명 상태에서는 dispatch하지 않고 먼저 복구한다. 실제 task/turn ID와 공개 식별자의 연결은 local에만 기록한다.
+5. Worker는 착수·재개 전에 자신의 최신 배정이 유효한지 확인하고 기존 preflight·worktree 절차를 따른다. 설계와 구현을 병렬화할 때도 승인된 작업 범위와 file·state가 분리되어야 하며, 이후 공통 Rule·code를 편집하는 단계에서 다시 충돌을 확인한다.
+
+### 완료·중단·재배정
+
+Planner는 완료 evidence와 acceptance criteria를 확인하고 body에 결과를 기록한 뒤 `done`을 추가하고 `in process`를 제거한다. 두 상태 label이 함께 남지 않았는지 확인한다. 정상 완료는 Issue도 닫되, 취소·보류 종료에 `done`을 붙이지 않는다.
+
+| 작업 유형 | `done` 조건 |
+| --- | --- |
+| 구현 | Acceptance criteria·관련 validation 충족과 구현 PR merge 확인 |
+| 설계안 작성 | 약속한 설계안·대안·근거·validation matrix와 acceptance criteria 완료. 후속 구현 승인은 별도 gate |
+| Rule 반영까지 포함한 설계 | 해당 범위의 acceptance criteria와 명시적 Rule 승인·PR merge 확인 |
+| 부모 추적 | 자식의 완료 evidence와 부모 자체의 전체 acceptance criteria 충족 |
+
+- Agent 응답 종료나 Draft PR 생성만으로 완료 처리하지 않는다. Review·blocker 중에는 담당자와 `in process`를 유지하고 남은 조건을 기록한다.
+- 응답 부재나 경과 시간만으로 label을 제거하거나 재배정하지 않는다. 기존 Worker 중단을 확인하고 branch·PR·미완료 변경·남은 작업을 인계한 뒤 기존 배정을 해제한다. 확인할 수 없으면 보류하고 사용자에게 알린다.
+- 재배정은 새 공개 식별자로 위 배정 절차를 따른다. 대기열로 돌릴 때도 기존 Worker 중단과 배정 해제를 먼저 기록한 뒤 `in process`를 제거한다. Retry budget은 아래 기준을 유지한다.
+- 완료 Issue를 재개하려면 사용자가 재개 범위를 정한 뒤 Planner가 완료 기록과 현재 상태를 구분하고 `done`을 제거한다. Reopen만으로 새 Worker를 시작하지 않는다.
+
+### 기존 Issue에 도입
+
+이 Rule 승인 후 최초 신규 배정 전에 Planner가 기존 Open Issue의 body·preflight·PR과 담당자를 확인한다. 배정 가능한 설계·구현의 진행 작업은 기존 담당을 연결해 `in process`로 표시하고, 부모는 위 부모 추적 규칙을 따른다. 완료·취소·미배정을 구분해 현재 body와 label을 일치시킨다. 오래된 상태 문구는 이력으로 옮기며 실행 허용이나 승인 범위를 새로 만들지 않는다. 확인하지 못한 작업은 미배정으로 간주하지 않는다.
+
+기존 `Ready`·`Blocked` label을 발견하면 dependency·단계 실행 허용·승인 evidence를 확인해 현재 실행 조건을 body에 기록하고, 반영을 확인한 뒤 해당 label을 제거한다. Label만으로 실행 조건을 추정하지 않으며 근거를 확인할 수 없으면 정리와 배정을 보류한다. 이 정리로 담당 배정이나 실행 허용을 변경하지 않는다.
 
 ## Context contract
 
