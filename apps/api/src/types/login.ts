@@ -4,6 +4,7 @@ import type { IssueAccessJwt } from '../auth/access-jwt/types.js'
 import type { DataSource } from 'typeorm'
 import type { LoginRegistry } from '../auth/login/registry.js'
 import type { ProviderPkceKeys } from '../auth/login/crypto.js'
+import type { AuthLoginRequest } from '../database/schemas/auth-login-requests.js'
 
 export type LoginErrorDefinition = typeof LOGIN_ERRORS[keyof typeof LOGIN_ERRORS]
 
@@ -58,6 +59,13 @@ export interface LoginDependencies {
   readonly pkceKeys: ProviderPkceKeys
   readonly issueAccessJwt: IssueAccessJwt
   readonly verifyProvider: (input: ProviderVerificationInput) => Promise<VerifiedIdentity>
+}
+
+export interface ClaimedLogin {
+  row: AuthLoginRequest
+  snapshot: ProviderRegistration
+  providerVerifier: string
+  startedAt: number
 }
 
 export interface LoginTokens {
