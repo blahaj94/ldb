@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: architecture
-last-reviewed: 2026-08-28
+last-reviewed: 2026-09-05
 ---
 
 # Architecture Overview
@@ -21,7 +21,7 @@ packages/
 scripts/
 ```
 
-- `apps/api`: API application을 위한 workspace. 현재 execution implementation과 test framework는 정해지지 않았다.
+- `apps/api`: NestJS API workspace. 승인된 ESM runtime·dependency·build/test 계약은 [`../rules/api-runtime.md`](../rules/api-runtime.md)를 따른다. 구현 현황은 Reference에서 확인한다.
 - `apps/web`: React, TypeScript, Vite 기반 web application.
 - `apps/desktop`: Electron, React, TypeScript, electron-vite 기반 desktop application.
 - `packages/*`: shared package를 위한 예약 boundary. 현재 tracked package는 없다.
@@ -31,11 +31,10 @@ scripts/
 
 ## Approved boundary
 
-현재 승인된 architecture는 workspace와 app boundary까지다. 다음 사항은 아직 결정되지 않았다.
+현재 workspace·app boundary와 API runtime·검증 기반이 승인됐다. 검색의 입력·응답·오류·계정 제한은 [`../rules/character-search.md`](../rules/character-search.md)를 따른다. 근거는 [PR #42 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)이다. 다음 사항은 아직 결정되지 않았다.
 
-- API runtime과 framework
 - Database와 schema 관리 방식
-- Web, desktop, API 사이의 contract와 transport
+- Web, desktop, API 사이의 인증·앱 통신 통합 contract와 transport
 - Shared package의 종류와 dependency direction
 - Authentication과 authorization 구조
 - Production deployment topology
