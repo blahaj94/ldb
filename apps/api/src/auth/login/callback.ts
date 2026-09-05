@@ -14,13 +14,14 @@ async function claimCallback(deps: LoginDependencies, provider: AuthProvider, qu
     const requests = manager.getRepository(AuthLoginRequestSchema)
     const row = await requests.findOne({ where: { stateHash: opaqueHash(input.state) }, lock: { mode: 'pessimistic_write' } })
     const time = await freshTime(manager)
-    if (!row || row.status !== 'browser_started' || row.provider !== provider || !cookieMatches(row, cookie)) {
+    if (!row || row.provider !== provider || !cookieMatches(row, cookie)) {
       throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
     if (requestExpired(row, time)) {
       await terminal(manager, row)
       return new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
+    if (row.status !== 'browser_started') throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     const snapshot = await resolveRegistration(manager, row, deps.registry)
     if (snapshot instanceof LoginFailure) return snapshot
     if (input.error !== undefined) {

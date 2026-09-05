@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto'
+import { URL, URLSearchParams } from 'node:url'
 import { creation, opaque, registryConfiguration } from './login-fixtures.mjs'
 
 export const digest = (value) => createHash('sha256').update(Buffer.from(value, 'base64url')).digest()

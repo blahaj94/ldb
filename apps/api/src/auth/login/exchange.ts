@@ -5,7 +5,7 @@ import type { LoginDependencies, LoginTokens } from '../../types/login.js'
 import { createIdentitySession } from '../identity-session.js'
 import { challenge, equalHash, opaqueHash } from './crypto.js'
 import { parseExchange } from './input.js'
-import { exchangeExpired, freshTime, loginTransaction, resolveRegistration, terminal } from './state.js'
+import { exchangeExpired, freshTime, loginTransaction, requestExpired, resolveRegistration, terminal } from './state.js'
 
 async function clearExpiredExchange(deps: LoginDependencies, id: string): Promise<void> {
   await loginTransaction(deps.dataSource, async (manager) => {
@@ -24,7 +24,12 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
       // 자신의 OAuth row를 먼저 잠그고 identity-session 내부의 user→session→refresh로 간다.
       const row = await requests.findOne({ where: { id: body.requestId }, lock: { mode: 'pessimistic_write' } })
       const time = await freshTime(manager)
-      if (!row || row.status !== 'exchange_ready' || row.clientId !== body.clientId || row.method !== LOGIN.method ||
+      if (!row || row.status === 'consumed' || row.status === 'failed') throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+      if (requestExpired(row, time)) {
+        await terminal(manager, row)
+        return new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+      }
+      if (row.status !== 'exchange_ready' || row.clientId !== body.clientId || row.method !== LOGIN.method ||
         row.codeChallenge !== challenge(body.codeVerifier) || !equalHash(row.exchangeCodeHash, opaqueHash(body.code))) {
         throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
       }

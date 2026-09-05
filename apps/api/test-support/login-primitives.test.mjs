@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { test } from 'node:test'
+import { URLSearchParams } from 'node:url'
 import { creation, opaque, registration, registryConfiguration } from './login-fixtures.mjs'
 
 const crypto = await import('../dist/auth/login/crypto.js')
