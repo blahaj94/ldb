@@ -26,7 +26,7 @@ review-after: API 실행 기반의 첫 validation 완료 또는 지원 major 변
 
 ## Runtime과 dependency 제안
 
-API만 Node `>=24.15.0 <25`의 최신 보안 patch를 사용하고 `@types/node`는 24.x로 맞춘다. Node 24는 확인 시점 LTS이며 기존 `pnpm@11.23.0`의 지원 Node 범위에 들어간다. 다른 app의 Node/types 버전이나 workspace package manager를 변경하지 않는다. [Node release 상태](https://nodejs.org/en/about/previous-releases), [pnpm 호환 표](https://pnpm.io/installation#compatibility)
+API만 Node `>=24.15.0 <25`를 호환 floor/major 범위로 두며, 실제 선택은 해당 major의 최신 보안 patch로 한다. `@types/node`는 24.x로 맞춘다. Node 24는 확인 시점 LTS이며 기존 `pnpm@11.23.0`의 지원 Node 범위에 들어간다. 다른 app의 Node/types 버전이나 workspace package manager를 변경하지 않는다. [Node release 상태](https://nodejs.org/en/about/previous-releases), [pnpm 호환 표](https://pnpm.io/installation#compatibility)
 
 다음 목록은 API workspace의 직접 dependency 승인안이다. Nest package는 동일한 12.x release로 맞추며 확인 기준은 12.0.1이다. 후속 구현은 아래 major 범위 안에서 공개 package의 engine·peer를 재확인하고 실제 해결된 version을 lockfile에 기록한다. Major·역할 변경이나 목록 밖 직접 dependency가 필요하면 승인을 다시 받는다.
 
@@ -59,7 +59,7 @@ HTTP client는 Node 내장 `fetch`, test runner와 assertion은 `node:test`, `no
 
 App 생성은 port를 열지 않는 factory로 분리하고, `main.ts`만 설정 읽기·listen·종료 signal 연결을 담당한다. Test는 factory에 fake 설정/provider를 넣어 `127.0.0.1`의 port `0`에서 실행하고 반드시 `app.close()`한다. 정상 HTTP 검증용 route는 test module 안에 두며 제품용 health/API를 추가하지 않는다.
 
-실행 기반의 최소 설정 제안은 `PORT`(생략 시 3000, 십진 정수 1~65535)다. 잘못된 값은 listen 전에 실패한다. 검색 구성에 필요한 `NEOPLE_API_KEY`는 검색 module을 연결할 때부터 필수이며 누락·빈 값은 listen 전에 실패한다. Runtime-only app은 아직 연결하지 않은 인증·DB·검색 설정을 요구하지 않는다. Credential을 요구하는 module의 필수 설정 누락은 값이나 stack을 출력하지 않는 실패로 검증한다. Fake 설정은 test에서만 주입하며 운영용 인증 우회나 test mode를 추가하지 않는다.
+실행 기반의 최소 **필수** 설정 제안은 `PORT`(십진 정수 1~65535)다. 누락·빈 값·잘못된 값은 listen 전에 실패한다. 따라서 runtime-only 단계에서도 실제 필수 설정 누락 실패를 검증한다. Test factory의 loopback port 0 주입은 환경변수 검증과 구분한다. 검색 구성에 필요한 `NEOPLE_API_KEY`는 검색 module을 연결할 때부터 필수이며 누락·빈 값은 listen 전에 실패한다. Runtime-only app은 아직 연결하지 않은 인증·DB·검색 설정을 요구하지 않는다. 필수 설정 실패는 값이나 stack을 출력하지 않고 검증한다. Fake 설정은 test에서만 주입하며 운영용 인증 우회나 test mode를 추가하지 않는다.
 
 후속 구현의 표준 검증 command는 다음과 같다. Package script를 아래 동작으로 구현한 뒤 [`testing.md`](testing.md)의 Red→Green evidence를 기록한다.
 
@@ -72,7 +72,7 @@ App 생성은 port를 열지 않는 factory로 분리하고, `main.ts`만 설정
 | `pnpm --filter @ldb/api start` | `node --import reflect-metadata dist/main.js`; build 후 실행 |
 | `pnpm --filter @ldb/api dev` | `pnpm run build` 후 `pnpm run start`; 초기 범위에 watch orchestration을 추가하지 않음 |
 
-Runtime acceptance에는 test HTTP 응답, metadata가 필요한 constructor DI, app 시작·종료 후 열린 handle 없음, child process의 build entry 실행과 종료, 잘못된 `PORT`와 연결된 module의 필수 설정 누락 시 nonzero exit·미listen을 포함한다. Test의 child process는 허용한 fake environment만 받아 실제 credential을 상속하지 않는다. Build entry 검증에는 위 `build`가 선행해야 한다.
+Runtime acceptance에는 test HTTP 응답, metadata가 필요한 constructor DI, app 시작·종료 후 열린 handle 없음, child process의 build entry 실행과 종료, `PORT` 누락·빈 값·잘못된 값에서 nonzero exit·미listen을 포함한다. 검색 module 연결 후에는 해당 필수 설정 누락도 검증한다. Test의 child process는 허용한 fake environment만 받아 실제 credential을 상속하지 않는다. Build entry 검증에는 위 `build`가 선행해야 한다.
 
 검색 adapter는 fake transport 또는 loopback upstream으로 검증한다. 외부 domain·네오플 credential·인증·DB가 필요하지 않아야 한다. 계정당 제한과 session 활동의 통합 검증은 해당 인증 Rule 승인 후 진행한다. Search query 길이의 외부 규격 미확인은 credential 없는 runtime 검증을 막지 않는다.
 
