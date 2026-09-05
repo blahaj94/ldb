@@ -120,7 +120,7 @@ const result = await dataSource.transaction('READ COMMITTED', async (manager) =>
 
 ### 책임과 저장
 
-- 기존 회원을 먼저 잠가 조회하므로 정상 재로그인에는 nickname 후보조차 생성하지 않는다. 없으면 parameterized `INSERT ... ON CONFLICT(provider,provider_subject) DO NOTHING RETURNING id`를 실행한다. 경합 때 생성한 nickname 후보 중 insert winner만 저장되며, loser는 READ COMMITTED의 다음 statement에서 회원을 잠가 읽는다. `isNewUser`는 실제 insert 결과로 결정한다.
+- 기존 회원을 먼저 잠가 조회하므로 정상 재로그인에는 nickname 후보조차 생성하지 않는다. 없으면 `UserSchema` Repository의 QueryBuilder로 `INSERT ... ON CONFLICT(provider,provider_subject) DO NOTHING RETURNING id`를 실행한다. 경합 때 생성한 nickname 후보 중 insert winner만 저장되며, loser는 READ COMMITTED의 다음 statement에서 회원을 잠가 읽는다. `isNewUser`는 실제 insert 결과로 결정한다.
 - 회원의 opaque subject는 trim·case 변경·숫자 변환 없이 보존한다. 반환 user는 `id`와 `nickname`만 포함한다.
 - User 잠금 뒤 PostgreSQL `clock_timestamp()`의 epoch를 floor한 시각으로 session의 `createdAt`·`lastActiveAt`과 refresh의 `issuedAt`을 맞춘다. Insert winner의 `createdAt`도 이 시각으로 확정하여 unique 대기 전에 평가된 임시 시각을 남기지 않는다. 기존 user timestamp와 nickname은 수정하지 않는다.
 - UUID와 refresh bytes는 Node crypto로 생성한다. 원문 refresh는 canonical base64url로 내부 결과에만 반환하고, decoded 32 bytes의 SHA-256만 `AuthRefreshTokenSchema`로 저장한다. Session·refresh는 동일 manager의 typed Repository를 사용한다. 기존 session이나 refresh 이력은 조회·수정하지 않는다.
@@ -130,10 +130,24 @@ Nickname·token·시간·잠금 정책 자체는 `docs/rules/auth-api.md`, `docs
 
 ### 검증 범위
 
-`apps/api/test/identity-session.test.ts`는 nickname 선행 0·범위, hash 대상 bytes, 신규/기존 회원, 독립 token/session, transaction 전제, conflict 뒤 없음, 정제 오류를 검증한다.
+`apps/api/test/auth-constants.test.ts`는 공통 상수의 승인된 값과 오류 class의 code·status·message 대응을 검증한다. `apps/api/test/identity-session.test.ts`는 nickname 선행 0·범위, hash 대상 bytes, 신규/기존 회원, 독립 token/session, transaction 전제, conflict 뒤 없음, 정제 오류를 검증한다.
 
-`apps/api/test-support/identity-session.mjs`는 기존 `test:database` harness에 연결된다. 기존 Migration이 적용된 PostgreSQL에서 9개 scenario group과 5개 rollback variant를 실행한다. `pg_blocking_pids()`로 실제 insert/row-lock 대기를 확인한 뒤 blocker를 해제하므로 단순 병렬 호출의 우연한 순차 실행을 동시성 evidence로 사용하지 않는다.
+`apps/api/test-support/identity-session.mjs`는 기존 `test:database` harness에 연결된다. 기존 Migration이 적용된 PostgreSQL에서 10개 scenario group과 6개 rollback variant를 실행한다. `pg_blocking_pids()`로 실제 insert/row-lock 대기를 확인한 뒤 blocker를 해제하므로 단순 병렬 호출의 우연한 순차 실행을 동시성 evidence로 사용하지 않는다.
 
-검증 항목은 신규/기존 데이터 보존, provider·대소문자·선행 0·공백의 identity 구분과 nickname 중복 허용, 동시 insert의 단일 승자, 먼저 생성한 transaction rollback 뒤 다음 요청의 실제 신규 생성, 잠금 뒤 fresh DB time, 호출자 code 소비 fixture와 공동 commit, 호출자 실패·session UUID 충돌·refresh hash 충돌·entropy 실패의 전체 rollback, transaction 전제, 기존 fixture 보존이다. 소비 fixture는 합성 원자성만 검증하며 아직 없는 `/auth/exchange`의 proof·TTL·single-use 검증을 대신하지 않는다.
+검증 항목은 신규/기존 데이터 보존, provider·대소문자·선행 0·공백의 identity 구분과 nickname 중복 허용, 동시 insert의 단일 승자, 먼저 생성한 transaction rollback 뒤 다음 요청의 실제 신규 생성, 잠금 뒤 fresh DB time, 호출자 code 소비 fixture와 공동 commit, 호출자 실패·회원/session UUID 충돌·refresh hash 충돌·entropy 실패의 전체 rollback, transaction 전제, 기존 fixture 보존이다. 소비 fixture는 합성 원자성만 검증하며 아직 없는 `/auth/exchange`의 proof·TTL·single-use 검증을 대신하지 않는다.
 
 Native `linux/arm64/v8` PostgreSQL 18.6에서 위 검증과 기존 catalog·constraint·Migration·schema diff matrix가 통과했다. `linux/amd64`, 실제 OAuth, HTTP endpoint, Access JWT, refresh rotation/logout, Desktop, 운영 clock 동기화·배포는 이번 범위 밖이다.
+
+### 상수·타입과 QueryBuilder
+
+`apps/api/src/constants/auth.ts`에 오류 code·HTTP status·message를 `AUTH_ERRORS`로 묶고, provider 식별자는 `AUTH_PROVIDERS.GOOGLE`·`DISCORD`로 정의한다. 최초 nickname의 prefix·digits와 refresh의 byteLength·encoding·hashAlgorithm도 이 file에 둔다. `apps/api/src/types/auth.ts`의 `AuthProvider`·`AuthErrorDefinition`·`AuthErrorCode`는 상수에서 파생한다. `VerifiedIdentity`·`IdentitySession`·entropy 주입 타입도 여기에서 관리하고 `apps/api/src/errors/identity-session.ts`가 오류 정의를 소비한다.
+
+User·AuthLoginRequest의 provider 타입과 현재 EntitySchema CHECK가 공통 provider 상수를 참조한다. Schema snapshot의 SQL은 이전과 정확히 같고 이미 적용된 Migration은 당시 literal을 보존한다. 현재 상수를 과거 Migration에 import하지 않는다.
+
+TypeORM 1.1.1의 `.orUpdate([], ['provider', 'provider_subject'])`는 overwrite 목록이 비어 있어 명시한 identity 충돌에만 `DO NOTHING`을 생성한다. `.returning(['id'])`의 `InsertResult.raw`로 실제 insert 승자를 판단한다. Target 없는 `orIgnore()`는 회원 PK 충돌까지 무시하므로 사용하지 않는다. 같은 transaction manager의 Repository를 사용하며 `.callListeners(false)`·`.updateEntity(false)`로 이전 raw INSERT와 같이 hook·entity 자동 갱신·추가 조회를 수행하지 않는다.
+
+PostgreSQL의 fresh whole-second clock expression은 local SQL constant 하나를 재사용한다. 실제 transaction isolation의 `SHOW`와 DB clock 조회는 TypeORM의 일반 CRUD로 대체하지 않는다. 이 두 조회를 connection 밖으로 옮기거나 transaction 시작 시각으로 바꾸지 않는다.
+
+`assertUserInsertSql`은 refactor 전 `b40055c`의 raw INSERT를 독립 기준으로 고정하고 같은 QueryRunner에서 실제 실행된 user INSERT·parameter 대응을 검사한다. Identifier quoting·사용하지 않는 User alias·공백만 정규화하며 conflict target, DO NOTHING, RETURNING, clock expression과 parameter 순서는 그대로 비교한다. Raw 구현과 QueryBuilder 구현 각각에서 실제 PostgreSQL matrix가 통과했다. 회원 PK 충돌은 `pk_users`의 실제 오류 발생까지 관측하여 광역 conflict ignore로 바뀌지 않았음을 확인한다.
+
+Unit mock의 기존 SQL 정규식 검사는 위 실제 DB의 전체 SQL 비교로 옮겼고, mock은 QueryBuilder 호출 형태에 맞췄다. 신규/기존 회원·nickname·hash·잠금/시각 순서·오류 assertion은 유지한다.
