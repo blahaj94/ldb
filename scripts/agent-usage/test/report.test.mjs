@@ -69,6 +69,18 @@ test("validateSnapshot accepts UTC ISO timestamps without fractional seconds", (
   assert.deepEqual(validateSnapshot(value).period, value.period);
 });
 
+test("validateSnapshot rejects normalized invalid UTC calendar dates", () => {
+  assert.throws(
+    () => validateSnapshot(snapshot({
+      period: {
+        startedAt: "2026-02-30T00:00:00Z",
+        capturedAt: "2026-03-02T01:00:00Z",
+      },
+    })),
+    /Invalid usage snapshot/,
+  );
+});
+
 test("validateSnapshot rejects unknown keys, unsafe strings, and excessive rows", () => {
   assert.throws(() => validateSnapshot({ ...snapshot(), secret: "no" }), /Invalid usage snapshot/);
   assert.throws(
@@ -79,6 +91,12 @@ test("validateSnapshot rejects unknown keys, unsafe strings, and excessive rows"
     () => validateSnapshot(snapshot({ agents: Array(257).fill(snapshot().agents[0]) })),
     /Invalid usage snapshot/,
   );
+  for (const model of ["vendor/model", "@model", "model+variant"]) {
+    assert.throws(
+      () => validateSnapshot(snapshot({ agents: [{ ...snapshot().agents[0], model }] })),
+      /Invalid usage snapshot/,
+    );
+  }
 });
 
 test("validateSnapshot enforces token math and complete state", () => {
@@ -97,6 +115,11 @@ test("validateSnapshot enforces token math and complete state", () => {
   );
   assert.throws(
     () => validateSnapshot(snapshot({ agents: [{ ...row, model: "unknown" }] })),
+    /Invalid usage snapshot/,
+  );
+  assert.throws(() => validateSnapshot(snapshot({ agents: [] })), /Invalid usage snapshot/);
+  assert.throws(
+    () => validateSnapshot(snapshot({ agents: [{ ...row, role: "subagent" }] })),
     /Invalid usage snapshot/,
   );
   assert.doesNotThrow(() =>
@@ -161,4 +184,17 @@ test("renderReport does not infer zero totals when no records were observed", ()
   }));
   assert.match(body, /관측된 usage record가 없습니다/);
   assert.doesNotMatch(body, /\|\s*0\s*\|/);
+});
+
+test("renderReport marks an absent role unobserved only for incomplete snapshots", () => {
+  const rootOnly = snapshot({ agents: [snapshot().agents[0]] });
+  assert.match(renderReport(rootOnly), /\| 서브 에이전트 \| 0 \| 0 \| 0 \| 0 \| 0 \| 0 \|/);
+
+  const partial = renderReport({
+    ...rootOnly,
+    complete: false,
+    warnings: ["descendant_missing"],
+  });
+  assert.match(partial, /\| 서브 에이전트 \| 미관측 \| 미관측 \| 미관측 \| 미관측 \| 미관측 \| 미관측 \|/);
+  assert.doesNotMatch(partial, /\| 서브 에이전트 \| 0 \|/);
 });

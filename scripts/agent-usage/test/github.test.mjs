@@ -146,6 +146,45 @@ test("publishReport trusts latest snapshot only from PR author or repository own
   assert.doesNotMatch(post.body.body, /attacker/);
 });
 
+test("publishReport uses the most recently updated trusted snapshot", () => {
+  const current = snapshotComment(snapshot());
+  const stale = snapshotComment(snapshot({ headSha: "b".repeat(40) }));
+  const mock = apiMock({
+    prComments: [
+      {
+        id: 1,
+        body: current,
+        user: { login: "author" },
+        created_at: "2026-09-05T00:30:00Z",
+        updated_at: "2026-09-05T01:30:00Z",
+      },
+      {
+        id: 2,
+        body: stale,
+        user: { login: "owner" },
+        created_at: "2026-09-05T01:00:00Z",
+        updated_at: "2026-09-05T01:00:00Z",
+      },
+    ],
+  });
+  assert.equal(publishReport(REPOSITORY, 35, mock.call).status, "published");
+});
+
+test("publishReport rejects a snapshot whose manifest issue is no longer linked", () => {
+  const mock = apiMock({
+    prComments: [{
+      body: snapshotComment(snapshot({ issue: 99 })),
+      user: { login: "author" },
+      created_at: "2026-09-05T01:00:00Z",
+    }],
+  });
+  const result = publishReport(REPOSITORY, 35, mock.call);
+  assert.equal(result.status, "unavailable");
+  const post = mock.calls.find(({ args }) => args.includes("POST"));
+  assert.match(post.body.body, /연결된 Issue/);
+  assert.match(post.body.body, /추정하지 않았습니다/);
+});
+
 test("publishReport posts unavailable without zeros for missing or stale snapshot", () => {
   for (const prComments of [
     [],
