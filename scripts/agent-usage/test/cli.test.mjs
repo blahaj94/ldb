@@ -57,6 +57,36 @@ test('begin은 local manifest를 저장하고 시작 turn의 조용한 덮어쓰
   assert.equal(execFileSync('git', ['ls-files'], { cwd: directory, encoding: 'utf8' }), '');
 });
 
+test('canonical repository와 --repo 대소문자가 달라도 begin과 snapshot이 같은 작업을 사용한다', async (t) => {
+  const { options, output } = await setup(t);
+  const call = options.call;
+  options.call = (args) => args[0] === 'repo' ? { nameWithOwner: 'Owner/Repo' } : call(args);
+  const begin = ['begin', '--issue', '1', '--from-turn', 'first'];
+  await runUsage(begin, options);
+  await runUsage([...begin, '--repo', 'OWNER/repo'], options);
+  await runUsage(['snapshot', '--issue', '1', '--pr', '3', '--repo', 'owner/REPO',
+    '--through-turn', 'first', '--until', end, '--json'], options);
+  const snapshot = JSON.parse(output.at(-1));
+  assert.equal(snapshot.repository, 'owner/repo');
+  assert.equal(snapshot.agents[0].totalTokens, 12);
+  await assert.rejects(runUsage([...begin, '--repo', 'different/repo'], options), /덮어/);
+  await assert.rejects(runUsage(['snapshot', '--issue', '1', '--pr', '3', '--repo', 'different/repo'], options), /기록/);
+});
+
+test('기존 mixed-case repository manifest도 원래 작업 범위를 유지하며 재사용한다', async (t) => {
+  const { directory, options, output } = await setup(t);
+  const begin = ['begin', '--issue', '1', '--from-turn', 'first'];
+  await runUsage(begin, options);
+  const file = join(directory, '.git/agent-usage/issue-1.json');
+  const legacy = { ...JSON.parse(await readFile(file, 'utf8')), repository: 'Owner/Repo' };
+  await writeFile(file, JSON.stringify(legacy));
+  await runUsage([...begin, '--repo', 'OWNER/REPO'], options);
+  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), legacy);
+  await runUsage(['snapshot', '--issue', '1', '--pr', '3', '--repo', 'owner/repo',
+    '--through-turn', 'first', '--until', end, '--json'], options);
+  assert.equal(JSON.parse(output.at(-1)).agents[0].totalTokens, 12);
+});
+
 test('snapshot은 명시적 종료 범위로 요약하고 --publish 없이는 GitHub에 쓰지 않는다', async (t) => {
   const { directory, options, output } = await setup(t);
   await runUsage(['begin', '--issue', '1', '--from-turn', 'first'], options);
