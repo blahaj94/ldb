@@ -233,6 +233,35 @@ test('known exact upstream codes override every HTTP status including 2xx', asyn
   }
 })
 
+test('known codes override conflicting non-2xx HTTP statuses', async (t) => {
+  const cases = [
+    {
+      upstreamCode: 'API003',
+      upstreamStatus: 401,
+      status: 500,
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '서버 오류로 검색을 처리하지 못했습니다.',
+    },
+    {
+      upstreamCode: 'API002',
+      upstreamStatus: 400,
+      status: 503,
+      code: 'NEOPLE_UNAVAILABLE',
+      message: '현재 캐릭터 검색을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+    },
+  ]
+
+  for (const item of cases) {
+    await t.test(`${item.upstreamCode} with HTTP ${item.upstreamStatus}`, async () => {
+      const search = createNeopleCharacterSearchForTest('fake-key', {
+        fetch: async () =>
+          jsonResponse({ error: { code: item.upstreamCode } }, item.upstreamStatus),
+      })
+      await expectFailure(search(input), item.status, item.code, item.message)
+    })
+  }
+})
+
 test('unknown, non-exact, missing codes and HTTP failures use status fallback', async (t) => {
   const cases: Array<[string, unknown, number, number, string]> = [
     ['unknown on 503', { error: { code: 'FUTURE' } }, 503, 503, 'NEOPLE_UNAVAILABLE'],
@@ -365,6 +394,40 @@ test('a fully parsed and projected response at 4,999ms succeeds', async () => {
     ],
   })
   assert.equal(scheduledDelay, 5_000)
+})
+
+test('deadline reached while projection starts is rechecked after projection', async () => {
+  let now = 0
+  const search = createNeopleCharacterSearchForTest('fake-key', {
+    fetch: async () => {
+      const response = {
+        status: 200,
+        text: async () => {
+          now = 4_999
+          return JSON.stringify({
+            rows: [{ characterId: 'id', characterName: '이름', serverId: 'cain', fame: 1 }],
+          })
+        },
+      }
+      Object.defineProperty(response, 'ok', {
+        get: () => {
+          now = 5_000
+          return true
+        },
+      })
+      return response as Response
+    },
+    now: () => now,
+    setTimer: () => Symbol('timer'),
+    clearTimer: () => undefined,
+  })
+
+  await expectFailure(
+    search(input),
+    504,
+    'NEOPLE_TIMEOUT',
+    '캐릭터 검색 응답 시간이 초과됐습니다. 다시 시도해 주세요.',
+  )
 })
 
 test('deadline aborts the request, wins over a late known code, and performs no retry', async () => {

@@ -135,6 +135,35 @@ test('malformed loopback JSON keeps the upstream 503 fallback', async () => {
   }
 })
 
+test('loopback API901 overrides HTTP 503 with the known-code 502 mapping', async () => {
+  let requests = 0
+  const loopback = await startLoopback((_request, response) => {
+    requests += 1
+    response.writeHead(503, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({ error: { code: 'API901', status: 503 } }))
+  })
+
+  try {
+    const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
+      fetch,
+      origin: loopback.origin,
+    })
+    const error = await expectStatus(
+      search({ characterName: '코드우선', serverId: 'cain', limit: 10 }),
+      502,
+    )
+    assert.deepEqual(error.body, {
+      error: {
+        code: 'NEOPLE_API_ERROR',
+        message: '캐릭터 검색 중 오류가 발생했습니다.',
+      },
+    })
+    assert.equal(requests, 1)
+  } finally {
+    await closeLoopback(loopback.server)
+  }
+})
+
 test('deadline aborts native fetch while the loopback body is still incomplete', async () => {
   let now = 0
   const captured: { signal?: AbortSignal } = {}
@@ -191,6 +220,61 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
     await Promise.race([
       responseClosed,
       delay(1_000).then(() => assert.fail('upstream response was not closed after abort')),
+    ])
+  } finally {
+    await closeLoopback(loopback.server)
+  }
+})
+
+test('clock deadline aborts an unfinished native body before its timer callback fires', async () => {
+  let now = 0
+  const captured: { signal?: AbortSignal } = {}
+  let scheduledDelay: number | undefined
+  let timerCleared = false
+  let requests = 0
+  let markResponseClosed: (() => void) | undefined
+  const responseClosed = new Promise<void>((resolve) => {
+    markResponseClosed = resolve
+  })
+  const loopback = await startLoopback((_request, response) => {
+    requests += 1
+    response.once('close', () => markResponseClosed?.())
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.flushHeaders()
+    response.write('{"rows":[')
+  })
+
+  try {
+    const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
+      fetch: async (request, init) => {
+        if (init?.signal !== null && init?.signal !== undefined) captured.signal = init.signal
+        const response = await fetch(request, init)
+        now = 5_000
+        return response
+      },
+      origin: loopback.origin,
+      now: () => now,
+      setTimer: (_callback, timeout) => {
+        scheduledDelay = timeout
+        return Symbol('timer')
+      },
+      clearTimer: () => {
+        timerCleared = true
+      },
+    })
+
+    const error = await expectStatus(
+      search({ characterName: '헤더지연', serverId: 'cain', limit: 10 }),
+      504,
+    )
+    assert.equal(error.body.error.code, 'NEOPLE_TIMEOUT')
+    assert.equal(captured.signal?.aborted, true)
+    assert.equal(scheduledDelay, 5_000)
+    assert.equal(timerCleared, true)
+    assert.equal(requests, 1)
+    await Promise.race([
+      responseClosed,
+      delay(1_000).then(() => assert.fail('upstream response was not closed after clock timeout')),
     ])
   } finally {
     await closeLoopback(loopback.server)
