@@ -249,5 +249,5 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     const ids = new Set(original[table].map((row) => String(row[key])))
     assert.deepEqual(final[table].filter((row) => ids.has(String(row[key]))), original[table])
   }
-  return { scenarios: 10, rollbackVariants: variants.length }
+  return { scenarios: 9, rollbackVariants: variants.length }
 }
