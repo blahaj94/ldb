@@ -1,106 +1,22 @@
-import { NEOPLE_SERVER_NAMES } from './servers.js'
-
-const NEOPLE_ORIGIN = 'https://api.neople.co.kr'
-const DEADLINE_MS = 5_000
-
-const errors = {
-  internal: {
-    status: 500,
-    code: 'INTERNAL_SERVER_ERROR',
-    message: '서버 오류로 검색을 처리하지 못했습니다.',
-  },
-  api: {
-    status: 502,
-    code: 'NEOPLE_API_ERROR',
-    message: '캐릭터 검색 중 오류가 발생했습니다.',
-  },
-  unavailable: {
-    status: 503,
-    code: 'NEOPLE_UNAVAILABLE',
-    message: '현재 캐릭터 검색을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
-  },
-  timeout: {
-    status: 504,
-    code: 'NEOPLE_TIMEOUT',
-    message: '캐릭터 검색 응답 시간이 초과됐습니다. 다시 시도해 주세요.',
-  },
-} as const
-
-const upstreamCodeErrors = new Map<string, keyof typeof errors>([
-  ['API000', 'internal'],
-  ['API003', 'internal'],
-  ['API004', 'internal'],
-  ['API005', 'internal'],
-  ['API002', 'unavailable'],
-  ['API008', 'unavailable'],
-  ['DNF980', 'unavailable'],
-  ['API901', 'api'],
-  ['DNF901', 'api'],
-  ['DNF000', 'api'],
-  ['API006', 'api'],
-  ['API007', 'api'],
-  ['API900', 'api'],
-  ['API999', 'api'],
-  ['DNF999', 'api'],
-])
-
-export interface NeopleCharacterSearchInput {
-  characterName: string
-  serverId: string
-  limit: number
-}
-
-export interface CharacterCandidate {
-  characterId: string
-  characterName: string
-  serverId: string
-  serverName: string | null
-  fame: number | null
-}
-
-export interface CharacterSearchResult {
-  rows: CharacterCandidate[]
-}
-
-export interface SearchErrorBody {
-  error: {
-    code: string
-    message: string
-  }
-}
-
-export class NeopleSearchFailure extends Error {
-  readonly body: SearchErrorBody
-
-  constructor(
-    readonly status: number,
-    code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'NeopleSearchFailure'
-    this.body = { error: { code, message } }
-  }
-}
-
-type FetchTransport = (request: string | URL, init?: RequestInit) => Promise<Response>
-type SearchCharacters = (input: NeopleCharacterSearchInput) => Promise<CharacterSearchResult>
-
-interface SearchDependencies {
-  fetch: FetchTransport
-  origin: string
-  now: () => number
-  setTimer: (callback: () => void, delay: number) => unknown
-  clearTimer: (timer: unknown) => void
-}
-
-export interface NeopleCharacterSearchTestDependencies {
-  fetch: FetchTransport
-  origin?: string
-  now?: () => number
-  setTimer?: SearchDependencies['setTimer']
-  clearTimer?: SearchDependencies['clearTimer']
-}
+import {
+  NEOPLE_ORIGIN,
+  NEOPLE_SEARCH_DEADLINE_MS,
+  NEOPLE_SERVER_NAMES,
+} from '../constants/neople-character-search.js'
+import {
+  classifyNeopleUpstreamFailure,
+  neopleSearchFailure,
+  neopleStatusFailure,
+  NeopleSearchFailure,
+} from '../errors/neople-search.js'
+import type {
+  CharacterCandidate,
+  CharacterSearchResult,
+  NeopleCharacterSearchInput,
+  NeopleCharacterSearchTestDependencies,
+  SearchCharacters,
+  SearchDependencies,
+} from '../types/neople-character-search.js'
 
 const nativeDependencies: SearchDependencies = {
   fetch: (request, init) => fetch(request, init),
@@ -110,35 +26,18 @@ const nativeDependencies: SearchDependencies = {
   clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
 }
 
-function failure(kind: keyof typeof errors): NeopleSearchFailure {
-  const error = errors[kind]
-  return new NeopleSearchFailure(error.status, error.code, error.message)
-}
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function statusFailure(status: number): NeopleSearchFailure {
-  return failure(status === 429 || status === 503 ? 'unavailable' : 'api')
-}
-
 function projectResponse(body: unknown, status: number, ok: boolean): CharacterSearchResult {
-  if (isObject(body) && Object.hasOwn(body, 'error')) {
-    const upstreamError = body.error
-    const code = isObject(upstreamError) && typeof upstreamError.code === 'string'
-      ? upstreamError.code
-      : undefined
-    const knownError = code === undefined ? undefined : upstreamCodeErrors.get(code)
-    throw knownError === undefined ? statusFailure(status) : failure(knownError)
-  }
+  const upstreamFailure = classifyNeopleUpstreamFailure(body, status, ok)
+  if (upstreamFailure !== undefined) throw upstreamFailure
 
-  if (!ok || !isObject(body) || !Array.isArray(body.rows)) {
-    throw statusFailure(status)
-  }
+  if (!isObject(body) || !Array.isArray(body.rows)) throw neopleSearchFailure('api')
 
   const rows = body.rows.map((candidate): CharacterCandidate => {
-    if (!isObject(candidate)) throw failure('api')
+    if (!isObject(candidate)) throw neopleSearchFailure('api')
 
     const { characterId, characterName, serverId } = candidate
     if (
@@ -149,13 +48,13 @@ function projectResponse(body: unknown, status: number, ok: boolean): CharacterS
       typeof serverId !== 'string' ||
       serverId.trim() === ''
     ) {
-      throw failure('api')
+      throw neopleSearchFailure('api')
     }
 
     const rawFame = candidate.fame
     if (rawFame !== undefined && rawFame !== null &&
       (typeof rawFame !== 'number' || !Number.isFinite(rawFame))) {
-      throw failure('api')
+      throw neopleSearchFailure('api')
     }
 
     return {
@@ -186,7 +85,7 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
     const url = buildUrl(input, dependencies.origin)
     const controller = new AbortController()
     const startedAt = dependencies.now()
-    const deadline = startedAt + DEADLINE_MS
+    const deadline = startedAt + NEOPLE_SEARCH_DEADLINE_MS
     let didTimeout = false
     let rejectTimeout: (reason: NeopleSearchFailure) => void = () => undefined
     const timeout = new Promise<never>((_resolve, reject) => {
@@ -195,8 +94,8 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
     const timer = dependencies.setTimer(() => {
       didTimeout = true
       controller.abort()
-      rejectTimeout(failure('timeout'))
-    }, DEADLINE_MS)
+      rejectTimeout(neopleSearchFailure('timeout'))
+    }, NEOPLE_SEARCH_DEADLINE_MS)
     const deadlineReached = (): boolean => {
       if (!didTimeout && dependencies.now() < deadline) return false
       didTimeout = true
@@ -214,34 +113,36 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
           signal: controller.signal,
         })
       } catch {
-        throw deadlineReached() ? failure('timeout') : failure('api')
+        throw deadlineReached() ? neopleSearchFailure('timeout') : neopleSearchFailure('api')
       }
 
-      if (deadlineReached()) throw failure('timeout')
+      if (deadlineReached()) throw neopleSearchFailure('timeout')
 
       let rawBody: string
       try {
         rawBody = await response.text()
       } catch {
-        throw deadlineReached() ? failure('timeout') : failure('api')
+        throw deadlineReached() ? neopleSearchFailure('timeout') : neopleSearchFailure('api')
       }
 
-      if (deadlineReached()) throw failure('timeout')
+      if (deadlineReached()) throw neopleSearchFailure('timeout')
 
       let body: unknown
       try {
         body = JSON.parse(rawBody) as unknown
       } catch {
-        throw deadlineReached() ? failure('timeout') : statusFailure(response.status)
+        throw deadlineReached()
+          ? neopleSearchFailure('timeout')
+          : neopleStatusFailure(response.status)
       }
 
       try {
         const result = projectResponse(body, response.status, response.ok)
-        if (deadlineReached()) throw failure('timeout')
+        if (deadlineReached()) throw neopleSearchFailure('timeout')
         return result
       } catch (error) {
-        if (deadlineReached()) throw failure('timeout')
-        throw error instanceof NeopleSearchFailure ? error : failure('api')
+        if (deadlineReached()) throw neopleSearchFailure('timeout')
+        throw error instanceof NeopleSearchFailure ? error : neopleSearchFailure('api')
       }
     }
 

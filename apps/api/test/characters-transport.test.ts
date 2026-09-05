@@ -5,8 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 import test from 'node:test'
 import {
   createNeopleCharacterSearchForTest,
-  NeopleSearchFailure,
 } from '../src/characters/neople-character-search.js'
+import { NeopleSearchFailure } from '../src/errors/neople-search.js'
 
 interface Loopback {
   origin: string

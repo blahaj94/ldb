@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   createNeopleCharacterSearchForTest,
-  NeopleSearchFailure,
 } from '../src/characters/neople-character-search.js'
-import { NEOPLE_SERVER_NAMES } from '../src/characters/servers.js'
+import { NEOPLE_SERVER_NAMES } from '../src/constants/neople-character-search.js'
+import { NeopleSearchFailure } from '../src/errors/neople-search.js'
 
 const input = { characterName: '가나다', serverId: 'cain', limit: 10 }
 
