@@ -1,0 +1,46 @@
+name: Agent Usage Report
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to retry or backfill
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: agent-usage-report-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Publish agent usage report
+        run: |
+          if ! [[ "$USAGE_PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Invalid pull request number" >&2
+            exit 2
+          fi
+          node scripts/agent-usage.mjs publish --repo "$GITHUB_REPOSITORY" --pr "$USAGE_PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          USAGE_PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
