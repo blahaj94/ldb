@@ -83,7 +83,7 @@ CHECK에서 실제로 반복되던 진행 중 앱 proof, browser_started/process
 
 API의 TypeORM `1.1.1`, `@nestjs/typeorm` `12.0.1`, TypeScript `5.9.3`은 package와 lockfile에서 확인했으며 이 refactor에서 변경하지 않았다. 별도 naming strategy가 없고 TypeORM 기본 strategy는 property를 snake_case column으로 바꾸지 않으므로 기존 `name`을 유지한다. UUID는 API 생성 책임, 시간은 기존 `timestamptz`·`precision: 0`·기본값 없음, nullable/type·UNIQUE/index/constraint 이름은 그대로다. 기존 Migration을 수정하거나 새 Migration을 추가하지 않는다.
 
-Identity session 쓰기는 `apps/api/src/auth/identity-session.ts`에 구현됐다. 아래 사용 경계대로 동일 transaction manager의 typed Repository를 사용하며 Generic Repository는 두지 않는다. AuthLoginRequest의 production 전이와 HTTP/OAuth 연결은 후속 범위다.
+Identity session 쓰기는 `apps/api/src/auth/identity-session.ts`에 구현됐다. 아래 사용 경계대로 동일 transaction manager의 typed Repository를 사용하며 Generic Repository는 두지 않는다. AuthLoginRequest의 공통 상태 전이와 HTTP factory·JWT 합성은 `apps/api/src/auth/login`에 구현됐다. 실제 provider adapter와 기본 main 연결 gate는 [`auth-login-development.md`](auth-login-development.md)를 참고한다.
 
 `apps/api/test/fixtures/auth-login-request-schema.json`은 구조 변경 전 `8614006`의 독립 metadata snapshot이다. `apps/api/test/auth-login-request-schema.test.ts`는 모든 column 옵션·flat property·선언 순서·UNIQUE/index와 23개 CHECK의 이름/SQL을 대조한다. 현재 schema/helper에서 기대값을 다시 만들지 않는다. Schema 의미가 변경되는 후속 작업에서는 승인된 migration과 DB behavior test를 먼저 검토하고 fixture를 명시적으로 갱신한다.
 
@@ -95,9 +95,9 @@ Identity session 쓰기는 `apps/api/src/auth/identity-session.ts`에 구현됐�
 
 - `exchange_ready`는 state/browser binding/nonce/provider PKCE가 정리된 행과 남아 있는 행을 모두 허용한다. Terminal의 일괄 NULL 정리 조건을 이 상태로 확대하지 않았다.
 - Google nonce는 `browser_started`와 `processing`에서 필수다. Discord는 NULL 또는 32-byte nonce를 모두 허용하고, `exchange_ready`의 nonce는 optional이다.
-- DB 시간 CHECK는 request의 `expires_at > created_at`, code의 `code_expires_at <= expires_at`와 상태별 null 여부를 검사한다. `consumed`에는 consumed_at이 필요하고 `failed`에는 NULL이어야 한다. 최대 TTL·현재시각 만료·single-use와 전이 경합은 DB의 이 CHECK만으로 보장하지 않으며 후속 runtime 계약의 책임이다.
+- DB 시간 CHECK는 request의 `expires_at > created_at`, code의 `code_expires_at <= expires_at`와 상태별 null 여부를 검사한다. `consumed`에는 consumed_at이 필요하고 `failed`에는 NULL이어야 한다. 최대 TTL·현재시각 만료·single-use와 전이 경합은 DB의 이 CHECK만으로 보장하지 않으며 공통 로그인 runtime이 lock과 fresh time으로 검사한다.
 
-이 범위를 좁히는 변경은 이번 refactor에 포함하지 않았다. Native arm64 PostgreSQL 18.6에서 검증했으며 amd64·운영 DB와 후속 OAuth/refresh/logout flow의 동시성·만료 실행은 미검증이다. Identity session의 검증 범위는 아래와 같다.
+이 범위를 좁히는 변경은 schema refactor에 포함하지 않았다. Native arm64 PostgreSQL 18.6에서 schema를 검증했으며 amd64·운영 DB와 실제 provider/refresh/logout은 미검증이다. 이후 공통 로그인 경합·만료 검증은 [`auth-login-development.md`](auth-login-development.md), Identity session의 기존 검증은 아래를 참고한다.
 
 
 ## Identity session
@@ -108,13 +108,13 @@ Identity session 쓰기는 `apps/api/src/auth/identity-session.ts`에 구현됐�
 import { createIdentitySession } from './auth/identity-session.js'
 
 const result = await dataSource.transaction('READ COMMITTED', async (manager) => {
-  // 후속 exchange는 자신의 OAuth row를 먼저 잠그고 proof/TTL 확인과 code 소비를 합성한다.
+  // 실제 exchange는 자신의 OAuth row를 먼저 잠그고 proof/TTL 확인과 code 소비를 합성한다.
   return createIdentitySession(manager, verifiedIdentity)
 })
 // transaction commit이 성공한 뒤에만 result의 token을 전달한다.
 ```
 
-호출자는 active READ COMMITTED transaction의 manager를 전달한다. 함수는 이 두 조건을 확인하며, 자체 DataSource·global Repository·nested transaction을 만들지 않는다. 현재 실제 호출자는 unit/Docker integration test이고 AppModule에는 연결하지 않는다. 후속 Nest 기능은 자신의 transaction manager를 전달하면 되므로 이번 기능만을 위한 DI module이나 Generic Repository를 추가하지 않았다.
+호출자는 active READ COMMITTED transaction의 manager를 전달한다. 함수는 이 두 조건을 확인하며, 자체 DataSource·global Repository·nested transaction을 만들지 않는다. 현재 공통 로그인 `apps/api/src/auth/login/exchange.ts`와 unit/Docker integration test가 호출한다. 기본 AppModule/main의 실제 provider 연결은 별도 gate다. 공통 HTTP factory는 이 함수를 직접 공개하지 않고 검증된 exchange service만 사용한다.
 
 오류를 transaction 밖으로 전파해 호출자 쓰기까지 rollback해야 한다. 내부 반환은 commit 전의 임시 결과이므로 callback 안에서 token을 응답하거나 오류를 삼키고 commit하지 않는다. DB 실패·random unique 충돌·conflict 뒤 회원 없음은 원문 SQL/parameters/cause 없는 `AUTH_UNAVAILABLE`이고, transaction 전제 위반·entropy 실패는 `AUTH_INTERNAL_ERROR`다. 함수 안에서는 자동 retry하지 않으며 재시작할 때 전체 transaction과 random material을 새로 만든다. Commit 결과가 불명확하면 성공을 추정하지 않는다.
 
@@ -136,7 +136,7 @@ Nickname·token·시간·잠금 정책 자체는 `docs/rules/auth-api.md`, `docs
 
 검증 항목은 신규/기존 데이터 보존, provider·대소문자·선행 0·공백의 identity 구분과 nickname 중복 허용, 동시 insert의 단일 승자, 먼저 생성한 transaction rollback 뒤 다음 요청의 실제 신규 생성, 잠금 뒤 fresh DB time, 호출자 code 소비 fixture와 공동 commit, 호출자 실패·회원/session UUID 충돌·refresh hash 충돌·entropy 실패의 전체 rollback, transaction 전제, 기존 fixture 보존이다. 소비 fixture는 합성 원자성만 검증하며 아직 없는 `/auth/exchange`의 proof·TTL·single-use 검증을 대신하지 않는다.
 
-Native `linux/arm64/v8` PostgreSQL 18.6에서 위 검증과 기존 catalog·constraint·Migration·schema diff matrix가 통과했다. `linux/amd64`, 실제 OAuth, HTTP endpoint, Access JWT, refresh rotation/logout, Desktop, 운영 clock 동기화·배포는 이번 범위 밖이다.
+Native `linux/arm64/v8` PostgreSQL 18.6에서 위 #54 검증과 기존 catalog·constraint·Migration·schema diff matrix가 통과했다. #54 당시 HTTP/OAuth/JWT 연결은 범위 밖이었다. 이후 #63의 공통 HTTP·JWT 합성 검증은 [`auth-login-development.md`](auth-login-development.md)를 따른다. `linux/amd64`, 실제 provider, refresh rotation/logout, Desktop, 운영 clock 동기화·배포는 미검증이다.
 
 ### 상수·타입과 QueryBuilder
 
