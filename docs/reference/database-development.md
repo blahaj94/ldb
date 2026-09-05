@@ -134,7 +134,7 @@ Nickname·token·시간·잠금 정책 자체는 `docs/rules/auth-api.md`, `docs
 
 `apps/api/test-support/identity-session.mjs`는 기존 `test:database` harness에 연결된다. 기존 Migration이 적용된 PostgreSQL에서 10개 scenario group과 6개 rollback variant를 실행한다. `pg_blocking_pids()`로 실제 insert/row-lock 대기를 확인한 뒤 blocker를 해제하므로 단순 병렬 호출의 우연한 순차 실행을 동시성 evidence로 사용하지 않는다.
 
-검증 항목은 신규/기존 데이터 보존, provider·대소문자·선행 0·공백의 identity 구분과 nickname 중복 허용, 동시 insert의 단일 승자, 먼저 생성한 transaction rollback 뒤 다음 요청의 실제 신규 생성, 잠금 뒤 fresh DB time, 호출자 code 소비 fixture와 공동 commit, 호출자 실패·회원/session UUID 충돌·refresh hash 충돌·entropy 실패의 전체 rollback, transaction 전제, 기존 fixture 보존이다. 소비 fixture는 합성 원자성만 검증하며 아직 없는 `/auth/exchange`의 proof·TTL·single-use 검증을 대신하지 않는다.
+검증 항목은 신규/기존 데이터 보존, provider·대소문자·선행 0·공백의 identity 구분과 nickname 중복 허용, 동시 insert의 단일 승자, 먼저 생성한 transaction rollback 뒤 다음 요청의 실제 신규 생성, 잠금 뒤 fresh DB time, 호출자 code 소비 fixture와 공동 commit, 호출자 실패·회원/session UUID 충돌·refresh hash 충돌·entropy 실패의 전체 rollback, transaction 전제, 기존 fixture 보존이다. 소비 fixture는 합성 원자성만 검증하며 `/auth/exchange`의 proof·TTL·single-use 검증을 대신하지 않는다.
 
 Native `linux/arm64/v8` PostgreSQL 18.6에서 위 #54 검증과 기존 catalog·constraint·Migration·schema diff matrix가 통과했다. #54 당시 HTTP/OAuth/JWT 연결은 범위 밖이었다. 이후 #63의 공통 HTTP·JWT 합성 검증은 [`auth-login-development.md`](auth-login-development.md)를 따른다. `linux/amd64`, 실제 provider, refresh rotation/logout, Desktop, 운영 clock 동기화·배포는 미검증이다.
 
