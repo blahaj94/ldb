@@ -103,6 +103,10 @@ Welcome 닫힘은 renderer의 이번 mount 내 navigation 상태다. Reload 시 
 
 Capture component는 signedIn home에서 mount한다. 로그인 이탈 시 unmount→기존 stream/worker/loop cleanup, 화면 후보·인식값 제거, main의 선택 source 해제를 수행한다. 재로그인 후 자동 capture를 시작하지 않고 source 선택·Start gesture를 다시 요구한다. 이후 인증된 검색을 연결할 때 기존 `notifyStableNicknameDetected` entry에서 main auth generation을 확인하고 현재 session의 HTTP만 수행한다. 늦은 OCR/검색 결과는 capture generation과 auth generation이 모두 맞을 때만 표시한다. 로그아웃 후 residual JWT 검색이 서버에서 가능하더라도 앱은 token을 사용하지 않는다. 현재 log-only handler를 이미 인증 검색으로 구현했다고 표시하지 않는다.
 
+이 화면 조건은 main 권한 검사를 대신하지 않는다. 후속 인증 연결에서는 `listCaptureSources`, 비어 있지 않은 source 선택, `notifyStableNicknameDetected`, display-media 허용에 main의 signedIn 검사를 추가한다. Source 열거/선택·media callback의 async 완료 직전에도 시작 auth generation과 현재 signedIn을 재검사하며 이탈했다면 목록/선택 성공을 반환하거나 stream을 허용하지 않는다. 기존 sender/frame/source/user-gesture 검사는 유지한다. 인증 이탈 시 main이 선택을 직접 무효화하고, trusted renderer의 빈 source 선택은 phase와 무관하게 cleanup용으로 허용한다. Renderer도 unmount된 capture instance의 late OCR 완료가 IPC를 보내지 않게 검사한다. Main이 이후 생성하는 검색 작업은 시작 auth generation에 묶는다.
+
+이 연결 경로의 기존 raw OCR nickname log도 제거하고 비민감 counter만 허용한다. 화면의 nickname text 표시와 진단 log 보관은 별개다. Auth 경계 밖의 무관한 module refactoring을 요구하는 것은 아니다.
+
 ## 승인 대상과 서버 별도 결정
 
 권장안은 main 단독 소유 + feature IPC + memory-only pending/access + 암호화 refresh 보관 + 등록 private protocol + 최소 welcome/home이다. Renderer token 보관은 bridge 노출면을 늘리고, provider embedded login은 승인된 외부 browser 경계와 다르므로 채택하지 않는다. 저장/protocol의 실질 대안 비교는 platform 문서에 둔다.

@@ -61,8 +61,9 @@ Path는 main이 고정한 `app.getPath('userData')/auth/<environment>/` 아래�
 1. 필요하면 기존 ready refresh를 main memory에 읽는다. Single writer 안에서 marker를 durable 생성/교체하고 성공을 확인한다. 실패하면 exchange/refresh를 보내지 않으며 storageBlocked다. 이미 남은 marker를 무시하고 덮어쓴 token으로 재시도하지 않는다.
 2. Exchange/refresh를 1회 전송한다. Refresh R0가 기존 file에 있더라도 marker가 있으므로 crash 후 R0를 다시 보내지 않는다. 네트워크 전 crash도 보수적으로 새 로그인을 요구할 수 있다.
 3. 성공 응답을 완전히 검증하고 safeStorage로 R1을 암호화한다. 동일 directory 임시 file write→file flush→atomic replace→해당 platform의 directory durability 확인 순서로 새 credential record를 commit한다. Write/replace 결과 불명은 성공이 아니다.
-4. Credential commit과 generation 유효성을 확인한 뒤 marker 삭제와 그 durability까지 확인한다. **이 단계 뒤에만** signedIn 또는 shared refresh 성공을 publish한다. Logout/cancel이 끼어들면 publish하지 않고 clear로 직렬화한다.
-5. 실패/취소는 marker를 유지하고 알려진 credential의 서버 logout을 lifecycle 규격대로 최대 1회 시도한다. Local clear는 marker 확립→credential 및 이 작업 소유 temp file 제거→삭제 durability 확인→marker 제거/durability 순서다. Clean 상태 확인 후 signedOut 또는 새 login을 허용한다.
+4. Credential commit과 generation 유효성을 확인한 뒤 marker 삭제와 그 durability까지 확인한다. **이 단계 뒤에만** signedIn 또는 shared refresh 성공을 publish한다. Logout/cancel이 끼어들면 publish하지 않고 clear로 직렬화한다. Marker unlink 뒤 directory flush 실패처럼 삭제 결과가 불명이면 marker가 남았다고 가정하지 않는다. 먼저 marker를 다시 durable 확립해 재복원 금지를 확인한다.
+5. 실패/취소는 marker 유지·필요한 재확립을 확인하고 알려진 credential의 서버 logout을 lifecycle 규격대로 최대 1회 시도한다. **재확립도 실패하면** 현재 process는 token을 쓰지 않되 `storageBlocked/LOCAL_CLEAR_UNCONFIRMED`로 전환한다. 이 경우 새 R1 record만 남아 재시작 시 정상 복원될 가능성이 있어 “다음 실행도 로그인되지 않음”을 보장하지 않는다. 서버 204를 확인했어도 local 삭제 완료와 구분하며, 후자가 미확인이면 전체 logout 완료로 표시하지 않는다.
+6. Local clear는 marker 확립→credential 및 이 작업 소유 temp file 제거→삭제 durability 확인→marker 제거/durability 순서다. Clean 상태 확인 후 signedOut 또는 새 login을 허용한다. 이 삭제 과정에서도 marker 상태가 불명하면 위 재확립·실패 안내 규칙을 적용한다.
 
 App 시작 시 marker가 있으면 새/옛 credential을 **복호화해서 자동 refresh하지 않는다**. 파일과 owned temporary record를 위 clear 순서로 제거하고 성공하면 signedOut/REAUTH_REQUIRED, 실패하면 storageBlocked다. Marker 없이 정상 credential 하나만 있으면 복원한다. 손상 record는 사용하지 않고 같은 clear/실패 규칙을 따른다. Backend 잠금·일시적 복호화 거절은 credential을 임의 평문 복원하지 않고 storageBlocked로 유지한다. retryAuth에서 접근이 회복되고 record/marker가 정상일 때만 정상 복원을 재개한다.
 
@@ -74,6 +75,7 @@ App 시작 시 marker가 있으면 새/옛 credential을 **복호화해서 자�
 | Marker 확립 후, 전송 전/후/응답 유실 | File의 R0를 무시하고 local clear 후 새 로그인. 서버 폐기 완료를 추정하지 않음 |
 | R1 임시 write/replace/flush 중 | Marker가 남아 있으므로 R0/R1 둘 다 사용하지 않음. Temp나 이전 file을 복구 후보로 탐색하지 않음 |
 | R1 durable commit 후 marker 제거 전 | 보수적으로 R1도 버리고 새 로그인. 일부 정상 session을 포기하는 가용성 비용을 수용 |
+| Marker unlink 뒤 durability 실패, 재확립 결과 | Durable 재확립 성공이면 R1도 복원 0. 재확립 실패면 R1만 남을 수 있어 다음 실행의 자동 복원 차단은 미확인; LOCAL_CLEAR_UNCONFIRMED 안내. R0는 앞서 R1 durable commit으로 교체됐어야 함 |
 | Marker 제거 durability 확인 후 | R1만 정상 복원 대상. R0 사본은 없음 |
 | Logout에서 marker 확립/credential 삭제조차 실패 | 현재 process는 사용을 중단하지만 재시작 시 이전 record가 남을 가능성을 배제하지 못함. storageBlocked/LOCAL_CLEAR_UNCONFIRMED로 안내하며 영구 logout 성공을 표시하지 않음 |
 
@@ -121,7 +123,7 @@ Single-instance의 범위는 동일 app profile이며 서로 다른 dev/prod app
 | Lifecycle unit | 600초 경계·절전/clock 변화, provider/browser 취소, 앱 취소·late response | TTL 연장/서버 취소 추정 없음; cancelled generation signedIn 0 |
 | Exchange integration | 정상 신규/기존, wrong proof/다른 request code, 중복 버튼·60초 만료·응답 유실 | 최종 서버 session 1개 이하, 저장 전 signedIn 0, code 자동 retry 0 |
 | Refresh unit/integration | 여러 caller·오래된 access 401·15초 abort·401/503/불완전 body | session당 refresh 1회·공유 결과; 결과 불명 R0 재사용 0·mutation 자동 replay 0 |
-| Store fault injection | marker/write/flush/replace/delete의 각 단계 실패와 crash | marker 있으면 R0/R1 자동 복원 0; clean/ready 판정·실패 안내 정확 |
+| Store fault injection | marker/write/flush/replace/delete의 각 단계 실패와 crash; unlink 뒤 flush 실패·marker 재확립 성공/실패 포함 | marker 있으면 R0/R1 자동 복원 0. 재확립 미확인은 자동 복원 차단을 보장하지 않고 정확히 안내; clean/ready 판정 정확 |
 | Logout 경합 | refresh/exchange 중 logout·두 logout·새 로그인·늦은 200·offline | generation 복구 0; known current/consumed session만 폐기; 서버 204 미확인 성공 표시 0 |
 | Restore/activity | restart 성공·offline·refresh 성공 후 `/me` 실패·marker/손상 | pending 복원 0, 정상 refresh 뒤 `/me`·home; background 활동 heartbeat 0 |
 | UI/capture 회귀 | welcome/home, logout/401/unmount, 늦은 OCR, sandbox/preload bundle | 기존 source/media validation 유지, stream/worker/loop cleanup, 재로그인 자동 capture 0 |

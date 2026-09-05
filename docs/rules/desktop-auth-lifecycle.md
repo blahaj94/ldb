@@ -63,6 +63,8 @@ sequenceDiagram
 ```
 
 1. `signedOut → startingLogin`: enabled provider와 저장 준비/이전 marker 정리를 확인한다. 준비 실패면 browser/서버 요청 없이 storageBlocked다. 새 attempt/verifier를 만들고 `{provider,clientId:"desktop",codeChallenge,codeChallengeMethod:"S256"}`만 보낸다.
+   - 생성 요청의 network/15초 timeout은 `signedOut/NETWORK_UNAVAILABLE`, 500/503은 `signedOut/AUTH_SERVICE_UNAVAILABLE`, 400·예상 밖 status·malformed/invalid 201은 `signedOut/LOGIN_RESTART_REQUIRED`로 끝낸다. 모두 pending/verifier를 폐기하고 browser 호출·자동 retry는 0이다. 응답을 못 받은 request row는 서버 TTL로 종료되며 이 endpoint는 session을 생성하지 않는다.
+   - 생성 응답 처리 및 openExternal 직전에 현재 attempt/generation을 재검사한다. 취소/만료 뒤 늦게 온 201은 URL을 열지 않고 버리며 이미 결정된 상태를 덮지 않는다.
 2. 201 응답에서 request UUID, exact launch URL, 유효 UTC ISO expiresAt을 검사한다. 서버 request 전체 TTL 600초를 연장하지 않는다. Main은 요청 시작부터 monotonic 600초 상한과 expiresAt wall-clock 조건 중 먼저 도달한 시점에 pending을 끝낸다. Clock 역행/큰 불연속이 관측되면 새 로그인을 요구한다. 절전 복귀·OS callback·HTTP 완료 때도 시간을 재검사한다. Client countdown은 안내/조기 포기 기준이며 서버의 fresh time 판단을 대체하지 않는다.
 3. Pending을 완전히 저장한 뒤 `waitingBrowser`를 발행하고 main이 openExternal을 한 번 호출한다. Resolver 성공은 browser/provider 로그인 성공 증거가 아니다. Renderer로 browserUrl을 보내지 않는다. OS 호출 실패면 pending을 정리하고 `signedOut/BROWSER_OPEN_FAILED`다.
 4. Provider callback은 브라우저에서 서버가 처리한다. 완료 HTML의 버튼은 등록 target에 **code 하나**만 싣는다. App은 callback에 requestId/provider/error/state/token이 있다고 가정하지 않는다. Provider 취소·실패/브라우저 닫힘은 앱에 전달되지 않으므로 pending은 사용자의 앱 내 취소 또는 TTL까지 기다린다. Polling이나 서버 취소 endpoint를 추가하지 않는다.
@@ -103,7 +105,7 @@ sequenceDiagram
 | 현재 기기 logout 정상 | Durable marker→known refresh로 `/auth/logout` 1회→local record/marker 정리→memory 해제. 서버 204만 폐기 확인. Provider revoke 없음 | signedOut. Server logout과 local 정리 모두 확인된 경우에만 완료 안내 |
 | Logout 503/timeout/offline, local 정리 성공 | 서버 결과를 추정하지 않고 local credential 사용·보관 중단. 자동 background retry 위해 token을 남기지 않음 | signedOut/LOGOUT_SERVER_UNCONFIRMED: “이 기기 정보는 지웠지만 서버 로그아웃은 확인하지 못했습니다.” |
 | Logout local marker/write/delete 실패 | 현재 process token 사용 중단, known token의 서버 logout은 1회 시도 가능. Local 재복원 차단의 durable 성공 여부는 platform 규격으로 구분 | storageBlocked/LOCAL_CLEAR_UNCONFIRMED. 삭제 실패 시 재시작 안전을 보장하지 않음; retryAuth로 local 정리 |
-| 새 token 저장 실패 | signedIn 금지/기존 보호 사용 중단, marker 유지. 완전한 known refresh로 해당 session logout 1회 시도 후 memory 폐기. 이전 R0 파일 복원 금지 | storageBlocked/TOKEN_SAVE_FAILED. 저장 복구 뒤 새 login; access-only 임시 로그인 없음 |
+| 새 token 저장 실패 | signedIn 금지/기존 보호 사용 중단, marker 유지·재확립을 확인. 완전한 known refresh로 해당 session logout 1회 시도 후 memory 폐기. Marker 삭제 결과까지 불명인 경우는 platform의 별도 실패 규칙 | 통상 storageBlocked/TOKEN_SAVE_FAILED. Marker 재확립도 실패하면 LOCAL_CLEAR_UNCONFIRMED가 우선. 저장 복구 뒤 새 login; access-only 임시 로그인 없음 |
 | `/me` 또는 보호 기능 최종 401 | generation 무효화·local clear. Known refresh가 있으면 session logout 1회 시도 가능; 다른 기기 변화 없음 | signedOut/REAUTH_REQUIRED. 기존 capture unmount |
 | signedIn 중 일반 기능 network/5xx | 401로 변환하거나 자동 logout/refresh하지 않음. Feature에 정제 오류 전달 | 기존 계정 표시와 수동 재시도. API 접근 성공·활동 연장을 주장하지 않음 |
 
