@@ -21,7 +21,8 @@ review-after: API 실행 기반의 첫 validation 완료 또는 지원 major 변
 | RFC에서 논의한 방향 | `apps/api`의 NestJS, 중앙 API, 검색 DB 저장·캐싱 없음 |
 | 승인된 실행 계약 | Node 24 LTS, Nest 12, ESM과 TypeScript build, 아래 dependency·test 방식 |
 | 인증·session·DB 추가 승인 | 아래 Authentication runtime contract와 연결된 canonical Rule. 실제 구현·검증 성공은 별개 |
-| 남은 미결정 | 운영 배포, PostgreSQL major/image, 실제 credential과 domain, 전체 서비스 한도 및 `auth-runtime.md`의 gate |
+| PostgreSQL 선택 상태 | Server·image·local validation의 정확한 값과 승인 상태·evidence는 [`auth-runtime.md`](auth-runtime.md)의 PostgreSQL 선택 구간만 따른다. 선택 승인과 실제 compiled ESM/DB/platform compatibility 검증은 별개다. |
+| 남은 미결정 | 운영 배포, 실제 credential과 domain, 전체 서비스 한도 및 `auth-runtime.md`의 나머지 운영·compatibility gate |
 
 설계 작성 시점의 `apps/api/package.json`은 ESM이며 `dev`, `build`, `test`는 비어 있고 API source·test·tsconfig가 없다. 아래 command와 경로는 **향후 구현 계약**이며 현재 실행 가능한 command나 검증 성공 evidence가 아니다.
 

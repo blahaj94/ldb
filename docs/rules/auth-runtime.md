@@ -27,11 +27,16 @@ review-after: 최초 engine·peer·ESM·DB validation 또는 승인된 version �
 
 Registry의 고정 version 근거: [@nestjs/typeorm](https://registry.npmjs.org/%40nestjs%2Ftypeorm/12.0.1), [typeorm](https://registry.npmjs.org/typeorm/1.1.1), [pg](https://registry.npmjs.org/pg/8.23.0), [jose](https://registry.npmjs.org/jose/6.2.12). 이 문서는 #39의 dated evidence를 옮겼으며 새 metadata 확인·설치/build/DB 검증을 수행했다는 뜻이 아니다. 구현 시 engine/peer와 실제 compiled ESM compatibility를 검증해야 한다. TypeORM 0.3 또는 Nest 통합 없이 DataSource 주입은 비용을 다시 비교할 대안이며 실패를 피하려 임의 채택하지 않는다.
 
-로컬 DB는 승인된 기존 경계대로 Docker만 허용한다. PostgreSQL server major·image digest는 아래 승인 대기 proposal이며, 승인 전에는 여전히 미정이다.
+로컬 DB는 승인된 기존 경계대로 Docker만 허용한다. PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상태는 아래 구간만 canonical source로 사용한다.
 
-## PostgreSQL 선택과 Docker 검증 proposal — 승인 대기
+## PostgreSQL 선택과 Docker 검증
 
-> 이 구간은 Issue #49의 **승인 대기 proposal**이다. Draft PR의 명시적인 사용자 승인 전에는 active Rule이나 image pull·DB 실행·구현 authority가 아니다. 기존 승인 metadata와 아래 Migration 계약은 그대로 유지한다.
+| 상태 항목 | 현재 값 |
+| --- | --- |
+| 선택 상태 | **승인 대기 proposal** |
+| 선택 승인 evidence | 없음 — PR #50의 명시적인 사용자 승인 comment 대기 |
+
+이 표가 선택 상태와 evidence의 단일 기준이다. 선택 상태가 승인 대기이면 아래 값은 proposal이며 active Rule이 아니다. Draft PR의 명시적인 사용자 승인을 확인하고 evidence를 기록해 선택 상태를 승인됨으로 바꾼 revision부터 선택 gate만 해소된다. 선택 승인은 image pull·DB 실행·구현 authority나 실제 compatibility·운영 검증 완료를 뜻하지 않으며 기존 승인 metadata와 아래 Migration 계약은 그대로 유지한다.
 
 ### 선택과 근거
 
@@ -61,7 +66,7 @@ PostgreSQL 18 image의 `PGDATA`는 `/var/lib/postgresql/18/docker`, declared `VO
 | --- | --- |
 | Fresh apply | App relation이 없는 새 test DB에서 compiled ESM DataSource/Migration을 한 번 명시 실행한다. `auth-database.md`의 auth domain table은 정확히 4개다. 별도의 TypeORM Migration history metadata는 실행 기반 내부 table로 구분하며 새 auth domain table 승인으로 세지 않는다. |
 | Re-run no-op | 같은 Migration을 다시 실행해 pending Migration과 schema 변경이 없음을 확인한다. |
-| Migration 목록·schema | Applied Migration 목록과 catalog를 조회해 column/nullability/collation, named unique·FK·CHECK, 일반 index와 partial unique index가 승인 contract와 일치하고 예상 밖 auth relation이 없음을 확인한다. |
+| Migration 목록·schema | Applied Migration 목록과 catalog를 조회해 column/nullability/collation, named unique·FK·CHECK, 일반 index와 partial unique index가 승인 contract와 일치하고 예상 밖 auth relation이 없음을 확인한다. `users(id)`, `auth_sessions(id)`, `auth_refresh_tokens(token_hash)`, `auth_login_requests(id)` 각각은 정확한 column 집합의 `PRIMARY KEY` constraint여야 하며 `UNIQUE NOT NULL`로 대체해 통과시키지 않는다. |
 | 위반 거절 | 각각 격리한 transaction에서 duplicate provider identity·미소비 refresh, orphan FK, nonempty/시간/revoked pair/hash/status별 CHECK, partial unique 위반이 해당 constraint/index에서 거절되고 rollback 뒤 fixture가 오염되지 않음을 확인한다. |
 | 자동 schema 변경 없음 | `synchronize:false`, `migrationsRun:false`로 app을 시작·종료한 전후 catalog가 동일해야 한다. App 시작이 fresh DB에 auth table이나 Migration history를 만들지 않고 migrated DB도 바꾸지 않는다. |
 | Disposable rollback | 별도의 빈 disposable test DB에 Migration up을 먼저 명시 적용해 auth schema와 applied history를 확인한 뒤 down을 실행한다. Auth domain table 제거와 Migration history의 일관성을 확인하며 빈 DB에서 즉시 down한 no-op를 성공으로 세거나 운영 destructive down의 근거로 사용하지 않는다. |
@@ -84,9 +89,9 @@ Migration의 문서 근거는 #39가 읽은 [TypeORM Migration setup](https://ty
 
 ## 승인과 미결정 gate
 
-API/security/schema/보관·key 주기·활동 분류·admission/DB 장애·body/deadline 정책과 위 exact dependency 역할·version은 승인됐다. 다음 미정이 필요한 구현은 별도 결정/검증을 완료해야 하며 이번 승인으로 해결된 것으로 간주하지 않는다.
+API/security/schema/보관·key 주기·활동 분류·admission/DB 장애·body/deadline 정책과 위 exact dependency 역할·version은 승인됐다. PostgreSQL server·image·local validation 선택의 상태와 evidence는 위 canonical 구간만 따른다. 선택 승인 여부와 별개로 다음 미정이 필요한 구현은 별도 결정/검증을 완료해야 한다.
 
-- PostgreSQL major/image digest, 운영 deployment topology와 single process 조건, clock 동기화·역행 감지, 실제 cleanup 시각·key 운영 절차
+- 운영 deployment topology와 single process 조건, clock 동기화·역행 감지, 실제 cleanup 시각·key 운영 절차
 - 더 넓은 dependency 허용 범위, 승인된 version의 compiled ESM/TypeScript/runtime compatibility
 - 실제 client/HTTPS callback/protocol 등록값·provider config snapshot, Electron OS 저장/IPC 및 실제 browser/OS 연동
 - Discord 일반 confidential OAuth PKCE의 공식 적용 근거와 후속 wrong/missing verifier·downgrade 거절 E2E

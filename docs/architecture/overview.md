@@ -31,9 +31,11 @@ scripts/
 
 ## Approved boundary
 
-현재 workspace·app boundary와 API runtime·검증 기반이 승인됐다. 검색의 입력·응답·오류·계정 제한은 [`../rules/character-search.md`](../rules/character-search.md)를 따른다. 근거는 [PR #42 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)이다. 인증·핵심 DB·서버 통신의 추가 승인 범위는 아래 Authentication boundary contract를 따른다. 다음 사항은 아직 결정되지 않았다.
+현재 workspace·app boundary와 API runtime·검증 기반이 승인됐다. 검색의 입력·응답·오류·계정 제한은 [`../rules/character-search.md`](../rules/character-search.md)를 따른다. 근거는 [PR #42 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)이다. 인증·핵심 DB·서버 통신의 추가 승인 범위는 아래 Authentication boundary contract를 따른다.
 
-- PostgreSQL server major·image digest와 실제 운영 배포/복구 절차
+PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상태·evidence는 [`../rules/auth-runtime.md`](../rules/auth-runtime.md)의 PostgreSQL 선택 구간만 따른다. 선택 승인은 실제 dependency/ESM/DB/platform compatibility 검증이나 운영 architecture를 확정하지 않는다. 다음 사항은 아직 결정되지 않았다.
+
+- PostgreSQL 운영 deployment·volume·backup/restore 절차
 - Web/mobile client와 실제 Desktop OS 저장·IPC·callback/protocol 등록
 - Shared package의 종류와 dependency direction
 - 탈퇴 state·삭제/재가입·백업 복원 및 provider별 미확인 gate
