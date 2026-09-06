@@ -24,6 +24,7 @@ review-after: Execution Issue 10개 적용 후
 
 - 사용자가 지정한 repository 전체의 활성 Planner 한 명이 Issue contract, 배정, 상태 전이와 결과 검토를 순서대로 관리한다. 대화나 terminal마다 별도 Planner를 자동으로 두지 않는다.
 - 여러 독립 결과나 architecture 판단이 필요한 큰 요청만 분해한다. 이미 bounded한 요청에는 별도 planning 단계를 만들지 않는다.
+- Dependency 제외 범위의 근거와 library·자체 공통 package의 별도 판단은 [`Dependency 선택과 비용`](change-control.md#dependency-선택과-비용)을 따른다. 비용 증가를 예상하면 설계·배정 전에 사용자 선택이 필요한지 확인한다.
 - 메인 context에는 오래 유지할 요구, 확정된 결정, 배정, dependency와 결과 evidence를 둔다. Code 탐색·구현·test의 상세 context는 Worker에게 맡긴다.
 - 메인 세션의 Planner는 Worker 역할을 겸하지 않는다. 직접 code 탐색·구현·test를 수행하거나 같은 탐색과 raw log 재검토로 대기를 채우지 않고 상세 작업은 별도 Worker context에 둔다.
 - High-capability model은 큰 작업의 decomposition, architecture, security, 높은 uncertainty 판단에 사용한다.
@@ -34,6 +35,7 @@ review-after: Execution Issue 10개 적용 후
 - Issue 범위, approval boundary, dependency와 최신 roster를 확인한 뒤 자신의 branch와 worktree에서 작업한다.
 - Acceptance criteria를 validation evidence로 검증하고 commit과 짧은 결과를 통합 담당에게 반환한다.
 - Scope를 임의로 늘리거나 architecture ambiguity를 추측으로 해결하지 않는다.
+- Dependency 제약으로 자체 구현·검증 부담이 커지는 것을 발견하면 [`Dependency 선택과 비용`](change-control.md#dependency-선택과-비용)에 따라 즉시 보고하고 사용자 선택을 요청한다. 해당 선택에 영향받는 구현만 보류하며 결정이 필요 없는 독립 작업은 계속할 수 있다.
 
 ### 통합 담당
 

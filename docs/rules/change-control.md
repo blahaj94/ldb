@@ -32,6 +32,26 @@ last-reviewed: 2026-08-28
 
 두 개 이상의 app을 변경한다는 사실만으로 중단하지 않는다. 위 approval boundary를 건드릴 때 중단한다.
 
+## Dependency 선택과 비용
+
+아래 정책과 다른 Rule의 연결 문구는 [Issue #96](https://github.com/blahaj94/ldb/issues/96)의 Draft PR 변경안이다. 기존 Rule의 승인 상태를 바꾸거나 특정 library 선정·설치를 승인하지 않는다.
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: dependency 제약을 지키려다 범용 기능의 자체 구현·검증 비용이 커지는 선택을 조기에 확인한다.
+evidence: "Issue #96의 사용자 요청과 Issue #84의 dependency·공통 package 제외 및 구현 규모 preflight"
+exceptions: 기존 기능이나 작은 native API 호출·단순 adapter로 요구를 충족하면 별도 비교 문서나 질문을 요구하지 않는다.
+review-after: 승인 후 dependency 선택이 필요한 구현 Issue 3개에서 질문의 적시성과 비교 비용을 확인한다.
+```
+
+- 새 dependency의 사전 승인은 사용 금지나 자체 구현 우선 지시가 아니다. 승인 절차를 피하려고 library가 맡을 범용 기능을 직접 구현하지 않는다.
+- Dependency 제약으로 범용 기능을 반복해서 만들거나 여러 공통 처리와 실패 경계 test를 직접 구성해야 해 구현·검증 부담이 커질 것으로 예상되면, 설계·착수 전에 아래 비교와 질문을 진행한다. 작업 도중 발견하면 해당 구현을 더 늘리기 전에 즉시 진행한다.
+- 비교는 기존 repository 기능, native API, 유지보수되는 library와 직접 구현 중 해당 요구에 적합한 선택지를 필요한 범위에서 확인한다. 구현뿐 아니라 test·mock·review·유지보수 비용, 호환성·dependency 부담과 library 도입 후에도 남는 인증·응답 제한·경합 등 제품 정책을 함께 고려한다. 정밀한 비용 추정이나 포괄적인 library 조사를 의무화하지 않는다.
+- 사용자에게 추천안과 실질적인 대안 1개, 각각의 trade-off를 짧게 제시하고 선택을 질문한다. Worker는 Planner에게 근거를 전달하고 선택에 영향받는 구현을 보류하며, 결정이 필요 없는 독립 작업은 계속할 수 있다. 질문만 하고 답변 전에 영향받는 자체 구현을 진행하지 않는다.
+- Planner가 dependency 추가를 제외 범위로 정할 때는 사용자 지시·승인된 Rule·이번 작업 범위 등 근거를 Issue에 명시한다. 이유 없이 관행적으로 고정하거나 필요한 library 검토까지 생략하는 제약으로 사용하지 않는다. 외부 library 도입과 자체 공통 package 신설은 목적·비용·boundary가 다른 별도 판단이다.
+- 명시적 사용자 금지와 승인된 runtime·API·security contract는 유지한다. 비용·요구 변화에 따른 기존 제한의 재검토는 제안할 수 있지만, 실제 dependency 설치·역할 변경이나 contract를 바꾸는 구현은 필요한 Rule 변경안의 Draft PR 승인과 해당 작업의 실행 허용 후에만 진행한다. 사용자의 후보 선택은 그 자체로 Rule 승인 evidence를 대신하지 않는다.
+
 ## Approval evidence
 
 Rule 변경이 필요하면 AI는 다음 순서로 진행한다.

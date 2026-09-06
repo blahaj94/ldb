@@ -26,6 +26,7 @@
 
 - 반복적이거나 context, 시간, 오류 비용이 큰 deterministic 작업은 기존 command와 `scripts/**`로 자동화한다.
 - 한 native command로 충분하면 wrapper를 만들지 않는다. 새 automation은 dependency 없는 Node.js ESM `.mjs`가 기본이며, Python이 더 작은 해법일 때만 `.py`를 쓴다.
+- 이 automation 기본값을 제품 runtime의 dependency 선택에 일반화하지 않는다. Dependency 제약으로 자체 구현·검증 비용이 커지면 [`Dependency 선택과 비용`](docs/rules/change-control.md#dependency-선택과-비용)에 따라 구현 전에 질문한다.
 - 사람의 판단, Rule 승인, acceptance criteria 결정을 script에 위임하지 않는다.
 
 ## Work protocol
