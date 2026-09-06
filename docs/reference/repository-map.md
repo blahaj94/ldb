@@ -3,7 +3,7 @@ type: reference
 status: active
 enforcement: autonomous
 scope: repository
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-07
 ---
 
 # Repository Map
@@ -54,6 +54,8 @@ last-reviewed: 2026-09-06
 - Stack: React, TypeScript, Vite
 - Command:
   - `pnpm --filter @ldb/web dev`
+  - `pnpm --filter @ldb/web test`
+  - `pnpm --filter @ldb/web typecheck`
   - `pnpm --filter @ldb/web build`
   - `pnpm --filter @ldb/web lint`
   - `pnpm --filter @ldb/web preview`
@@ -71,6 +73,17 @@ last-reviewed: 2026-09-06
   - `pnpm --filter @ldb/desktop typecheck`
   - `pnpm --filter @ldb/desktop lint`
   - `pnpm --filter @ldb/desktop build`
+
+## Shared UI
+
+- 실제 검증 환경·결과·upstream Motion 지원 제한: `docs/reference/ui-validation.md`.
+- `packages/ui`: `@ldb/ui`, 공식 SEED Snippet·Layout과 중립 Example. Package/peer/CSS 소유·고정 source·고지·명령은 `packages/ui/README.md`를 따른다.
+- Library: `pnpm --filter @ldb/ui test`, `typecheck`, `lint`, `build`.
+- 독립 Example: `pnpm --filter @ldb/ui dev:examples`, `build:examples`, `preview:examples`. 별도 app workspace는 만들지 않는다.
+- 각 consumer는 SEED base.css와 별도 공용 foundation.css를 browser entry에서 한 번 import한다. Library JS는 CSS를 import하지 않고 SEED/React/JSX runtime을 external 처리한다.
+- Source 재생성·hash/local diff: `packages/ui/scripts/prepare-seed-source.mjs`, `packages/ui/seed-provenance.json`.
+- 산출물 검증: `node packages/ui/scripts/verify-build.mjs library packages/ui/dist`, `consumer` mode로 Example·Web·Desktop renderer 산출물을 검사한다. 입력 graph의 미사용 dependency도 보수적으로 고지에 포함한다.
+- Test-only Electron UI: `apps/desktop/scripts/ui-fixture.mjs`와 `ui-fixture-preload.cts`. `pnpm --filter @ldb/desktop ui:fixture desktop light` 또는 `example dark`로 실제 production renderer/Example을 연다. 제품 main/preload 대신 synthetic source/선택 bridge와 media 거절 stub을 사용하며 capture/OCR 성공을 검증하지 않는다.
 
 ## Repository tooling
 

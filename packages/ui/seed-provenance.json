@@ -1,0 +1,122 @@
+{
+  "repository": "https://github.com/daangn/seed-design",
+  "commit": "08b3600989597f4e9017731484a409685c08aa68",
+  "files": [
+    {
+      "upstream": "docs/registry/react/ui/action-button.tsx",
+      "local": "src/seed/action-button.tsx",
+      "sha256": "e0ba59245e0db2edbeedd5952db621aa057f0f3a84f40aa0ff17b8dac90446f9",
+      "localChanges": [],
+      "localSha256": "e0ba59245e0db2edbeedd5952db621aa057f0f3a84f40aa0ff17b8dac90446f9"
+    },
+    {
+      "upstream": "docs/registry/react/ui/text-field.tsx",
+      "local": "src/seed/text-field.tsx",
+      "sha256": "b7d87b1005376b41c7ab9569afd18b3ebe1b166a3b4dffca716b0b53dbede061",
+      "localChanges": [],
+      "localSha256": "b7d87b1005376b41c7ab9569afd18b3ebe1b166a3b4dffca716b0b53dbede061"
+    },
+    {
+      "upstream": "docs/registry/react/ui/dialog.tsx",
+      "local": "src/seed/dialog.tsx",
+      "sha256": "bad9ac3c92cd22a227ecacdca291cfb7a2167ce79496be1733de67f112aee30f",
+      "localChanges": [
+        {
+          "reason": "Declaration이 pnpm의 private transitive 경로를 참조하지 않도록 공식 export type을 명시한다. Runtime 변경 없음.",
+          "before": "export const DialogTrigger = ContentDialog.Trigger;",
+          "after": "export const DialogTrigger: React.ForwardRefExoticComponent<DialogTriggerProps & React.RefAttributes<HTMLButtonElement>> = ContentDialog.Trigger;"
+        },
+        {
+          "reason": "Apache-2.0 §4(b) changed-file 고지",
+          "notice": "/*! LDB 수정: DialogTrigger의 동일 public type을 명시했습니다. Runtime 변경 없음. 상세: packages/ui/seed-provenance.json. */"
+        }
+      ],
+      "localSha256": "6306e00a04ba6f059e1f8b39c360829f25f0b3ed9594cb57968c0519987449c6"
+    },
+    {
+      "upstream": "docs/registry/react/ui/loading-indicator.tsx",
+      "local": "src/seed/loading-indicator.tsx",
+      "sha256": "12996227049d488643c4147d50a440572b5c374d8d3eb1c3441dba0249ba0cdf",
+      "localChanges": [],
+      "localSha256": "12996227049d488643c4147d50a440572b5c374d8d3eb1c3441dba0249ba0cdf"
+    },
+    {
+      "upstream": "docs/registry/react/ui/progress-circle.tsx",
+      "local": "src/seed/progress-circle.tsx",
+      "sha256": "c56e2ae9a2f297cc8e29bf7d2041207dd91a72248547e12d701071d94a1038fc",
+      "localChanges": [],
+      "localSha256": "c56e2ae9a2f297cc8e29bf7d2041207dd91a72248547e12d701071d94a1038fc"
+    },
+    {
+      "upstream": "docs/registry/react/block/layout-01.tsx",
+      "local": "src/seed/layout-01.tsx",
+      "sha256": "29809c81131a5b8bd6b3d729c095c48b7613184f43cb9a0dbc83273afb10e580",
+      "localChanges": [
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": "export default function LayoutBlock() {",
+          "after": "export interface LayoutBlockProps {\n  header?: string;\n  children?: React.ReactNode;\n  footer?: string;\n}\n\nexport default function LayoutBlock({ header = \"Header\", children = <Text textStyle=\"t5Medium\" color=\"fg.neutralSubtle\">Content</Text>, footer = \"Footer\" }: LayoutBlockProps) {"
+        },
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": ">Header</Text>",
+          "after": ">{header}</Text>"
+        },
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": "<Text textStyle=\"t5Medium\" color=\"fg.neutralSubtle\">\n              Content\n            </Text>",
+          "after": "{children}"
+        },
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": "              Footer\n",
+          "after": "              {footer}\n"
+        },
+        {
+          "reason": "Apache-2.0 §4(b) changed-file 고지",
+          "notice": "/*! LDB 수정: 공식 Layout 구조와 시각 값을 유지하며 header/footer/children content slot을 연결했습니다. 상세: packages/ui/seed-provenance.json. */"
+        }
+      ],
+      "localSha256": "dbe890312007920bea1642e3fd085d2f296442aa98e32f2d9ac5549c379a048a"
+    }
+  ],
+  "snippetDependencies": {
+    "action-button": [
+      "loading-indicator"
+    ],
+    "loading-indicator": [
+      "progress-circle"
+    ],
+    "dialog": [
+      "action-button",
+      "@karrotmarket/react-monochrome-icon"
+    ],
+    "text-field": [
+      "@karrotmarket/react-monochrome-icon"
+    ]
+  },
+  "notices": {
+    "seed": [
+      "notices/SEED-LICENSE",
+      "notices/SEED-NOTICE"
+    ],
+    "icons": {
+      "package": "@karrotmarket/react-monochrome-icon@1.26.0",
+      "repository": "https://github.com/daangn/seed-icon-v3",
+      "files": [
+        "notices/ICONS-LICENSE",
+        "notices/ICONS-NOTICE"
+      ]
+    }
+  },
+  "foundation": {
+    "local": "foundation.css",
+    "localSha256": "ce22e17499fc43c85fce96fe471c88c444eeff1719b8df81a3b46432d7aab1cc",
+    "source": "docs/content/foundations/typography.mdx",
+    "changes": [
+      "공식 system font stack을 body에 적용한다. Root font-size를 지정하지 않고 사용자 browser 기본값을 유지한다.",
+      "LDB 초기화: full-viewport Layout의 body 기본 여백을 제거하고 @seed-design/css@2.7.0의 bg.layerDefault·fg.neutral Token을 body 환경에 연결한다. Component selector·Token 재정의 없음."
+    ],
+    "packageEntryAudit": "@seed-design/css@2.7.0은 base/all 및 layered/min 변형만 제공하며 body font/reset entry는 없다."
+  }
+}
