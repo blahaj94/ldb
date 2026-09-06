@@ -2,7 +2,13 @@
 
 import { Box, Layout, Text, VStack } from "@seed-design/react";
 
-export default function LayoutBlock() {
+export interface LayoutBlockProps {
+  header?: string;
+  children?: React.ReactNode;
+  footer?: string;
+}
+
+export default function LayoutBlock({ header = "Header", children = <Text textStyle="t5Medium" color="fg.neutralSubtle">Content</Text>, footer = "Footer" }: LayoutBlockProps) {
   return (
     <Layout.Root>
       <Layout.Content>
@@ -16,7 +22,7 @@ export default function LayoutBlock() {
             display="flex"
             alignItems="center"
           >
-            <Text textStyle="t6Bold">Header</Text>
+            <Text textStyle="t6Bold">{header}</Text>
           </Box>
 
           <Box
@@ -30,9 +36,7 @@ export default function LayoutBlock() {
             justifyContent="center"
             minHeight="200px"
           >
-            <Text textStyle="t5Medium" color="fg.neutralSubtle">
-              Content
-            </Text>
+            {children}
           </Box>
 
           <Box
@@ -45,7 +49,7 @@ export default function LayoutBlock() {
             alignItems="center"
           >
             <Text textStyle="t3Regular" color="fg.neutralSubtle">
-              Footer
+              {footer}
             </Text>
           </Box>
         </VStack>

@@ -47,8 +47,29 @@
       "upstream": "docs/registry/react/block/layout-01.tsx",
       "local": "src/seed/layout-01.tsx",
       "sha256": "29809c81131a5b8bd6b3d729c095c48b7613184f43cb9a0dbc83273afb10e580",
-      "localChanges": [],
-      "localSha256": "29809c81131a5b8bd6b3d729c095c48b7613184f43cb9a0dbc83273afb10e580"
+      "localChanges": [
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": "export default function LayoutBlock() {",
+          "after": "export interface LayoutBlockProps {\n  header?: string;\n  children?: React.ReactNode;\n  footer?: string;\n}\n\nexport default function LayoutBlock({ header = \"Header\", children = <Text textStyle=\"t5Medium\" color=\"fg.neutralSubtle\">Content</Text>, footer = \"Footer\" }: LayoutBlockProps) {"
+        },
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": ">Header</Text>",
+          "after": ">{header}</Text>"
+        },
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": "<Text textStyle=\"t5Medium\" color=\"fg.neutralSubtle\">\n              Content\n            </Text>",
+          "after": "{children}"
+        },
+        {
+          "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
+          "before": "              Footer\n",
+          "after": "              {footer}\n"
+        }
+      ],
+      "localSha256": "f2d449ea6e466de5b496346824de2b3e36be382f4956af5bec12b182b21b201d"
     }
   ],
   "snippetDependencies": {

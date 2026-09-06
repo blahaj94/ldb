@@ -13,7 +13,10 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
-    "build": "vite build && tsc -p tsconfig.build.json"
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "dev:examples": "vite --config examples/vite.config.ts",
+    "build:examples": "vite build --config examples/vite.config.ts",
+    "preview:examples": "vite preview --config examples/vite.config.ts"
   },
   "peerDependencies": {
     "@seed-design/react": "2.4.1",

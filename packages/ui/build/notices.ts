@@ -9,7 +9,8 @@ type BundleContext = {
   emitFile(asset: { type: 'asset'; fileName: string; source: string }): string
 }
 
-// 각 실제 bundle의 dependency 고지와 module provenance를 함께 보존한다.
+// 각 build 입력 graph의 dependency 고지와 module provenance를 보존한다.
+// Tree-shaking 전 입력도 포함해 고지와 중복 사본 검사를 보수적으로 수행한다.
 // Vite 7(Electron)과 Vite 8에서 공통으로 제공하는 Rollup hook만 사용한다.
 export function uiNotices() {
   return {

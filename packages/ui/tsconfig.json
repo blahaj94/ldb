@@ -16,15 +16,22 @@
     "noUnusedParameters": true,
     "noEmit": true,
     "types": [
-      "node"
+      "node",
+      "vite/client"
     ],
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@ldb/ui": [
+        "./src/index.tsx"
+      ]
+    }
   },
   "include": [
     "src",
     "test",
     "vitest.config.ts",
     "build",
-    "vite.config.ts"
+    "vite.config.ts",
+    "examples"
   ]
 }
