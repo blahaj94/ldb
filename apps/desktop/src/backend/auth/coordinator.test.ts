@@ -271,6 +271,72 @@ describe('Desktop AuthCoordinator login', () => {
     })
   })
 
+  it.each([
+    ['commit', 'cancel', false, 'confirmed'],
+    ['commit', 'expiry', true, 'confirmed'],
+    ['finalize', 'cancel', false, 'confirmed'],
+    ['finalize', 'expiry', true, 'confirmed'],
+    ['reestablish', 'cancel', false, 'confirmed'],
+    ['reestablish', 'expiry', true, 'confirmed'],
+    ['reestablish', 'cancel', false, 'failed'],
+    ['reestablish', 'expiry', true, 'failed']
+  ] as const)(
+    'exchange %s 실패 폐기 중 %s: 서버 성공=%s, local clear=%s도 stale credential을 복원하지 않는다',
+    async (failureStage, invalidation, serverConfirmed, clearOutcome) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      await beginWaitingLogin(coordinator)
+      const isCommitFailure = failureStage === 'commit'
+      const isReestablishFailure = failureStage === 'reestablish'
+      if (isCommitFailure) {
+        harness.store.commitOutcomes.push('failed')
+      } else {
+        harness.store.removeOutcomes.push('unknown')
+        harness.store.unknownRemoveApplied.push(true)
+        if (isReestablishFailure) {
+          harness.store.reestablishOutcomes.push('failed')
+        }
+      }
+      harness.store.clearOutcomes.push(clearOutcome)
+      const disposal = deferred<void>()
+      harness.http.logout.mockImplementationOnce(() => disposal.promise)
+
+      const returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+      await vi.waitFor(() => expect(harness.http.logout).toHaveBeenCalledTimes(1))
+      const isCancelled = invalidation === 'cancel'
+      if (isCancelled) {
+        await coordinator.cancelLogin(ATTEMPT_ID)
+      } else {
+        harness.clock.advance(600_000)
+      }
+      if (serverConfirmed) {
+        disposal.resolve()
+      } else {
+        disposal.reject(new AuthHttpFailure('unavailable'))
+      }
+      await returning
+
+      const isLocalClean = clearOutcome === 'confirmed'
+      const expectedNotice = isCancelled ? 'LOGIN_CANCELLED' : 'LOGIN_EXPIRED'
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: isLocalClean ? 'signedOut' : 'storageBlocked',
+        notice: isLocalClean ? expectedNotice : 'LOCAL_CLEAR_UNCONFIRMED'
+      })
+      expect(harness.store.clearCredential).toHaveBeenCalledTimes(1)
+      expect(harness.store.inspection).toEqual({
+        status: isLocalClean ? 'empty' : 'recovery-required'
+      })
+      expect(harness.http.logout).toHaveBeenCalledTimes(1)
+
+      const restarted = createAuthCoordinator(harness.dependencies)
+      await restarted.start()
+      expect(harness.http.refresh).not.toHaveBeenCalled()
+      expect(restarted.getSnapshot().phase).toBe('signedOut')
+      expect(harness.store.inspection).toEqual({ status: 'empty' })
+    }
+  )
+
   it('token, verifier, server identity와 pending 내부값을 snapshot이나 명령 결과에 넣지 않는다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
