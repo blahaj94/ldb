@@ -3,7 +3,8 @@ import { randomBytes } from 'node:crypto'
 // 격리된 test 등록값이다. 제품 registry/환경변수/credential로 export하지 않는다.
 export function registration(provider = 'google', version = 'test-v1') {
   return {
-    provider, version,
+    provider,
+    version,
     providerClientId: `${provider}-test-client`,
     providerSecretRef: `${provider}-test-secret-reference`,
     callbackUrl: `https://api.test.invalid/auth/callback/${provider}`,

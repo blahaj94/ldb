@@ -9,25 +9,45 @@ const { completeLoginCallback } = await import('../dist/auth/login/callback.js')
 const { exchangeLogin } = await import('../dist/auth/login/exchange.js')
 
 test('expired processing callback read commits terminal cleanup after an uncertain prior claim', async () => {
-  const state = opaque(), binding = opaque(), time = new Date('2026-09-06T00:10:00Z')
+  const state = opaque(),
+    binding = opaque(),
+    time = new Date('2026-09-06T00:10:00Z')
   const stored = {
-    id: randomUUID(), provider: 'google', status: 'processing', expiresAt: time,
-    stateHash: digest(state), browserBindingHash: digest(binding),
+    id: randomUUID(),
+    provider: 'google',
+    status: 'processing',
+    expiresAt: time,
+    stateHash: digest(state),
+    browserBindingHash: digest(binding),
   }
-  let updates = 0, providerCalls = 0
+  let updates = 0,
+    providerCalls = 0
   const manager = {
     query: async () => [{ now: time }],
     getRepository: () => ({
       findOne: async () => stored,
-      update: async (_where, patch) => { updates++; Object.assign(stored, patch) },
+      update: async (_where, patch) => {
+        updates++
+        Object.assign(stored, patch)
+      },
     }),
   }
   const deps = {
     dataSource: { transaction: async (_isolation, operation) => operation(manager) },
-    verifyProvider: async () => { providerCalls++ },
+    verifyProvider: async () => {
+      providerCalls++
+    },
   }
-  await assert.rejects(() => completeLoginCallback(deps, 'google', new URLSearchParams({ state, code: 'fixture-provider-code' }), `__Host-ldb-login-${stored.id}=${binding}`),
-    { code: 'LOGIN_REQUEST_INVALID' })
+  await assert.rejects(
+    () =>
+      completeLoginCallback(
+        deps,
+        'google',
+        new URLSearchParams({ state, code: 'fixture-provider-code' }),
+        `__Host-ldb-login-${stored.id}=${binding}`,
+      ),
+    { code: 'LOGIN_REQUEST_INVALID' },
+  )
   assert.equal(providerCalls, 0)
   assert.equal(updates, 1)
   assert.equal(stored.status, 'failed')
@@ -41,10 +61,22 @@ test('expired active request read by exchange clears secrets while terminal cons
     let updates = 0
     const manager = {
       query: async () => [{ now: time }],
-      getRepository: () => ({ findOne: async () => stored, update: async (_where, patch) => { updates++; Object.assign(stored, patch) } }),
+      getRepository: () => ({
+        findOne: async () => stored,
+        update: async (_where, patch) => {
+          updates++
+          Object.assign(stored, patch)
+        },
+      }),
     }
-    await assert.rejects(() => exchangeLogin({ dataSource: { transaction: async (_isolation, operation) => operation(manager) } },
-      { requestId: stored.id, clientId: 'desktop', code: opaque(), codeVerifier: opaque() }), { code: 'LOGIN_EXCHANGE_INVALID' })
+    await assert.rejects(
+      () =>
+        exchangeLogin(
+          { dataSource: { transaction: async (_isolation, operation) => operation(manager) } },
+          { requestId: stored.id, clientId: 'desktop', code: opaque(), codeVerifier: opaque() },
+        ),
+      { code: 'LOGIN_EXCHANGE_INVALID' },
+    )
     assert.equal(updates, status === 'consumed' ? 0 : 1)
     assert.equal(stored.status, status === 'consumed' ? 'consumed' : 'failed')
   }

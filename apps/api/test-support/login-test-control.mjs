@@ -2,15 +2,24 @@ import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
 import { clearTimeout, setTimeout } from 'node:timers'
 
-export const settled = (operation) => operation.then((value) => ({ value }), (error) => ({ error }))
+export const settled = (operation) =>
+  operation.then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  )
 
 export async function bounded(promise) {
   let timer
   try {
-    return await Promise.race([promise, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('login test barrier timed out')), 5000)
-    })])
-  } finally { clearTimeout(timer) }
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('login test barrier timed out')), 5000)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // Test가 실제 QueryRunner 경계를 관측/고장 주입한다. 제품의 test mode는 추가하지 않는다.
@@ -20,13 +29,22 @@ export function instrument(source, hooks) {
     const runner = create.apply(this, args)
     const query = runner.query.bind(runner)
     const commit = runner.commitTransaction.bind(runner)
-    runner.query = (sql, parameters, ...rest) => hooks.query
-      ? hooks.query({ runner, sql, parameters, query, run: () => query(sql, parameters, ...rest) })
-      : query(sql, parameters, ...rest)
-    runner.commitTransaction = () => hooks.commit ? hooks.commit(runner, commit) : commit()
+    runner.query = (sql, parameters, ...rest) =>
+      hooks.query
+        ? hooks.query({
+            runner,
+            sql,
+            parameters,
+            query,
+            run: () => query(sql, parameters, ...rest),
+          })
+        : query(sql, parameters, ...rest)
+    runner.commitTransaction = () => (hooks.commit ? hooks.commit(runner, commit) : commit())
     return runner
   }
-  return () => { source.createQueryRunner = create }
+  return () => {
+    source.createQueryRunner = create
+  }
 }
 
 export async function blockedBy(source, waiter, blocker) {
@@ -56,7 +74,9 @@ export async function locked(source, table, id, operation) {
 }
 
 export async function databaseNow(source) {
-  return (await source.query('SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now'))[0].now
+  return (
+    await source.query('SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now')
+  )[0].now
 }
 
 export async function waitUntil(source, time) {
@@ -70,13 +90,20 @@ export async function waitUntil(source, time) {
 
 export async function atExactTime(source, time, operation) {
   let clocks = 0
-  const restore = instrument(source, { query: async ({ sql, run }) => {
-    const result = await run()
-    if (sql === 'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now') {
-      clocks++
-      return [{ now: time }]
-    }
-    return result
-  } })
-  try { await operation(); assert(clocks > 0) } finally { restore() }
+  const restore = instrument(source, {
+    query: async ({ sql, run }) => {
+      const result = await run()
+      if (sql === 'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now') {
+        clocks++
+        return [{ now: time }]
+      }
+      return result
+    },
+  })
+  try {
+    await operation()
+    assert(clocks > 0)
+  } finally {
+    restore()
+  }
 }

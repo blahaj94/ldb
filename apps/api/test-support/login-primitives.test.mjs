@@ -11,11 +11,26 @@ const { parseCreation, parseExchange, parseCallback } = await import('../dist/au
 
 test('app S256 and opaque code hashes have distinct exact inputs', () => {
   const value = opaque()
-  assert.equal(crypto.challenge(value), createHash('sha256').update(value, 'ascii').digest('base64url'))
-  assert.deepEqual(crypto.opaqueHash(value), createHash('sha256').update(Buffer.from(value, 'base64url')).digest())
+  assert.equal(
+    crypto.challenge(value),
+    createHash('sha256').update(value, 'ascii').digest('base64url'),
+  )
+  assert.deepEqual(
+    crypto.opaqueHash(value),
+    createHash('sha256').update(Buffer.from(value, 'base64url')).digest(),
+  )
   assert.notDeepEqual(crypto.opaqueHash(value), createHash('sha256').update(value).digest())
   const noncanonical = 'A'.repeat(42) + 'B'
-  for (const bad of [null, 1, '', value + '=', ' ' + value, value.slice(1), noncanonical, '+'.repeat(43)]) {
+  for (const bad of [
+    null,
+    1,
+    '',
+    value + '=',
+    ' ' + value,
+    value.slice(1),
+    noncanonical,
+    '+'.repeat(43),
+  ]) {
     assert.throws(() => crypto.decodeOpaque(bad), { code: 'INVALID_AUTH_REQUEST' })
   }
 })
@@ -24,30 +39,56 @@ test('strict creation/exchange shapes reject injected identity, redirect and non
   const verifier = opaque()
   const body = creation(crypto.challenge(verifier))
   assert.deepEqual(parseCreation(body), body)
-  for (const bad of [null, [], { ...body, subject: 'untrusted' }, { ...body, redirectUri: 'https://evil.invalid' },
-    { ...body, provider: 'other' }, { ...body, clientId: 'web' }, { ...body, codeChallengeMethod: 'plain' },
-    { ...body, codeChallenge: 'A'.repeat(42) + 'B' }]) {
+  for (const bad of [
+    null,
+    [],
+    { ...body, subject: 'untrusted' },
+    { ...body, redirectUri: 'https://evil.invalid' },
+    { ...body, provider: 'other' },
+    { ...body, clientId: 'web' },
+    { ...body, codeChallengeMethod: 'plain' },
+    { ...body, codeChallenge: 'A'.repeat(42) + 'B' },
+  ]) {
     assert.throws(() => parseCreation(bad), { code: 'INVALID_AUTH_REQUEST' })
   }
-  const exchange = { requestId: randomUUID(), clientId: 'desktop', code: opaque(), codeVerifier: verifier }
+  const exchange = {
+    requestId: randomUUID(),
+    clientId: 'desktop',
+    code: opaque(),
+    codeVerifier: verifier,
+  }
   assert.deepEqual(parseExchange(exchange), exchange)
   // String client 불일치는 구조 오류가 아니라 service의 LOGIN_EXCHANGE_INVALID다.
   assert.equal(parseExchange({ ...exchange, clientId: 'web' }).clientId, 'web')
-  for (const bad of [{ ...exchange, userId: randomUUID() }, { ...exchange, clientId: 1 },
-    { ...exchange, requestId: 'not-uuid' }, { ...exchange, code: 'A'.repeat(42) + 'B' },
-    { ...exchange, codeVerifier: verifier + '=' }]) {
+  for (const bad of [
+    { ...exchange, userId: randomUUID() },
+    { ...exchange, clientId: 1 },
+    { ...exchange, requestId: 'not-uuid' },
+    { ...exchange, code: 'A'.repeat(42) + 'B' },
+    { ...exchange, codeVerifier: verifier + '=' },
+  ]) {
     assert.throws(() => parseExchange(bad), { code: 'INVALID_AUTH_REQUEST' })
   }
 })
 
 test('callback rejects duplicate/conflicting required fields but ignores standard unknown fields', () => {
   const state = opaque()
-  assert.deepEqual(parseCallback(new URLSearchParams({ state, code: 'provider-code', scope: 'openid profile' })),
-    { state, code: 'provider-code', error: undefined })
-  for (const query of [`state=${state}&state=${state}&code=x`, `state=${state}&code=x&code=y`,
-    `state=${state}&error=x&error=y`, `state=${state}&code=x&error=access_denied`, 'code=x',
-    `state=${state}`, `state=${state}&code=`]) {
-    assert.throws(() => parseCallback(new URLSearchParams(query)), { code: 'LOGIN_REQUEST_INVALID' })
+  assert.deepEqual(
+    parseCallback(new URLSearchParams({ state, code: 'provider-code', scope: 'openid profile' })),
+    { state, code: 'provider-code', error: undefined },
+  )
+  for (const query of [
+    `state=${state}&state=${state}&code=x`,
+    `state=${state}&code=x&code=y`,
+    `state=${state}&error=x&error=y`,
+    `state=${state}&code=x&error=access_denied`,
+    'code=x',
+    `state=${state}`,
+    `state=${state}&code=`,
+  ]) {
+    assert.throws(() => parseCallback(new URLSearchParams(query)), {
+      code: 'LOGIN_REQUEST_INVALID',
+    })
   }
 })
 
@@ -56,22 +97,39 @@ test('registry validates exact trusted URLs and freezes historical snapshot sema
   config.registrations.push(registration('google', 'test-v2'))
   config.activeVersions.google = 'test-v2'
   const registry = new LoginRegistry(config)
-  const row = { provider: 'google', providerConfigVersion: 'test-v1', returnTargetId: 'test-return-test-v1' }
+  const row = {
+    provider: 'google',
+    providerConfigVersion: 'test-v1',
+    returnTargetId: 'test-return-test-v1',
+  }
   assert.equal(registry.resolve(row).version, 'test-v1')
   assert.equal(registry.active('google').version, 'test-v2')
   config.registrations[0].providerClientId = 'mutated'
   assert.equal(registry.resolve(row).providerClientId, 'google-test-client')
-  assert.throws(() => registry.resolve({ ...row, returnTargetId: 'different' }), { code: 'AUTH_INTERNAL_ERROR' })
-  assert.throws(() => registry.resolve({ ...row, providerConfigVersion: 'removed' }), { code: 'AUTH_INTERNAL_ERROR' })
-  for (const callbackUrl of ['http://api.test.invalid/auth/callback/google', 'https://u:p@api.test.invalid/auth/callback/google',
-    'https://api.test.invalid/auth/callback/google#fragment', 'https://api.test.invalid/auth/callback/google?x=1',
-    'https://api.test.invalid/auth/callback/discord']) {
+  assert.throws(() => registry.resolve({ ...row, returnTargetId: 'different' }), {
+    code: 'AUTH_INTERNAL_ERROR',
+  })
+  assert.throws(() => registry.resolve({ ...row, providerConfigVersion: 'removed' }), {
+    code: 'AUTH_INTERNAL_ERROR',
+  })
+  for (const callbackUrl of [
+    'http://api.test.invalid/auth/callback/google',
+    'https://u:p@api.test.invalid/auth/callback/google',
+    'https://api.test.invalid/auth/callback/google#fragment',
+    'https://api.test.invalid/auth/callback/google?x=1',
+    'https://api.test.invalid/auth/callback/discord',
+  ]) {
     const bad = registryConfiguration()
     bad.registrations[0].callbackUrl = callbackUrl
     assert.throws(() => new LoginRegistry(bad), { code: 'AUTH_INTERNAL_ERROR' })
   }
-  for (const url of ['https://app.test.invalid/return', 'ldb-test://u:p@login/complete',
-    'ldb-test://login/complete?code=old', 'ldb-test://login/complete#fragment', 'ldb-test://*/complete']) {
+  for (const url of [
+    'https://app.test.invalid/return',
+    'ldb-test://u:p@login/complete',
+    'ldb-test://login/complete?code=old',
+    'ldb-test://login/complete#fragment',
+    'ldb-test://*/complete',
+  ]) {
     const bad = registryConfiguration()
     bad.registrations[0].returnTarget.url = url
     assert.throws(() => new LoginRegistry(bad), { code: 'AUTH_INTERNAL_ERROR' })
@@ -81,22 +139,43 @@ test('registry validates exact trusted URLs and freezes historical snapshot sema
 test('provider PKCE encryption binds request/provider/purpose and supports retained keys', () => {
   const key = randomBytes(32)
   const oldKey = randomBytes(32)
-  const keys = new crypto.ProviderPkceKeys({ activeKeyId: 'new', keys: [{ id: 'old', key: oldKey }, { id: 'new', key }] })
+  const keys = new crypto.ProviderPkceKeys({
+    activeKeyId: 'new',
+    keys: [
+      { id: 'old', key: oldKey },
+      { id: 'new', key },
+    ],
+  })
   const context = { id: randomUUID(), provider: 'google', purpose: 'login' }
   const verifier = opaque()
   const sealed = keys.encrypt(verifier, context)
-  const historical = new crypto.ProviderPkceKeys({ activeKeyId: 'old', keys: [{ id: 'old', key: oldKey }] }).encrypt(verifier, context)
+  const historical = new crypto.ProviderPkceKeys({
+    activeKeyId: 'old',
+    keys: [{ id: 'old', key: oldKey }],
+  }).encrypt(verifier, context)
   assert.equal(keys.decrypt({ ...context, ...historical }), verifier)
   assert.equal(sealed.providerPkceIv.length, 12)
   assert.equal(sealed.providerPkceTag.length, 16)
   assert.equal(sealed.providerPkceKeyId, 'new')
   assert.equal(keys.decrypt({ ...context, ...sealed }), verifier)
   assert.notDeepEqual(keys.encrypt(verifier, context).providerPkceIv, sealed.providerPkceIv)
-  for (const patch of [{ id: randomUUID() }, { provider: 'discord' }, { purpose: 'other' },
-    { providerPkceTag: randomBytes(16) }, { providerPkceKeyId: 'missing' }]) {
-    assert.throws(() => keys.decrypt({ ...context, ...sealed, ...patch }), { code: 'AUTH_INTERNAL_ERROR' })
+  for (const patch of [
+    { id: randomUUID() },
+    { provider: 'discord' },
+    { purpose: 'other' },
+    { providerPkceTag: randomBytes(16) },
+    { providerPkceKeyId: 'missing' },
+  ]) {
+    assert.throws(() => keys.decrypt({ ...context, ...sealed, ...patch }), {
+      code: 'AUTH_INTERNAL_ERROR',
+    })
   }
-  assert.throws(() => new crypto.ProviderPkceKeys({ activeKeyId: 'x', keys: [] }), { code: 'AUTH_INTERNAL_ERROR' })
-  assert.throws(() => new crypto.ProviderPkceKeys({ activeKeyId: 'x', keys: [{ id: 'x', key: randomBytes(16) }] }),
-    { code: 'AUTH_INTERNAL_ERROR' })
+  assert.throws(() => new crypto.ProviderPkceKeys({ activeKeyId: 'x', keys: [] }), {
+    code: 'AUTH_INTERNAL_ERROR',
+  })
+  assert.throws(
+    () =>
+      new crypto.ProviderPkceKeys({ activeKeyId: 'x', keys: [{ id: 'x', key: randomBytes(16) }] }),
+    { code: 'AUTH_INTERNAL_ERROR' },
+  )
 })

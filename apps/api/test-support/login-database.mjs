@@ -4,7 +4,8 @@ import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:c
 import { URL, URLSearchParams } from 'node:url'
 import { creation, opaque, registryConfiguration } from './login-fixtures.mjs'
 
-export const digest = (value) => createHash('sha256').update(Buffer.from(value, 'base64url')).digest()
+export const digest = (value) =>
+  createHash('sha256').update(Buffer.from(value, 'base64url')).digest()
 export const proof = (value) => createHash('sha256').update(value, 'ascii').digest('base64url')
 
 export async function counts(source) {
@@ -21,9 +22,22 @@ export async function row(source, id) {
 
 export function assertCleared(request, status) {
   assert.equal(request.status, status)
-  for (const field of ['code_challenge', 'method', 'launch_ticket_hash', 'state_hash', 'browser_binding_hash',
-    'oidc_nonce_hash', 'provider_pkce_ciphertext', 'provider_pkce_iv', 'provider_pkce_tag', 'provider_pkce_key_id',
-    'verified_subject', 'exchange_code_hash', 'code_expires_at']) assert.equal(request[field], null, field)
+  for (const field of [
+    'code_challenge',
+    'method',
+    'launch_ticket_hash',
+    'state_hash',
+    'browser_binding_hash',
+    'oidc_nonce_hash',
+    'provider_pkce_ciphertext',
+    'provider_pkce_iv',
+    'provider_pkce_tag',
+    'provider_pkce_key_id',
+    'verified_subject',
+    'exchange_code_hash',
+    'code_expires_at',
+  ])
+    assert.equal(request[field], null, field)
   assert.equal(request.consumed_at instanceof Date, status === 'consumed')
 }
 
@@ -31,7 +45,10 @@ export async function failure(operation, code) {
   await assert.rejects(operation, (error) => {
     assert.equal(error.code, code)
     assert.equal(error.cause, undefined)
-    assert.doesNotMatch(String(error.stack), /fixture-secret|fixture-subject|fixture-provider-code|SQL detail/)
+    assert.doesNotMatch(
+      String(error.stack),
+      /fixture-secret|fixture-subject|fixture-provider-code|SQL detail/,
+    )
     return true
   })
 }
@@ -40,12 +57,19 @@ export async function fixture(source, overrides = {}) {
   const { createLoginService } = await import('../dist/auth/login/service.js')
   const { LoginRegistry } = await import('../dist/auth/login/registry.js')
   const { ProviderPkceKeys } = await import('../dist/auth/login/crypto.js')
-  const { createAccessJwtIssuer, createAccessJwtVerifier } = await import('../dist/auth/access-jwt/index.js')
+  const { createAccessJwtIssuer, createAccessJwtVerifier } =
+    await import('../dist/auth/access-jwt/index.js')
   const keyPair = generateKeyPairSync('ec', { namedCurve: 'P-256' })
   const signing = {
-    issuer: 'https://issuer.test.invalid', audience: 'test-api',
-    verificationKeys: [{ kid: 'test-key', publicKeyPem: keyPair.publicKey.export({ format: 'pem', type: 'spki' }) }],
-    signingKey: { kid: 'test-key', privateKeyPem: keyPair.privateKey.export({ format: 'pem', type: 'pkcs8' }) },
+    issuer: 'https://issuer.test.invalid',
+    audience: 'test-api',
+    verificationKeys: [
+      { kid: 'test-key', publicKeyPem: keyPair.publicKey.export({ format: 'pem', type: 'spki' }) },
+    ],
+    signingKey: {
+      kid: 'test-key',
+      privateKeyPem: keyPair.privateKey.export({ format: 'pem', type: 'pkcs8' }),
+    },
   }
   const issueAccessJwt = await createAccessJwtIssuer(signing)
   const verifyJwt = await createAccessJwtVerifier(signing)
@@ -54,7 +78,10 @@ export async function fixture(source, overrides = {}) {
   const dependencies = {
     dataSource: source,
     registry: new LoginRegistry(registryConfiguration()),
-    pkceKeys: new ProviderPkceKeys({ activeKeyId: 'test-pkce', keys: [{ id: 'test-pkce', key: randomBytes(32) }] }),
+    pkceKeys: new ProviderPkceKeys({
+      activeKeyId: 'test-pkce',
+      keys: [{ id: 'test-pkce', key: randomBytes(32) }],
+    }),
     issueAccessJwt,
     verifyProvider: async (input) => {
       verifiedCalls.push(input)
@@ -81,10 +108,23 @@ export async function started(service, provider = 'google') {
 
 export async function ready(service, provider = 'google') {
   const flow = await started(service, provider)
-  const completion = await service.callback(provider,
-    new URLSearchParams({ state: flow.state, code: 'fixture-provider-code', scope: 'ignored' }), flow.cookie)
+  const completion = await service.callback(
+    provider,
+    new URLSearchParams({ state: flow.state, code: 'fixture-provider-code', scope: 'ignored' }),
+    flow.cookie,
+  )
   const code = new URL(completion.returnUrl).searchParams.get('code')
-  return { ...flow, completion, code, exchange: { requestId: flow.request.requestId, clientId: 'desktop', code, codeVerifier: flow.verifier } }
+  return {
+    ...flow,
+    completion,
+    code,
+    exchange: {
+      requestId: flow.request.requestId,
+      clientId: 'desktop',
+      code,
+      codeVerifier: flow.verifier,
+    },
+  }
 }
 
 export async function assertCommonLogin(source, mark = () => undefined) {
@@ -114,9 +154,13 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   assert.notEqual(authorization.searchParams.get('code_challenge'), proof(verifier))
   assert.equal(authorization.searchParams.get('scope'), 'openid profile')
   assert.equal(authorization.searchParams.get('code_challenge_method'), 'S256')
-  assert.equal(authorization.searchParams.get('redirect_uri'), 'https://api.test.invalid/auth/callback/google')
+  assert.equal(
+    authorization.searchParams.get('redirect_uri'),
+    'https://api.test.invalid/auth/callback/google',
+  )
   assert.match(browser.cookie, new RegExp(`^__Host-ldb-login-${request.requestId}=`))
-  for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/']) assert(browser.cookie.includes(flag))
+  for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/'])
+    assert(browser.cookie.includes(flag))
   assert.doesNotMatch(browser.cookie, /Domain=/i)
   assert(Number(/Max-Age=(\d+)/.exec(browser.cookie)[1]) <= 600)
   await failure(() => f.service.authorize(ticket), 'LOGIN_REQUEST_INVALID')
@@ -125,13 +169,22 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   mark('callback binding, verified result and exchange-ready')
   const params = new URLSearchParams({ state, code: 'fixture-provider-code' })
   await failure(() => f.service.callback('discord', params, cookie), 'LOGIN_REQUEST_INVALID')
-  await failure(() => f.service.callback('google', params, '__Host-other=wrong'), 'LOGIN_REQUEST_INVALID')
-  await failure(() => f.service.callback('google', params, `${cookie}; ${cookie}`), 'LOGIN_REQUEST_INVALID')
+  await failure(
+    () => f.service.callback('google', params, '__Host-other=wrong'),
+    'LOGIN_REQUEST_INVALID',
+  )
+  await failure(
+    () => f.service.callback('google', params, `${cookie}; ${cookie}`),
+    'LOGIN_REQUEST_INVALID',
+  )
   assert.equal(f.verifiedCalls.length, 0)
   assert.deepEqual(await row(source, request.requestId), launched)
   const completion = await f.service.callback('google', params, cookie)
   assert.equal(f.verifiedCalls.length, 1)
-  assert.equal(proof(f.verifiedCalls[0].providerVerifier), authorization.searchParams.get('code_challenge'))
+  assert.equal(
+    proof(f.verifiedCalls[0].providerVerifier),
+    authorization.searchParams.get('code_challenge'),
+  )
   assert.deepEqual(f.verifiedCalls[0].nonceHash, launched.oidc_nonce_hash)
   const code = new URL(completion.returnUrl).searchParams.get('code')
   const exchangeReady = await row(source, request.requestId)
@@ -144,10 +197,21 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   await failure(() => f.service.callback('google', params, cookie), 'LOGIN_REQUEST_INVALID')
 
   mark('actual exchange validates proof and atomically commits tokens')
-  const exchange = { requestId: request.requestId, clientId: 'desktop', code, codeVerifier: verifier }
-  await failure(() => f.service.exchange({ ...exchange, codeVerifier: opaque() }), 'LOGIN_EXCHANGE_INVALID')
+  const exchange = {
+    requestId: request.requestId,
+    clientId: 'desktop',
+    code,
+    codeVerifier: verifier,
+  }
+  await failure(
+    () => f.service.exchange({ ...exchange, codeVerifier: opaque() }),
+    'LOGIN_EXCHANGE_INVALID',
+  )
   await failure(() => f.service.exchange({ ...exchange, code: opaque() }), 'LOGIN_EXCHANGE_INVALID')
-  await failure(() => f.service.exchange({ ...exchange, requestId: randomUUID() }), 'LOGIN_EXCHANGE_INVALID')
+  await failure(
+    () => f.service.exchange({ ...exchange, requestId: randomUUID() }),
+    'LOGIN_EXCHANGE_INVALID',
+  )
   assert.deepEqual(await row(source, request.requestId), exchangeReady)
   assert.deepEqual(await counts(source), baseline)
   const result = await f.service.exchange(exchange)
@@ -156,15 +220,23 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   assert.deepEqual(Object.keys(result.user).sort(), ['id', 'nickname'])
   const principal = await f.verifyJwt(result.accessToken, Math.floor(Date.now() / 1000))
   assert.equal(principal.userId, result.user.id)
-  const [session] = await source.query('SELECT * FROM auth_sessions WHERE id=$1', [principal.sessionId])
-  const [refresh] = await source.query('SELECT * FROM auth_refresh_tokens WHERE session_id=$1', [session.id])
+  const [session] = await source.query('SELECT * FROM auth_sessions WHERE id=$1', [
+    principal.sessionId,
+  ])
+  const [refresh] = await source.query('SELECT * FROM auth_refresh_tokens WHERE session_id=$1', [
+    session.id,
+  ])
   assert.deepEqual(refresh.token_hash, digest(result.refreshToken))
   assert.equal(session.last_active_at.getTime(), principal.issuedAt * 1000)
   assert.equal(new Date(result.sessionExpiresAt) - session.last_active_at, 2_592_000_000)
   assert.equal(new Date(result.accessTokenExpiresAt).getTime(), principal.expiresAt * 1000)
   assertCleared(await row(source, request.requestId), 'consumed')
   await failure(() => f.service.exchange(exchange), 'LOGIN_EXCHANGE_INVALID')
-  assert.deepEqual(await counts(source), { users: baseline.users + 1, sessions: baseline.sessions + 1, refresh: baseline.refresh + 1 })
+  assert.deepEqual(await counts(source), {
+    users: baseline.users + 1,
+    sessions: baseline.sessions + 1,
+    refresh: baseline.refresh + 1,
+  })
 
   mark('existing identity preserves nickname and other sessions')
   await source.query('UPDATE users SET nickname=$2 WHERE id=$1', [result.user.id, '기존 닉네임 👩‍💻'])
@@ -175,10 +247,17 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   assert.equal(second.isNewUser, false)
   assert.notEqual(second.refreshToken, result.refreshToken)
   const after = await source.query('SELECT * FROM auth_sessions ORDER BY id')
-  assert.deepEqual(after.filter((item) => before.some((old) => old.id === item.id)), before)
+  assert.deepEqual(
+    after.filter((item) => before.some((old) => old.id === item.id)),
+    before,
+  )
 
   mark('sign failure rolls back actual code consumption and all identity writes')
-  const broken = await fixture(source, { issueAccessJwt: async () => { throw new Error('fixture-secret SQL detail') } })
+  const broken = await fixture(source, {
+    issueAccessJwt: async () => {
+      throw new Error('fixture-secret SQL detail')
+    },
+  })
   const brokenFlow = await ready(broken.service)
   const beforeFailure = await counts(source)
   const beforeRequest = await row(source, brokenFlow.request.requestId)
@@ -188,11 +267,31 @@ export async function assertCommonLogin(source, mark = () => undefined) {
 
   mark('cancel and provider error clear terminal fields')
   const cancelled = await started(f.service)
-  await failure(() => f.service.callback('google', new URLSearchParams({ state: cancelled.state, error: 'access_denied' }), cancelled.cookie), 'LOGIN_CANCELLED')
+  await failure(
+    () =>
+      f.service.callback(
+        'google',
+        new URLSearchParams({ state: cancelled.state, error: 'access_denied' }),
+        cancelled.cookie,
+      ),
+    'LOGIN_CANCELLED',
+  )
   assertCleared(await row(source, cancelled.request.requestId), 'failed')
-  const providerFailure = await fixture(source, { verifyProvider: async () => { throw new Error('fixture-secret') } })
+  const providerFailure = await fixture(source, {
+    verifyProvider: async () => {
+      throw new Error('fixture-secret')
+    },
+  })
   const failed = await started(providerFailure.service)
-  await failure(() => providerFailure.service.callback('google', new URLSearchParams({ state: failed.state, code: 'fixture-provider-code' }), failed.cookie), 'AUTH_PROVIDER_ERROR')
+  await failure(
+    () =>
+      providerFailure.service.callback(
+        'google',
+        new URLSearchParams({ state: failed.state, code: 'fixture-provider-code' }),
+        failed.cookie,
+      ),
+    'AUTH_PROVIDER_ERROR',
+  )
   assertCleared(await row(source, failed.request.requestId), 'failed')
   return { scenarios: 6 }
 }
