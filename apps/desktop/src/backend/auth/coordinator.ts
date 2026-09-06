@@ -593,12 +593,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
   async function recoverRejectedExchange(value: PendingLogin): Promise<void> {
     const cleared = await clearLocal()
-    if (!isCurrentPending(value)) {
+    const isLogoutCleaning = logoutFlight != null
+    if (isLogoutCleaning) {
       return
     }
     if (!cleared) {
       generation += 1
       storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
+      return
+    }
+    if (!isCurrentPending(value)) {
       return
     }
     const checkedAt = dependencies.clock.read()
