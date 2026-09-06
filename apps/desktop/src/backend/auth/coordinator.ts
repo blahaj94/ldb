@@ -192,6 +192,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const hasServerExpiry = expiresAtMs != null
     const hasReachedServerExpiry = hasServerExpiry && checkedAt.wallMs >= expiresAtMs
     const isExpired =
+      value.startedAt.discontinuous ||
       checkedAt.discontinuous ||
       isWallClockReversed ||
       isMonotonicReversed ||
