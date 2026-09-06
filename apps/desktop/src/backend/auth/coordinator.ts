@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import {
   clearCredential,
   finalizeCredentialTransition,
@@ -8,6 +7,8 @@ import {
 import { decideLocalCleanup } from './cleanup-result'
 import { AuthHttpFailure } from './http'
 import { createPkce } from './pkce'
+import { PendingLogin } from './pending-login'
+import type { ClaimedExchange } from './pending-login'
 import { parseReturnUrl, validateApiOrigin, validateReturnTarget } from './protocol'
 import type {
   AuthAuthorization,
@@ -20,30 +21,11 @@ import type {
   AuthProvider,
   AuthSnapshot,
   AuthTokens,
-  ClockReading,
   CredentialTransitionKind,
   LoginExchangeResponse
 } from './types'
 
-const LOGIN_REQUEST_MAX_AGE_MS = 600_000
 const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
-
-type PendingLogin = {
-  readonly attemptId: string
-  readonly provider: AuthProvider
-  readonly verifier: string
-  readonly generation: number
-  readonly startedAt: ClockReading
-  requestId: string | null
-  expiresAt: string | null
-  expiresAtMs: number | null
-  stage: 'starting' | 'waiting' | 'exchanging'
-  rejectedFingerprint: string | null
-  exchangeFingerprint: string | null
-  exchangePromise: Promise<void> | null
-  controller: AbortController
-  cancelExpiry: (() => void) | null
-}
 
 type SessionCredential = AuthTokens &
   Readonly<{
@@ -71,10 +53,6 @@ function isCanonicalUuid(value: unknown): value is string {
   const isUuid = isString && UUID_PATTERN.test(value)
 
   return isUuid
-}
-
-function fingerprint(value: string): string {
-  return createHash('sha256').update(value, 'ascii').digest('base64url')
 }
 
 function sessionCredential(tokens: AuthTokens): SessionCredential {
@@ -168,14 +146,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return { ok: false, error: { code }, snapshot: snapshot() }
   }
 
-  function pendingSnapshot(value: PendingLogin): NonNullable<AuthSnapshot['login']> {
-    return {
-      attemptId: value.attemptId,
-      provider: value.provider,
-      expiresAt: value.expiresAt
-    }
-  }
-
   function isCurrentPending(value: PendingLogin): boolean {
     const hasSamePending = pending === value
     const hasSameGeneration = generation === value.generation
@@ -184,31 +154,12 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return isCurrent
   }
 
-  function pendingExpired(value: PendingLogin, checkedAt: ClockReading): boolean {
-    const isWallClockReversed = checkedAt.wallMs < value.startedAt.wallMs
-    const isMonotonicReversed = checkedAt.monotonicMs < value.startedAt.monotonicMs
-    const hasReachedMonotonicLimit =
-      checkedAt.monotonicMs - value.startedAt.monotonicMs >= LOGIN_REQUEST_MAX_AGE_MS
-    const expiresAtMs = value.expiresAtMs
-    const hasServerExpiry = expiresAtMs != null
-    const hasReachedServerExpiry = hasServerExpiry && checkedAt.wallMs >= expiresAtMs
-    const isExpired =
-      value.startedAt.discontinuous ||
-      checkedAt.discontinuous ||
-      isWallClockReversed ||
-      isMonotonicReversed ||
-      hasReachedMonotonicLimit ||
-      hasReachedServerExpiry
-
-    return isExpired
-  }
-
   function keepPendingFresh(value: PendingLogin): boolean {
     if (!isCurrentPending(value)) {
       return false
     }
     const checkedAt = dependencies.clock.read()
-    const isExpired = pendingExpired(value, checkedAt)
+    const isExpired = value.isExpired(checkedAt)
     if (isExpired) {
       expirePending(value)
       return false
@@ -217,9 +168,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   }
 
   function clearPendingReference(value: PendingLogin): void {
-    value.cancelExpiry?.()
-    value.cancelExpiry = null
-    value.controller.abort()
+    value.dispose()
     if (pending === value) {
       pending = null
     }
@@ -237,32 +186,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       user: null,
       entry: null,
       notice: 'LOGIN_EXPIRED'
-    })
-  }
-
-  function scheduleExpiry(value: PendingLogin): void {
-    value.cancelExpiry?.()
-    const checkedAt = dependencies.clock.read()
-    if (pendingExpired(value, checkedAt)) {
-      expirePending(value)
-      return
-    }
-
-    const monotonicRemaining =
-      value.startedAt.monotonicMs + LOGIN_REQUEST_MAX_AGE_MS - checkedAt.monotonicMs
-    const wallRemaining =
-      value.expiresAtMs == null ? monotonicRemaining : value.expiresAtMs - checkedAt.wallMs
-    const delayMs = Math.max(0, Math.min(monotonicRemaining, wallRemaining))
-    value.cancelExpiry = dependencies.clock.schedule(delayMs, () => {
-      if (!isCurrentPending(value)) {
-        return
-      }
-      const firedAt = dependencies.clock.read()
-      if (pendingExpired(value, firedAt)) {
-        expirePending(value)
-      } else {
-        scheduleExpiry(value)
-      }
     })
   }
 
@@ -567,7 +490,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           codeChallenge: challenge,
           codeChallengeMethod: 'S256'
         },
-        value.controller.signal
+        value.signal
       )
     } catch (error) {
       finishPendingFailure(value, loginRequestNotice(error))
@@ -577,22 +500,19 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
 
-    value.requestId = created.requestId
-    value.expiresAt = created.expiresAt
-    value.expiresAtMs = Date.parse(created.expiresAt)
-    value.stage = 'waiting'
+    value.acceptRequest(created)
     const checkedAt = dependencies.clock.read()
-    if (pendingExpired(value, checkedAt)) {
+    if (value.isExpired(checkedAt)) {
       expirePending(value)
       return
     }
-    scheduleExpiry(value)
+    value.scheduleExpiry()
     if (!isCurrentPending(value)) {
       return
     }
     publish({
       phase: 'waitingBrowser',
-      login: pendingSnapshot(value),
+      login: value.snapshot(),
       user: null,
       entry: null,
       notice: null
@@ -623,27 +543,22 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
     const checkedAt = dependencies.clock.read()
-    if (pendingExpired(value, checkedAt)) {
+    if (value.isExpired(checkedAt)) {
       expirePending(value)
       return
     }
 
-    value.stage = 'waiting'
-    value.exchangeFingerprint = null
+    value.resumeWaiting()
     publish({
       phase: 'waitingBrowser',
-      login: pendingSnapshot(value),
+      login: value.snapshot(),
       user: null,
       entry: null,
       notice: 'LOGIN_RETURN_INVALID'
     })
   }
 
-  async function exchangeLogin(
-    value: PendingLogin,
-    requestId: string,
-    code: string
-  ): Promise<void> {
+  async function exchangeLogin(value: PendingLogin, claim: ClaimedExchange): Promise<void> {
     const operationGeneration = value.generation
     const prepared = await prepareTransition('exchange', operationGeneration)
     if (!prepared) {
@@ -657,15 +572,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     let exchanged: LoginExchangeResponse
     try {
       activeCredentialHttpStarted = true
-      exchanged = await dependencies.http.exchange(
-        {
-          requestId,
-          clientId: 'desktop',
-          code,
-          codeVerifier: value.verifier
-        },
-        value.controller.signal
-      )
+      exchanged = await dependencies.http.exchange(claim.input, claim.signal)
     } catch (error) {
       if (!keepPendingFresh(value)) {
         await handleStaleTransition()
@@ -673,7 +580,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
       const isRejected = error instanceof AuthHttpFailure && error.code === 'exchange-invalid'
       if (isRejected) {
-        value.rejectedFingerprint = fingerprint(code)
+        value.rejectCode(claim.input.code)
         await recoverRejectedExchange(value)
         return
       }
@@ -743,30 +650,19 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return Promise.resolve(failure('AUTH_OPERATION_FAILED'))
     }
     const startedAt = dependencies.clock.read()
-    const value: PendingLogin = {
-      attemptId,
-      provider,
-      verifier: pkce.verifier,
-      generation,
-      startedAt,
-      requestId: null,
-      expiresAt: null,
-      expiresAtMs: null,
-      stage: 'starting',
-      rejectedFingerprint: null,
-      exchangeFingerprint: null,
-      exchangePromise: null,
-      controller: new AbortController(),
-      cancelExpiry: null
-    }
+    const value = new PendingLogin(
+      { attemptId, provider, verifier: pkce.verifier, generation, startedAt },
+      dependencies.clock,
+      expirePending
+    )
     pending = value
-    scheduleExpiry(value)
+    value.scheduleExpiry()
     if (!isCurrentPending(value)) {
       return Promise.resolve(success())
     }
     const starting = publish({
       phase: 'startingLogin',
-      login: pendingSnapshot(value),
+      login: value.snapshot(),
       user: null,
       entry: null,
       notice: null
@@ -822,34 +718,23 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return Promise.resolve()
     }
     const checkedAt = dependencies.clock.read()
-    if (pendingExpired(value, checkedAt)) {
+    if (value.isExpired(checkedAt)) {
       expirePending(value)
       return Promise.resolve()
     }
-    const codeFingerprint = fingerprint(parsed.code)
-    const wasRejected = value.rejectedFingerprint === codeFingerprint
-    if (wasRejected) {
+    const claim = value.claim(parsed.code)
+    const isIgnored = claim.status === 'ignored'
+    if (isIgnored) {
       return Promise.resolve()
     }
-    const isExchangeInFlight = value.stage === 'exchanging'
-    if (isExchangeInFlight) {
-      const isSameExchange = value.exchangeFingerprint === codeFingerprint
-      return isSameExchange && value.exchangePromise != null
-        ? value.exchangePromise
-        : Promise.resolve()
-    }
-    const requestId = value.requestId
-    const canExchange = value.stage === 'waiting' && requestId != null
-    if (!canExchange) {
-      return Promise.resolve()
+    const isJoined = claim.status === 'joined'
+    if (isJoined) {
+      return claim.promise
     }
 
-    value.stage = 'exchanging'
-    value.exchangeFingerprint = codeFingerprint
-    value.controller = new AbortController()
     publish({
       phase: 'exchanging',
-      login: pendingSnapshot(value),
+      login: value.snapshot(),
       user: null,
       entry: null,
       notice: null
@@ -857,8 +742,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isCurrentPending(value)) {
       return Promise.resolve()
     }
-    const exchange = exchangeLogin(value, requestId, parsed.code)
-    value.exchangePromise = exchange
+    const exchange = exchangeLogin(value, claim)
+    value.trackExchange(exchange)
     const writer = exchange.then(() => undefined)
     activeCredentialHttpStarted = false
     activeWriter = writer
@@ -1320,9 +1205,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return logoutFlight
     }
     const pendingLogin = pending
-    const hasPendingBeforeExchange =
-      pendingLogin != null &&
-      (pendingLogin.stage === 'starting' || pendingLogin.stage === 'waiting')
+    const hasPendingBeforeExchange = pendingLogin != null && pendingLogin.isBeforeExchange
     if (hasPendingBeforeExchange) {
       return cancelLogin(pendingLogin.attemptId)
     }

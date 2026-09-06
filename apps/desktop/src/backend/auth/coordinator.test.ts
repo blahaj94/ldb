@@ -844,6 +844,28 @@ describe('Desktop AuthCoordinator login', () => {
     expect(harness.http.exchange).not.toHaveBeenCalled()
   })
 
+  it('취소된 attempt의 queued timer callback은 새 pending을 만료하거나 다시 예약하지 않는다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+    const staleCallback = harness.clock.scheduled[0].callback
+    await coordinator.cancelLogin(ATTEMPT_ID)
+    await beginWaitingLogin(coordinator)
+    const current = coordinator.getSnapshot()
+    const scheduledCount = harness.clock.scheduled.length
+
+    harness.clock.discontinuous = true
+    staleCallback()
+    harness.clock.discontinuous = false
+
+    expect(coordinator.getSnapshot()).toEqual(current)
+    expect(harness.clock.scheduled).toHaveLength(scheduledCount)
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${OTHER_CODE}`)
+    expect(coordinator.getSnapshot().phase).toBe('signedIn')
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+  })
+
   it('clock 불연속 입력은 남은 wall/monotonic 시간과 무관하게 pending을 만료한다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
