@@ -26,9 +26,10 @@ export default defineConfig({
       outDir: 'out/frontend'
     },
     resolve: {
-      alias: {
-        '@frontend': resolve('src/frontend/src')
-      }
+      alias: [
+        { find: '@frontend', replacement: resolve('src/frontend/src') },
+        { find: /^@ldb\/ui$/, replacement: resolve('../../packages/ui/src/index.tsx') }
+      ]
     },
     plugins: [react(), seedDesignPlugin(), uiNotices()]
   }
