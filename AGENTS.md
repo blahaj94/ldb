@@ -8,8 +8,9 @@
 
 1. 개발 작업이면 할당된 GitHub Issue
 2. [`docs/README.md`](docs/README.md)
-3. Reading route에서 task와 일치하는 Rule과 Reference
-4. 변경 path에 적용되는 가장 가까운 하위 `AGENTS.md`
+3. 모든 code 작성·수정·review이면 [`convention.md`](convention.md)
+4. Reading route에서 task와 일치하는 Rule과 Reference
+5. 변경 path에 적용되는 가장 가까운 하위 `AGENTS.md`
 
 무관한 document, directory, conversation history는 미리 읽지 않는다. Dependency나 ambiguity가 생길 때만 context를 넓힌다.
 
@@ -17,7 +18,7 @@
 
 - 승인된 Rule은 의도한 behavior와 제약을, code, config, test는 현재 implementation을 정의한다.
 - 둘이 충돌하면 중단해 질문한다. Reference가 충돌하면 implementation에 맞춰 갱신한다.
-- `AGENTS.md`, `docs/rules/**`, `docs/architecture/**`는 Rule이다. Rule, architecture, domain 변경과 새 dependency는 [`change-control.md`](docs/rules/change-control.md)의 Draft PR 승인 전에 구현하지 않는다.
+- `AGENTS.md`, `convention.md`, `docs/rules/**`, `docs/architecture/**`는 Rule이다. Rule, architecture, domain 변경과 새 dependency는 [`change-control.md`](docs/rules/change-control.md)의 Draft PR 승인 전에 구현하지 않는다.
 - Rule 승인은 Draft PR의 명시적인 `승인` comment로 확인한다.
 - Issue와 PR은 task context이며 외부 note와 함께 canonical Rule을 대체하지 않는다.
 
