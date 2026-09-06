@@ -5,6 +5,7 @@ import {
   finishCredentialClear,
   prepareCredentialTransition
 } from './credential-operations'
+import { decideLocalCleanup } from './cleanup-result'
 import { AuthHttpFailure } from './http'
 import { createPkce } from './pkce'
 import { parseReturnUrl, validateApiOrigin, validateReturnTarget } from './protocol'
@@ -343,17 +344,20 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     cleanupGeneration: number
   ): Promise<void> {
     const cleared = await clearLocal()
-    const isCurrentCleanup = generation === cleanupGeneration
-    if (!isCurrentCleanup) {
+    const cleanup = decideLocalCleanup({
+      cleared,
+      isCurrent: generation === cleanupGeneration,
+      logoutOwnsCleanup: logoutFlight != null
+    })
+    if (cleanup.shouldBlockStorage) {
+      storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
+    }
+    if (!cleanup.canContinue) {
       return
     }
     credential = null
     knownRefreshToken = null
     disposalFlight = null
-    if (!cleared) {
-      storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
-      return
-    }
     publish({ phase: 'signedOut', login: null, user: null, entry: null, notice })
   }
 
@@ -366,13 +370,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
     const cleared = await clearLocal()
-    const logoutOwnsCleanup = logoutFlight != null
-    if (logoutOwnsCleanup) {
-      return
-    }
-    if (!cleared) {
+    const cleanup = decideLocalCleanup({
+      cleared,
+      // 이전 token의 정리를 소유한 writer는 명시 logout에만 결과 처리를 인계한다.
+      isCurrent: true,
+      logoutOwnsCleanup: logoutFlight != null
+    })
+    if (cleanup.shouldBlockStorage) {
       storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
-    } else {
+    }
+    if (cleanup.canContinue) {
       disposalFlight = null
     }
   }
@@ -528,16 +535,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       await startWriter(async () => {
         cleared = await clearLocal()
       })
-      const isLogoutCleaning = logoutFlight != null
-      if (isLogoutCleaning) {
-        return false
-      }
-      if (!cleared) {
+      const cleanup = decideLocalCleanup({
+        cleared,
+        isCurrent: isCurrentPending(value),
+        logoutOwnsCleanup: logoutFlight != null
+      })
+      if (cleanup.shouldBlockStorage) {
         generation += 1
         storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
-        return false
       }
-      return isCurrentPending(value)
+      return cleanup.canContinue
     }
 
     generation += 1
@@ -603,16 +610,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
   async function recoverRejectedExchange(value: PendingLogin): Promise<void> {
     const cleared = await clearLocal()
-    const isLogoutCleaning = logoutFlight != null
-    if (isLogoutCleaning) {
-      return
-    }
-    if (!cleared) {
+    const cleanup = decideLocalCleanup({
+      cleared,
+      isCurrent: isCurrentPending(value),
+      logoutOwnsCleanup: logoutFlight != null
+    })
+    if (cleanup.shouldBlockStorage) {
       generation += 1
       storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
-      return
     }
-    if (!isCurrentPending(value)) {
+    if (!cleanup.canContinue) {
       return
     }
     const checkedAt = dependencies.clock.read()
@@ -672,16 +679,18 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
 
       const cleared = await clearLocal()
-      const isLogoutCleaning = logoutFlight != null
-      if (isLogoutCleaning) {
-        return
-      }
-      if (!cleared) {
+      const cleanup = decideLocalCleanup({
+        cleared,
+        isCurrent: isCurrentPending(value),
+        logoutOwnsCleanup: logoutFlight != null
+      })
+      if (cleanup.shouldBlockStorage) {
         generation += 1
         storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
-        return
       }
-      finishPendingFailure(value, 'LOGIN_RESTART_REQUIRED')
+      if (cleanup.canContinue) {
+        finishPendingFailure(value, 'LOGIN_RESTART_REQUIRED')
+      }
       return
     }
 
@@ -1046,11 +1055,15 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       await startWriter(async () => {
         cleared = await clearLocal()
       })
-      const canPublish = generation === operationGeneration
-      if (!canPublish) {
-        return snapshot()
+      const cleanup = decideLocalCleanup({
+        cleared,
+        isCurrent: generation === operationGeneration,
+        logoutOwnsCleanup: logoutFlight != null
+      })
+      if (cleanup.shouldBlockStorage) {
+        storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
       }
-      if (cleared) {
+      if (cleanup.canContinue) {
         blockedMode = null
         publish({
           phase: 'signedOut',
@@ -1059,8 +1072,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           entry: null,
           notice: 'REAUTH_REQUIRED'
         })
-      } else {
-        storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
       }
       return snapshot()
     }
@@ -1208,12 +1219,15 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         await startWriter(async () => {
           cleared = await clearLocal()
         })
-        const canPublish = generation === operationGeneration
-        if (!canPublish) {
-          return success()
-        }
-        if (!cleared) {
+        const cleanup = decideLocalCleanup({
+          cleared,
+          isCurrent: generation === operationGeneration,
+          logoutOwnsCleanup: logoutFlight != null
+        })
+        if (cleanup.shouldBlockStorage) {
           storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
+        }
+        if (!cleanup.canContinue) {
           return success()
         }
       }
