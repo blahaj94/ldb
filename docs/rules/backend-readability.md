@@ -1,6 +1,6 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: warning
 scope: backend server source and related tests
 last-reviewed: 2026-09-06
@@ -18,7 +18,7 @@ review-after: 승인 뒤 Backend 구현 PR 3개에서 사람이 읽고 수정하
 
 적용 대상은 `apps/api`와 향후 서버용 app/package의 source 및 직접 관련된 test다. 사람의 재진입 기준은 TypeScript와 async/await를 이해하고 관련 contract를 읽은 유지보수자다. 특정 module의 내부 관례를 이미 외웠다고 가정하지 않는다.
 
-이 문서는 [`code-quality.md`](code-quality.md)의 유지보수성 기준을 Backend 작업에 구체화한다. 승인·scope·dependency는 [`change-control.md`](change-control.md), 검증은 [`testing.md`](testing.md)를 따른다. 현재는 제안이며 Draft PR의 명시적 승인 전에는 active Rule이나 구현 권한으로 취급하지 않는다.
+이 문서는 [`code-quality.md`](code-quality.md)의 유지보수성 기준을 Backend 작업에 구체화한다. 승인·scope·dependency는 [`change-control.md`](change-control.md), 검증은 [`testing.md`](testing.md)를 따른다. 이 Rule은 [PR #66의 사용자 승인](https://github.com/blahaj94/ldb/pull/66#issuecomment-5557123897)을 반영한다.
 
 ## 작성 제약
 
@@ -91,4 +91,4 @@ review-after: 승인 뒤 Backend 구현 PR 3개에서 사람이 읽고 수정하
 
 이 사례의 모든 표현을 그대로 복제하지 않는다. 함수 길이, 단계 번호, file 수, Result type 개수는 목표가 아니다. PR #64의 가독성 평가는 구현 전체의 승인이나 merge를 대신하지 않는다.
 
-재검토할 때는 후속 Backend PR에서 사람이 실제 변경 지점을 찾고 실패 결과를 설명할 수 있었는지 확인한다. 불필요한 길이·주석·이동이 늘어난 제약은 근거와 함께 조정한다. Rule의 active 전환과 변경 승인은 기존 change-control을 따른다.
+재검토할 때는 후속 Backend PR에서 사람이 실제 변경 지점을 찾고 실패 결과를 설명할 수 있었는지 확인한다. 불필요한 길이·주석·이동이 늘어난 제약은 근거와 함께 조정한다. 이 Rule의 변경 승인은 기존 change-control을 따른다.
