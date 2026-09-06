@@ -366,6 +366,10 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
     const cleared = await clearLocal()
+    const logoutOwnsCleanup = logoutFlight != null
+    if (logoutOwnsCleanup) {
+      return
+    }
     if (!cleared) {
       storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
     } else {
