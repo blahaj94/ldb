@@ -43,6 +43,11 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
     callerSignal: AbortSignal,
     operation: (signal: AbortSignal) => Promise<T>
   ): Promise<T> {
+    const wasCancelledBeforeStart = callerSignal.aborted
+    if (wasCancelledBeforeStart) {
+      throw new AuthHttpFailure('network', 'not-sent')
+    }
+
     const controller = new AbortController()
     let rejectAbort!: (failure: AuthHttpFailure) => void
     const aborted = new Promise<never>((_resolve, reject) => {

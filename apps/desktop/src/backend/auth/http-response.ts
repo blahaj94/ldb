@@ -279,6 +279,11 @@ export async function readJson(response: Response): Promise<unknown> {
     Number.isFinite(declaredBytes) &&
     declaredBytes > AUTH_RESPONSE_MAX_BYTES
   if (hasOversizeDeclaration) {
+    try {
+      await response.body?.cancel()
+    } catch {
+      // Response는 이미 실패다. Stream cancel 상세는 credential 경계 밖으로 전달하지 않는다.
+    }
     throw new AuthHttpFailure('invalid-response')
   }
 

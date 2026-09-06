@@ -2,6 +2,19 @@ import { isCanonicalOpaque } from './pkce'
 
 const MAX_URL_BYTES = 2_048
 const CONTROL_SPACE_OR_BACKSLASH = /[\u0000-\u0020\u007f\\]/
+const INCOMPATIBLE_APP_PROTOCOLS = new Set([
+  'about:',
+  'blob:',
+  'data:',
+  'file:',
+  'ftp:',
+  'http:',
+  'https:',
+  'javascript:',
+  'mailto:',
+  'ws:',
+  'wss:'
+])
 
 export class AuthProtocolFailure extends Error {
   constructor() {
@@ -46,8 +59,8 @@ export function validateApiOrigin(apiOrigin: string): string {
 
 function validateReturnTarget(returnTarget: string): string {
   const url = parseExactUrl(returnTarget)
-  const isPrivateScheme =
-    url.protocol !== 'https:' && url.protocol !== 'http:' && url.protocol !== 'file:'
+  // 실제 owned scheme 값은 bootstrap이 주입한다. Browser/network가 이미 소유한 built-in만 제외한다.
+  const isPrivateScheme = !INCOMPATIBLE_APP_PROTOCOLS.has(url.protocol)
   const hasNoCredentials = url.username.length === 0 && url.password.length === 0
   const hasNoPort = url.port.length === 0
   const hasNoQuery = url.search.length === 0
