@@ -418,6 +418,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       await disposeKnownRefresh(tokens.refreshToken)
       const isCurrentAfterDisposal = generation === operationGeneration
       if (!isCurrentAfterDisposal) {
+        await handleStaleTransition()
         return false
       }
       generation += 1
@@ -465,6 +466,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     await disposeKnownRefresh(tokens.refreshToken)
     const isCurrentAfterDisposal = generation === operationGeneration
     if (!isCurrentAfterDisposal) {
+      await handleStaleTransition()
       return false
     }
     generation += 1
@@ -851,6 +853,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         }
         const isCurrentAfterRemoval = generation === operationGeneration
         if (!isCurrentAfterRemoval) {
+          await handleStaleTransition()
           return null
         }
         if (removed) {
