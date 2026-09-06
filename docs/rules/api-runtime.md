@@ -46,6 +46,8 @@ Nest 12는 ESM package이며 [공식 migration guide](https://docs.nestjs.com/mi
 
 HTTP client는 Node 내장 `fetch`, test runner와 assertion은 `node:test`, `node:assert/strict`를 사용한다. Axios, Jest, Vitest, SWC, `tsx`, `ts-node`, Nest CLI, `class-validator`, `class-transformer`, config package는 이 범위에 추가하지 않는다. Query와 응답 경계는 [`character-search.md`](character-search.md)의 제한된 검증으로 표현한다.
 
+이 선택은 `apps/api`의 현재 승인 범위이며 다른 app의 HTTP client 선택에 일반화하지 않는다. 승인 범위 밖 dependency가 필요하거나 제약 때문에 자체 구현·검증 부담이 커지면 [`Dependency 선택과 비용`](change-control.md#dependency-선택과-비용)에 따라 재검토를 제안한다. 별도 승인 전에는 현재 `fetch` 선택과 API·security contract를 유지한다.
+
 ## Build와 test 계약
 
 - `apps/api/package.json`의 `type: module`을 유지한다. `tsconfig.json`은 `module`·`moduleResolution: NodeNext`, `target: ES2023`, `strict: true`, `experimentalDecorators: true`, `emitDecoratorMetadata: true`, `noEmitOnError: true`를 사용한다. 실행 시 필요한 class import는 type-only로 지우지 않는다.

@@ -36,6 +36,8 @@ Logic에 포함한다.
 
 SQL, migration, 복잡한 config, route definition처럼 경계가 애매한 변경은 AI가 임의로 제외하지 않고 PR에서 별도로 보고한다.
 
+Test·mock의 logic 줄 수 제외는 전체 작업 비용에서 제외한다는 뜻이 아니다. 범용 기능의 자체 구현으로 규모가 커지면 commit 분리를 제안하기 전에 [`Dependency 선택과 비용`](change-control.md#dependency-선택과-비용)에 따라 library 등으로 줄일 수 있는 범위와 남는 제품 정책을 검토한다. 이때 test·mock·review·유지보수 비용도 포함한다.
+
 Logic budget을 넘으면 AI는 구현을 숨기거나 기계적으로 줄 수를 맞추지 않는다. 다음을 preflight 또는 PR에 보고하고 분리를 제안한다.
 
 ```text
