@@ -47,7 +47,8 @@ test('listen-time trusted configuration errors are sanitized', async () => {
     transport.configuration.registrations[0].jwksUri = url
     assert.throws(() => createGoogleProviderVerifier(transport.configuration), (error) => {
       assert.equal(error.code, 'AUTH_INTERNAL_ERROR')
-      assert(!/fixture-client-secret/.test(String(error.stack)))
+      const leaksSecret = /fixture-client-secret/.test(String(error.stack))
+      assert.equal(leaksSecret, false)
       return true
     })
   }
@@ -65,7 +66,8 @@ test('public JWKS caches, rotates once for unknown kid and never follows token j
   const transport = adapterConfiguration(key, response, {
     fetch: async (url, options) => {
       assert.equal(options.redirect, 'error')
-      if (url === tokenEndpoint) return Response.json(response)
+      const isTokenRequest = url === tokenEndpoint
+      if (isTokenRequest) return Response.json(response)
       assert.equal(url, jwksUri)
       keyRequests += 1
       return Response.json({ keys }, { headers: { 'cache-control': 'public, max-age=3600' } })
@@ -103,20 +105,23 @@ test('cold and expired JWKS each refresh once to verify a newly propagated RS256
       let rotating = false
       const signals = []
       const transport = adapterConfiguration(key, response, { fetch: async (url, options) => {
-        signals.push(options.signal)
-        if (url === tokenEndpoint) {
+        signals.push({ url, signal: options.signal })
+        const isTokenRequest = url === tokenEndpoint
+        if (isTokenRequest) {
           tokenRequests += 1
           return Response.json(response)
         }
         assert.equal(url, jwksUri)
         keyRequests += 1
-        const propagated = rotating && keyRequests - rotationStartedAt === 2
-        return Response.json({ keys: [propagated ? rotated.jwk : key.jwk] }, {
+        const isSecondFetch = keyRequests - rotationStartedAt === 2
+        const hasPropagatedKey = rotating && isSecondFetch
+        return Response.json({ keys: [hasPropagatedKey ? rotated.jwk : key.jwk] }, {
           headers: { 'cache-control': 'max-age=60' },
         })
       } })
       const verify = createGoogleProviderVerifier(transport.configuration)
-      if (initialCache === 'expired') {
+      const isExpiredCache = initialCache === 'expired'
+      if (isExpiredCache) {
         await verify(f.input)
         clock += 60_000
       }
@@ -127,10 +132,20 @@ test('cold and expired JWKS each refresh once to verify a newly propagated RS256
 
       const identity = await verify(f.input)
 
-      assert(identity.provider === 'google' && identity.subject === 'FixtureSubject')
+      const hasGoogleProvider = identity.provider === 'google'
+      const hasExpectedSubject = identity.subject === 'FixtureSubject'
+      const hasExpectedIdentity = hasGoogleProvider && hasExpectedSubject
+      assert(hasExpectedIdentity)
       assert.equal(keyRequests - rotationStartedAt, 2)
       assert.equal(tokenRequests - previousTokenRequests, 1)
-      assert(signals.every((signal) => signal === f.input.signal))
+      const hasExpectedSignals = signals.every(({ url, signal }) => {
+        const isTokenRequest = url === tokenEndpoint
+        const hasOriginalSignal = signal === f.input.signal
+        const isUnabortedKeySignal = !isTokenRequest && !signal.aborted
+        const isExpectedSignal = isTokenRequest ? hasOriginalSignal : isUnabortedKeySignal
+        return isExpectedSignal
+      })
+      assert(hasExpectedSignals)
     })
   }
 })
@@ -142,7 +157,8 @@ test('persistent cold unknown kid stops after two JWKS fetches and never repeats
   let tokenRequests = 0
   let keyRequests = 0
   const transport = adapterConfiguration(key, response, { fetch: async (url) => {
-    if (url === tokenEndpoint) {
+    const isTokenRequest = url === tokenEndpoint
+    if (isTokenRequest) {
       tokenRequests += 1
       return Response.json(response)
     }
@@ -156,7 +172,7 @@ test('persistent cold unknown kid stops after two JWKS fetches and never repeats
   assert.equal(keyRequests, 2)
 })
 
-test('unknown kid refresh uses the caller signal and drops an aborted late second response', async () => {
+test('unknown kid refresh follows caller cancellation and drops an aborted late second response', async () => {
   const rotated = await signingKey('late-propagated-google-key')
   const f = verificationInput()
   const response = await tokenResponse(rotated, f.nonce)
@@ -167,12 +183,14 @@ test('unknown kid refresh uses the caller signal and drops an aborted late secon
   const signals = []
   const transport = adapterConfiguration(key, response, { fetch: async (url, options) => {
     signals.push(options.signal)
-    if (url === tokenEndpoint) {
+    const isTokenRequest = url === tokenEndpoint
+    if (isTokenRequest) {
       tokenRequests += 1
       return Response.json(response)
     }
     keyRequests += 1
-    if (keyRequests === 1) return Response.json({ keys: [key.jwk] })
+    const isInitialLoad = keyRequests === 1
+    if (isInitialLoad) return Response.json({ keys: [key.jwk] })
     refreshEntered.resolve()
     return lateRefresh.promise
   } })
@@ -188,7 +206,10 @@ test('unknown kid refresh uses the caller signal and drops an aborted late secon
   await setImmediate()
   assert.equal(tokenRequests, 1)
   assert.equal(keyRequests, 2)
-  assert(signals.every((signal) => signal === f.input.signal))
+  const hasOriginalTokenSignal = signals[0] === f.input.signal
+  const isRefreshSignalAborted = signals.at(-1).aborted
+  assert(hasOriginalTokenSignal)
+  assert(isRefreshSignalAborted)
 })
 
 test('network failure during unknown kid refresh does not trigger another attempt', async () => {
@@ -198,12 +219,14 @@ test('network failure during unknown kid refresh does not trigger another attemp
   let keyRequests = 0
   let tokenRequests = 0
   const transport = adapterConfiguration(key, response, { fetch: async (url) => {
-    if (url === tokenEndpoint) {
+    const isTokenRequest = url === tokenEndpoint
+    if (isTokenRequest) {
       tokenRequests += 1
       return Response.json(response)
     }
     keyRequests += 1
-    if (keyRequests === 1) return Response.json({ keys: [key.jwk] })
+    const isInitialLoad = keyRequests === 1
+    if (isInitialLoad) return Response.json({ keys: [key.jwk] })
     throw new Error('fixture-raw-error')
   } })
 
@@ -225,7 +248,8 @@ test('JWKS HTTP no-store/no-cache/expired age prevent stale cache reuse', async 
   ]) {
     let keyRequests = 0
     const transport = adapterConfiguration(key, response, { fetch: async (url) => {
-      if (url === tokenEndpoint) return Response.json(response)
+      const isTokenRequest = url === tokenEndpoint
+      if (isTokenRequest) return Response.json(response)
       keyRequests += 1
       return Response.json({ keys: [key.jwk] }, { headers })
     } })
@@ -243,7 +267,8 @@ test('normal max-age is fresh before its boundary and reloads exactly at expirat
   t.mock.method(Date, 'now', () => clock)
   let requests = 0
   const transport = adapterConfiguration(key, response, { fetch: async (url) => {
-    if (url === tokenEndpoint) return Response.json(response)
+    const isTokenRequest = url === tokenEndpoint
+    if (isTokenRequest) return Response.json(response)
     requests += 1
     return Response.json({ keys: [key.jwk] }, { headers: { 'cache-control': 'max-age=60', age: '10' } })
   } })
@@ -266,13 +291,18 @@ test('aborted old JWKS body cannot overwrite the newer rotated cache when it fin
   const lateBody = Promise.withResolvers()
   let keyRequests = 0
   const transport = adapterConfiguration(key, response, { fetch: async (url) => {
-    if (url === tokenEndpoint) return Response.json(response)
+    const isTokenRequest = url === tokenEndpoint
+    if (isTokenRequest) return Response.json(response)
     keyRequests += 1
-    if (keyRequests > 1) return Response.json({ keys: [rotated.jwk] }, { headers: { 'cache-control': 'max-age=3600' } })
+    const isNewGeneration = keyRequests > 1
+    if (isNewGeneration) return Response.json({ keys: [rotated.jwk] }, { headers: { 'cache-control': 'max-age=3600' } })
     return {
       status: 200, headers: new Map([['cache-control', 'max-age=3600']]),
       body: { cancel: async () => undefined },
-      json: () => { entered.resolve(); return lateBody.promise },
+      json: () => {
+        entered.resolve()
+        return lateBody.promise
+      },
     }
   } })
   const verify = createGoogleProviderVerifier(transport.configuration)
@@ -291,6 +321,9 @@ test('aborted old JWKS body cannot overwrite the newer rotated cache when it fin
 test('single caller signal cancels secret, token headers/body and JWKS headers/body; late replies cannot succeed', async (t) => {
   for (const stage of ['secret', 'token headers', 'token body', 'JWKS headers', 'JWKS body']) {
     await t.test(stage, async () => {
+      const isSecretStage = stage === 'secret'
+      const isJwksStage = stage.startsWith('JWKS')
+      const isHeaderStage = stage.endsWith('headers')
       const f = verificationInput()
       const response = await tokenResponse(key, f.nonce)
       const entered = Promise.withResolvers()
@@ -309,35 +342,52 @@ test('single caller signal cancels secret, token headers/body and JWKS headers/b
       })
       const transport = adapterConfiguration(key, response, {
         resolveSecret: () => {
-          if (stage !== 'secret') return 'fixture-client-secret'
+          if (!isSecretStage) return 'fixture-client-secret'
           entered.resolve()
           return late.promise
         },
         fetch: (url, options) => {
           requests.push(options)
-          const token = url === tokenEndpoint
-          if (stage === (token ? 'token headers' : 'JWKS headers')) {
+          const isTokenRequest = url === tokenEndpoint
+          const headerStage = isTokenRequest ? 'token headers' : 'JWKS headers'
+          const shouldHoldHeaders = stage === headerStage
+          if (shouldHoldHeaders) {
             entered.resolve()
             return late.promise
           }
-          return Promise.resolve(bodyResponse(token ? response : { keys: [key.jwk] },
-            stage === (token ? 'token body' : 'JWKS body')))
+          const body = isTokenRequest ? response : { keys: [key.jwk] }
+          const bodyStage = isTokenRequest ? 'token body' : 'JWKS body'
+          const shouldHoldBody = stage === bodyStage
+          return Promise.resolve(bodyResponse(body, shouldHoldBody))
         },
       })
       const verify = createGoogleProviderVerifier(transport.configuration)
       const pending = providerFailure(verify(f.input))
       await entered.promise
-      if (stage.startsWith('JWKS')) {
-        assert(requests[0].body === undefined, 'token form is already released during JWKS wait')
+      if (isJwksStage) {
+        const isFormReleased = requests[0].body === undefined
+        assert(isFormReleased, 'token form is already released during JWKS wait')
       }
       f.controller.abort(new Error('fixture-raw-error'))
       await pending
-      assert(requests.every((options) => options.signal === f.input.signal))
-      assert(requests.every((options) => options.body === undefined))
-      late.resolve(stage === 'secret' ? 'fixture-client-secret' : stage.endsWith('headers')
-        ? bodyResponse(response, false) : response)
+      const hasTokenRequest = requests.length > 0
+      if (hasTokenRequest) {
+        const hasOriginalTokenSignal = requests[0].signal === f.input.signal
+        assert(hasOriginalTokenSignal)
+      }
+      if (isJwksStage) assert.equal(requests[1].signal.aborted, true)
+      const areFormsReleased = requests.every((options) => {
+        const isFormReleased = options.body === undefined
+        return isFormReleased
+      })
+      assert(areFormsReleased)
+      let lateResult = response
+      if (isSecretStage) lateResult = 'fixture-client-secret'
+      else if (isHeaderStage) lateResult = bodyResponse(response, false)
+      late.resolve(lateResult)
       await setImmediate()
-      if (stage !== 'secret') assert(cancelled > 0)
+      const wasBodyCancelled = cancelled > 0
+      if (!isSecretStage) assert(wasBodyCancelled)
     })
   }
 })
@@ -359,7 +409,10 @@ test('pre-abort performs no external call; provider HTTP/JSON/raw errors never e
   ]) {
     const next = verificationInput()
     let calls = 0
-    const invalid = adapterConfiguration(key, response, { fetch: () => { calls += 1; return upstream() } })
+    const invalid = adapterConfiguration(key, response, { fetch: () => {
+      calls += 1
+      return upstream()
+    } })
     await providerFailure(createGoogleProviderVerifier(invalid.configuration)(next.input))
     assert.equal(calls, 1)
   }
@@ -380,7 +433,8 @@ test('missing historical secret and malformed trusted JWKS fail without retry or
     let calls = 0
     const invalid = adapterConfiguration(key, response, { fetch: async (url) => {
       calls += 1
-      return Response.json(url === tokenEndpoint ? response : keys)
+      const isTokenRequest = url === tokenEndpoint
+      return Response.json(isTokenRequest ? response : keys)
     } })
     await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
     assert.equal(calls, expectedRequests)

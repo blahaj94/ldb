@@ -19,21 +19,38 @@ test('Google RS256 returns only case-sensitive provider/subject and discards pro
     const verify = createGoogleProviderVerifier(transport.configuration)
     const identity = await verify(f.input)
     assert.deepEqual(Object.keys(identity).sort(), ['provider', 'subject'])
-    assert(identity.provider === 'google' && identity.subject === 'FixtureSubject')
+    const hasGoogleProvider = identity.provider === 'google'
+    const hasExpectedSubject = identity.subject === 'FixtureSubject'
+    const hasExpectedIdentity = hasGoogleProvider && hasExpectedSubject
+    assert(hasExpectedIdentity)
+    assert.equal(transport.requests.length, 2)
     const tokenRequest = transport.requests[0]
     assert.equal(tokenRequest.url, transport.configuration.registrations[0].tokenEndpoint)
     assert.deepEqual(Object.keys(tokenRequest.fields).sort(), [
       'client_id', 'client_secret', 'code', 'code_verifier', 'grant_type', 'redirect_uri',
     ])
     assert.equal(tokenRequest.fields.grant_type, 'authorization_code')
-    assert(tokenRequest.fields.code === f.input.code)
-    assert(tokenRequest.fields.code_verifier === f.input.providerVerifier)
-    assert(tokenRequest.fields.client_secret === 'fixture-client-secret')
+    const hasProviderCode = tokenRequest.fields.code === f.input.code
+    const hasProviderVerifier = tokenRequest.fields.code_verifier === f.input.providerVerifier
+    const hasClientSecret = tokenRequest.fields.client_secret === 'fixture-client-secret'
+    assert(hasProviderCode)
+    assert(hasProviderVerifier)
+    assert(hasClientSecret)
     assert.equal(tokenRequest.fields.client_id, f.input.snapshot.providerClientId)
     assert.equal(tokenRequest.fields.redirect_uri, f.input.snapshot.callbackUrl)
-    assert(tokenRequest.options.body === undefined)
-    assert(transport.requests.every(({ options }) => options.signal === f.input.signal))
-    assert(transport.requests.every(({ options }) => options.redirect === 'error'))
+    const isFormReleased = tokenRequest.options.body === undefined
+    const hasOriginalTokenSignal = tokenRequest.options.signal === f.input.signal
+    const jwksSignal = transport.requests[1].options.signal
+    const hasJwksSignal = jwksSignal != null
+    const isJwksSignalUnaborted = hasJwksSignal && !jwksSignal.aborted
+    const rejectsAllRedirects = transport.requests.every(({ options }) => {
+      const rejectsRedirect = options.redirect === 'error'
+      return rejectsRedirect
+    })
+    assert(isFormReleased)
+    assert(hasOriginalTokenSignal)
+    assert(isJwksSignalUnaborted)
+    assert(rejectsAllRedirects)
     assert.deepEqual(transport.secrets[0], {
       version: f.input.snapshot.version,
       reference: f.input.snapshot.providerSecretRef,

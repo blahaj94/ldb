@@ -49,7 +49,8 @@ export async function tokenResponse(key, nonce, claims = {}, header = {}) {
     ...claims,
   }
   for (const field of Object.keys(payload)) {
-    if (payload[field] === undefined) delete payload[field]
+    const isOmittedClaim = payload[field] === undefined
+    if (isOmittedClaim) delete payload[field]
   }
   const idToken = await new SignJWT(payload)
     .setProtectedHeader({ alg: key.alg, kid: key.kid, ...header })
@@ -67,8 +68,11 @@ export function adapterConfiguration(key, response, overrides = {}) {
       return 'fixture-client-secret'
     },
     fetch: async (url, options) => {
-      requests.push({ url, options, fields: options.body && Object.fromEntries(options.body) })
-      if (url === tokenEndpoint) return Response.json(response)
+      const hasBody = options.body != null
+      const fields = hasBody ? Object.fromEntries(options.body) : undefined
+      requests.push({ url, options, fields })
+      const isTokenRequest = url === tokenEndpoint
+      if (isTokenRequest) return Response.json(response)
       assert.equal(url, jwksUri)
       return Response.json({ keys: [key.jwk] }, { headers: { 'cache-control': 'max-age=3600' } })
     },
@@ -81,8 +85,10 @@ export async function providerFailure(operation) {
   await assert.rejects(operation, (error) => {
     assert.equal(error.code, 'AUTH_PROVIDER_ERROR')
     assert.equal(error.message, '소셜 로그인을 완료하지 못했습니다. 다시 시도해 주세요.')
-    assert(error.cause === undefined)
-    assert(!/fixture-provider-code|fixture-client-secret|FixtureSubject|fixture-raw-error/.test(String(error.stack)))
+    const hasNoCause = error.cause === undefined
+    const leaksProviderData = /fixture-provider-code|fixture-client-secret|FixtureSubject|fixture-raw-error/.test(String(error.stack))
+    assert(hasNoCause)
+    assert.equal(leaksProviderData, false)
     return true
   })
 }

@@ -18,7 +18,9 @@ interface PublicKeyLoad {
 }
 
 function cacheLifetime(headers: Headers): number {
-  const cacheControl = headers.get('cache-control') ?? ''
+  const cacheControlHeader = headers.get('cache-control')
+  const hasCacheControl = cacheControlHeader != null
+  const cacheControl = hasCacheControl ? cacheControlHeader : ''
   const directives = cacheControl.toLowerCase().split(',').map((part) => part.trim())
   const prohibitsReuse = directives.some((part) => {
     const isNoCacheDirective = /^(no-store|no-cache)(?:=|$)/.test(part)
@@ -32,7 +34,9 @@ function cacheLifetime(headers: Headers): number {
   const hasMaxAge = maxAgeDirective != null
   if (!hasMaxAge) return 0
   const maxAge = maxAgeDirective.slice(8)
-  const age = headers.get('age') ?? '0'
+  const ageHeader = headers.get('age')
+  const hasAgeHeader = ageHeader != null
+  const age = hasAgeHeader ? ageHeader : '0'
   const isValidAge = /^\d+$/.test(age)
   if (!isValidAge) return 0
   const remaining = Number(maxAge) - Number(age)
