@@ -106,6 +106,33 @@ describe('Desktop AuthCoordinator login', () => {
     }
   )
 
+  it('최초 clock reading만 불연속이어도 외부 효과 없이 만료되고 새 로그인을 시작할 수 있다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    const normalReading = harness.clock.read()
+    const readClock = vi.spyOn(harness.clock, 'read')
+    readClock.mockReturnValueOnce({ ...normalReading, discontinuous: true })
+
+    const result = await coordinator.beginLogin('google')
+    await settle()
+
+    expect(result.snapshot).toMatchObject({
+      phase: 'signedOut',
+      login: null,
+      notice: 'LOGIN_EXPIRED'
+    })
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      login: null,
+      notice: 'LOGIN_EXPIRED'
+    })
+    expect(harness.http.createLoginRequest).not.toHaveBeenCalled()
+    expect(harness.browser.open).not.toHaveBeenCalled()
+    readClock.mockRestore()
+    await beginWaitingLogin(coordinator)
+  })
+
   it('signedOut의 pending 없는 정상 복귀는 HTTP 없이 새 로그인 안내를 공개한다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
