@@ -20,7 +20,7 @@ review-after: 사용자 정책 결정, 운영 저장소 선정 또는 최초 경
 
 | 승인 항목 | 권장 선택·이유 | 선택하지 않은 대안과 영향 |
 | --- | --- | --- |
-| D1 탈퇴 확정/취소 | 최종 확인과 동일 계정의 새 OAuth round trip 뒤 임시 차단하고, 별도 journal의 durable intent를 확정점으로 한다. Provider session 재사용은 허용한다. 준비 중에는 결과 판정까지 취소를 유보하며 확정 뒤 취소 없다. 확정 전 취소/만료는 회원 유지. 경합의 단일 기준을 만든다. | 항상 비밀번호/추가 인증을 강제하는 대안은 provider별 보장과 계정 접근 상실 복구 정책이 필요하다. 삭제 유예/복구 UI도 별도 보관·권한 설계가 필요하다. |
+| D1 탈퇴 확정/취소 | 최종 확인과 동일 계정의 새 OAuth round trip 뒤 임시 차단하고, 별도 journal의 durable intent를 확정점으로 한다. Provider session 재사용은 허용한다. 준비 중에는 결과 판정까지 취소를 유보하며 확정 뒤 취소 없다. 준비 전 취소/만료는 회원 유지. 경합의 단일 기준을 만든다. | 항상 비밀번호/추가 인증을 강제하는 대안은 provider별 보장과 계정 접근 상실 복구 정책이 필요하다. 삭제 유예/복구 UI도 별도 보관·권한 설계가 필요하다. |
 | D2 provider 실패 | 확정 뒤 revoke의 실패/불명도 로컬 삭제를 막지 않는다. 결과를 분리해 표시하고 삭제 뒤 자동/서버 revoke 재시도는 하지 않는다. Provider 장애가 회원 보관을 무기한 연장하지 않게 한다. | Revoke 확인 때까지 삭제 보류는 장애·계정 접근 상실 시 탈퇴를 끝내지 못한다. Token을 암호화 저장해 재시도하면 현재 비보관 정책·key·queue·보관기간을 추가로 바꿔야 한다. |
 | D3 재가입/진행 로그인 | 완료 후 600초 대기, 그 이후 생성한 요청만 새 UUID·nickname·session으로 가입. 기존/대기 중 OAuth로 자동 재가입하지 않는다. 기존 login TTL 600초에 맞춘 작은 차단 구간이다. | 즉시 새 요청 재가입은 가능하지만 이전 revoke의 지연 효력과 새 동의가 더 쉽게 경합한다. 장기 차단은 provider 식별 보관을 늘린다. 600초도 provider 효력 완료를 보장하지 않는다. |
 | D4 삭제 후 식별/조회 | 조회 자격은 생성부터 고정 86,400초, identity HMAC fence는 완료부터 최대 1,200초, 삭제 UUID journal은 아래 8일 정책. 재가입 계정에는 이전 결과를 연결하지 않는다. | 조회 자격 없음은 응답 유실 복구를 어렵게 한다. 장기 receipt·원문 subject tombstone은 불필요한 추적/보관을 늘린다. HMAC도 익명정보로 간주하지 않는다. 저장소 장애로 삭제 불가 시에는 기간 상한을 보장할 수 없는 격리 잔여와 복구 후 우선 삭제를 예외로 제안하며 별도 승인한다. |
@@ -52,7 +52,7 @@ D1–D5와 아래 수치/권한/한계를 Draft PR의 명시적인 `승인` comm
 | `cancelled`, `expired` | `awaiting_reauth`에서만 즉시 가능. Preparing의 외부 결과 불명은 취소/만료로 바꾸지 않는다. 확정 부재가 판정되면 실패/만료로 종결한다. 재인증 proof/원 user·session 연결을 지우고 요청 ID/hash/상태/시각만 남긴다. | 같은 요청 부활 없음. 유효한 계정에서 새 요청을 생성할 수 있음. |
 | receipt 만료/삭제 | 생성+86,400초 이상 또는 복원으로 자격 무효화. 완료/취소/만료 결과와 hash 삭제. | 모든 lookup은 같은 `404 WITHDRAWAL_REQUEST_UNAVAILABLE`. 미완료 로컬 삭제 obligation은 receipt와 독립해 끝내며 조회 자격을 연장하지 않음. |
 
-확정 전에 현재 user/session을 확인할 수 없는 DB 장애는 503이며 삭제하지 않는다. Durable intent 이후의 DB/journal 장애는 탈퇴 취소가 아니다. Primary 손실 전 준비만 commit되고 journal에 없는 요청은 확정된 탈퇴로 표시하지 않는다. 복구는 이전 writer generation을 차단한 뒤 journal 최종 결과를 판정하므로 늦은 append가 판정을 뒤집지 못한다. `completed` 응답은 로컬 DELETE와 결과 commit을 확인한 뒤만 허용한다. Provider 결과가 confirmed이면 “LDB 탈퇴 완료·연결 해제 요청 확인”, 그 외에는 “LDB 탈퇴 완료·소셜 연결 해제는 확인하지 못함”을 표시한다. 백업에는 보관 상한까지 암호화된 사본이 남을 수 있음을 구분한다.
+Preparing 진입 전에 현재 user/session을 확인할 수 없는 DB 장애는 503이며 삭제하지 않는다. Durable intent 이후의 DB/journal 장애는 탈퇴 취소가 아니다. Primary 손실 전 준비만 commit되고 journal에 없는 요청은 확정된 탈퇴로 표시하지 않는다. 복구는 이전 writer generation을 차단한 뒤 journal 최종 결과를 판정하므로 늦은 append가 판정을 뒤집지 못한다. `completed` 응답은 로컬 DELETE와 결과 commit을 확인한 뒤만 허용한다. Provider 결과가 confirmed이면 “LDB 탈퇴 완료·연결 해제 요청 확인”, 그 외에는 “LDB 탈퇴 완료·소셜 연결 해제는 확인하지 못함”을 표시한다. 백업에는 보관 상한까지 암호화된 사본이 남을 수 있음을 구분한다.
 
 ## Revoke 결과·재개·중복
 
@@ -66,11 +66,11 @@ D1–D5와 아래 수치/권한/한계를 Draft PR의 명시적인 `승인` comm
 
 재인증의 code 교환+identity 검증에는 기존 10초/자동 retry 0을 적용한다. 확정 뒤 revoke는 별도 10초/자동 retry 0이며 callback에서만 새 token을 사용한다. 준비/journal DB 경계에서 token이 만료되거나 처리 주체가 사라지면 `unknown`으로 로컬 삭제를 계속한다. Token·provider code·raw 응답은 DB/file/queue/journal에 보관하지 않는다. 각 작업은 phase·executor epoch를 확인한 CAS만 반영한다. 새 owner는 기록된 revoke claim을 재실행하지 않고 deadline 뒤 unknown으로 처리한다. 이전 owner의 늦은 DB write는 거절하고, network에 이미 보낸 revoke의 remote 지연은 D2 한계로 남긴다. 이 추가 외부 단계와 로컬 재개 executor는 기존 로그인 callback을 확장 승인한 것으로 간주하지 않는다.
 
-같은 `(requestId,statusToken,원 user)` 생성 재전송은 기존 상태를 반환하며 TTL·browser proof·동의를 갱신하지 않는다. 다른 key로 같은 user에 요청하면 `409 WITHDRAWAL_IN_PROGRESS`다. Key 충돌/다른 user/틀린 자격은 기존 row·account 존재를 드러내지 않는 정제 거절이다. 확정 후 session이 차단/삭제되면 생성 endpoint 재전송 대신 전용 status/resume를 쓴다. 재가입한 user의 새 요청은 다른 deletionId와 UUID를 가진다.
+같은 `(requestId,statusToken,원 user)` 생성 재전송은 기존 상태를 반환하며 TTL·browser proof·동의를 갱신하지 않는다. 다른 key로 같은 user에 요청하면 `409 WITHDRAWAL_IN_PROGRESS`다. Key 충돌/다른 user/틀린 자격은 기존 row·account 존재를 드러내지 않는 정제 거절이다. Preparing 이후 session이 차단/삭제되면 생성 endpoint 재전송 대신 전용 status/resume를 쓴다. 재가입한 user의 새 요청은 다른 deletionId와 UUID를 가진다.
 
 ## 로그인·기능 경합의 최종 결과
 
-Identity 직렬화 key는 길이 구분 encoding의 `(provider,subject)` HMAC-SHA-256이다. 별도 secret key/version을 DB 밖에 두고 raw subject나 단순 사전 대입 가능한 hash를 tombstone으로 남기지 않는다. 모든 exchange와 탈퇴 확정/삭제는 user 존재 여부와 무관하게 같은 identity transaction lock을 획득한다. Lock key가 충돌하면 직렬화만 늘고 full digest/identity 일치 검사 없이 계정을 합치지 않는다.
+Identity 직렬화 key는 길이 구분 encoding의 `(provider,subject)` HMAC-SHA-256이다. 별도 secret key/version을 DB 밖에 두고 raw subject나 단순 사전 대입 가능한 hash를 tombstone으로 남기지 않는다. 모든 exchange와 탈퇴 준비/삭제는 user 존재 여부와 무관하게 같은 identity transaction lock을 획득한다. Lock key가 충돌하면 직렬화만 늘고 full digest/identity 일치 검사 없이 계정을 합치지 않는다.
 
 Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction lock → user → session → refresh**다. 다른 session/cleanup 작업이 뒤에서 OAuth/withdrawal/identity lock을 잡지 않는다. 검색 활동은 기존 session-only lock을 유지한다. 탈퇴는 다른 login row를 잠가 전수 취소하지 않고 callback 완료 및 최종 exchange에서 user lifecycle/fence·TTL을 확인한다. Identity를 아직 모르는 callback은 검증 후 검사하고, 그 검사를 통과해도 exchange에서 다시 검사한다.
 
@@ -78,13 +78,13 @@ Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction loc
 
 | 경합 | 최종 결과 |
 | --- | --- |
-| Exchange가 먼저 user/session 생성 commit | 뒤의 탈퇴가 같은 user를 deleting으로 바꾸고 최종 cascade한다. 늦은 token 응답도 refresh·계정 기능에 유효하지 않다. |
-| 탈퇴 확정이 먼저, OAuth/exchange가 대기 | 같은 identity의 deleting user 또는 fence를 확인해 `400 LOGIN_EXCHANGE_INVALID`/기존 callback 정제 실패. 새 user/session/refresh 생성 없음. |
+| Exchange가 먼저 user/session 생성 commit | 뒤의 탈퇴 준비가 같은 user를 deleting으로 바꾸고 최종 cascade한다. 늦은 token 응답도 refresh·계정 기능에 유효하지 않다. |
+| 탈퇴 preparing이 먼저, OAuth/exchange가 대기 | 같은 identity의 deleting user 또는 fence를 확인해 `400 LOGIN_EXCHANGE_INVALID`/기존 callback 정제 실패. 새 user/session/refresh 생성 없음. |
 | 삭제 전/중 callback이 identity 검증 완료 | Subject 검증은 회원 생성 허가가 아님. 최종 exchange의 lifecycle/fence/created_at 검사에서 거절. 신규 사용자로 자동 전환하지 않음. |
 | 완료 후 600초 직전/정확한 경계 | 직전 시작 요청은 계속 실패. 경계부터 새로 생성한 요청만 재가입 가능. 새 UUID·랜덤 nickname이며 이전 receipt/session/활동과 연결하지 않음. |
-| Refresh 또는 계정 기능이 확정 전에 lock/commit | 기존 승인 결과가 먼저 완료될 수 있음. 이후 deleting을 확인한 refresh·GET/PATCH는 401, 기존 refresh 전체는 최종 cascade. Admission만 먼저 완료된 계정 기능은 기능 단계에서 lifecycle 재확인해 결과/변경 0. |
-| 탈퇴 확정 후 refresh·계정 기능 | user.lifecycle 검사에서 401, 새 token·조회·nickname 변경 없음. 탈퇴/status/revoke는 session 활동이 아님. |
-| Logout·refresh reuse·session cleanup | 기존 session별 의미를 유지. 확정 전에 원 session이 끝나면 재인증 확정 실패. 확정 뒤에는 로컬 삭제 obligation을 취소하지 않음. |
+| Refresh 또는 계정 기능이 preparing 전에 lock/commit | 기존 승인 결과가 먼저 완료될 수 있음. 이후 deleting을 확인한 refresh·GET/PATCH는 401, 기존 refresh 전체는 최종 cascade. Admission만 먼저 완료된 계정 기능은 기능 단계에서 lifecycle 재확인해 결과/변경 0. |
+| 탈퇴 preparing 후 refresh·계정 기능 | user.lifecycle 검사에서 401, 새 token·조회·nickname 변경 없음. 탈퇴/status/revoke는 session 활동이 아님. |
+| Logout·refresh reuse·session cleanup | 기존 session별 의미를 유지. Preparing 진입 전에 원 session이 끝나면 준비 실패. Preparing 이후 logout/만료는 journal 판정을 취소하지 않으며 durable intent가 있으면 삭제, 부재를 확정한 복구는 미확정 종결. |
 | 검색과 deleting/삭제 | 기존 residual 정책 유지: 유효 JWT의 검색은 exp까지 가능, session-only 활동을 먼저 기록할 수 있지만 삭제가 cascade함. 검색으로 user/session 재생성 없음. 이 제안은 JWT 즉시 검색 차단을 약속하지 않음. |
 | 신규 재가입 후 늦은 기존 executor/receipt | 삭제 대상 oldUserId만 사용하고 provider identity로 현재 user를 찾아 DELETE하지 않음. 새 user와 session 보존, 서버 revoke 재시도 없음. |
 
@@ -103,7 +103,7 @@ Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction loc
 | API proposal | 자격·정제 결과 |
 | --- | --- |
 | `POST /auth/withdrawal-requests` | JWT + `{requestId,clientId:"desktop",statusToken,confirmation:"delete_account"}`. 201 `{requestId,status,reauthUrl,reauthExpiresAt,receiptExpiresAt}`. 같은 key의 재전송 200, 소비된 launch URL은 재발급하지 않음. |
-| `POST /auth/withdrawal-requests/:id/reauthorize` | 원 user/session JWT + `{statusToken}`. `awaiting_reauth`의 남은 TTL에 새 일회용 browser attempt를 201로 제공. 이전 attempt는 무효화. 확정 후 거절. |
+| `POST /auth/withdrawal-requests/:id/reauthorize` | 원 user/session JWT + `{statusToken}`. `awaiting_reauth`의 남은 TTL에 새 일회용 browser attempt를 201로 제공. 이전 attempt는 무효화. Preparing 이후 거절. |
 | Browser authorize/callback | purpose 전용 launch 및 provider callback 등록/분기. URL은 launch ticket/state/code만, statusToken 없음. 기존 state+cookie와 새 purpose-bound OAuth 결과 확인 후 상태 machine 진행. 성공 HTML은 정제 결과·앱 복귀 안내만, token/receipt/user ID 없음. |
 | `POST /auth/withdrawal-requests/:id/status` | `{statusToken}`만으로 200 `{status,revokeOutcome,receiptExpiresAt,completedAt?,rejoinNotBefore?}`. Profile/subject/user/session ID·provider 원문 오류 없음. POST로 secret의 URL 노출을 피함. |
 | `POST /auth/withdrawal-requests/:id/resume` | `{statusToken}`. 준비/journal 결과 판정 및 이미 확정된 로컬 삭제만 202 처리 중 또는 200 완료 상태. Awaiting 상태는 409. 새 provider 요청/새 인증 권한 없음. |
@@ -167,9 +167,9 @@ Desktop 최소 연결안은 main이 withdrawal requestId/statusToken/receipt dea
 
 | Case | 기대 결과/확인 invariant |
 | --- | --- |
-| 생성 재전송·다른 key·다른 user·원 session logout | 같은 요청/TTL 유지; 다른 active 요청 409; 소유 우회 0; 확정 전 logout은 삭제 0. |
+| 생성 재전송·다른 key·다른 user·원 session logout | 같은 요청/TTL 유지; 다른 active 요청 409; 소유 우회 0; preparing 진입 전 logout은 준비/삭제 0. Preparing 뒤 logout은 journal 판정을 유지하고 durable intent가 있으면 삭제, 부재 확정은 미확정 종결. |
 | Wrong state/cookie/purpose/provider/account·stale attempt | 삭제·session 발급·revoke 0; 올바른 요청의 자격을 임의 소비하지 않음; attempt 교체 뒤 이전 callback 거절. |
-| 요청 TTL 직전/정확한 경계·lock 대기 | Fresh T로 확정 가능/불가 구분; 만료 뒤 user 상태 변화 0. |
+| 요청 TTL 직전/정확한 경계·lock 대기 | Fresh T로 preparing 진입 가능/불가 구분; 진입 전 정확한 만료는 user 변화 0. TTL 안에 preparing된 작업은 이후 만료에도 journal 판정을 끝내며 intent 존재 시 삭제/부재 확정 시 미확정 종결. |
 | Callback 중복·preparing commit 불명·journal 전 primary 손실 | 원자 준비 하나, journal 확인 전 revoke/DELETE 0; old writer fencing 후 intent 부재는 미확정 실패, durable intent 존재는 삭제 완료로 수렴. |
 | Revoke 200/명확한 오류/invalid_token/5xx/timeout/늦은 응답 | confirmed/failed/unknown 구분; DELETE와 분리; token 영구 저장 0·중복 provider 호출 0. |
 | Journal ack 유실·append 중복·저장소 불가 | deletionId idempotency, read-after-write로 확인; 확인 전 revoke/DELETE/완료 0; preparing 유지. 늦은 이전 epoch write 0. |
