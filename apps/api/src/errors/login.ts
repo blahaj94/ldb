@@ -15,10 +15,20 @@ export class LoginFailure extends Error {
   }
 }
 
-export function loginFailure(error: unknown, fallback = LOGIN_ERRORS.INTERNAL as LoginErrorDefinition): LoginFailure {
-  if (error instanceof LoginFailure) return error
-  if (error instanceof IdentitySessionFailure) {
-    return new LoginFailure(error.code === LOGIN_ERRORS.UNAVAILABLE.code ? LOGIN_ERRORS.UNAVAILABLE : LOGIN_ERRORS.INTERNAL)
+export function loginFailure(
+  error: unknown,
+  fallback: LoginErrorDefinition = LOGIN_ERRORS.INTERNAL,
+): LoginFailure {
+  if (error instanceof LoginFailure) {
+    return error
   }
+
+  if (error instanceof IdentitySessionFailure) {
+    const definition = error.code === LOGIN_ERRORS.UNAVAILABLE.code
+      ? LOGIN_ERRORS.UNAVAILABLE
+      : LOGIN_ERRORS.INTERNAL
+    return new LoginFailure(definition)
+  }
+
   return new LoginFailure(fallback)
 }

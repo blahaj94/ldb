@@ -22,6 +22,10 @@ export interface LoginExchange {
   codeVerifier: string
 }
 
+export type LoginCallbackInput =
+  | { state: string; code: string; error?: undefined }
+  | { state: string; code?: undefined; error: string }
+
 export interface ProviderRegistration {
   readonly provider: AuthProvider
   readonly version: string
@@ -30,7 +34,10 @@ export interface ProviderRegistration {
   readonly callbackUrl: string
   readonly authorizationEndpoint: string
   readonly expectedAudience: string | null
-  readonly returnTarget: { readonly id: string; readonly url: string }
+  readonly returnTarget: {
+    readonly id: string
+    readonly url: string
+  }
 }
 
 export interface LoginRegistryConfiguration {
@@ -41,7 +48,10 @@ export interface LoginRegistryConfiguration {
 
 export interface ProviderPkceConfiguration {
   readonly activeKeyId: string
-  readonly keys: readonly { readonly id: string; readonly key: Buffer }[]
+  readonly keys: readonly {
+    readonly id: string
+    readonly key: Buffer
+  }[]
 }
 
 /** 서버의 검증 adapter만 구현한다. HTTP body·query에서 adapter/identity를 공급하지 않는다. */
@@ -74,13 +84,36 @@ export interface LoginTokens {
   accessTokenExpiresAt: string
   refreshToken: string
   sessionExpiresAt: string
-  user: { id: string; nickname: string }
+  user: {
+    id: string
+    nickname: string
+  }
   isNewUser: boolean
 }
 
+export interface CreatedLoginRequest {
+  requestId: string
+  browserUrl: string
+  expiresAt: string
+}
+
+export interface LoginAuthorization {
+  redirectUrl: string
+  cookie: string
+}
+
+export interface CompletedLoginCallback {
+  returnUrl: string
+  cookie: string
+}
+
 export interface LoginHttpService {
-  create(input: unknown): Promise<{ requestId: string; browserUrl: string; expiresAt: string }>
-  authorize(ticket: string): Promise<{ redirectUrl: string; cookie: string }>
-  callback(provider: AuthProvider, query: URLSearchParams, cookieHeader: string): Promise<{ returnUrl: string; cookie: string }>
+  create(input: unknown): Promise<CreatedLoginRequest>
+  authorize(ticket: string): Promise<LoginAuthorization>
+  callback(
+    provider: AuthProvider,
+    query: URLSearchParams,
+    cookieHeader: string,
+  ): Promise<CompletedLoginCallback>
   exchange(input: unknown): Promise<LoginTokens>
 }
