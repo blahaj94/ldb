@@ -416,6 +416,10 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const isCredentialCommitted = credentialCommit === 'confirmed'
     if (!isCredentialCommitted) {
       await disposeKnownRefresh(tokens.refreshToken)
+      const isCurrentAfterDisposal = generation === operationGeneration
+      if (!isCurrentAfterDisposal) {
+        return false
+      }
       generation += 1
       storageBlocked('TOKEN_SAVE_FAILED', 'cleanup')
       return false
@@ -459,6 +463,10 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
 
     await disposeKnownRefresh(tokens.refreshToken)
+    const isCurrentAfterDisposal = generation === operationGeneration
+    if (!isCurrentAfterDisposal) {
+      return false
+    }
     generation += 1
     const notice = finalized === 'save-failed' ? 'TOKEN_SAVE_FAILED' : 'LOCAL_CLEAR_UNCONFIRMED'
     storageBlocked(notice, 'cleanup')
@@ -840,6 +848,10 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           removed = (await dependencies.store.removeTransition()) === 'confirmed'
         } catch {
           removed = false
+        }
+        const isCurrentAfterRemoval = generation === operationGeneration
+        if (!isCurrentAfterRemoval) {
+          return null
         }
         if (removed) {
           knownRefreshToken = refreshToken
