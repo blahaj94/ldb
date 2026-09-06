@@ -76,6 +76,7 @@ last-reviewed: 2026-09-07
 
 ## Shared UI
 
+- 실제 검증 환경·결과·upstream Motion 지원 제한: `docs/reference/ui-validation.md`.
 - `packages/ui`: `@ldb/ui`, 공식 SEED Snippet·Layout과 중립 Example. Package/peer/CSS 소유·고정 source·고지·명령은 `packages/ui/README.md`를 따른다.
 - Library: `pnpm --filter @ldb/ui test`, `typecheck`, `lint`, `build`.
 - 독립 Example: `pnpm --filter @ldb/ui dev:examples`, `build:examples`, `preview:examples`. 별도 app workspace는 만들지 않는다.
