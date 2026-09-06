@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { test } from 'node:test'
+import { decodeJwt, SignJWT } from 'jose'
 import { createGoogleProviderVerifier } from '../dist/auth/google/index.js'
 import { registration } from './login-fixtures.mjs'
 import {
@@ -16,7 +17,9 @@ test('Google RS256 returns only case-sensitive provider/subject and discards pro
     const response = await tokenResponse(key, f.nonce, { iss: issuer, azp: registration().expectedAudience })
     const transport = adapterConfiguration(key, response)
     const verify = createGoogleProviderVerifier(transport.configuration)
-    assert.deepEqual(await verify(f.input), { provider: 'google', subject: 'FixtureSubject' })
+    const identity = await verify(f.input)
+    assert.deepEqual(Object.keys(identity).sort(), ['provider', 'subject'])
+    assert(identity.provider === 'google' && identity.subject === 'FixtureSubject')
     const tokenRequest = transport.requests[0]
     assert.equal(tokenRequest.url, transport.configuration.registrations[0].tokenEndpoint)
     assert.deepEqual(Object.keys(tokenRequest.fields).sort(), [
@@ -28,7 +31,7 @@ test('Google RS256 returns only case-sensitive provider/subject and discards pro
     assert(tokenRequest.fields.client_secret === 'fixture-client-secret')
     assert.equal(tokenRequest.fields.client_id, f.input.snapshot.providerClientId)
     assert.equal(tokenRequest.fields.redirect_uri, f.input.snapshot.callbackUrl)
-    assert.equal(tokenRequest.options.body, undefined)
+    assert(tokenRequest.options.body === undefined)
     assert(transport.requests.every(({ options }) => options.signal === f.input.signal))
     assert(transport.requests.every(({ options }) => options.redirect === 'error'))
     assert.deepEqual(transport.secrets[0], {
@@ -97,6 +100,20 @@ test('optional at_hash may be absent; present hash requires exact canonical valu
   const signed = await tokenResponse(key, f.nonce)
   for (const accessToken of [undefined, '', 'wrong-access-token']) {
     const invalid = adapterConfiguration(key, { ...signed, access_token: accessToken })
+    await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
+  }
+})
+
+test('at_hash rejects padded and noncanonical encodings even when they decode to the correct hash', async () => {
+  const f = verificationInput()
+  const response = await tokenResponse(key, f.nonce)
+  const payload = decodeJwt(response.id_token)
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  const last = alphabet.indexOf(payload.at_hash.at(-1))
+  for (const atHash of [`${payload.at_hash}=`, `${payload.at_hash.slice(0, -1)}${alphabet[last | 1]}`]) {
+    const idToken = await new SignJWT({ ...payload, at_hash: atHash })
+      .setProtectedHeader({ alg: 'RS256', kid: key.kid }).sign(key.privateKey)
+    const invalid = adapterConfiguration(key, { ...response, id_token: idToken })
     await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
   }
 })

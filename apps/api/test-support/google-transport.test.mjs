@@ -23,7 +23,7 @@ test('historical version binds exact client, secret reference, callback, audienc
     ],
   })
   const verify = createGoogleProviderVerifier(transport.configuration)
-  // 呼出元의 configuration mutation도 이미 복제한 historical binding을 바꾸지 않는다.
+  // 호출자의 configuration mutation도 이미 복제한 historical binding을 바꾸지 않는다.
   transport.configuration.registrations[0].tokenEndpoint = 'https://mutated.test.invalid/token'
   await verify(f.input)
   assert.equal(transport.requests[0].url, tokenEndpoint)
@@ -47,7 +47,7 @@ test('listen-time trusted configuration errors are sanitized', async () => {
     transport.configuration.registrations[0].jwksUri = url
     assert.throws(() => createGoogleProviderVerifier(transport.configuration), (error) => {
       assert.equal(error.code, 'AUTH_INTERNAL_ERROR')
-      assert.doesNotMatch(String(error.stack), /fixture-client-secret/)
+      assert(!/fixture-client-secret/.test(String(error.stack)))
       return true
     })
   }
@@ -112,6 +112,58 @@ test('JWKS HTTP no-store/no-cache/expired age prevent stale cache reuse', async 
   }
 })
 
+test('normal max-age is fresh before its boundary and reloads exactly at expiration', async (t) => {
+  const f = verificationInput()
+  const response = await tokenResponse(key, f.nonce)
+  let clock = Date.now()
+  t.mock.method(Date, 'now', () => clock)
+  let requests = 0
+  const transport = adapterConfiguration(key, response, { fetch: async (url) => {
+    if (url === tokenEndpoint) return Response.json(response)
+    requests += 1
+    return Response.json({ keys: [key.jwk] }, { headers: { 'cache-control': 'max-age=60', age: '10' } })
+  } })
+  const verify = createGoogleProviderVerifier(transport.configuration)
+  await verify(f.input)
+  clock += 49_999
+  await verify(f.input)
+  assert.equal(requests, 1)
+  clock += 1
+  await verify(f.input)
+  assert.equal(requests, 2)
+})
+
+test('aborted old JWKS body cannot overwrite the newer rotated cache when it finishes late', async () => {
+  const rotated = await signingKey('rotated-after-abort')
+  const first = verificationInput()
+  const next = verificationInput()
+  let response = await tokenResponse(key, first.nonce)
+  const entered = Promise.withResolvers()
+  const lateBody = Promise.withResolvers()
+  let keyRequests = 0
+  const transport = adapterConfiguration(key, response, { fetch: async (url) => {
+    if (url === tokenEndpoint) return Response.json(response)
+    keyRequests += 1
+    if (keyRequests > 1) return Response.json({ keys: [rotated.jwk] }, { headers: { 'cache-control': 'max-age=3600' } })
+    return {
+      status: 200, headers: new Map([['cache-control', 'max-age=3600']]),
+      body: { cancel: async () => undefined },
+      json: () => { entered.resolve(); return lateBody.promise },
+    }
+  } })
+  const verify = createGoogleProviderVerifier(transport.configuration)
+  const abandoned = providerFailure(verify(first.input))
+  await entered.promise
+  first.controller.abort()
+  await abandoned
+  response = await tokenResponse(rotated, next.nonce)
+  await verify(next.input)
+  lateBody.resolve({ keys: [key.jwk] })
+  await setImmediate()
+  await verify(next.input)
+  assert.equal(keyRequests, 2)
+})
+
 test('single caller signal cancels secret, token headers/body and JWKS headers/body; late replies cannot succeed', async (t) => {
   for (const stage of ['secret', 'token headers', 'token body', 'JWKS headers', 'JWKS body']) {
     await t.test(stage, async () => {
@@ -151,6 +203,9 @@ test('single caller signal cancels secret, token headers/body and JWKS headers/b
       const verify = createGoogleProviderVerifier(transport.configuration)
       const pending = providerFailure(verify(f.input))
       await entered.promise
+      if (stage.startsWith('JWKS')) {
+        assert(requests[0].body === undefined, 'token form is already released during JWKS wait')
+      }
       f.controller.abort(new Error('fixture-raw-error'))
       await pending
       assert(requests.every((options) => options.signal === f.input.signal))
@@ -183,5 +238,24 @@ test('pre-abort performs no external call; provider HTTP/JSON/raw errors never e
     const invalid = adapterConfiguration(key, response, { fetch: () => { calls += 1; return upstream() } })
     await providerFailure(createGoogleProviderVerifier(invalid.configuration)(next.input))
     assert.equal(calls, 1)
+  }
+})
+
+test('missing historical secret and malformed trusted JWKS fail without retry or identity', async () => {
+  const f = verificationInput()
+  const response = await tokenResponse(key, f.nonce)
+  for (const resolveSecret of [() => '', () => undefined, () => { throw new Error('fixture-raw-error') }]) {
+    const invalid = adapterConfiguration(key, response, { resolveSecret })
+    await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
+    assert.equal(invalid.requests.length, 0)
+  }
+  for (const keys of [null, [], { keys: [] }, { keys: ['invalid'] }, { keys: [{ kty: 'RSA', n: 'broken', e: 'AQAB' }] }]) {
+    let calls = 0
+    const invalid = adapterConfiguration(key, response, { fetch: async (url) => {
+      calls += 1
+      return Response.json(url === tokenEndpoint ? response : keys)
+    } })
+    await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
+    assert.equal(calls, 2)
   }
 })
