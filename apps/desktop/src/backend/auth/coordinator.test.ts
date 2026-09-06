@@ -184,6 +184,46 @@ describe('Desktop AuthCoordinator login', () => {
     }
   )
 
+  it.each(['cancel', 'logout'] as const)(
+    'waitingBrowser의 동기 listener가 %s하면 browser를 열지 않고 다음 로그인은 정상 시작한다',
+    async (action) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      const shouldCancel = action === 'cancel'
+      const listener = vi.fn((snapshot: ReturnType<typeof coordinator.getSnapshot>) => {
+        const isWaitingBrowser = snapshot.phase === 'waitingBrowser'
+        const login = snapshot.login
+        const hasLogin = login != null
+        const shouldInvalidate = isWaitingBrowser && hasLogin
+        if (shouldInvalidate) {
+          if (shouldCancel) {
+            void coordinator.cancelLogin(login.attemptId)
+          } else {
+            void coordinator.logout()
+          }
+        }
+      })
+      const unsubscribe = coordinator.subscribe(listener)
+
+      await coordinator.beginLogin('google')
+      await settle()
+
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: 'signedOut',
+        login: null,
+        notice: 'LOGIN_CANCELLED'
+      })
+      expect(harness.http.createLoginRequest).toHaveBeenCalledTimes(1)
+      expect(harness.browser.open).not.toHaveBeenCalled()
+      expect(harness.http.logout).not.toHaveBeenCalled()
+      unsubscribe()
+      await beginWaitingLogin(coordinator)
+      expect(harness.http.createLoginRequest).toHaveBeenCalledTimes(2)
+      expect(harness.browser.open).toHaveBeenCalledTimes(1)
+    }
+  )
+
   it('signedOut의 pending 없는 정상 복귀는 HTTP 없이 새 로그인 안내를 공개한다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
