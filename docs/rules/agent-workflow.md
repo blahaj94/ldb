@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-09-05
+last-reviewed: 2026-09-06
 rationale: 작은 GitHub Issue의 handoff와 배정·완료를 명확히 하여 중복 착수와 agent 사이의 context·비용을 제한한다.
 evidence: "GitHub Issue #26, #44"
 exceptions: 긴급 작업도 change-control approval boundary와 사용자 merge 권한은 생략하지 않는다.
@@ -80,11 +80,19 @@ Metadata의 source of truth는 Issue body다. 현재 작업 유형·상태·실�
 - Issue당 담당 Worker는 한 명이다. 독립 구현 결과를 병렬화하려면 별도 Issue로 나누며, 같은 Issue의 Scout·Reviewer는 별도 구현 담당자가 아니다.
 - 단순히 여러 의견을 얻기 위해 같은 implementation을 여러 Worker에게 중복시키지 않는다.
 - Uncertainty가 높으면 좁은 질문과 종료 조건을 가진 low-tier Scout 한 명을 검토한다.
-- `low` tier는 repository 탐색, 반복 작업, 단순 refactor와 first-pass review에 사용한다.
-- `standard` tier는 명확한 acceptance criteria가 있는 일반 implementation과 test의 기본값이다.
+- `low` tier는 repository 탐색, code를 변경하지 않는 반복 작업과 first-pass review에 사용한다. 단순하더라도 code 작성·수정은 배정하지 않는다.
+- `standard` tier는 명확한 acceptance criteria가 있는 일반 implementation과 test의 기본값이며, code 작업은 아래 runtime mapping을 따른다.
 - `high` tier는 큰 작업 planning, architecture/security ambiguity, high-risk final review와 escalation에 사용한다.
-- Provider 또는 model 이름은 Issue contract에 고정하지 않는다. 실행 환경이 capability tier를 실제 model에 매핑한다.
+- Provider 또는 model 이름은 Issue contract마다 반복해 고정하지 않는다. 실행 환경은 아래 canonical runtime mapping을 포함한 승인된 기준으로 capability tier를 실제 model에 매핑한다.
 - Dependency가 남은 Issue는 dispatch하지 않는다. Native dependency와 Issue body의 reference 및 완료 evidence를 확인하며, 불일치는 배정 전에 정리한다. Dependency 완료, 해당 단계 실행 허용, Rule 승인은 각각 확인한다.
+
+### Code Worker runtime mapping
+
+- Code 작성·수정에는 implementation, bug fix, refactor, test, script와 tooling code가 모두 포함된다.
+- Code Worker의 기본 실행 설정은 `gpt-5.6-sol`, reasoning effort `high`다. `standard` tier의 일반 implementation은 이 설정에 매핑하며, 작업이 단순하다는 이유로 `low` tier나 더 낮은 effort에 배정하지 않는다.
+- 사용자가 model 또는 effort를 명시하면 그 선택을 우선한다. 다른 model이나 더 높은 effort는 사용자의 명시적 선택 또는 승인된 runtime mapping에 따라 사용할 수 있지만, `gpt-5.6-sol`과 `high` 요청을 자동으로 낮추지 않는다.
+- Planner와 Worker는 착수 전에 실제 model과 effort가 선택되었는지 확인한다. 설정을 사용할 수 없거나 확인할 수 없으면 임의로 downgrade하지 않고 가용성 문제를 알리며, 확인하지 못한 설정을 적용했다고 보고하지 않는다.
+- 이 mapping은 Issue의 capability tier metadata를 대체하지 않으며 Issue마다 provider/model 이름을 반복해 고정하지 않는다. Model 선택과 관계없이 [`../../convention.md`](../../convention.md), [`testing.md`](testing.md), 이 문서의 review·escalation 기준을 모두 적용한다.
 
 ### 배정 책임과 상태
 
@@ -185,7 +193,7 @@ PR이 merge되면 연결된 same-repository Issue에 작업 사용량 보고를 
 - PR을 최종 handoff하기 전에 deterministic command로 사용량 snapshot을 PR comment에 저장한다. 후속 작업으로 PR head가 바뀌면 snapshot도 갱신한다.
 - Snapshot에는 대상 PR/head, 집계 범위와 시각, 본 에이전트와 서브 에이전트별 사용량, 실제 모델과 reasoning effort를 기록한다. 같은 agent의 모델 설정 변경도 보존한다.
 - Snapshot 이후의 마무리 응답과 보고 자체 사용량은 제외될 수 있으며, 보고서에서 집계 시점을 명시한다.
-- Model과 effort는 실행 사실을 보고하기 위한 metadata다. Execution Issue의 worker tier를 특정 provider/model로 고정하는 근거로 사용하지 않는다.
+- Model과 effort는 실행 사실과 위 runtime mapping 준수 여부를 확인하기 위한 metadata다. Execution Issue의 worker tier를 특정 provider/model로 반복해 고정하는 근거로 사용하지 않는다.
 
 ### 집계와 정보 경계
 
