@@ -80,6 +80,7 @@ export function adapterConfiguration(key, response, overrides = {}) {
 export async function providerFailure(operation) {
   await assert.rejects(operation, (error) => {
     assert.equal(error.code, 'AUTH_PROVIDER_ERROR')
+    assert.equal(error.message, '소셜 로그인을 완료하지 못했습니다. 다시 시도해 주세요.')
     assert(error.cause === undefined)
     assert(!/fixture-provider-code|fixture-client-secret|FixtureSubject|fixture-raw-error/.test(String(error.stack)))
     return true

@@ -31,11 +31,17 @@ export function createGoogleJwks(jwksUri: string, fetchGoogle: typeof globalThis
       const expiresAt = Date.now() + cacheLifetime(response.headers)
       body = await readProviderJson(response, signal)
       signal.throwIfAborted()
-      if (!body || typeof body !== 'object' || !('keys' in body) || !Array.isArray(body.keys)) {
-        throw new Error()
+      const jwksResponse = body
+      const responseIsNotObject = jwksResponse === null || typeof jwksResponse !== 'object'
+      if (responseIsNotObject) {
+        throw new TypeError('Google JWKS response must be an object')
       }
-      const keys: JWK[] = body.keys.map((key: unknown) => {
-        if (!key || typeof key !== 'object') throw new Error()
+      const candidates = 'keys' in jwksResponse ? jwksResponse.keys : undefined
+      if (!Array.isArray(candidates)) {
+        throw new TypeError('Google JWKS response must contain a keys array')
+      }
+      const keys: JWK[] = candidates.map((key: unknown) => {
+        if (!key || typeof key !== 'object') throw new TypeError('Google JWKS entries must be objects')
         // 검증/parsing은 jose에 맡기고 public RSA field 이외의 응답 data는 보관하지 않는다.
         const publicKey: Record<string, unknown> = {}
         for (const field of ['kty', 'kid', 'alg', 'use', 'key_ops', 'n', 'e']) {

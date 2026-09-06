@@ -17,7 +17,7 @@ export function withAbort<T>(
     const aborted = () => {
       finished = true
       signal.removeEventListener('abort', aborted)
-      reject(new Error())
+      reject(new Error('Google provider verification was aborted'))
     }
     signal.addEventListener('abort', aborted, { once: true })
     if (signal.aborted) aborted()
@@ -26,7 +26,7 @@ export function withAbort<T>(
       signal.removeEventListener('abort', aborted)
       if (finished || signal.aborted) {
         discard?.(value)
-        reject(new Error())
+        reject(new Error('Google provider result arrived after cancellation'))
         return
       }
       finished = true
@@ -45,7 +45,8 @@ export async function readProviderJson(
 ): Promise<unknown> {
   try {
     signal.throwIfAborted()
-    if (!response || response.status !== 200) throw new Error()
+    if (!response) throw new TypeError('Google provider HTTP response is missing')
+    if (response.status !== 200) throw new Error('Google provider HTTP status is not successful')
     return await withAbort(response.json(), signal)
   } finally {
     if (response) discardResponse(response)
@@ -65,7 +66,7 @@ export async function exchangeGoogleCode(
   const request: RequestInit = { method: 'POST', redirect: 'error', cache: 'no-store' }
 
   try {
-    if (!input) throw new Error()
+    if (!input) throw new TypeError('Google token exchange input is required')
     const signal = input.signal
     signal.throwIfAborted()
     secret = await withAbort(Promise.resolve(resolveSecret({
@@ -73,7 +74,9 @@ export async function exchangeGoogleCode(
       reference: registration.snapshot.providerSecretRef,
       signal,
     })), signal)
-    if (typeof secret !== 'string' || secret.length === 0) throw new Error()
+    if (typeof secret !== 'string' || secret.length === 0) {
+      throw new TypeError('Google client secret could not be resolved')
+    }
     signal.throwIfAborted()
 
     form = new URLSearchParams({
