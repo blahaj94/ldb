@@ -581,6 +581,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       notice: null
     })
 
+    if (!isCurrentPending(value)) {
+      return
+    }
     try {
       await dependencies.browser.open(created.browserUrl)
     } catch {
