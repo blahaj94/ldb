@@ -296,6 +296,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         await dependencies.http.logout(refreshToken, new AbortController().signal)
         return true
       } catch {
+        const hasConcurrentLogout = logoutFlight != null
+        // Known current/consumed token이 있으면 logout이 그 서버 결과로 같은 session 폐기를 판단한다.
+        const hasKnownLogoutCredential = knownRefreshToken != null
+        const needsLateDisposalConfirmation = hasConcurrentLogout && !hasKnownLogoutCredential
+        if (needsLateDisposalConfirmation) {
+          lateDisposalUnconfirmed = true
+        }
         return false
       }
     })()
@@ -351,10 +358,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
   async function handleStaleTransition(refreshToken?: string): Promise<void> {
     if (refreshToken != null) {
-      const disposed = await disposeKnownRefresh(refreshToken)
-      if (!disposed) {
-        lateDisposalUnconfirmed = true
-      }
+      await disposeKnownRefresh(refreshToken)
     }
     const isLogoutCleaning = logoutFlight != null
     if (isLogoutCleaning) {
@@ -1225,6 +1229,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     knownRefreshToken = null
     disposalFlight = null
     blockedMode = localConfirmed ? null : 'cleanup'
+    const isServerConfirmed = serverConfirmed && !lateDisposalUnconfirmed
+    lateDisposalUnconfirmed = false
     const isCurrentLogout = generation === logoutGeneration
     if (!isCurrentLogout) {
       return success()
@@ -1240,8 +1246,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return success()
     }
 
-    const isServerConfirmed = serverConfirmed && !lateDisposalUnconfirmed
-    lateDisposalUnconfirmed = false
     publish({
       phase: 'signedOut',
       login: null,
