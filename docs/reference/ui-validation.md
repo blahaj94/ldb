@@ -89,7 +89,7 @@ Chrome의 강제 pseudo-state를 모두 해제하고 color-scheme/reduced-motion
 
 ## Fresh consumer resolution 수정
 
-PR #104 merge 이후 발견된 cold resolution 회귀의 Green은 `215bedcbf116b6caa53c2ca4068734d27b9f5a18`다. Red·격리 조건·실제 command 결과는 `packages/ui/test/consumer-resolution.md`를 따른다. Source alias는 현재 public source를 직접 소비하며, 이전 artifact 선행 build를 cold 성공 근거로 사용하지 않는다.
+PR #104 merge 이후 발견된 cold resolution 회귀의 Green은 `b5ccfbc0dce4743a9a34fff9324ec520a6bd0613`다. Red·격리 조건·실제 command 결과는 `packages/ui/test/consumer-resolution.md`를 따른다. Source alias는 현재 public source를 직접 소비하며, 이전 artifact 선행 build를 cold 성공 근거로 사용하지 않는다.
 
 기준 `1f2434b`와 비교해 `packages/ui/src`, `foundation.css`, Example source, Web/Desktop product source, package manifest와 lockfile은 변경되지 않았다. 여섯 consumer config의 resolution 및 build-time type만 바뀌었으므로 위 interaction·Theme·Motion·responsive matrix를 이 불변 범위에서 재사용했다. 새 전체 matrix를 수행했다는 뜻이 아니다.
 
