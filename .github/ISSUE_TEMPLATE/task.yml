@@ -66,12 +66,22 @@ body:
     validations:
       required: true
 
-  - type: input
+  - type: dropdown
     id: worker_count
     attributes:
       label: worker_count
-      description: 현재 배정 계획의 Worker roster slot 수를 양의 정수로 작성합니다. 동시 process, Scout·Reviewer와 누적 retry는 세지 않습니다.
-      value: "1"
+      description: 1–8 중 현재 배정 계획의 Worker roster slot 수를 선택합니다. 동시 process, Scout·Reviewer와 누적 retry는 세지 않습니다.
+      options:
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+        - "6"
+        - "7"
+        - "8"
+      default: 0
+      multiple: false
     validations:
       required: true
 
