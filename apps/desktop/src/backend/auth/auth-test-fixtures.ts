@@ -1,10 +1,13 @@
 import { vi } from 'vitest'
+import type { MockedFunction } from 'vitest'
 import type {
+  AuthBrowser,
   AuthClock,
   AuthCoordinatorDependencies,
   AuthEntropy,
   AuthHttp,
   AuthTokens,
+  ClockReading,
   CredentialInspection,
   CredentialStore,
   CredentialTransitionKind,
@@ -69,7 +72,7 @@ export class FakeClock implements AuthClock {
   discontinuous = false
   readonly scheduled: ScheduledTask[] = []
 
-  read() {
+  read(): ClockReading {
     return {
       wallMs: this.wallMs,
       monotonicMs: this.monotonicMs,
@@ -111,6 +114,8 @@ export class FakeStore implements CredentialStore {
   readonly clearOutcomes: StoreMutationOutcome[] = []
   readonly clearWaits: Promise<StoreMutationOutcome>[] = []
   readonly removeOutcomes: StoreMutationOutcome[] = []
+  readonly removeWaits: Promise<StoreMutationOutcome>[] = []
+  readonly unknownRemoveApplied: boolean[] = []
   readonly reestablishOutcomes: StoreMutationOutcome[] = []
   private backendUnavailable = false
   private refreshToken: string | null = null
@@ -178,8 +183,11 @@ export class FakeStore implements CredentialStore {
   })
   readonly removeTransition = vi.fn(async () => {
     this.operations.push('store:remove')
-    const outcome = this.next(this.removeOutcomes)
-    if (outcome === 'confirmed') {
+    const wait = this.removeWaits.shift()
+    const outcome = wait == null ? this.next(this.removeOutcomes) : await wait
+    const unknownWasApplied = outcome === 'unknown' && (this.unknownRemoveApplied.shift() ?? false)
+    const markerWasRemoved = outcome === 'confirmed' || unknownWasApplied
+    if (markerWasRemoved) {
       this.marker = null
     }
     return outcome
@@ -198,9 +206,24 @@ export class FakeStore implements CredentialStore {
   }
 }
 
-export type AuthHarness = ReturnType<typeof createAuthHarness>
+export type AuthHarness = Readonly<{
+  dependencies: AuthCoordinatorDependencies
+  browser: Readonly<{ open: MockedFunction<AuthBrowser['open']> }>
+  clock: FakeClock
+  entropy: AuthEntropy
+  operations: string[]
+  http: Readonly<{
+    value: AuthHttp
+    createLoginRequest: MockedFunction<AuthHttp['createLoginRequest']>
+    exchange: MockedFunction<AuthHttp['exchange']>
+    refresh: MockedFunction<AuthHttp['refresh']>
+    logout: MockedFunction<AuthHttp['logout']>
+    me: MockedFunction<AuthHttp['me']>
+  }>
+  store: FakeStore
+}>
 
-export function createAuthHarness() {
+export function createAuthHarness(): AuthHarness {
   const clock = new FakeClock()
   const operations: string[] = []
   const store = new FakeStore(operations)

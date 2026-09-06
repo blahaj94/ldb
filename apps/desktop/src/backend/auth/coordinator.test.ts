@@ -233,6 +233,44 @@ describe('Desktop AuthCoordinator login', () => {
     }
   )
 
+  it('marker finalize 대기 중 cancel되면 ready R1을 다시 marker로 막은 뒤 서버 폐기한다', async () => {
+    const harness = createAuthHarness()
+    const remove = deferred<'confirmed'>()
+    const serverLogout = deferred<void>()
+    harness.store.removeWaits.push(remove.promise)
+    harness.http.logout.mockImplementationOnce(async () => {
+      harness.operations.push('http:logout')
+      await serverLogout.promise
+    })
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+    harness.operations.length = 0
+
+    const returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+    await vi.waitFor(() => expect(harness.store.removeTransition).toHaveBeenCalledTimes(1))
+    await coordinator.cancelLogin(ATTEMPT_ID)
+    remove.resolve('confirmed')
+    await vi.waitFor(() => expect(harness.http.logout).toHaveBeenCalledTimes(1))
+
+    const reestablishIndex = harness.operations.indexOf('store:reestablish:exchange')
+    const logoutIndex = harness.operations.indexOf('http:logout')
+    expect(reestablishIndex).toBeGreaterThan(-1)
+    expect(logoutIndex).toBeGreaterThan(reestablishIndex)
+    expect(harness.store.storedRefreshToken).toBe(REFRESH_1)
+    expect(harness.store.transitionMarker).toBe('exchange')
+    expect(harness.store.inspection).toEqual({ status: 'recovery-required' })
+    expect(coordinator.getSnapshot().phase).not.toBe('signedIn')
+
+    serverLogout.resolve()
+    await returning
+    expect(harness.store.inspection).toEqual({ status: 'empty' })
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      notice: 'LOGIN_CANCELLED'
+    })
+  })
+
   it('token, verifier, server identity와 pending 내부값을 snapshot이나 명령 결과에 넣지 않는다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
@@ -512,6 +550,7 @@ describe('Desktop AuthCoordinator login', () => {
     ] as const) {
       const harness = createAuthHarness()
       harness.store.removeOutcomes.push('unknown')
+      harness.store.unknownRemoveApplied.push(true)
       harness.store.reestablishOutcomes.push(reestablished)
       const coordinator = createAuthCoordinator(harness.dependencies)
       await coordinator.start()
@@ -522,6 +561,11 @@ describe('Desktop AuthCoordinator login', () => {
       expect(coordinator.getSnapshot()).toMatchObject({ phase: 'storageBlocked', notice })
       expect(harness.http.logout).toHaveBeenCalledWith(REFRESH_1, expect.any(AbortSignal))
       expect(harness.store.reestablishTransition).toHaveBeenCalledWith('exchange')
+      expect(harness.store.inspection).toEqual(
+        reestablished === 'confirmed'
+          ? { status: 'recovery-required' }
+          : { status: 'ready', refreshToken: REFRESH_1 }
+      )
     }
   })
 
@@ -926,6 +970,7 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
   it('uncertain marker가 남은 credential은 새 coordinator가 refresh하지 않고 clear한다', async () => {
     const harness = createAuthHarness()
     harness.store.removeOutcomes.push('unknown')
+    harness.store.unknownRemoveApplied.push(true)
     harness.store.reestablishOutcomes.push('confirmed')
     const first = createAuthCoordinator(harness.dependencies)
     await first.start()
