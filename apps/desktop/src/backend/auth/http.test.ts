@@ -17,7 +17,16 @@ function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: jsonHeaders })
 }
 
-async function inspectRequest(input: RequestInfo | URL, init?: RequestInit) {
+type RecordedRequest = Pick<
+  Request,
+  'url' | 'method' | 'redirect' | 'cache' | 'credentials' | 'signal'
+> &
+  Readonly<{ headers: Record<string, string>; body: unknown }>
+
+async function inspectRequest(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<RecordedRequest> {
   const request = new Request(input, init)
   const hasBody = request.body != null
   const body: unknown = hasBody ? await request.json() : null
@@ -50,7 +59,7 @@ afterEach(() => {
 describe('Desktop auth 고정 HTTP client', () => {
   it('login request를 고정 endpoint와 exact JSON body로 한 번 전송한다', async () => {
     const ticket = Buffer.alloc(32, 8).toString('base64url')
-    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = []
+    const requests: RecordedRequest[] = []
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       requests.push(await inspectRequest(input, init))
       return jsonResponse(
@@ -103,7 +112,7 @@ describe('Desktop auth 고정 HTTP client', () => {
       jsonResponse({ user: { id: USER_ID, nickname: '모험가000001' } }),
       new Response(null, { status: 204 })
     ]
-    const requests: Awaited<ReturnType<typeof inspectRequest>>[] = []
+    const requests: RecordedRequest[] = []
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       requests.push(await inspectRequest(input, init))
       return responses.shift()!
@@ -391,7 +400,7 @@ describe('Desktop auth 고정 HTTP client', () => {
     const cancel = vi.fn()
     const fetch = vi.fn<typeof globalThis.fetch>(
       () =>
-        new Promise((resolve) => {
+        new Promise<Response>((resolve) => {
           setTimeout(
             () => resolve(new Response(new ReadableStream({ cancel }), { headers: jsonHeaders })),
             14_900
