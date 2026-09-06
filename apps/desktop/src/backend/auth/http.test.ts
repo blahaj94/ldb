@@ -110,7 +110,21 @@ describe('Desktop auth 고정 HTTP client', () => {
       code: CODE,
       codeVerifier: CODE
     })
+    expect(JSON.parse(String(fetch.mock.calls[1][1]?.body))).toEqual({
+      refreshToken: REFRESH_0
+    })
+    expect(fetch.mock.calls[1][1]).toMatchObject({
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      signal: expect.any(AbortSignal)
+    })
     expect(fetch.mock.calls[2][1]?.headers).toMatchObject({ Authorization: `Bearer ${ACCESS_1}` })
+    expect(JSON.parse(String(fetch.mock.calls[3][1]?.body))).toEqual({
+      refreshToken: REFRESH_1
+    })
+    expect(fetch.mock.calls[3][1]).toMatchObject({
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      signal: expect.any(AbortSignal)
+    })
   })
 
   it('oversize, malformed, unknown field와 credential 형태를 성공으로 해석하지 않는다', async () => {
@@ -179,5 +193,37 @@ describe('Desktop auth 고정 HTTP client', () => {
 
     await rejected
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('이미 취소된 caller는 fetch를 시작하지 않는다', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(client.refresh(REFRESH_0, controller.signal)).rejects.toMatchObject({
+      code: 'network',
+      transmission: 'not-sent'
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('oversize Content-Length를 거절할 때 response stream도 취소한다', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream<Uint8Array>({ cancel })
+    const response = new Response(stream, {
+      status: 200,
+      headers: {
+        ...jsonHeaders,
+        'Content-Length': '16385'
+      }
+    })
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => response)
+    const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
+
+    await expect(client.refresh(REFRESH_0, new AbortController().signal)).rejects.toMatchObject({
+      code: 'invalid-response'
+    })
+    expect(cancel).toHaveBeenCalledTimes(1)
   })
 })

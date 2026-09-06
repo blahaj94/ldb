@@ -53,4 +53,11 @@ describe('Desktop auth PKCE와 URL 경계', () => {
       parseReturnUrl(`${RETURN_TARGET}?code=${CODE.slice(0, -1)}`, RETURN_TARGET)
     ).toThrow()
   })
+
+  it.each(['javascript:alert', 'data:text/plain,value', 'ftp://auth/return'])(
+    'app private protocol이 될 수 없는 built-in target %s을 거절한다',
+    (target) => {
+      expect(() => parseReturnUrl(`${target}?code=${CODE}`, target)).toThrow()
+    }
+  )
 })
