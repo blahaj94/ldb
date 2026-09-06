@@ -64,7 +64,7 @@ export function createGoogleJwks(jwksUri: string, fetchGoogle: typeof globalThis
       return await withAbort(keys.resolver(header, token), signal)
     } catch (error) {
       if (!(error instanceof errors.JWKSNoMatchingKey)) throw error
-      if (!usedCache) throw error
+      // Cold/expired 응답도 전파가 늦을 수 있으므로 unknown kid에만 한 번 새 key를 받는다.
       const refreshed = await load(signal)
       return withAbort(refreshed.resolver(header, token), signal)
     }
