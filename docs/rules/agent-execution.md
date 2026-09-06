@@ -1,10 +1,11 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: repository
+last-reviewed: 2026-09-06
 rationale: 한 Issue의 독립 작업을 여러 Worker가 수행할 때 배정·context·통합 상태를 분리해 중복 작업과 stale 결과를 막는다.
-evidence: "GitHub Issue #81"
+evidence: "GitHub Issue #81, PR #82 사용자 승인: https://github.com/blahaj94/ldb/pull/82#issuecomment-5558848884"
 exceptions: 복수 Worker가 이점이 없거나 독립성을 증명할 수 없으면 한 Worker를 사용한다.
 review-after: 복수 Worker Execution Issue 5개 적용 후
 ---
@@ -13,7 +14,7 @@ review-after: 복수 Worker Execution Issue 5개 적용 후
 
 ## 범위와 권한
 
-이 문서는 [`agent-workflow.md`](agent-workflow.md)의 Execution Issue를 여러 Worker에게 나눌 때의 실행 계약이다. 승인 전에는 이 제안을 실제 배정에 적용하지 않는다. Rule 승인과 구현 허용, 사용자 merge 권한은 [`change-control.md`](change-control.md)를 따른다.
+이 문서는 [`agent-workflow.md`](agent-workflow.md)의 Execution Issue를 여러 Worker에게 나눌 때의 실행 계약이다. [PR #82의 사용자 승인](https://github.com/blahaj94/ldb/pull/82#issuecomment-5558848884)으로 확정된 active Rule이며 이후 Rule 변경과 구현 허용, 사용자 merge 권한은 [`change-control.md`](change-control.md)를 따른다.
 
 한 Issue의 담당 Planner가 전체 contract와 상태에 단일 책임을 지고, 통합 담당 한 명이 Issue 통합 branch의 정확성을 책임진다. 각 Worker는 배정된 bounded scope와 자신의 branch만 책임진다. 이 구분은 Planner나 통합 담당이 Worker의 누락·충돌을 직접 구현할 권한을 만들지 않는다.
 
