@@ -1,107 +1,263 @@
 import { performance } from 'node:perf_hooks'
 import { AuthLoginRequestSchema } from '../../database/schemas/auth-login-requests.js'
 import { CLEARED_LOGIN_FIELDS, LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
-import { LoginFailure } from '../../errors/login.js'
+import { LoginFailure, loginFailure } from '../../errors/login.js'
 import type { AuthProvider, VerifiedIdentity } from '../../types/auth.js'
-import type { ClaimedLogin, LoginDependencies } from '../../types/login.js'
+import type {
+  ClaimedLogin, CompletedLoginCallback, LoginCallbackInput, LoginDependencies, ProviderRegistration,
+} from '../../types/login.js'
 import { newOpaque, opaqueHash } from './crypto.js'
 import { parseCallback } from './input.js'
-import { browserCookie, cookieMatches, freshTime, loginTransaction, requestExpired, resolveRegistration, terminal } from './state.js'
+import {
+  browserCookie, cookieMatches, freshTime, loginTransaction, markLoginRequestFailed, requestExpired,
+} from './state.js'
 
-async function claimCallback(deps: LoginDependencies, provider: AuthProvider, query: URLSearchParams, cookie: string): Promise<ClaimedLogin> {
+interface ClaimedProviderLogin extends ClaimedLogin {
+  providerCode: string
+}
+
+interface VerifiedProviderLogin {
+  identity: VerifiedIdentity
+  completedAt: Date
+}
+
+type CallbackClaimResult =
+  | { status: 'claimed'; claim: ClaimedProviderLogin }
+  | { status: 'rejected'; error: LoginFailure }
+
+type CallbackCommitResult =
+  | { status: 'completed'; completion: CompletedLoginCallback }
+  | { status: 'rejected'; error: LoginFailure }
+
+export async function completeLoginCallback(
+  deps: LoginDependencies,
+  provider: AuthProvider,
+  query: URLSearchParams,
+  cookieHeader: string,
+): Promise<CompletedLoginCallback> {
   const input = parseCallback(query)
-  return loginTransaction(deps.dataSource, async (manager) => {
-    const requests = manager.getRepository(AuthLoginRequestSchema)
-    const row = await requests.findOne({ where: { stateHash: opaqueHash(input.state) }, lock: { mode: 'pessimistic_write' } })
-    const time = await freshTime(manager)
-    if (!row || row.provider !== provider || !cookieMatches(row, cookie)) {
-      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
-    }
-    if (requestExpired(row, time)) {
-      await terminal(manager, row)
-      return new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
-    }
-    if (row.status !== 'browser_started') throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
-    const snapshot = await resolveRegistration(manager, row, deps.registry)
-    if (snapshot instanceof LoginFailure) return snapshot
-    if (input.error !== undefined) {
-      await terminal(manager, row)
-      return new LoginFailure(input.error === 'access_denied' ? LOGIN_ERRORS.CANCELLED : LOGIN_ERRORS.PROVIDER)
-    }
-    let providerVerifier: string
-    try { providerVerifier = deps.pkceKeys.decrypt(row) } catch {
-      await terminal(manager, row)
-      return new LoginFailure(LOGIN_ERRORS.INTERNAL)
-    }
-    await requests.update({ id: row.id }, { status: 'processing' })
-    // Commit 지연도 provider의 단일 deadline에 포함한다.
-    return { row, snapshot, providerVerifier, startedAt: performance.now() }
-  })
-}
 
-async function failClaim(deps: LoginDependencies, id: string): Promise<void> {
-  await loginTransaction(deps.dataSource, async (manager) => {
-    const row = await manager.getRepository(AuthLoginRequestSchema).findOne({ where: { id }, lock: { mode: 'pessimistic_write' } })
-    if (row?.status === 'processing') await terminal(manager, row)
-  })
-}
+  // 1. Callback을 한 번만 선점하고 짧은 transaction을 끝낸다.
+  const claimed = await claimCallback(deps, provider, input, cookieHeader)
 
-async function verify(deps: LoginDependencies, claimed: ClaimedLogin, code: string): Promise<{ identity: VerifiedIdentity; completedAt: Date }> {
-  const controller = new AbortController()
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const deadline = claimed.startedAt + LOGIN.providerDeadlineMs
+  // 2. DB 잠금을 놓은 상태에서 provider를 검증한다. 이 단계의 실패만 claim을 정리한다.
+  let verified: VerifiedProviderLogin
   try {
-    const remaining = deadline - performance.now()
-    if (remaining <= 0) throw new Error()
-    const identity = await Promise.race([
-      Promise.resolve().then(() => deps.verifyProvider({
-        snapshot: claimed.snapshot, code, providerVerifier: claimed.providerVerifier,
-        nonceHash: claimed.row.oidcNonceHash, signal: controller.signal,
-      })),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => { controller.abort(); reject(new Error()) }, remaining)
-      }),
-    ])
-    if (performance.now() >= deadline || identity?.provider !== claimed.snapshot.provider ||
-      typeof identity.subject !== 'string' || identity.subject.length === 0) throw new Error()
-    // DB lock 대기가 검증 완료 시점의 60초 TTL을 연장하지 않도록 먼저 고정한다.
-    return { identity: { provider: identity.provider, subject: identity.subject }, completedAt: new Date(Math.floor(Date.now() / 1000) * 1000) }
-  } catch { throw new LoginFailure(LOGIN_ERRORS.PROVIDER) } finally {
-    clearTimeout(timer)
+    verified = await verifyProviderLogin(deps, claimed)
+  } catch (error) {
+    await failClaim(deps, claimed.row.id)
+    throw error
+  }
+
+  // 3. 다시 요청을 잠그고 검증 결과와 일회용 exchange code를 함께 저장한다.
+  return prepareExchangeCode(deps, claimed, verified)
+}
+
+async function claimCallback(
+  deps: LoginDependencies,
+  provider: AuthProvider,
+  input: LoginCallbackInput,
+  cookieHeader: string,
+): Promise<ClaimedProviderLogin> {
+  try {
+    const committed = await deps.dataSource.transaction<CallbackClaimResult>(
+      'READ COMMITTED',
+      async (manager) => {
+        const requests = manager.getRepository(AuthLoginRequestSchema)
+        const request = await requests.findOne({
+          where: { stateHash: opaqueHash(input.state) },
+          lock: { mode: 'pessimistic_write' },
+        })
+        const checkedAt = await freshTime(manager)
+
+        if (!request || request.provider !== provider || !cookieMatches(request, cookieHeader)) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        // Binding이 맞는 만료 요청은 processing 상태여도 정리를 commit한다.
+        if (requestExpired(request, checkedAt)) {
+          await markLoginRequestFailed(manager, request.id)
+          return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID) }
+        }
+        if (request.status !== 'browser_started') {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+
+        let registration: ProviderRegistration
+        try {
+          registration = deps.registry.resolve(request)
+        } catch {
+          await markLoginRequestFailed(manager, request.id)
+          return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.INTERNAL) }
+        }
+
+        if (input.error !== undefined) {
+          await markLoginRequestFailed(manager, request.id)
+          const failure = input.error === 'access_denied'
+            ? LOGIN_ERRORS.CANCELLED
+            : LOGIN_ERRORS.PROVIDER
+          return { status: 'rejected', error: new LoginFailure(failure) }
+        }
+
+        let providerVerifier: string
+        try {
+          providerVerifier = deps.pkceKeys.decrypt(request)
+        } catch {
+          await markLoginRequestFailed(manager, request.id)
+          return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.INTERNAL) }
+        }
+
+        await requests.update({ id: request.id }, { status: 'processing' })
+        return {
+          status: 'claimed',
+          claim: {
+            row: request,
+            snapshot: registration,
+            providerVerifier,
+            // Commit·release 지연도 provider의 단일 deadline에 포함한다.
+            startedAt: performance.now(),
+            // Error callback은 위에서 정리했으므로 code가 있는 입력만 남는다.
+            providerCode: input.code,
+          },
+        }
+      },
+    )
+
+    if (committed.status === 'rejected') {
+      throw committed.error
+    }
+    return committed.claim
+  } catch (error) {
+    throw loginFailure(error, LOGIN_ERRORS.UNAVAILABLE)
+  }
+}
+
+async function failClaim(deps: LoginDependencies, requestId: string): Promise<void> {
+  await loginTransaction(deps.dataSource, async (manager) => {
+    const request = await manager.getRepository(AuthLoginRequestSchema).findOne({
+      where: { id: requestId },
+      lock: { mode: 'pessimistic_write' },
+    })
+    if (request?.status === 'processing') {
+      await markLoginRequestFailed(manager, request.id)
+    }
+  })
+}
+
+async function verifyProviderLogin(
+  deps: LoginDependencies,
+  claimed: ClaimedProviderLogin,
+): Promise<VerifiedProviderLogin> {
+  const controller = new AbortController()
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined
+  const deadline = claimed.startedAt + LOGIN.providerDeadlineMs
+
+  try {
+    const remainingMs = deadline - performance.now()
+    if (remainingMs <= 0) {
+      throw new Error()
+    }
+
+    // Provider 호출과 timeout은 같은 deadline을 공유하며 retry하지 않는다.
+    const verification = Promise.resolve().then(() => deps.verifyProvider({
+      snapshot: claimed.snapshot,
+      code: claimed.providerCode,
+      providerVerifier: claimed.providerVerifier,
+      nonceHash: claimed.row.oidcNonceHash,
+      signal: controller.signal,
+    }))
+    const timeout = new Promise<never>((_, reject) => {
+      deadlineTimer = setTimeout(() => {
+        controller.abort()
+        reject(new Error())
+      }, remainingMs)
+    })
+    const identity = await Promise.race([verification, timeout])
+
+    // Timer가 아직 실행되지 않았어도 deadline을 지난 결과는 수용하지 않는다.
+    if (
+      performance.now() >= deadline ||
+      identity?.provider !== claimed.snapshot.provider ||
+      typeof identity.subject !== 'string' ||
+      identity.subject.length === 0
+    ) {
+      throw new Error()
+    }
+
+    // 완료 transaction의 DB 잠금 대기가 code TTL을 연장하지 않도록 먼저 시각을 고정한다.
+    return {
+      identity: { provider: identity.provider, subject: identity.subject },
+      completedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+    }
+  } catch {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+  } finally {
+    clearTimeout(deadlineTimer)
     controller.abort()
     claimed.providerVerifier = ''
   }
 }
 
-export async function completeLoginCallback(deps: LoginDependencies, provider: AuthProvider, query: URLSearchParams, cookieHeader: string) {
-  const input = parseCallback(query)
-  const claimed = await claimCallback(deps, provider, query, cookieHeader)
-  let verified: Awaited<ReturnType<typeof verify>>
-  try { verified = await verify(deps, claimed, input.code!) } catch (error) {
-    await failClaim(deps, claimed.row.id)
-    throw error
+async function prepareExchangeCode(
+  deps: LoginDependencies,
+  claimed: ClaimedProviderLogin,
+  verified: VerifiedProviderLogin,
+): Promise<CompletedLoginCallback> {
+  try {
+    const committed = await deps.dataSource.transaction<CallbackCommitResult>(
+      'READ COMMITTED',
+      async (manager) => {
+        const requests = manager.getRepository(AuthLoginRequestSchema)
+        const request = await requests.findOne({
+          where: { id: claimed.row.id },
+          lock: { mode: 'pessimistic_write' },
+        })
+        const checkedAt = await freshTime(manager)
+
+        // 외부 검증 중 상태 또는 등록 binding이 달라진 요청은 완료하지 않는다.
+        if (
+          !request ||
+          request.status !== 'processing' ||
+          request.provider !== claimed.snapshot.provider ||
+          request.providerConfigVersion !== claimed.snapshot.version ||
+          request.returnTargetId !== claimed.snapshot.returnTarget.id
+        ) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+
+        const codeDeadline = verified.completedAt.getTime() + LOGIN.codeSeconds * 1000
+        const codeExpiresAt = new Date(Math.min(codeDeadline, request.expiresAt.getTime()))
+        if (requestExpired(request, checkedAt) || checkedAt.getTime() >= codeExpiresAt.getTime()) {
+          await markLoginRequestFailed(manager, request.id)
+          return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID) }
+        }
+
+        const code = newOpaque()
+        await requests.update({ id: request.id }, {
+          ...CLEARED_LOGIN_FIELDS,
+          status: 'exchange_ready',
+          codeChallenge: request.codeChallenge,
+          method: request.method,
+          verifiedSubject: verified.identity.subject,
+          exchangeCodeHash: opaqueHash(code),
+          codeExpiresAt,
+        })
+
+        return {
+          status: 'completed',
+          completion: {
+            returnUrl: `${claimed.snapshot.returnTarget.url}?code=${code}`,
+            cookie: browserCookie(request.id, '', 0),
+          },
+        }
+      },
+    )
+
+    // 정리 또는 exchange-ready 저장의 commit·release 뒤에만 HTTP 결과를 전달한다.
+    if (committed.status === 'rejected') {
+      throw committed.error
+    }
+    return committed.completion
+  } catch (error) {
+    throw loginFailure(error, LOGIN_ERRORS.UNAVAILABLE)
   }
-  return loginTransaction(deps.dataSource, async (manager) => {
-    const requests = manager.getRepository(AuthLoginRequestSchema)
-    const row = await requests.findOne({ where: { id: claimed.row.id }, lock: { mode: 'pessimistic_write' } })
-    const time = await freshTime(manager)
-    if (!row || row.status !== 'processing' || row.provider !== claimed.snapshot.provider ||
-      row.providerConfigVersion !== claimed.snapshot.version || row.returnTargetId !== claimed.snapshot.returnTarget.id) {
-      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
-    }
-    const codeExpiresAt = new Date(Math.min(verified.completedAt.getTime() + LOGIN.codeSeconds * 1000, row.expiresAt.getTime()))
-    if (requestExpired(row, time) || time.getTime() >= codeExpiresAt.getTime()) {
-      await terminal(manager, row)
-      return new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
-    }
-    const code = newOpaque()
-    await requests.update({ id: row.id }, {
-      ...CLEARED_LOGIN_FIELDS, status: 'exchange_ready', codeChallenge: row.codeChallenge, method: row.method,
-      verifiedSubject: verified.identity.subject, exchangeCodeHash: opaqueHash(code), codeExpiresAt,
-    })
-    return {
-      returnUrl: `${claimed.snapshot.returnTarget.url}?code=${code}`,
-      cookie: browserCookie(row.id, '', 0),
-    }
-  })
 }
