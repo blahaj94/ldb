@@ -21,8 +21,11 @@ Loading은 disabled를 포함하지 않는 공식 상태다. Busy 작업에서 a
 - `node packages/ui/scripts/verify-build.mjs library packages/ui/dist`: external·CSS 없음·source/고지 hash 검증.
 - `node packages/ui/scripts/verify-build.mjs consumer <산출물 경로>`: 단일 React/SEED 사본·base.css 1회·stylesheet 1개·고지 확인.
 - `pnpm install --frozen-lockfile`
+- `node --test packages/ui/scripts/test-consumer-resolution.mjs`: 전용 checkout의 cold consumer command 회귀. 격리·삭제되는 산출물·Desktop 경계는 `test/consumer-resolution.md`를 먼저 확인한다.
 
 현재 package command는 repository root에서 실행한다. 소비 app과 Example은 별도 build·시각·keyboard·focus·Motion 검증이 필요하다. jsdom 결과를 실제 browser/Electron 또는 Tab 이동 성공으로 대신하지 않는다.
+
+Web·Desktop renderer·Example은 Vite/Vitest의 exact `@ldb/ui` alias와 TypeScript paths로 public source entry를 직접 해석한다. 소비 command 전에 library build를 실행할 필요가 없으며 dev에는 source 변경이 직접 반영된다. Exact alias는 `@ldb/ui/foundation.css` subpath를 바꾸지 않는다. Package export의 ESM/declaration 산출물은 별도 library build로 계속 검증한다. Web의 명시 `node` type은 공식 Snippet의 개발용 `process.env` guard를 검사하는 기존 build-time dependency이며 runtime Node global을 추가하지 않는다.
 
 ## Source와 고지
 

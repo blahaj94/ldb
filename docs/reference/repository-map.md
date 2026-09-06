@@ -80,6 +80,7 @@ last-reviewed: 2026-09-07
 - `packages/ui`: `@ldb/ui`, 공식 SEED Snippet·Layout과 중립 Example. Package/peer/CSS 소유·고정 source·고지·명령은 `packages/ui/README.md`를 따른다.
 - Library: `pnpm --filter @ldb/ui test`, `typecheck`, `lint`, `build`.
 - 독립 Example: `pnpm --filter @ldb/ui dev:examples`, `build:examples`, `preview:examples`. 별도 app workspace는 만들지 않는다.
+- Web/Desktop renderer/Example의 source resolution과 cold regression: `packages/ui/README.md`, `packages/ui/test/consumer-resolution.md`. 소비 command는 사전 library build를 요구하지 않는다.
 - 각 consumer는 SEED base.css와 별도 공용 foundation.css를 browser entry에서 한 번 import한다. Library JS는 CSS를 import하지 않고 SEED/React/JSX runtime을 external 처리한다.
 - Source 재생성·hash/local diff: `packages/ui/scripts/prepare-seed-source.mjs`, `packages/ui/seed-provenance.json`.
 - 산출물 검증: `node packages/ui/scripts/verify-build.mjs library packages/ui/dist`, `consumer` mode로 Example·Web·Desktop renderer 산출물을 검사한다. 입력 graph의 미사용 dependency도 보수적으로 고지에 포함한다.
