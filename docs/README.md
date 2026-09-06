@@ -30,13 +30,13 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 
 ## Reading route
 
-아래 역할별 시작점과 연결된 읽기·출력·인계·기록 기준의 변경은 [Issue #98](https://github.com/blahaj94/ldb/issues/98)의 D4 Draft 제안이다. 기존 active Rule의 승인 상태와 의무는 유지하며, 변경안의 승인은 [`change-control.md`](rules/change-control.md#approval-evidence)를 따른다.
+아래 역할별 시작점과 연결된 읽기·출력·인계·기록 기준은 [PR #99의 사용자 승인](https://github.com/blahaj94/ldb/pull/99#issuecomment-5559860989)과 merge를 반영한 active Rule이다. 기존 active Rule의 승인 상태와 의무는 유지하며, 이후 변경의 승인은 [`change-control.md`](rules/change-control.md#approval-evidence)를 따른다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 역할에 필요한 context부터 확인하고 재독·출력·인계·기록의 중복 비용을 줄인다.
-evidence: "Issue #98의 전체 문서 audit·context 측정과 D4 실행 동의"
+evidence: "https://github.com/blahaj94/ldb/pull/99#issuecomment-5559860989"
 exceptions: 적용되는 Rule·AC·승인·보안·검증 의무는 생략하지 않고 불확실하면 관련 본문을 확인한다.
 review-after: 승인 후 서로 다른 역할의 Execution Issue 3개에서 누락과 재독·인계 비용을 확인한다.
 ```
