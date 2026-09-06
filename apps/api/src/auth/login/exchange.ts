@@ -1,4 +1,3 @@
-import type { EntityManager } from 'typeorm'
 import { AuthLoginRequestSchema } from '../../database/schemas/auth-login-requests.js'
 import { CLEARED_LOGIN_FIELDS, LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure, loginFailure } from '../../errors/login.js'
@@ -7,7 +6,9 @@ import type { IssuedAccessJwt } from '../access-jwt/types.js'
 import { createIdentitySession } from '../identity-session.js'
 import { challenge, equalHash, opaqueHash } from './crypto.js'
 import { parseExchange } from './input.js'
-import { exchangeExpired, freshTime, loginTransaction, requestExpired } from './state.js'
+import {
+  exchangeExpired, freshTime, loginTransaction, markLoginRequestFailed, requestExpired,
+} from './state.js'
 
 type ExchangeCommitResult =
   | { status: 'issued'; tokens: LoginTokens }
@@ -148,17 +149,6 @@ export async function exchangeLogin(
 
     throw failure
   }
-}
-
-async function markLoginRequestFailed(
-  manager: EntityManager,
-  requestId: string,
-): Promise<void> {
-  await manager.getRepository(AuthLoginRequestSchema).update({ id: requestId }, {
-    ...CLEARED_LOGIN_FIELDS,
-    status: 'failed',
-    consumedAt: null,
-  })
 }
 
 async function clearExpiredExchange(deps: LoginDependencies, id: string): Promise<void> {

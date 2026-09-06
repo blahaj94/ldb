@@ -7,10 +7,15 @@ import type { LoginRegistry } from './registry.js'
 import { decodeOpaque, equalHash, opaqueHash } from './crypto.js'
 
 /** Failure 반환은 terminal 정리를 commit한다. Throw는 호출자 쓰기까지 rollback한다. */
-export async function loginTransaction<T>(source: DataSource, operation: (manager: EntityManager) => Promise<T | LoginFailure>): Promise<T> {
+export async function loginTransaction<T>(
+  source: DataSource,
+  operation: (manager: EntityManager) => Promise<T | LoginFailure>,
+): Promise<T> {
   try {
     const result = await source.transaction('READ COMMITTED', operation)
-    if (result instanceof LoginFailure) throw result
+    if (result instanceof LoginFailure) {
+      throw result
+    }
     return result
   } catch (error) {
     // Commit 응답 유실·release 실패도 결과를 폐기한다. Token 재전달/retry 경로는 없다.
@@ -25,12 +30,25 @@ export async function freshTime(manager: EntityManager): Promise<Date> {
   return clock.now
 }
 
-export function requestExpired(row: AuthLoginRequest, time: Date): boolean {
-  return time.getTime() >= row.expiresAt.getTime()
+export function requestExpired(request: AuthLoginRequest, checkedAt: Date): boolean {
+  return checkedAt.getTime() >= request.expiresAt.getTime()
 }
 
-export function exchangeExpired(row: AuthLoginRequest, time: Date): boolean {
-  return requestExpired(row, time) || row.codeExpiresAt === null || time.getTime() >= row.codeExpiresAt.getTime()
+export function exchangeExpired(request: AuthLoginRequest, checkedAt: Date): boolean {
+  return requestExpired(request, checkedAt) ||
+    request.codeExpiresAt === null ||
+    checkedAt.getTime() >= request.codeExpiresAt.getTime()
+}
+
+export async function markLoginRequestFailed(
+  manager: EntityManager,
+  requestId: string,
+): Promise<void> {
+  await manager.getRepository(AuthLoginRequestSchema).update({ id: requestId }, {
+    ...CLEARED_LOGIN_FIELDS,
+    status: 'failed',
+    consumedAt: null,
+  })
 }
 
 export async function terminal(manager: EntityManager, row: AuthLoginRequest, consumedAt: Date | null = null): Promise<void> {
@@ -47,16 +65,31 @@ export async function resolveRegistration(manager: EntityManager, row: AuthLogin
 }
 
 export function browserCookie(id: string, value: string, seconds: number): string {
-  return `${LOGIN.cookiePrefix}${id}=${value}; Max-Age=${seconds}; Secure; HttpOnly; SameSite=Lax; Path=/`
+  return [
+    `${LOGIN.cookiePrefix}${id}=${value}`,
+    `Max-Age=${seconds}`,
+    'Secure',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Path=/',
+  ].join('; ')
 }
 
-export function cookieMatches(row: AuthLoginRequest, header: string): boolean {
+export function cookieMatches(request: AuthLoginRequest, header: string): boolean {
   try {
-    const name = `${LOGIN.cookiePrefix}${row.id}`
-    const matches = header.split(';').map((part) => part.trim()).filter((part) => part.split('=')[0] === name)
-    if (matches.length !== 1) return false
-    const value = matches[0].slice(name.length + 1)
+    const cookieName = `${LOGIN.cookiePrefix}${request.id}`
+    const matches = header.split(';')
+      .map((part) => part.trim())
+      .filter((part) => part.split('=')[0] === cookieName)
+
+    // 중복된 요청 cookie는 어느 값을 선택하지 않고 binding 실패로 처리한다.
+    if (matches.length !== 1) {
+      return false
+    }
+    const value = matches[0].slice(cookieName.length + 1)
     decodeOpaque(value)
-    return equalHash(row.browserBindingHash, opaqueHash(value))
-  } catch { return false }
+    return equalHash(request.browserBindingHash, opaqueHash(value))
+  } catch {
+    return false
+  }
 }
