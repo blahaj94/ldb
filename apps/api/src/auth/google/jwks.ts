@@ -174,10 +174,25 @@ export function createGoogleJwks(jwksUri: string, fetchGoogle: typeof globalThis
       const canUseRefreshedCache = hasLatestCache && isNewerGeneration && isFreshGeneration
       const refreshed = canUseRefreshedCache ? latestCache : await waitForLoad(signal)
       try {
-        // Cold/expired key miss도 이 한 번의 refresh 뒤에는 추가 fetch 없이 실패한다.
+        // Cold/expired key miss도 이 한 번의 refresh 뒤에는 추가 fetch를 허용하지 않는다.
         return await withAbort(refreshed.resolver(header, token), signal)
       } catch (error) {
-        throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
+        const isUnknownAfterRefresh = error instanceof errors.JWKSNoMatchingKey
+        if (!isUnknownAfterRefresh) throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
+
+        // 닫힌 이전 refresh를 기다리는 사이 다른 caller가 받은 새 cache는 local lookup만 한다.
+        const cacheAfterRefresh = cached
+        const hasCacheAfterRefresh = cacheAfterRefresh != null
+        const isNewerThanRefresh = hasCacheAfterRefresh &&
+          cacheAfterRefresh.generation > refreshed.generation
+        const isFreshAfterRefresh = isNewerThanRefresh && Date.now() < cacheAfterRefresh.expiresAt
+        const canRecheckCache = hasCacheAfterRefresh && isNewerThanRefresh && isFreshAfterRefresh
+        if (!canRecheckCache) throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
+        try {
+          return await withAbort(cacheAfterRefresh.resolver(header, token), signal)
+        } catch (error) {
+          throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
+        }
       }
     }
   }
