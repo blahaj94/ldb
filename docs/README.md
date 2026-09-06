@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-07
 ---
 
 # LDB Document Guide
@@ -60,7 +60,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 | 작업                             | Required document                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
 | Code 작성·수정·review       | 위 역할별 시작점과 [`convention.md`](../convention.md#읽기-안내)에 따라 `change-control.md`, `testing.md`, `code-quality.md`의 적용 본문 확인 |
-| Web·Desktop UI의 시각 기준·공용 자산 | [`rules/design-system.md`](rules/design-system.md) |
+| Web·Desktop UI의 SEED 기준·공용 자산·Example·시각 검증 | [`rules/design-system.md`](rules/design-system.md); package·peer·CSS 책임은 [`Shared UI boundary`](architecture/overview.md#shared-ui-boundary) |
 | 큰 작업 분해와 역할·Issue contract | `docs/rules/agent-workflow.md`                                                       |
 | Worker 배정·상태·handoff·통합   | `docs/rules/agent-execution.md`                                                       |
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
@@ -87,11 +87,11 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/change-control.md`](rules/change-control.md): approval, Issue, branch, commit, PR, parallel 작업
 - [`rules/testing.md`](rules/testing.md): Red-Green workflow와 validation 기준
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
-- [`rules/design-system.md`](rules/design-system.md): 공통 자산·용도별 기본값·Layout·밀도와 화면별 외형 override 금지
+- [`rules/design-system.md`](rules/design-system.md): SEED 재사용·고정 source·기본값·override 금지·중립 Example·향후 검증 matrix
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
 - [`rules/agent-execution.md`](rules/agent-execution.md): 복수 Worker의 roster, context, 상태와 통합 계약
-- [`architecture/overview.md`](architecture/overview.md): 현재 system boundary와 architecture approval 지점
+- [`architecture/overview.md`](architecture/overview.md): 현재 system boundary·Shared UI boundary 제안·peer/CSS 책임과 architecture approval 지점
 
 - [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 계약
 - [`rules/character-search.md`](rules/character-search.md): 검색 query·응답·오류·계정 제한 계약
