@@ -21,17 +21,10 @@ export async function prepareCredentialTransition(
   return isReestablished ? 'established' : 'unconfirmed'
 }
 
-export async function commitCredentialTransition(
+export async function finalizeCredentialTransition(
   store: CredentialStore,
-  refreshToken: string,
   kind: CredentialTransitionKind
 ): Promise<CredentialCommit> {
-  const committed = await store.commitCredential(refreshToken)
-  const isCredentialCommitted = committed === 'confirmed'
-  if (!isCredentialCommitted) {
-    return 'save-failed'
-  }
-
   const removed = await store.removeTransition()
   if (removed === 'confirmed') {
     return 'committed'
@@ -52,6 +45,10 @@ export async function clearCredential(store: CredentialStore): Promise<Credentia
     return 'unconfirmed'
   }
 
+  return finishCredentialClear(store)
+}
+
+export async function finishCredentialClear(store: CredentialStore): Promise<CredentialClear> {
   const cleared = await store.clearCredential()
   const isCredentialCleared = cleared === 'confirmed'
   if (!isCredentialCleared) {
