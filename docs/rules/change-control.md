@@ -70,7 +70,7 @@ Issue는 Goal, user-visible behavior, acceptance criteria, in scope, out of scop
 - 같은 file, public contract, generated source·artifact, database·migration, test fixture·snapshot 또는 다른 shared state를 상충하게 변경할 가능성이 있으면 병렬 구현하지 않는다. File이 달라도 producer·consumer나 runtime state가 겹치면 같은 충돌로 본다.
 - Worker는 result commit과 validation evidence를 반환한다. 통합 담당은 scope와 기준 commit을 확인한 뒤 통합 branch에 순서대로 반영한다.
 - Result base 이후 integration head가 전진했다면 textual conflict 유무와 별개로 중간 변경과의 semantic 관계를 확인한다. 관련 의미가 바뀐 stale result는 최신 head에서 Worker가 rebase·재검증한 뒤에만 반영한다.
-- Semantic conflict와 누락은 관련 Worker에게 반환한다. 통합 담당이 직접 해결해야 하면 별도 Worker scope·branch·roster 기록을 먼저 만든다.
+- 예상하지 못한 semantic·logic conflict나 scope 누락을 발견하면 영향받는 scope를 멈추고 Planner와 사용자에게 보고한다. 필요한 승인과 범위 판단을 거친 뒤 관련 Worker에게 후속 작업을 배정하며 자동 해결하지 않는다.
 - Formatting 또는 Reference document처럼 의미 변화가 없는 conflict는 통합 담당이 해결하고 결과를 보고할 수 있다.
 - 다른 Issue의 PR이 먼저 merge되면 Issue 통합 branch를 최신 main으로 rebase하고 영향을 받은 Worker result와 최종 head의 전체 validation을 다시 실행한다.
 - 최종 PR은 Issue 통합 branch의 검증된 exact head에서 만든다. Worker branch의 개별 성공이나 conflict-free 반영만으로 통합 validation을 대신하지 않는다.
