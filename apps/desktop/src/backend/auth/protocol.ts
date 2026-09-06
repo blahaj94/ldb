@@ -1,7 +1,6 @@
 import { isCanonicalOpaque } from './pkce'
 
 const MAX_URL_BYTES = 2_048
-const CONTROL_SPACE_OR_BACKSLASH = /[\u0000-\u0020\u007f\\]/
 const INCOMPATIBLE_APP_PROTOCOLS = new Set([
   'about:',
   'blob:',
@@ -16,6 +15,19 @@ const INCOMPATIBLE_APP_PROTOCOLS = new Set([
   'wss:'
 ])
 
+function hasForbiddenUrlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)!
+    const isControlOrSpace = codePoint <= 0x20 || codePoint === 0x7f
+    const isBackslash = character === '\\'
+    const isForbidden = isControlOrSpace || isBackslash
+    if (isForbidden) {
+      return true
+    }
+  }
+  return false
+}
+
 export class AuthProtocolFailure extends Error {
   constructor() {
     super('Authentication URL is invalid.')
@@ -27,7 +39,7 @@ export class AuthProtocolFailure extends Error {
 function parseExactUrl(raw: unknown): URL {
   const isString = typeof raw === 'string'
   const isWithinLimit = isString && Buffer.byteLength(raw, 'utf8') <= MAX_URL_BYTES
-  const hasForbiddenCharacter = isString && CONTROL_SPACE_OR_BACKSLASH.test(raw)
+  const hasForbiddenCharacter = isString && hasForbiddenUrlCharacter(raw)
   const canParse = isString && isWithinLimit && !hasForbiddenCharacter
   if (!canParse) {
     throw new AuthProtocolFailure()

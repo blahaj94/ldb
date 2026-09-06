@@ -155,3 +155,15 @@ export type AuthCoordinatorDependencies = Readonly<{
   http: AuthHttp
   store: CredentialStore
 }>
+
+export interface AuthCoordinator {
+  getSnapshot(): AuthSnapshot
+  subscribe(listener: (snapshot: AuthSnapshot) => void): () => void
+  start(): Promise<AuthSnapshot>
+  beginLogin(provider: unknown): Promise<AuthCommandResult>
+  cancelLogin(attemptId: unknown): Promise<AuthCommandResult>
+  handleReturnUrl(raw: unknown): Promise<void>
+  retryAuth(): Promise<AuthCommandResult>
+  authorization(): Promise<AuthAuthorization>
+  logout(): Promise<AuthCommandResult>
+}

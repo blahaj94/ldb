@@ -53,7 +53,7 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
     const aborted = new Promise<never>((_resolve, reject) => {
       rejectAbort = reject
     })
-    const abort = () => {
+    const abort = (): void => {
       controller.abort()
       rejectAbort(new AuthHttpFailure('network'))
     }

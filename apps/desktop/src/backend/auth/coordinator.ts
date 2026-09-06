@@ -12,6 +12,7 @@ import type {
   AuthAuthorization,
   AuthCommandError,
   AuthCommandResult,
+  AuthCoordinator,
   AuthCoordinatorDependencies,
   AuthNotice,
   AuthPhase,
@@ -82,7 +83,7 @@ function sessionCredential(tokens: AuthTokens): SessionCredential {
   }
 }
 
-export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies) {
+export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies): AuthCoordinator {
   validateApiOrigin(dependencies.apiOrigin)
   validateReturnTarget(dependencies.returnTarget)
 
@@ -429,6 +430,24 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const isFreshAfterFinalize = isOperationFresh()
     if (!isFreshAfterFinalize) {
       const logoutOwnsRefreshCleanup = kind === 'refresh' && logoutFlight != null
+      let hasDurableMarker = finalized === 'save-failed'
+      if (finalized === 'committed') {
+        try {
+          hasDurableMarker = (await dependencies.store.reestablishTransition(kind)) === 'confirmed'
+        } catch {
+          hasDurableMarker = false
+        }
+      }
+      if (!hasDurableMarker) {
+        const isExplicitLogout = logoutFlight != null
+        if (!isExplicitLogout) {
+          storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
+        }
+        if (!logoutOwnsRefreshCleanup) {
+          await disposeKnownRefresh(tokens.refreshToken)
+        }
+        return false
+      }
       await handleStaleTransition(logoutOwnsRefreshCleanup ? undefined : tokens.refreshToken)
       return false
     }
@@ -782,7 +801,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const writer = exchange.then(() => undefined)
     activeCredentialHttpStarted = false
     activeWriter = writer
-    const clearWriter = () => {
+    const clearWriter = (): void => {
       if (activeWriter === writer) {
         activeWriter = null
         activeCredentialHttpStarted = false
@@ -853,7 +872,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     activeCredentialHttpStarted = false
     const writer = operation()
     activeWriter = writer
-    const clearWriter = () => {
+    const clearWriter = (): void => {
       if (activeWriter === writer) {
         activeWriter = null
         activeCredentialHttpStarted = false
@@ -1025,7 +1044,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
     })()
     refreshFlight = { generation: operationGeneration, promise }
-    const clearRefresh = () => {
+    const clearRefresh = (): void => {
       if (refreshFlight?.promise === promise) {
         refreshFlight = null
       }
@@ -1219,7 +1238,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     const operation = performLogout()
     logoutFlight = operation
-    const clearLogout = () => {
+    const clearLogout = (): void => {
       if (logoutFlight === operation) {
         logoutFlight = null
       }

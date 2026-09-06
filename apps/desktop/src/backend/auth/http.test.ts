@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createAuthHttpClient, AuthHttpFailure } from './http'
+import type { AuthTokens } from './types'
 import {
   ACCESS_1,
   API_ORIGIN,
@@ -16,7 +17,7 @@ function jsonResponse(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: jsonHeaders })
 }
 
-function validTokens() {
+function validTokens(): AuthTokens {
   return {
     tokenType: 'Bearer',
     accessToken: ACCESS_1,

@@ -298,7 +298,7 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
   }
 
   const reader = response.body.getReader()
-  const cancelReader = () => {
+  const cancelReader = (): void => {
     void reader.cancel().catch(() => undefined)
   }
   signal?.addEventListener('abort', cancelReader, { once: true })
