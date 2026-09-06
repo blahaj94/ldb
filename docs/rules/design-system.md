@@ -73,6 +73,17 @@ Component·Pattern·Template의 구분은 [Carbon의 Component](https://carbonde
 | Layout이 제공하는 간격·배치·밀도 옵션을 해당 용도에 맞게 선택 | 허용. 같은 역할과 조건에 임의로 다른 옵션을 선택하지 않는다. |
 | 새로운 표현이 필요하지만 공용 자산에 해당 선택지가 없음 | 공용 자산의 변경·확장을 제안한다. 화면별 override로 임시 해결하지 않는다. |
 
+## Example 관리
+
+- Component Example·Pattern Example·Template Example의 source, 필요한 예시 content·data와 실행 안내를 공용 자산과 같은 repository에서 version 관리한다.
+- Example은 해당 revision의 공용 자산과 public API를 직접 사용한다. Example에도 앞의 공통 자산 사용과 외형 override 금지 기준을 적용한다.
+- 공용 자산을 추가하거나 외형·동작·public API·적용 조건을 변경하면, 그 영향을 확인하는 Example을 같은 PR에서 추가·갱신하고 검증한다. 변경한 Variant·State·조합과 영향을 받는 Pattern·Template을 기준으로 관련 Example의 범위를 정한다.
+- 공용 자산의 직접 참조로 변경이 전파되고 Example의 구성과 기대 결과 설명이 여전히 유효하면, 실행 확인으로 동기화를 검증한다. Example file의 수정 여부만으로 갱신·검증 여부를 판단하지 않는다.
+- Example의 API 사용, 예시 content·data, 기대 결과 설명과 실행 안내가 변경 후에도 일치하도록 유지한다. 공용 자산 변경과 관련 Example의 필요한 갱신을 별도 후속 작업으로 미루지 않는다.
+- PR에는 관련 Example의 file path, 실행 command, 확인한 Variant·State·조합과 결과를 남긴다. 검증 evidence는 [Testing](testing.md)을 따르며, Example을 수정했다는 사실만으로 검증 성공을 판단하지 않는다.
+
+Example의 구체적인 목록·디렉터리·실행 도구와 자동화 범위는 후속 구현 범위에서 정한다. Example이 제품 도메인에 의존하지 않는다는 용어 절의 기준은 유지한다.
+
 ## 변경과 Review
 
 1. 요구를 기존 공통 자산과 적용 조건으로 표현할 수 있는지 먼저 확인한다.
@@ -80,7 +91,7 @@ Component·Pattern·Template의 구분은 [Carbon의 Component](https://carbonde
 3. 사용자 피드백은 개별 시안의 선택과 공통 기준으로 적용할 범위를 구분한다. 특정 화면의 피드백을 AI가 임의로 전체 Rule로 확대하지 않는다.
 4. 채택한 변경은 공용 정의와 관련 사용처에 반영하고 확인한다. 공용 정의만으로 전파되지 않는 변경은 영향받는 사용처와 후속 작업을 명시한다. 새 화면에만 새 기준을 적용하고 기존 화면과의 차이를 숨기지 않는다.
 
-Review에서는 화면과 공통 자산의 변경 위치, override 우회 여부, Variant·Pattern의 적용 조건, 영향을 받는 상태와 기존 사용처를 확인한다. 위반은 해당 변경을 완료한 것으로 판단하기 전에 수정한다.
+Review에서는 화면과 공통 자산의 변경 위치, override 우회 여부, Variant·Pattern의 적용 조건, 영향을 받는 상태와 기존 사용처, 관련 Example의 갱신·검증을 확인한다. 위반은 해당 변경을 완료한 것으로 판단하기 전에 수정한다.
 
 검증 종류와 필요한 evidence는 [Testing](testing.md)을 따른다. 시각 확인에는 변경한 표현과 관련 상태·사용처를 포함한다. 예제 도구·자동 검사·시각 비교 환경은 별도 구현 범위에서 정한다.
 
