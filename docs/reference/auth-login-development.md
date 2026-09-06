@@ -50,7 +50,7 @@ Authorization URL의 Google `openid profile`, Discord `identify`, 독립 S256은
 - Callback은 browser/provider/TTL을 확인해 `processing`을 commit한 뒤 외부 verifier를 호출한다. Provider 처리가 멈춘 동안 별도 connection에서 해당 row의 `FOR UPDATE NOWAIT`가 성공한다. Claim commit 지연을 포함한 단일 10초 deadline으로 제한하며 늦은 결과는 무시한다.
 - 검증 완료 시각을 먼저 고정해 code TTL이 이후 row lock 대기로 연장되지 않게 한다. Exchange-ready commit에서는 더 이상 필요 없는 browser/provider proof도 정리하고 앱 proof·subject·code hash·deadline만 남긴다.
 - Exchange는 OAuth row→user→새 session→refresh 순서의 하나의 transaction을 사용한다. User/identity uniqueness 대기 및 JWT 준비 뒤에도 fresh DB 정수 초로 TTL을 재확인한다. TTL을 넘으면 준비한 회원/session 쓰기를 rollback하고 별도 짧은 transaction에서 만료 row를 정리한다.
-- `createIdentitySession`과 JWT issuer의 반환은 commit 전 임시 값이다. `loginTransaction`이 commit 성공을 확인한 뒤에만 HTTP에 전달한다. Commit 결과 불명은 정제된 503이며 response/token cache, 자동 retry, 재전달 grace가 없다. 실제 commit됐다면 replay는 400이다.
+- `createIdentitySession`과 JWT issuer의 반환은 commit 전 임시 값이다. Exchange는 `DataSource.transaction`의 commit·release 완료 뒤 같은 함수에서 `ExchangeCommitResult`를 확인한다. `issued`는 token을 반환하고, `rejected`는 요청 정리를 commit한 뒤 오류를 던진다. Transaction 안에서 던진 오류는 DB 쓰기를 rollback한다. 요청 생성·callback은 기존 `loginTransaction` 경계를 사용한다. Commit 결과 불명은 정제된 503이며 response/token cache, 자동 retry, 재전달 grace가 없다. 실제 commit됐다면 replay는 400이다.
 - 취소·provider 실패·유효한 만료 read는 terminal commit에서 민감 field를 null 처리한다. Crash/DB 장애 뒤 남은 row의 물리 삭제는 별도 cleanup/운영 범위다. Cleanup 미구현이 TTL 뒤 교환을 허용하지 않는다.
 
 ## HTTP·노출 검증
