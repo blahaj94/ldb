@@ -1,12 +1,12 @@
 ---
 type: reference
-scope: apps/api internal refresh transaction core
+scope: apps/api refresh/logout HTTP and transaction core
 last-reviewed: 2026-09-06
 ---
 
-# Refresh transaction core 개발
+# Refresh HTTP와 현재 session logout 개발
 
-`apps/api/src/auth/refresh/index.ts`의 `rotateRefresh({ dataSource, issueAccessJwt }, rawToken)`은 이미 발급된 refresh로 rotation하는 내부 진입점이다. `rawToken`만 credential 입력으로 받고 user/session ID를 받지 않는다. 기존 `createAccessJwtIssuer`가 만든 issuer와 기존 DataSource를 주입한다. `/auth/refresh` HTTP 연결과 기본 main 활성화는 구현하지 않았다.
+`apps/api/src/auth/refresh/index.ts`의 `rotateRefresh({ dataSource, issueAccessJwt }, rawToken)`은 이미 발급된 refresh로 rotation하는 내부 진입점이다. `rawToken`만 credential 입력으로 받고 user/session ID를 받지 않는다. 기존 `createAccessJwtIssuer`가 만든 issuer와 기존 DataSource를 주입한다. `apps/api/src/auth/login/http.ts`의 `createSessionHttpService`와 기존 `createLoginHttpApp`의 선택적 두 번째 인자가 이 core를 `POST /auth/refresh`와 `POST /auth/logout`에 연결한다. 기본 main 활성화는 구현하지 않았다.
 
 Contract는 `docs/rules/auth-session.md`, `docs/rules/auth-database.md`, `docs/rules/auth-api.md`를 따른다. 기존 schema·Migration·dependency·JWT interface를 변경하지 않았다. 공통 `REFRESH_TOKEN`, `AUTH_ERRORS`, `LOGIN.idleSeconds`와 기존 요청 구조 오류 정의를 읽기 재사용한다.
 
@@ -22,7 +22,15 @@ Core가 `DataSource.transaction('READ COMMITTED', ...)`를 호출하여 transact
 
 직접 입력의 canonical 형식 실패는 `INVALID_AUTH_REQUEST`(400), 미발급/없는 소유 row/소유 불일치/종료/만료/확인된 재사용은 `AUTHENTICATION_REQUIRED`(401)다. `RefreshFailure`의 code·status·고정 message는 후속 HTTP 계층에서 기존 정제 응답에 연결할 수 있다. Token 결과는 `tokenType`, `accessToken`, `accessTokenExpiresAt`, `refreshToken`, `sessionExpiresAt`이고 두 시각은 UTC ISO 8601이다.
 
-후속 HTTP 작업은 승인된 JSON pre-parser와 `{refreshToken}` shape 검증, no-store·정제 오류 응답·log sink 경계를 연결한 뒤 위 함수를 await하여 결과를 보낸다. 추가 Access JWT 입력이나 임의 user/session 선택 인자를 만들지 않는다. 내부 core test는 이 HTTP 경계 또는 운영 연결의 완료 evidence가 아니다.
+HTTP 경계는 승인된 JSON pre-parser와 정확한 `{refreshToken}` shape를 검증하고 위 core를 await한다. Refresh의 명시적 `RefreshFailure` 400/401/500/503을 보존하며 commit·release 확인 뒤에만 200 token body를 보낸다. 모든 응답은 no-store이고 추가 Access JWT나 임의 user/session 선택 인자를 받지 않는다.
+
+## Logout transaction
+
+`apps/api/src/auth/logout/index.ts`의 `logoutSession(dataSource, rawToken)`은 refresh core의 canonical 32-byte decode·re-encode·hash 검증을 재사용한다. 형식이 잘못된 credential은 DB 접근 전 `400 INVALID_AUTH_REQUEST`, canonical이지만 미발급인 hash는 `204`다.
+
+Logout은 하나의 READ COMMITTED transaction에서 잠금 없는 token/session hint를 읽고 user→session→refresh 순서로 잠근다. 잠금 뒤 존재·소유·hash를 다시 확인하며 이미 revoked, 정확한 idle deadline 이상, 삭제·unknown이면 추가 상태 변경 없이 완료한다. Current/consumed token의 활성 session만 fresh DB 정수 초로 `revoked_at`과 `logout` reason을 저장한다. `last_active_at`, refresh 발급·소비 이력과 다른 session은 쓰지 않는다.
+
+Transaction의 commit·release 완료 뒤에만 body 없는 204를 보낸다. DB 오류와 실제 commit 또는 rollback 뒤 acknowledgement를 잃은 fault injection은 모두 `503 AUTH_UNAVAILABLE`이며 성공 204를 보내거나 자동 retry하지 않는다. 물리 network 단절 검증은 아니다.
 
 ## 검증 근거
 
@@ -40,7 +48,7 @@ Core가 `DataSource.transaction('READ COMMITTED', ...)`를 호출하여 transact
 | 8 | `refresh-rotation.mjs`: 40일 전 session 생성·refresh 발급에도 최근 활동이 있으면 허용, 4번 rotation 뒤 전체 이력 보존, 가장 오래된 consumed 재사용 탐지, 같은 user의 다른 기기와 다른 user snapshot 보존. `refresh-concurrency.mjs`: logout 선행/후행·늦은 결과, hint 뒤 user/session 삭제, 활동의 새 deadline 선commit |
 | 9 | Red→Green commit, 아래 필수 command, 독립 review·사용량 snapshot과 Draft PR handoff는 #70과 연결 PR에 기록 |
 
-DB matrix는 rotation/history 2개, concurrency/TTL 12개, failure 10개 scenario group이다. Logout·삭제·활동 경합의 상대편은 통제된 DB transaction이며 해당 endpoint 또는 cleanup 구현이 아니다. Commit 불명은 실제 PostgreSQL commit/rollback 후 QueryRunner에서 acknowledgement 실패를 주입한 검증으로, 물리 network 단절 실험과 구분한다. 세 table의 잠금 대기는 mock 없이 PostgreSQL의 blocking PID로 확인한다.
+기존 DB matrix는 rotation/history 2개, concurrency/TTL 12개, failure 10개 scenario group이다. 기존 core matrix를 그대로 실행한 뒤 `session-http-integration.mjs`의 HTTP→PostgreSQL 12개 scenario를 같은 disposable harness에서 실행한다. 정상 refresh, current/consumed·반복·unknown·물리 삭제 logout, 다른 기기와 이력·활동 보존, refresh/logout 양방향 경합, 늦은 200 뒤 최종 무효, 양 endpoint의 commit 전 응답 금지와 실제 commit/rollback 뒤 acknowledgement 오류, transport/shape no-write를 검증한다. Commit 결과 불명은 QueryRunner fault injection이며 물리 network 단절 실험과 구분한다. 별도 process `login-log-probe.mjs`는 refresh/logout 성공·오류·media·oversize·body canary의 stdout/stderr 비노출을 검증하고, database integration의 canary capture는 같은 process 안의 관측으로 구분한다.
 
 ```bash
 pnpm --filter @ldb/api run --sequential '/^(lint|test|typecheck)$/'
@@ -48,6 +56,6 @@ pnpm --filter @ldb/api test:database
 git diff --check
 ```
 
-2026-09-06에 Node `24.19.0`, pnpm `11.23.0`, Docker server `29.7.2`, native `linux/arm64/v8`의 PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`에서 통과했다. API test는 production build를 포함한다. 기존 catalog·constraint·schema diff·Migration·identity/login·teardown matrix도 함께 통과했다. 승인된 image index/arm64 child digest를 기존 harness가 확인했다. `linux/amd64`, 실제 provider, `/auth/refresh` HTTP, logout/계정/cleanup/검색 연결, Desktop와 운영 배포·clock 검증은 이번 evidence에 포함되지 않는다.
+2026-09-06에 Docker server `29.7.2`, native `linux/arm64/v8`의 PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`에서 새 HTTP matrix와 기존 catalog·constraint·schema diff·Migration·identity/login/refresh/Google·teardown matrix가 함께 통과했다. 승인된 image index/arm64 child digest를 기존 harness가 확인했다. `linux/amd64`, 실제 provider/credential·계정, 기본 main composition, Desktop, 운영 배포·proxy/APM·clock·cleanup과 물리 network 단절은 미검증이다.
 
-`rotateRefreshForTest`는 random 실패/충돌을 위한 test 전용 주입 경계이며 환경변수나 HTTP 입력으로 노출하지 않는다. #68의 Google source·test를 이 branch에 복제하지 않았다. 공유 harness·Reference는 #68 고정 head 확인 후 refresh 최소 delta만 작성하며 먼저 merge된 병렬 PR 이후 최신 main rebase와 전체 validation을 따른다.
+`rotateRefreshForTest`는 random 실패/충돌을 위한 test 전용 주입 경계이며 환경변수나 HTTP 입력으로 노출하지 않는다. Session HTTP factory도 환경변수 test mode를 두지 않으며 실제 DataSource/JWT issuer를 명시적으로 합성한다.

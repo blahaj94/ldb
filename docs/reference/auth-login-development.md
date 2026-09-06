@@ -10,7 +10,7 @@ last-reviewed: 2026-09-06
 
 ## 현재 실행 경계
 
-`createLoginService`에 초기화된 DataSource, 검증된 registry와 provider PKCE key, 실제 Access JWT issuer, 서버의 provider verifier를 주입한다. `createLoginHttpApp(service)`는 이 service를 실제 Nest HTTP route에 연결하며 기본 body parser를 끄고 인증 pre-parser와 정제 오류 처리를 설치한다. DataSource는 composition 호출자가 소유하고 종료한다.
+`createLoginService`에 초기화된 DataSource, 검증된 registry와 provider PKCE key, 실제 Access JWT issuer, 서버의 provider verifier를 주입한다. `createLoginHttpApp(service)`는 기존 login service를 실제 Nest HTTP route에 연결한다. 선택적 두 번째 인자에 `createSessionHttpService({dataSource,issueAccessJwt})` 결과를 넘기면 같은 parser/filter/factory에 refresh/logout route도 연결한다. 기존 한 인자 caller와 login/Google/exchange/HEAD 동작은 유지한다. Factory는 기본 body parser를 끄고 인증 pre-parser와 정제 오류 처리를 설치하며 DataSource는 composition 호출자가 소유하고 종료한다.
 
 `apps/api/src/app.ts`의 기본 `AppModule`과 `apps/api/src/main.ts`에는 자동 연결하지 않았다. Google adapter는 구현했지만 실제 registry·secret resolver·운영 composition의 제공과 검증이 남아 있다. 현재 `pnpm --filter @ldb/api start`는 기존 runtime-only app이며 배포된 `/auth/*`가 활성화되지 않는다. HTTP 검증은 별도 factory에 격리 test 설정을 주입해 수행한다. 제품용 test mode·환경변수 인증 우회·HTTP verified identity 입력은 없다.
 
@@ -35,6 +35,7 @@ last-reviewed: 2026-09-06
 | `apps/api/src/auth/login/exchange.ts` | Proof/TTL 재검증·기존 identity-session/JWT 합성 |
 | `apps/api/src/auth/login/service.ts` | 내부 dependency 연결과 service 생성 |
 | `apps/api/src/auth/login/json-parser.ts`, `http.ts` | 실제 stream parser, Nest route, no-store·정적 HTML·오류 경계 |
+| `apps/api/src/auth/logout/index.ts`, `errors.ts` | 제출 refresh hash로 현재 session만 잠가 종료하고 DB/commit 불명을 정제 |
 | `apps/api/src/auth/google/types.ts`, `index.ts` | Server-only 설정·historical snapshot binding·Google RS256/claim 검증·최소 identity 반환 |
 | `apps/api/src/auth/google/transport.ts` | Secret 해석·code 교환·body 읽기의 공통 signal 적용과 민감 참조 정리 |
 | `apps/api/src/auth/google/jwks.ts` | Trusted public JWK cache·동시 load 공유·독립 waiter 취소·bounded unknown kid refresh; key 선택은 jose |
@@ -71,7 +72,7 @@ Authorization URL의 Google `openid profile`, Discord `identify`, 독립 S256은
 
 ## HTTP·노출 검증
 
-Pre-parser는 media/encoding을 먼저 확인하고 실제 payload를 최대 16,384 byte만 buffer한다. Chunked body의 종료를 기다리지 않고 초과 시 413과 connection close를 반환한다. 전체 body가 상한 이하면 strict UTF-8·JSON·정확한 field를 검증한다. 선언된 Content-Length 초과는 조기 거절하고, 상충한 Content-Length/Transfer-Encoding 같은 HTTP framing 오류는 Node의 선행 거절로 구분한다. Framing 밖 bytes를 제품 JSON body로 재해석하지 않는다.
+Pre-parser는 login JSON과 refresh/logout의 정확한 `{refreshToken}` body에 같은 우선순위를 적용한다. Media/encoding을 먼저 확인하고 실제 payload를 최대 16,384 byte만 buffer한다. Chunked body의 종료를 기다리지 않고 초과 시 413과 connection close를 반환한다. 전체 body가 상한 이하면 strict UTF-8·JSON·정확한 field를 검증한다. 선언된 Content-Length 초과는 조기 거절하고, 상충한 Content-Length/Transfer-Encoding 같은 HTTP framing 오류는 Node의 선행 거절로 구분한다. Framing 밖 bytes를 제품 JSON body로 재해석하지 않는다.
 
 Controller와 직접 호출 가능한 service는 각각 입력을 검증한다. Service 내부 callback은 한 번 parsing한 성공/code 또는 실패/error 입력을 claim 단계로 전달하며, claim이 성공한 결과만 provider code를 보유한 검증 입력으로 사용한다.
 
@@ -92,7 +93,7 @@ git diff --check
 `test`는 `build`를 먼저 실행하므로 dist가 없거나 오래된 상태에서도 최신 source를 검증한다.
 
 - `apps/api/test-support/login-primitives.test.mjs`: encoding·hash 입력 차이·정확한 field·callback parameter·registry·PKCE key/AAD.
-- `login-http.test.mjs`, `login-log-probe.mjs`: 실제 HTTP stream 상한·우선순위·HTML·redirect·정제 오류와 별도 process log sink.
+- `login-http.test.mjs`, `session-http.test.mjs`, `login-log-probe.mjs`: 실제 HTTP stream 상한·우선순위·HTML·redirect·refresh/logout 정제 오류와 별도 API process log sink. 별도 process는 session 성공·오류·media·oversize·body canary가 stdout/stderr에 남지 않음을 확인한다.
 - `login-state.test.mjs`: commit 결과 불명 뒤 만료 processing/active read의 terminal 정리, provider 검증 성공·예외·잘못된 identity·timeout 뒤 DB 대기 전 claim의 code/verifier 참조 해제 regression. Transaction test double에서 claim 결과를 관측하고 후속 transaction을 보류하며, timeout은 test timer로 구동한다.
 - `login-database.mjs`: 실제 상태 흐름·회원 쓰기 0·잘못된 proof·replay·기존 identity와 독립 session·서명 실패 rollback.
 - `login-concurrency.mjs`, `login-test-control.mjs`: 실제 PostgreSQL blocker를 관측한 ticket/exchange/identity 경합, provider 동안 lock 해제, OAuth/user lock 뒤 fresh time, 정확 만료, code TTL cap, callback timeout. 정확한 경계 equality는 실제 SQL/row lock과 함께 test에서 clock 결과를 고정하며, 잠금 대기의 만료는 실제 DB clock으로 별도 검증한다. 두 번째 waiter가 첫 waiter의 tuple lock 뒤에 대기하는 경우도 실제 blocker로 확인한다.
