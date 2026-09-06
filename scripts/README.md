@@ -75,7 +75,7 @@ node --check scripts/agent-usage/github.mjs
 
 | 변경 범위 | Repository root에서 실행할 command |
 | --- | --- |
-| API | `pnpm --filter @ldb/api run --sequential '/^(build\|lint\|test\|typecheck)$/'` |
+| API | `pnpm --filter @ldb/api run --sequential '/^(lint\|test\|typecheck)$/'` |
 | API auth database | 위 API command와 `pnpm --filter @ldb/api test:database` |
 | Desktop | `pnpm --filter @ldb/desktop run --sequential '/^(test\|lint\|build)$/'` |
 | Web | `pnpm --filter @ldb/web run --sequential '/^(lint\|build)$/'` |
@@ -85,7 +85,7 @@ node --check scripts/agent-usage/github.mjs
 
 Desktop `build`는 `typecheck`를 포함하므로 위 조합에서 별도로 반복하지 않습니다. Web `build`도 `tsc -b`를 포함합니다. 빠른 feedback이 필요할 때는 기존 개별 `test`, `lint`, `typecheck` command를 먼저 실행할 수 있습니다. 여러 범위를 변경했다면 해당 행을 함께 검증합니다.
 
-API의 `test`는 build entry를 실행하므로 위 순차 command처럼 `build`를 먼저 실행합니다. Root `test`는 성공 evidence가 아닙니다. Web에는 별도 test script가 없으며, 문서만 변경할 때 app build를 반복할 필요는 없습니다. 실제 validation 범위와 실행하지 못한 항목은 [`testing.md`](../docs/rules/testing.md)에 따라 PR에 기록합니다.
+API의 `test`는 `build`를 먼저 실행해 `dist`를 새로 만든 뒤 `.test-dist` compile과 test를 수행합니다. 위 API 조합은 이 build를 포함하며, 단독 `pnpm --filter @ldb/api test`도 최신 production output을 검증합니다. Root `test`는 성공 evidence가 아닙니다. Web에는 별도 test script가 없으며, 문서만 변경할 때 app build를 반복할 필요는 없습니다. 실제 validation 범위와 실행하지 못한 항목은 [`testing.md`](../docs/rules/testing.md)에 따라 PR에 기록합니다.
 
 Schema First 작성·생성·적용 순서는 [`database-development.md`](../docs/reference/database-development.md)를 따른다. `db:migrate:generate`는 현재 EntitySchema와 접속한 개발 DB를 비교해 compiled ESM 계약의 Migration source를 생성하며 DB를 변경하지 않는다.
 

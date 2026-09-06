@@ -26,7 +26,7 @@ last-reviewed: 2026-09-06
 - Stack: Node 24, NestJS 12, TypeScript
 - Entry: `src/main.ts` → `dist/main.js`
 - 필수 runtime 설정: `PORT`의 ASCII 십진 정수 `1`~`65535`
-- Test compile: `src`, `test` → `.test-dist`; 제품 endpoint 없이 test module의 loopback HTTP로 runtime을 검증한다.
+- Test compile: `test`가 `dist`를 먼저 clean build한 뒤 `src`, `test`를 `.test-dist`로 compile한다. 단독 실행에서도 runtime entry와 login test가 최신 production output을 사용한다. Test module의 loopback HTTP로 runtime을 검증한다.
 - Database: `src/database/schemas`의 typed EntitySchema가 ORM mapping과 Migration 생성의 시작점이다. 작성 순서·생성 한계는 [`database-development.md`](database-development.md)를 참고한다. `src/database/data-source.ts`의 compiled ESM DataSource와 `src/database/cli.ts`의 정제된 CLI가 `src/database/migrations`의 auth 초기 Migration을 명시 실행한다. 기본 `AppModule`은 DB module을 연결하지 않는다.
 - Auth 정의: `src/constants/auth.ts`의 provider·오류·nickname·refresh 값에서 `src/types/auth.ts`의 공통 타입을 파생한다. Identity session 오류는 `src/errors/identity-session.ts`가 관리한다.
 - Identity session: `src/auth/identity-session.ts`가 검증된 provider identity에서 회원·독립 session·최초 refresh를 생성한다. 호출자의 active READ COMMITTED manager에 합성하며 commit 성공 이후에만 token을 전달한다. 사용 경계와 실제 DB 검증은 [`database-development.md`](database-development.md)의 Identity session 절을 참고한다. 공통 로그인 exchange가 이 함수를 호출하며 실제 provider adapter는 별도 gate다.

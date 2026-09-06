@@ -59,6 +59,8 @@ Pre-parser는 media/encoding을 먼저 확인하고 실제 payload를 최대 16,
 
 Controller와 직접 호출 가능한 service는 각각 입력을 검증한다. Service 내부 callback은 한 번 parsing한 성공/code 또는 실패/error 입력을 claim 단계로 전달하며, claim이 성공한 결과만 provider code를 보유한 검증 입력으로 사용한다.
 
+Authorize와 Google/Discord callback handler는 GET만 service로 전달한다. Express가 GET handler로 넘기는 HEAD는 query 검증·ticket 소비·callback claim 전에 `400 LOGIN_REQUEST_INVALID`로 거절한다. HEAD의 응답 body는 비어 있고 cookie·redirect를 발급하지 않으며, 같은 ticket/state/cookie를 이후 GET에서 사용할 수 있다.
+
 모든 factory 응답은 no-store이며 browser 응답은 no-referrer와 active content/frame을 차단하는 CSP를 사용한다. 완료 HTML에는 등록 return URL의 자체 code만 둔다. Nest logger와 TypeORM raw logging을 끄고 오류 객체·URL·body·cookie·credential·identity를 출력하지 않는다. 별도 API process에서 stdout/stderr와 canary 요청을 검증한다. 실제 proxy/APM/OS history 수집 차단을 이 test로 대신하지 않는다.
 
 ## Validation
@@ -66,10 +68,12 @@ Controller와 직접 호출 가능한 service는 각각 입력을 검증한다. 
 표준 command는 repository root에서 실행한다.
 
 ```bash
-pnpm --filter @ldb/api run --sequential '/^(build|lint|test|typecheck)$/'
+pnpm --filter @ldb/api run --sequential '/^(lint|test|typecheck)$/'
 pnpm --filter @ldb/api test:database
 git diff --check
 ```
+
+`test`는 `build`를 먼저 실행하므로 dist가 없거나 오래된 상태에서도 최신 source를 검증한다.
 
 - `apps/api/test-support/login-primitives.test.mjs`: encoding·hash 입력 차이·정확한 field·callback parameter·registry·PKCE key/AAD.
 - `login-http.test.mjs`, `login-log-probe.mjs`: 실제 HTTP stream 상한·우선순위·HTML·redirect·정제 오류와 별도 process log sink.
@@ -77,6 +81,6 @@ git diff --check
 - `login-database.mjs`: 실제 상태 흐름·회원 쓰기 0·잘못된 proof·replay·기존 identity와 독립 session·서명 실패 rollback.
 - `login-concurrency.mjs`, `login-test-control.mjs`: 실제 PostgreSQL blocker를 관측한 ticket/exchange/identity 경합, provider 동안 lock 해제, OAuth/user lock 뒤 fresh time, 정확 만료, code TTL cap, callback timeout. 정확한 경계 equality는 실제 SQL/row lock과 함께 test에서 clock 결과를 고정하며, 잠금 대기의 만료는 실제 DB clock으로 별도 검증한다. 두 번째 waiter가 첫 waiter의 tuple lock 뒤에 대기하는 경우도 실제 blocker로 확인한다.
 - `login-failures.mjs`: 실제 consumed UPDATE 뒤 rollback, commit 전 실패/commit 성공 뒤 응답 유실, callback claim/완료 응답 유실, snapshot/key 변경과 비자격 요청의 무변경.
-- `login-http-integration.mjs`: Nest HTTP→실제 PostgreSQL→실제 JWT issuer의 전체 흐름. Commit 확인 전 HTTP 응답 없음과 commit 불명 뒤 token 미전달도 검증한다.
+- `login-http-integration.mjs`: Nest HTTP→실제 PostgreSQL→실제 JWT issuer의 전체 흐름. Commit 확인 전 HTTP 응답 없음과 commit 불명 뒤 token 미전달, HEAD 전후 요청 row 전체·provider 호출·회원/session 무변경과 후속 GET/exchange 성공도 검증한다.
 
 DB helper는 기존 Docker-only disposable harness에 연결된다. 기존 Migration/catalog·constraint·schema drift·데이터 보존·exact resource teardown도 함께 수행한다. 실제 실행은 native `linux/arm64/v8` PostgreSQL 18.6이며 `linux/amd64`, 실제 provider/credential, Desktop·browser/OS protocol·저장소, 운영 배포·clock 동기화·proxy/APM·cleanup은 미검증이다. 최종 command 결과와 AC별 evidence는 Issue #63 및 연결 Draft PR을 따른다.
