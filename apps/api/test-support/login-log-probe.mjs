@@ -34,19 +34,34 @@ try {
   const fail = () => {
     throw new Error('credential-canary provider-subject nickname SQL secret')
   }
-  app = await createLoginHttpApp({
-    create: fail,
-    authorize: fail,
-    exchange: () =>
-      successful ? { accessToken: 'credential-canary', refreshToken: 'credential-canary' } : fail(),
-    callback: () =>
-      successful
-        ? {
-            returnUrl: `ldb-test://login/complete?code=${opaque()}`,
-            cookie: '__Host-test=; Max-Age=0; Secure; HttpOnly; Path=/',
-          }
-        : fail(),
-  })
+  app = await createLoginHttpApp(
+    {
+      create: fail,
+      authorize: fail,
+      exchange: () =>
+        successful ? { accessToken: 'credential-canary', refreshToken: 'credential-canary' } : fail(),
+      callback: () =>
+        successful
+          ? {
+              returnUrl: `ldb-test://login/complete?code=${opaque()}`,
+              cookie: '__Host-test=; Max-Age=0; Secure; HttpOnly; Path=/',
+            }
+          : fail(),
+    },
+    {
+      refresh: () =>
+        successful
+          ? {
+              tokenType: 'Bearer',
+              accessToken: 'credential-canary',
+              accessTokenExpiresAt: '2026-09-06T00:15:00.000Z',
+              refreshToken: 'credential-canary',
+              sessionExpiresAt: '2026-10-06T00:00:00.000Z',
+            }
+          : fail(),
+      logout: () => (successful ? undefined : fail()),
+    },
+  )
   await app.listen(0, '127.0.0.1')
   const base = await app.getUrl()
   const callback = await fetch(
@@ -80,6 +95,44 @@ try {
     assert.equal(rejected.status, expected)
     assert.doesNotMatch(await rejected.text(), /credential-canary/)
   }
+  for (const path of ['/auth/refresh', '/auth/logout']) {
+    const failedSession = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: opaque() }),
+    })
+    assert.equal(failedSession.status, 500)
+    assert.doesNotMatch(
+      await failedSession.text(),
+      /credential-canary|provider-subject|nickname|SQL|secret/,
+    )
+    const malformedSession = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"refreshToken":"credential-canary",',
+    })
+    assert.equal(malformedSession.status, 400)
+    assert.doesNotMatch(await malformedSession.text(), /credential-canary|refreshToken/)
+    const invalidShape = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: opaque(), sessionId: 'credential-canary' }),
+    })
+    assert.equal(invalidShape.status, 400)
+    assert.doesNotMatch(await invalidShape.text(), /credential-canary|sessionId|refreshToken/)
+    for (const [media, expected] of [
+      ['application/json', 413],
+      ['text/plain', 415],
+    ]) {
+      const rejected = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': media },
+        body: 'credential-canary'.repeat(1100),
+      })
+      assert.equal(rejected.status, expected)
+      assert.doesNotMatch(await rejected.text(), /credential-canary/)
+    }
+  }
   successful = true
   const completion = await fetch(
     `${base}/auth/callback/google?state=${opaque()}&code=credential-canary`,
@@ -98,6 +151,20 @@ try {
   })
   assert.equal(tokens.status, 200)
   assert.equal((await tokens.json()).accessToken, 'credential-canary')
+  const refreshed = await fetch(`${base}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ refreshToken: opaque() }),
+  })
+  assert.equal(refreshed.status, 200)
+  assert.equal((await refreshed.json()).refreshToken, 'credential-canary')
+  const loggedOut = await fetch(`${base}/auth/logout`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ refreshToken: opaque() }),
+  })
+  assert.equal(loggedOut.status, 204)
+  assert.equal(await loggedOut.text(), '')
 } catch {
   failed = true
 } finally {

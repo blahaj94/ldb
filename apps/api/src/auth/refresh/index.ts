@@ -15,7 +15,7 @@ type RefreshCommitResult =
   | { status: 'issued'; tokens: RefreshTokens }
   | { status: 'reuse-revoked' }
 
-function tokenHash(rawToken: unknown): Buffer {
+export function refreshTokenHash(rawToken: unknown): Buffer {
   if (typeof rawToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(rawToken)) {
     throw new RefreshFailure(REFRESH_ERRORS.INVALID_REQUEST)
   }
@@ -31,7 +31,7 @@ async function rotate(
   rawToken: unknown,
   refreshBytes: (size: number) => Buffer,
 ): Promise<RefreshTokens> {
-  const presentedHash = tokenHash(rawToken)
+  const presentedHash = refreshTokenHash(rawToken)
 
   try {
     const committed = await deps.dataSource.transaction<RefreshCommitResult>(

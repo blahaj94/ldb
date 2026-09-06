@@ -5,6 +5,7 @@ import type { DataSource } from 'typeorm'
 import type { LoginRegistry } from '../auth/login/registry.js'
 import type { ProviderPkceKeys } from '../auth/login/crypto.js'
 import type { AuthLoginRequest } from '../database/schemas/auth-login-requests.js'
+import type { RefreshTokens } from '../auth/refresh/types.js'
 
 export type LoginErrorDefinition = typeof LOGIN_ERRORS[keyof typeof LOGIN_ERRORS]
 
@@ -116,4 +117,9 @@ export interface LoginHttpService {
     cookieHeader: string,
   ): Promise<CompletedLoginCallback>
   exchange(input: unknown): Promise<LoginTokens>
+}
+
+export interface SessionHttpService {
+  refresh(rawToken: string): Promise<RefreshTokens>
+  logout(rawToken: string): Promise<void>
 }

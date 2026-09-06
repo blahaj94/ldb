@@ -6,11 +6,17 @@ import type { Request, Response } from 'express'
 import { LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure, loginFailure } from '../../errors/login.js'
 import type { AuthProvider } from '../../types/auth.js'
-import type { LoginHttpService } from '../../types/login.js'
-import { parseCallback, parseCreation, parseExchange } from './input.js'
+import type { LoginHttpService, SessionHttpService } from '../../types/login.js'
+import { LogoutFailure } from '../logout/errors.js'
+import { logoutSession } from '../logout/index.js'
+import { RefreshFailure } from '../refresh/errors.js'
+import { rotateRefresh } from '../refresh/index.js'
+import type { RefreshDependencies } from '../refresh/types.js'
+import { parseCallback, parseCreation, parseExchange, parseRefreshToken } from './input.js'
 import { jsonError, loginJsonParser } from './json-parser.js'
 
 const LOGIN_SERVICE = Symbol('LOGIN_SERVICE')
+const SESSION_SERVICE = Symbol('SESSION_SERVICE')
 const htmlEntities: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -47,13 +53,18 @@ function readOriginalQuery(request: Request): URLSearchParams {
   return new URL(request.originalUrl, 'https://request.invalid').searchParams
 }
 
+function authHttpFailure(error: unknown): LoginFailure | RefreshFailure | LogoutFailure {
+  const isSessionFailure = error instanceof RefreshFailure || error instanceof LogoutFailure
+  return isSessionFailure ? error : loginFailure(error)
+}
+
 @Catch()
 class LoginHttpFilter implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp()
     const request = context.getRequest<Request>()
     const response = context.getResponse<Response>()
-    const failure = loginFailure(error)
+    const failure = authHttpFailure(error)
 
     if (response.headersSent) {
       response.end()
@@ -65,6 +76,25 @@ class LoginHttpFilter implements ExceptionFilter {
     } else {
       jsonError(response, failure)
     }
+  }
+}
+
+@Controller('auth')
+class SessionController {
+  constructor(@Inject(SESSION_SERVICE) private readonly service: SessionHttpService) {}
+
+  @Post('refresh')
+  async refresh(@Req() request: Request, @Res() response: Response): Promise<void> {
+    const rawToken = parseRefreshToken(request.body)
+    const tokens = await this.service.refresh(rawToken)
+    response.status(200).json(tokens)
+  }
+
+  @Post('logout')
+  async logout(@Req() request: Request, @Res() response: Response): Promise<void> {
+    const rawToken = parseRefreshToken(request.body)
+    await this.service.logout(rawToken)
+    response.status(204).end()
   }
 }
 
@@ -138,10 +168,31 @@ class LoginController {
 }
 
 /** 실제 server composition 또는 격리 test가 service를 주입한다. 환경변수 test mode는 없다. */
-export async function createLoginHttpApp(service: LoginHttpService): Promise<INestApplication> {
+export function createSessionHttpService(deps: RefreshDependencies): SessionHttpService {
+  return {
+    refresh: (rawToken) => rotateRefresh(deps, rawToken),
+    logout: (rawToken) => logoutSession(deps.dataSource, rawToken),
+  }
+}
+
+export async function createLoginHttpApp(
+  service: LoginHttpService,
+  sessionService?: SessionHttpService,
+): Promise<INestApplication> {
+  const hasSessionService = sessionService != null
+  const controllers = hasSessionService
+    ? [LoginController, SessionController]
+    : [LoginController]
+  const providers = hasSessionService
+    ? [
+        { provide: LOGIN_SERVICE, useValue: service },
+        { provide: SESSION_SERVICE, useValue: sessionService },
+      ]
+    : [{ provide: LOGIN_SERVICE, useValue: service }]
+
   @Module({
-    controllers: [LoginController],
-    providers: [{ provide: LOGIN_SERVICE, useValue: service }],
+    controllers,
+    providers,
   })
   class LoginHttpModule {}
 

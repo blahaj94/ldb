@@ -2,10 +2,23 @@ import type { NextFunction, Request, Response } from 'express'
 import { LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure } from '../../errors/login.js'
 import type { LoginErrorDefinition } from '../../types/login.js'
+import type { LogoutErrorDefinition } from '../logout/errors.js'
+import type { RefreshErrorDefinition } from '../refresh/errors.js'
+
+type AuthJsonErrorCatalogEntry =
+  | LoginErrorDefinition
+  | LogoutErrorDefinition
+  | RefreshErrorDefinition
+
+type AuthJsonErrorDefinition = Readonly<{
+  status: AuthJsonErrorCatalogEntry['status']
+  code: AuthJsonErrorCatalogEntry['code']
+  message: string
+}>
 
 export function jsonError(
   response: Response,
-  definition: Pick<LoginFailure, 'status' | 'code' | 'message'>,
+  definition: AuthJsonErrorDefinition,
 ): void {
   response.status(definition.status).json({
     error: { code: definition.code, message: definition.message },
@@ -26,7 +39,15 @@ function readHeaderValues(request: Request, name: string): string[] {
 /** Nest/Express parser를 끈 app에서 가장 먼저 실제 payload stream을 제한한다. */
 export function loginJsonParser(request: Request, response: Response, next: NextFunction): void {
   const path = request.path.toLowerCase().replace(/\/+$/, '')
-  if (request.method !== 'POST' || !['/auth/login-requests', '/auth/exchange'].includes(path)) {
+  const isPost = request.method === 'POST'
+  const isAuthJsonPath = [
+    '/auth/login-requests',
+    '/auth/exchange',
+    '/auth/refresh',
+    '/auth/logout',
+  ].includes(path)
+  const shouldParseAuthJson = isPost && isAuthJsonPath
+  if (!shouldParseAuthJson) {
     next()
     return
   }

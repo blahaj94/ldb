@@ -3,9 +3,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { request } from 'node:http'
 import process from 'node:process'
-import { createLoginHttpApp } from '../dist/auth/login/http.js'
-import { logoutSession } from '../dist/auth/logout/index.js'
-import { rotateRefresh } from '../dist/auth/refresh/index.js'
+import { createLoginHttpApp, createSessionHttpService } from '../dist/auth/login/http.js'
 import { opaque } from './login-fixtures.mjs'
 import { bounded, instrument, settled } from './login-test-control.mjs'
 import { digest, fixture, stored } from './refresh-fixtures.mjs'
@@ -63,15 +61,8 @@ function postChunks(base, path, chunks, headers = {}) {
   })
 }
 
-function sessionService(f) {
-  return {
-    refresh: (rawToken) => rotateRefresh(f.deps, rawToken),
-    logout: (rawToken) => logoutSession(f.deps.dataSource, rawToken),
-  }
-}
-
 async function withSessionApp(f, operation) {
-  const app = await createLoginHttpApp(loginService, sessionService(f))
+  const app = await createLoginHttpApp(loginService, createSessionHttpService(f.deps))
   await app.listen(0, '127.0.0.1')
   try {
     return await operation(await app.getUrl())
@@ -152,6 +143,28 @@ async function currentTokenLogout(source) {
     assert.equal(after.session.last_active_at.getTime(), before.session.last_active_at.getTime())
     assert.deepEqual(after.tokens, before.tokens)
   })
+}
+
+async function deletedSessionLogout(source) {
+  const f = await fixture(source)
+  const otherDevice = await fixture(source, f.identity)
+  const otherBefore = await stored(source, otherDevice.initial.session.id)
+  await source.query('DELETE FROM auth_sessions WHERE id=$1', [f.initial.session.id])
+
+  await withSessionApp(f, async (base) => {
+    const response = await post(base, '/auth/logout', {
+      refreshToken: f.initial.refreshToken,
+    })
+    assert.equal(response.status, 204)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    assert.equal(await response.text(), '')
+  })
+
+  assert.deepEqual(await stored(source, f.initial.session.id), {
+    session: undefined,
+    tokens: [],
+  })
+  assert.deepEqual(await stored(source, otherDevice.initial.session.id), otherBefore)
 }
 
 async function noResponseBeforeCommit(source, route) {
@@ -394,6 +407,7 @@ export async function assertSessionHttpIntegration(source, mark) {
   const cases = [
     ['normal refresh, consumed/repeated logout and other-device preservation', () => normalRefreshAndLogout(source)],
     ['current token logout preserves activity and refresh history', () => currentTokenLogout(source)],
+    ['physically deleted session logout is 204 and preserves another device', () => deletedSessionLogout(source)],
     ['refresh response waits for commit', () => noResponseBeforeCommit(source, '/auth/refresh')],
     ['logout response waits for commit', () => noResponseBeforeCommit(source, '/auth/logout')],
     ['refresh commit then logout with delayed 200 leaves final token invalid', () => refreshThenLogoutWithLateResponse(source)],
