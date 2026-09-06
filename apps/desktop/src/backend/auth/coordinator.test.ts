@@ -471,11 +471,17 @@ describe('Desktop AuthCoordinator login', () => {
 
     harness.clock.advance(600_000)
     await settle()
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      notice: 'LOGIN_EXPIRED',
+      login: null
+    })
+
     await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
 
     expect(coordinator.getSnapshot()).toMatchObject({
       phase: 'signedOut',
-      notice: 'LOGIN_EXPIRED',
+      notice: 'LOGIN_RESTART_REQUIRED',
       login: null
     })
     expect(harness.http.exchange).not.toHaveBeenCalled()

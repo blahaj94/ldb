@@ -726,6 +726,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     pending = value
     scheduleExpiry(value)
+    if (!isCurrentPending(value)) {
+      return Promise.resolve(success())
+    }
     const starting = publish({
       phase: 'startingLogin',
       login: pendingSnapshot(value),
@@ -771,6 +774,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     const value = pending
     if (value == null) {
+      const needsNewLogin = state.phase === 'signedOut'
+      if (needsNewLogin) {
+        publish({
+          phase: 'signedOut',
+          login: null,
+          user: null,
+          entry: null,
+          notice: 'LOGIN_RESTART_REQUIRED'
+        })
+      }
       return Promise.resolve()
     }
     const checkedAt = dependencies.clock.read()
