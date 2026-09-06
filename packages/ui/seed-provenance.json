@@ -25,9 +25,13 @@
           "reason": "Declaration이 pnpm의 private transitive 경로를 참조하지 않도록 공식 export type을 명시한다. Runtime 변경 없음.",
           "before": "export const DialogTrigger = ContentDialog.Trigger;",
           "after": "export const DialogTrigger: React.ForwardRefExoticComponent<DialogTriggerProps & React.RefAttributes<HTMLButtonElement>> = ContentDialog.Trigger;"
+        },
+        {
+          "reason": "Apache-2.0 §4(b) changed-file 고지",
+          "notice": "/*! LDB 수정: DialogTrigger의 동일 public type을 명시했습니다. Runtime 변경 없음. 상세: packages/ui/seed-provenance.json. */"
         }
       ],
-      "localSha256": "fc97f79b7eabb8e6984f526db1cd69491bd1b87158e0aab7759c7f628064ce25"
+      "localSha256": "6306e00a04ba6f059e1f8b39c360829f25f0b3ed9594cb57968c0519987449c6"
     },
     {
       "upstream": "docs/registry/react/ui/loading-indicator.tsx",
@@ -67,9 +71,13 @@
           "reason": "LDB composition: 공식 Layout 구조·Token·반응형 조건을 유지하며 중립 content slot만 연결한다.",
           "before": "              Footer\n",
           "after": "              {footer}\n"
+        },
+        {
+          "reason": "Apache-2.0 §4(b) changed-file 고지",
+          "notice": "/*! LDB 수정: 공식 Layout 구조와 시각 값을 유지하며 header/footer/children content slot을 연결했습니다. 상세: packages/ui/seed-provenance.json. */"
         }
       ],
-      "localSha256": "f2d449ea6e466de5b496346824de2b3e36be382f4956af5bec12b182b21b201d"
+      "localSha256": "dbe890312007920bea1642e3fd085d2f296442aa98e32f2d9ac5549c379a048a"
     }
   ],
   "snippetDependencies": {

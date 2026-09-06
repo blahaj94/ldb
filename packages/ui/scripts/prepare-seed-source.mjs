@@ -54,6 +54,19 @@ for (const file of provenance.files) {
     }
   }
 
+  const isModifiedSource = file.localChanges.length > 0
+  if (isModifiedSource) {
+    const summary = isDialog
+      ? 'DialogTrigger의 동일 public type을 명시했습니다. Runtime 변경 없음.'
+      : '공식 Layout 구조와 시각 값을 유지하며 header/footer/children content slot을 연결했습니다.'
+    const notice = `/*! LDB 수정: ${summary} 상세: packages/ui/seed-provenance.json. */`
+    const firstExport = localSource.indexOf('export ')
+    const isExportMissing = firstExport < 0
+    if (isExportMissing) throw new Error('Modified SEED source export is missing')
+    localSource = localSource.slice(0, firstExport) + notice + '\n' + localSource.slice(firstExport)
+    file.localChanges.push({ reason: 'Apache-2.0 §4(b) changed-file 고지', notice })
+  }
+
   await writeFile(new URL(file.local, root), localSource)
   file.localSha256 = createHash('sha256').update(localSource).digest('hex')
 }

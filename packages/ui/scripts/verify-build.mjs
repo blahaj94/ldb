@@ -13,6 +13,17 @@ const output = resolve(outputPath)
 const uiRoot = fileURLToPath(new URL('../', import.meta.url))
 const files = await readdir(output, { recursive: true })
 const graph = JSON.parse(await readFile(resolve(output, 'notices/bundle-modules.json'), 'utf8'))
+const javaScriptFiles = files.filter((file) => {
+  const isJavaScript = file.endsWith('.js')
+  return isJavaScript
+})
+for (const file of javaScriptFiles) {
+  const code = await readFile(resolve(output, file), 'utf8')
+  assert.ok(code.startsWith('/*! LDB modified SEED source:'), `Distributed modification notice: ${file}`)
+}
+const changes = await readFile(resolve(output, 'notices/LDB-MODIFICATIONS.txt'), 'utf8')
+assert.ok(changes.includes('DialogTrigger'))
+assert.ok(changes.includes('header/footer/children'))
 const cssFiles = files.filter((file) => {
   const isStylesheet = file.endsWith('.css')
   return isStylesheet
@@ -32,6 +43,8 @@ const foundationBytes = await readFile(resolve(uiRoot, provenance.foundation.loc
 assert.equal(createHash('sha256').update(foundationBytes).digest('hex'), provenance.foundation.localSha256)
 for (const source of provenance.files) {
   const bytes = await readFile(resolve(uiRoot, source.local))
+  const isModifiedSource = source.localChanges.length > 0
+  if (isModifiedSource) assert.ok(bytes.toString().includes('/*! LDB 수정:'))
   const hash = createHash('sha256').update(bytes).digest('hex')
   assert.equal(hash, source.localSha256 ?? source.sha256, source.local)
 }

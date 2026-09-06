@@ -2,6 +2,7 @@
 
 import { Box, Layout, Text, VStack } from "@seed-design/react";
 
+/*! LDB 수정: 공식 Layout 구조와 시각 값을 유지하며 header/footer/children content slot을 연결했습니다. 상세: packages/ui/seed-provenance.json. */
 export interface LayoutBlockProps {
   header?: string;
   children?: React.ReactNode;

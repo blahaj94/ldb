@@ -15,7 +15,30 @@ type BundleContext = {
 export function uiNotices() {
   return {
     name: 'ldb-ui-notices',
-    generateBundle(this: BundleContext) {
+    generateBundle(
+      this: BundleContext,
+      _options: unknown,
+      bundle: Record<string, { type: 'asset' | 'chunk'; code?: string }>
+    ) {
+      const provenance = JSON.parse(readFileSync(join(uiRoot, 'seed-provenance.json'), 'utf8'))
+      const changes: string[] = []
+      for (const source of provenance.files) {
+        const isModifiedSource = source.localChanges.length > 0
+        if (!isModifiedSource) continue
+        changes.push(`${source.local}:\n${JSON.stringify(source.localChanges, null, 2)}`)
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'notices/LDB-MODIFICATIONS.txt',
+        source: changes.join('\n\n')
+      })
+      for (const chunk of Object.values(bundle)) {
+        const isJavaScript = chunk.type === 'chunk'
+        const hasCode = typeof chunk.code === 'string'
+        const shouldMarkSource = isJavaScript && hasCode
+        if (!shouldMarkSource) continue
+        chunk.code = '/*! LDB modified SEED source: see notices/LDB-MODIFICATIONS.txt and notices/seed-provenance.json. */\n' + chunk.code
+      }
       for (const name of readdirSync(join(uiRoot, 'notices'))) {
         this.emitFile({
           type: 'asset',

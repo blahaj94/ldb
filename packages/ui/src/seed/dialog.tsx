@@ -6,6 +6,7 @@ import { forwardRef } from "react";
 import { ActionButton, type ActionButtonProps } from "./action-button";
 import type * as React from "react";
 
+/*! LDB 수정: DialogTrigger의 동일 public type을 명시했습니다. Runtime 변경 없음. 상세: packages/ui/seed-provenance.json. */
 export interface DialogRootProps extends ContentDialog.RootProps {
   /**
    * @default false
