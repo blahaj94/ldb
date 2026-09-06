@@ -20,6 +20,8 @@ last-reviewed: 2026-08-28
 
 Rule 변경이 필요한 작업은 승인된 Rule commit 이후 Red-Green 순서를 시작한다. Red commit은 PR branch에서 허용되지만 최종 PR head는 반드시 Green이어야 한다. Main에는 squash merge하므로 의도적으로 실패하는 중간 commit이 남지 않는다.
 
+병렬 작업도 이 선후 관계를 바꾸지 않는다. 같은 behavior의 Red test와 Green implementation을 서로 다른 Worker가 동시에 시작하지 않는다. Red가 기대한 이유로 실패하는 것을 확인하고 Issue 통합 branch에 반영한 뒤 Green을 시작한다. 서로 다른 base에서 작성한 Red와 Green은 최신 integration head에서 실패 원인과 최종 통과를 다시 검증한다.
+
 Test framework 또는 dependency가 없으면 임의로 추가하지 않는다. 새 dependency 승인을 먼저 요청한다.
 
 ## Required evidence
