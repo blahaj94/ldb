@@ -105,6 +105,7 @@ export function createGoogleProviderVerifier(
     if (registrations.size === 0) throw new Error()
 
     return async (input: ProviderVerificationInput | undefined) => {
+      let exchange: Promise<unknown> | undefined
       let response: unknown
       let idToken: string | undefined
       let accessToken: unknown
@@ -121,9 +122,10 @@ export function createGoogleProviderVerifier(
         decodeOpaque(input.providerVerifier)
 
         // Token 교환에는 저장 snapshot만 사용하고 active registry를 조회하지 않는다.
-        const exchange = exchangeGoogleCode(registration, input, resolveSecret, fetchGoogle)
+        exchange = exchangeGoogleCode(registration, input, resolveSecret, fetchGoogle)
         input = undefined
         response = await exchange
+        exchange = undefined
         if (!response || typeof response !== 'object' || !('id_token' in response) ||
           typeof response.id_token !== 'string' || response.id_token.length === 0) {
           throw new Error()
@@ -151,6 +153,7 @@ export function createGoogleProviderVerifier(
       } finally {
         // JS string zeroization/GC 시점을 보장하지 않으며 후속 DB 대기 전 소유 참조를 해제한다.
         input = undefined
+        exchange = undefined
         response = undefined
         idToken = undefined
         accessToken = undefined
