@@ -28,8 +28,10 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/kor": "^1.0.0",
+    "ky": "2.1.0",
     "tesseract.js": "^7.0.0",
-    "tesseract.js-core": "^7.0.0"
+    "tesseract.js-core": "^7.0.0",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
