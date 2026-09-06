@@ -145,7 +145,8 @@ export class PendingLogin {
   claim(code: string): ExchangeClaim {
     const codeFingerprint = fingerprint(code)
     const wasRejected = this.rejectedFingerprint === codeFingerprint
-    if (this.disposed || wasRejected) {
+    const shouldIgnore = this.disposed || wasRejected
+    if (shouldIgnore) {
       return { status: 'ignored' }
     }
     const isExchangeInFlight = this.stage === 'exchanging'
