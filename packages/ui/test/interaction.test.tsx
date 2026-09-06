@@ -176,7 +176,7 @@ describe('Dialog interaction', () => {
 
     expect(onOpenChange).toHaveBeenCalledOnce()
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
-    expect(document.activeElement).toBe(trigger)
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 
   it('closes through the accessible close button', async () => {

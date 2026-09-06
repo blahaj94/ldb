@@ -3,5 +3,9 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react()],
-  test: { environment: 'jsdom' }
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./test/setup.ts'],
+    server: { deps: { inline: [/@seed-design\//] } }
+  }
 })

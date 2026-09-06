@@ -6,3 +6,5 @@
 - TextField: AC는 label·value·invalid 연결이며 callback exactly-once를 요구하지 않는다. 공식 Snippet과 `@seed-design/react@2.4.1` 연결에서 하나의 native input event가 같은 `New name` 값을 2회 전달했다. 보고된 모든 값의 집합이 `New name` 하나인지와 부모가 대문자로 변환한 최종 controlled value `NEW NAME`을 검증한다. 값 누락·다른 값·controlled 연결 실패는 계속 실패한다. 호출 횟수 보장이나 duplicate 제거를 새 public contract로 만들지 않는다.
 
 이는 승인 behavior를 통과시키기 위한 runtime 변경이 아니라, 원래 test가 임의로 추가한 두 가정을 제거한 것이다. 실제 pointer/keyboard·Tab·Motion 검증은 jsdom과 분리한다.
+
+Dialog focus 복귀는 content unmount 다음 비동기 focus 단계가 끝날 때까지 같은 bounded wait로 확인한다. 즉시 assertion으로 발생한 timing failure를 수정했으며, 기대한 trigger focus 자체는 유지한다.

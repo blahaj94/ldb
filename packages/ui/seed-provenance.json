@@ -6,37 +6,49 @@
       "upstream": "docs/registry/react/ui/action-button.tsx",
       "local": "src/seed/action-button.tsx",
       "sha256": "e0ba59245e0db2edbeedd5952db621aa057f0f3a84f40aa0ff17b8dac90446f9",
-      "localChanges": []
+      "localChanges": [],
+      "localSha256": "e0ba59245e0db2edbeedd5952db621aa057f0f3a84f40aa0ff17b8dac90446f9"
     },
     {
       "upstream": "docs/registry/react/ui/text-field.tsx",
       "local": "src/seed/text-field.tsx",
       "sha256": "b7d87b1005376b41c7ab9569afd18b3ebe1b166a3b4dffca716b0b53dbede061",
-      "localChanges": []
+      "localChanges": [],
+      "localSha256": "b7d87b1005376b41c7ab9569afd18b3ebe1b166a3b4dffca716b0b53dbede061"
     },
     {
       "upstream": "docs/registry/react/ui/dialog.tsx",
       "local": "src/seed/dialog.tsx",
       "sha256": "bad9ac3c92cd22a227ecacdca291cfb7a2167ce79496be1733de67f112aee30f",
-      "localChanges": []
+      "localChanges": [
+        {
+          "reason": "Declaration이 pnpm의 private transitive 경로를 참조하지 않도록 공식 export type을 명시한다. Runtime 변경 없음.",
+          "before": "export const DialogTrigger = ContentDialog.Trigger;",
+          "after": "export const DialogTrigger: React.ForwardRefExoticComponent<DialogTriggerProps & React.RefAttributes<HTMLButtonElement>> = ContentDialog.Trigger;"
+        }
+      ],
+      "localSha256": "fc97f79b7eabb8e6984f526db1cd69491bd1b87158e0aab7759c7f628064ce25"
     },
     {
       "upstream": "docs/registry/react/ui/loading-indicator.tsx",
       "local": "src/seed/loading-indicator.tsx",
       "sha256": "12996227049d488643c4147d50a440572b5c374d8d3eb1c3441dba0249ba0cdf",
-      "localChanges": []
+      "localChanges": [],
+      "localSha256": "12996227049d488643c4147d50a440572b5c374d8d3eb1c3441dba0249ba0cdf"
     },
     {
       "upstream": "docs/registry/react/ui/progress-circle.tsx",
       "local": "src/seed/progress-circle.tsx",
       "sha256": "c56e2ae9a2f297cc8e29bf7d2041207dd91a72248547e12d701071d94a1038fc",
-      "localChanges": []
+      "localChanges": [],
+      "localSha256": "c56e2ae9a2f297cc8e29bf7d2041207dd91a72248547e12d701071d94a1038fc"
     },
     {
       "upstream": "docs/registry/react/block/layout-01.tsx",
       "local": "src/seed/layout-01.tsx",
       "sha256": "29809c81131a5b8bd6b3d729c095c48b7613184f43cb9a0dbc83273afb10e580",
-      "localChanges": []
+      "localChanges": [],
+      "localSha256": "29809c81131a5b8bd6b3d729c095c48b7613184f43cb9a0dbc83273afb10e580"
     }
   ],
   "snippetDependencies": {

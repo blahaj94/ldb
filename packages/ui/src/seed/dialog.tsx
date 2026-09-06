@@ -23,7 +23,7 @@ DialogRoot.displayName = "DialogRoot";
 
 export interface DialogTriggerProps extends ContentDialog.TriggerProps {}
 
-export const DialogTrigger = ContentDialog.Trigger;
+export const DialogTrigger: React.ForwardRefExoticComponent<DialogTriggerProps & React.RefAttributes<HTMLButtonElement>> = ContentDialog.Trigger;
 
 export interface DialogContentProps extends Omit<ContentDialog.ContentProps, "title"> {
   title?: React.ReactNode;

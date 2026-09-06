@@ -1,18 +1,31 @@
-# 공용 UI 준비와 interaction Red
+# 공용 SEED UI
 
-Issue #103의 준비 단계다. `src/index.tsx`는 import·render 실패와 interaction assertion 실패를 구분하기 위한 임시 native render scaffold이며, 아직 제품에서 소비하지 않는다. 승인된 공식 Snippet·CSS·Example 구현은 통합된 Red 확인 뒤 진행한다.
+`@ldb/ui`는 공식 SEED Snippet·Layout을 제공한다. 제품 data·event·platform 연결은 소비 app이 소유한다. 기준은 `docs/rules/design-system.md`와 `docs/architecture/overview.md`다.
 
-- `pnpm --filter @ldb/ui test`: React DOM과 기존 Vitest/jsdom으로 callback·상태·접근성 연결·Dialog focus를 검사한다. 현재 의도적인 Red다.
+## Public API와 CSS 책임
+
+ActionButton, TextField/TextFieldInput, DialogRoot/Trigger/Content/Body/Footer/Action과 공식 LayoutBlock을 제공한다. 공식 이름·semantic prop·ref를 유지하며 runtime wrapper 없이 public prop type에서 임의 style·className·시각 값 override를 제외한다. 내부 `src/seed` 경로는 package export가 아니다.
+
+SEED React `2.4.1`, CSS `2.7.0`, React/React DOM `19.2.8`은 peer이며 소비 환경과 같은 개발 사본을 사용한다. 공식 icon `1.26.0`은 dependency다. Library build는 SEED·React·React DOM·JSX runtime·icon을 external 처리하고 CSS를 출력하지 않는다. 각 browser entry가 `@seed-design/css/base.css`를 한 번 import하고 공식 Vite plugin `2.1.0`을 연결한다. Plugin의 기본 system Theme 초기화와 recipe가 가져오는 CSS를 그대로 사용한다.
+
+Loading은 disabled를 포함하지 않는 공식 상태다. Busy 작업에서 activation을 차단하려면 `loading`과 `disabled`를 함께 전달한다. TextField는 공식 grapheme callback의 `value`를 controlled state에 연결하며 callback 횟수 보장을 추가하지 않는다. Dialog의 기본 outside interaction 닫기 정책은 공식 Snippet의 `false`다.
+
+## Command
+
+- `pnpm --filter @ldb/ui build`: ESM bundle과 portable declaration 생성.
+- `pnpm --filter @ldb/ui test`: interaction·접근성 연결과 public type 검사. Layout 크기 관측만 jsdom에서 격리한다.
 - `pnpm --filter @ldb/ui typecheck`
 - `pnpm --filter @ldb/ui lint`
+- `node packages/ui/scripts/verify-build.mjs library packages/ui/dist`: external·CSS 없음·source/고지 hash 검증.
+- `node packages/ui/scripts/verify-build.mjs consumer <산출물 경로>`: 단일 React/SEED 사본·base.css 1회·stylesheet 1개·고지 확인.
 - `pnpm install --frozen-lockfile`
 
-`test/interaction.test.tsx`의 enabled/disabled native button 검사는 harness 기준점이다. Loading click 차단, TextField label/control·controlled value callback·invalid/설명/오류 연결, Dialog trigger·이름·초기 focus·Escape/닫기·focus 복귀 검사는 아직 없는 SEED interaction을 요구한다. Library mock이나 import 실패를 Red 근거로 사용하지 않는다. jsdom의 click/event 검사는 실제 pointer/keyboard·Tab/Shift+Tab·시각·Motion 검증을 대신하지 않는다.
+현재 package command는 repository root에서 실행한다. 소비 app과 Example은 별도 build·시각·keyboard·focus·Motion 검증이 필요하다. jsdom 결과를 실제 browser/Electron 또는 Tab 이동 성공으로 대신하지 않는다.
 
-`apps/desktop/src/frontend/src/App.test.tsx`는 renderer의 선택값·숫자 interval·등록 전 Start 차단·등록 후 Start/Stop callback을 보존하는 기존 behavior 기준점이다. Capture hook만 격리하며 IPC·media·OCR는 실행하지 않는다. Web counter 보존 검사는 소비 연결 전에 추가하고, 실제 Electron 검증은 별도 격리 환경에서 수행한다.
+## Source와 고지
 
-## 고정 기준과 미구현 범위
+`seed-provenance.json`이 upstream repository·고정 SHA·source path·원본/local hash·전이 Snippet·local diff를 기록한다. 기준 SHA는 `08b3600989597f4e9017731484a409685c08aa68`이다. ActionButton → LoadingIndicator → ProgressCircle과 Dialog → ActionButton, TextField/Dialog의 공식 icon 의존을 포함한다. `LayoutBlock`은 실제 registry id `layout-01`, source `docs/registry/react/block/layout-01.tsx`의 Header+Content+Footer 구조와 공식 반응형 조건을 그대로 제공한다.
 
-선택 기준은 `docs/rules/design-system.md`, peer·CSS 책임은 `docs/architecture/overview.md`를 따른다. Runtime dependency와 Vite plugin은 승인된 exact version으로 선언했으며 CLI는 설치하지 않았다. Peer와 개발 React 사본은 현재 소비 app의 lockfile에 맞춘 `19.2.8`이다.
+`node packages/ui/scripts/prepare-seed-source.mjs`는 고정 source hash를 확인한 뒤 Snippet을 생성한다. Source 직접 수정 대신 이 생성 script에서 필요한 변환을 관리한다. DialogTrigger의 동일한 public type을 명시하는 변환만 적용해 declaration의 pnpm private 경로 참조를 방지한다. Runtime 변경은 없다. TypeScript는 build-time `node` type을 명시하며 library declaration에는 Node runtime을 노출하지 않는다.
 
-공식 source 기준은 `daangn/seed-design` commit `08b3600989597f4e9017731484a409685c08aa68`이다. API 확인에 사용한 source는 `docs/registry/react/ui/action-button.tsx`, `docs/registry/react/ui/text-field.tsx`, `docs/registry/react/ui/dialog.tsx`다. 현재 upstream source를 복제한 file은 없으며, scaffold는 LDB 작성 코드다. Green에서는 의존 `loading-indicator`와 Layout block을 포함한 source provenance·변경 diff·각 LICENSE/NOTICE 보존, package external·build·Example·app CSS 소유 검증을 함께 추가한다. 설치된 package 자체의 고지는 package에 유지되며 배포 산출물 고지 검증은 아직 수행하지 않았다.
+`notices`는 SEED source와 별도 icon package의 LICENSE/NOTICE를 보존한다. `build/notices.ts`는 각 build에서 고지·source provenance와 실제 bundled dependency의 license/NOTICE·module 목록을 산출물 `notices`에 기록한다. Absolute filesystem path는 이 목록에 저장하지 않는다. 최초 Red와 정정한 두 기대값의 근거는 `test/contract-corrections.md`에 남겼다.

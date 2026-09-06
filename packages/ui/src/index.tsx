@@ -1,37 +1,38 @@
-import type { ActionButtonProps, ContentDialog, TextField as SeedTextField, UseTextFieldWithGraphemesParams } from '@seed-design/react'
-import type { ComponentProps, ReactNode } from 'react'
+import type { unstable_StyleProps as SeedStyleProps } from '@seed-design/react'
+import type { ComponentPropsWithRef, ComponentType, ElementType } from 'react'
+import { ActionButton as SeedActionButton } from './seed/action-button'
+import { TextField as SeedTextField, TextFieldInput as SeedTextFieldInput } from './seed/text-field'
+import {
+  DialogRoot as SeedDialogRoot,
+  DialogTrigger as SeedDialogTrigger,
+  DialogContent as SeedDialogContent,
+  DialogBody as SeedDialogBody,
+  DialogFooter as SeedDialogFooter,
+  DialogAction as SeedDialogAction
+} from './seed/dialog'
 
-// #103 Red용 render scaffold. Green 단계에서 고정된 공식 Snippet으로 교체한다.
-// Native event는 그대로 연결하며 SEED state/context/focus 동작은 아직 없다.
-export function ActionButton({ children, onClick, disabled, type }: ActionButtonProps) {
-  return <button type={type} disabled={disabled} onClick={onClick}>{children}</button>
-}
+// Runtime wrapper 없이 공식 Snippet을 제공하고 화면별 외형 override prop은 공개하지 않는다.
+type PublicProps<T extends ElementType> = Omit<ComponentPropsWithRef<T>, 'style' | 'className' | 'fontWeight' | keyof SeedStyleProps>
 
-type TextFieldProps = Omit<SeedTextField.RootProps, 'onValueChange'> & {
-  onValueChange?: UseTextFieldWithGraphemesParams['onValueChange']
-  label?: ReactNode
-  description?: ReactNode
-  errorMessage?: ReactNode
-}
+export type ActionButtonProps = PublicProps<typeof SeedActionButton>
+export const ActionButton: ComponentType<ActionButtonProps> = SeedActionButton
 
-export function TextField({ label, description, errorMessage, children }: TextFieldProps) {
-  return <div><label>{label}</label>{children}<p>{description}</p><p>{errorMessage}</p></div>
-}
+export type TextFieldProps = PublicProps<typeof SeedTextField>
+export const TextField: ComponentType<TextFieldProps> = SeedTextField
+export type TextFieldInputProps = PublicProps<typeof SeedTextFieldInput>
+export const TextFieldInput: ComponentType<TextFieldInputProps> = SeedTextFieldInput
 
-export function TextFieldInput(props: ComponentProps<'input'>) {
-  return <input {...props} />
-}
+export type DialogRootProps = PublicProps<typeof SeedDialogRoot>
+export const DialogRoot: ComponentType<DialogRootProps> = SeedDialogRoot
+export type DialogTriggerProps = PublicProps<typeof SeedDialogTrigger>
+export const DialogTrigger: ComponentType<DialogTriggerProps> = SeedDialogTrigger
+export type DialogContentProps = Omit<PublicProps<typeof SeedDialogContent>, 'layerIndex'>
+export const DialogContent: ComponentType<DialogContentProps> = SeedDialogContent
+export type DialogBodyProps = PublicProps<typeof SeedDialogBody>
+export const DialogBody: ComponentType<DialogBodyProps> = SeedDialogBody
+export type DialogFooterProps = PublicProps<typeof SeedDialogFooter>
+export const DialogFooter: ComponentType<DialogFooterProps> = SeedDialogFooter
+export type DialogActionProps = PublicProps<typeof SeedDialogAction>
+export const DialogAction: ComponentType<DialogActionProps> = SeedDialogAction
 
-export function DialogRoot({ children }: ContentDialog.RootProps) {
-  return <>{children}</>
-}
-
-export function DialogTrigger({ children }: ContentDialog.TriggerProps) {
-  return <button type="button">{children}</button>
-}
-
-type DialogContentProps = Omit<ContentDialog.ContentProps, 'title'> & { title?: ReactNode }
-
-export function DialogContent({ title, children }: DialogContentProps) {
-  return <div role="dialog"><h2>{title}</h2>{children}<button type="button" aria-label="닫기">닫기</button></div>
-}
+export { default as LayoutBlock } from './seed/layout-01'
