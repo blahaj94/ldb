@@ -42,7 +42,7 @@ Generated/vendor 코드는 산출물을 직접 고치지 않고 소유한 생성
 - 단순한 검사도 같은 방식을 따른다. 조건 길이나 비교 횟수로 변수화 여부를 매번 판단하지 않는다.
 - 여러 검증 의미를 담은 긴 조건 전체에 `isInvalid` 같은 이름 하나만 붙이는 것으로 끝내지 않는다. 응답 형태, field 존재, type, 빈 값 등 개별 결과가 보여야 한다.
 - 의미 하나가 여러 원시 조건을 필요로 할 수 있다. 예를 들어 null 여부와 object type은 함께 `isResponseObject`를 구성한다. 연산자 하나마다 변수를 만들지는 않는다.
-- 이미 의미가 분명한 boolean 값은 그대로 사용한다. 같은 값을 다른 이름으로 다시 포장할 필요는 없다. `!`는 부정 연산으로 사용할 수 있다.
+- 이미 의미가 분명하고 nullish가 섞이지 않은 boolean 값은 그대로 사용한다. 같은 값을 다른 이름으로 다시 포장할 필요는 없다. `!`는 boolean의 부정 연산으로 사용할 수 있다.
 - `is`, `has`, `can`, `should` 등 true의 의미를 드러내는 이름을 선택한다. 막연한 `check`, `verifyResponse`, `flag` 대신 대상과 판단을 적는다. 이름은 실제 검사보다 강한 보장을 암시하지 않는다.
 - `sameSnapshot`처럼 함수 이름이 판단을 설명해도 내부의 각 비교를 이름 붙이고 합성한다. Boolean을 반환하는 검증 함수나 callback도 동일하다.
 
@@ -78,6 +78,37 @@ function sameSnapshot(expected: Snapshot, actual: Snapshot): boolean {
 }
 ```
 
+### Nullish와 boolean 조건의 구분
+
+- JavaScript/TypeScript에서 결측은 `value == null`, 존재는 `value != null`로 확인한다. 이 비교는 `null`과 `undefined`를 함께 다루려는 의도를 명시한다.
+- Nonboolean 값의 `if (value)`, `!value`, `!!value`, `Boolean(value)`를 nullish 검사로 사용하지 않는다. `0`, `0n`, 빈 문자열, `false`, `NaN`의 유효성은 존재 여부와 별도로 판단한다.
+- `== null` / `!= null`은 nullish 검사를 위한 의도적인 loose equality 사용이다. 일반 비교에는 `===` / `!==`를 사용하고, null만 또는 undefined만 구분하는 계약에도 해당 값과 strict 비교한다.
+- Nullish가 섞이지 않은 boolean은 `if (isEnabled)`와 `!isEnabled`로 직접 읽을 수 있다. `boolean | null | undefined`는 `flag != null`의 존재 여부와 `flag === true` / `flag === false`의 값을 구분한다.
+- Nullish 검사 결과도 앞의 명명·합성 기준을 따른다. `const hasValue = value != null` 또는 `const isValueMissing = value == null`로 의미를 드러내고 해당 boolean을 분기·합성에 사용한다.
+- 존재와 내용 검사를 분리한다. 값이 존재한다는 사실만으로 문자열이 비어 있지 않거나 숫자가 유효한 범위라는 뜻은 아니다.
+- 기존 truthiness 검사를 기계적으로 교체하지 않는다. 부재 거절과 존재 허용의 극성, 빈 값까지 거절하던 기존 의미를 확인하고 필요한 검사를 보존한다.
+
+| 값 | `value == null` | `value != null` |
+| --- | --- | --- |
+| `null` | true | false |
+| `undefined` | true | false |
+| `0`, `0n` | false | true |
+| `''` | false | true |
+| `false` | false | true |
+| `NaN` | false | true |
+
+Nullable string의 존재와 빈 문자열을 구분하는 예시다. 빈 문자열을 허용하는 계약이라면 `hasText`만으로 존재를 판단한다.
+
+```ts
+function hasNonEmptyText(value: string | null | undefined): boolean {
+  const hasText = value != null
+  const isTextEmpty = hasText && value.length === 0
+  const isTextNonEmpty = hasText && !isTextEmpty
+
+  return isTextNonEmpty
+}
+```
+
 ## 3. 검사 의존성과 평가 시점을 보존
 
 - 존재·type 확인 뒤에만 가능한 property 접근을 미리 실행하지 않는다. 앞선 검사 결과로 다음 평가를 보호한다.
@@ -91,7 +122,7 @@ function sameSnapshot(expected: Snapshot, actual: Snapshot): boolean {
 ```ts
 function isInvalidTokenResponse(response: unknown): boolean {
   const isResponseObject =
-    response !== null && typeof response === 'object'
+    response != null && typeof response === 'object'
 
   const hasIdToken = isResponseObject && 'id_token' in response
   const idTokenField = hasIdToken ? response.id_token : undefined
@@ -152,8 +183,9 @@ if (isTokenResponseInvalid) {
 2. 개별 검사 결과를 debugger에서 볼 수 있고 최종 boolean이 그 결과들로 합성되는가?
 3. 단순 조건·검증 함수 내부·test라는 이유로 기준을 생략하지 않았는가?
 4. 실패를 판단한 위치가 적절한 오류를 선택하고 이미 분류된 오류가 보존되는가?
-5. Property 접근·type narrowing·평가 시점·side effect·민감 값 수명이 보존되는가?
-6. Helper와 주석이 책임·이유를 드러내며 불필요한 이동이나 중복 설명을 늘리지 않는가?
+5. Nullish 존재 여부와 boolean·빈 값·내용 검사를 구분하고 nonboolean truthiness를 피했는가?
+6. Property 접근·type narrowing·평가 시점·side effect·민감 값 수명이 보존되는가?
+7. Helper와 주석이 책임·이유를 드러내며 불필요한 이동이나 중복 설명을 늘리지 않는가?
 
 기준을 충족하지 못하면 위치·이유·더 작은 개선안을 review에 남긴다. 문법·library 계약에 따른 제한은 구체적인 근거로 기록한다. 별도의 승인 단계를 추가하지 않으며 변경 절차와 logic/context budget은 기존 Rule을 따른다.
 
