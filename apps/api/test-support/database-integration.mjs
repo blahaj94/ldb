@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import { assertIdentitySessions } from './identity-session.mjs'
+import { assertRefreshRotation } from './refresh-rotation.mjs'
+import { assertRefreshConcurrency } from './refresh-concurrency.mjs'
+import { assertRefreshFailures } from './refresh-failures.mjs'
 import { assertCommonLogin } from './login-database.mjs'
 import { assertLoginConcurrency } from './login-concurrency.mjs'
 import { assertLoginFailures } from './login-failures.mjs'
@@ -489,6 +492,16 @@ async function primaryScenario() {
       assertLoginHttpIntegration(source, (part) => (currentStage = `login HTTP ${part}`)),
     )
     process.stdout.write(`Login HTTP/database/JWT: ${httpFlows} flows\n`)
+    const refreshRotation = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertRefreshRotation(source, (part) => (currentStage = `refresh rotation ${part}`)),
+    )
+    const refreshConcurrency = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertRefreshConcurrency(source, (part) => (currentStage = `refresh concurrency ${part}`)),
+    )
+    const refreshFailures = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertRefreshFailures(source, (part) => (currentStage = `refresh failures ${part}`)),
+    )
+    process.stdout.write(`Refresh core: ${refreshRotation} rotation/history, ${refreshConcurrency} concurrency/TTL, ${refreshFailures} failure scenarios\n`)
     currentStage = 'migrated Nest lifecycle'
     await assertNestLifecycle(resources.configuration)
     checkSignal()

@@ -151,3 +151,7 @@ PostgreSQL의 fresh whole-second clock expression은 local SQL constant 하나�
 `assertUserInsertSql`은 refactor 전 `b40055c`의 raw INSERT를 독립 기준으로 고정하고 같은 QueryRunner에서 실제 실행된 user INSERT·parameter 대응을 검사한다. Identifier quoting·사용하지 않는 User alias·공백만 정규화하며 conflict target, DO NOTHING, RETURNING, clock expression과 parameter 순서는 그대로 비교한다. Raw 구현과 QueryBuilder 구현 각각에서 실제 PostgreSQL matrix가 통과했다. 회원 PK 충돌은 `pk_users`의 실제 오류 발생까지 관측하여 광역 conflict ignore로 바뀌지 않았음을 확인한다.
 
 Unit mock의 기존 SQL 정규식 검사는 위 실제 DB의 전체 SQL 비교로 옮겼고, mock은 QueryBuilder 호출 형태에 맞췄다. 신규/기존 회원·nickname·hash·잠금/시각 순서·오류 assertion은 유지한다.
+
+## Refresh transaction core
+
+`apps/api/src/auth/refresh/index.ts`에 refresh rotation·확인된 재사용 session 폐기를 commit까지 소유하는 내부 core가 구현됐다. 전용 unit·실제 PostgreSQL 검증과 후속 HTTP 연결 경계는 [`auth-refresh-development.md`](auth-refresh-development.md)를 참고한다. 이 검증은 `/auth/refresh` HTTP 또는 logout·cleanup·운영 연결 완료를 뜻하지 않는다.
