@@ -78,6 +78,75 @@ test("accepts an exact owner approval for Rule changes", () => {
   assert.equal(statusFor(report, "rule_approval"), "pass");
 });
 
+test("warns for root convention changes without approval", () => {
+  const report = buildPolicyReport(
+    createInput({
+      files: [{ filename: "convention.md", additions: 1, deletions: 0 }],
+      commits: [{ commit: { message: "docs: update convention" } }],
+    }),
+  );
+
+  assert.equal(statusFor(report, "rule_approval"), "warning");
+});
+
+test("accepts exact owner approval for root convention changes", () => {
+  const report = buildPolicyReport(
+    createInput({
+      files: [{ filename: "convention.md", additions: 1, deletions: 0 }],
+      commits: [{ commit: { message: "docs: update convention" } }],
+      comments: [{ body: "승인", user: { login: "blahaj94" } }],
+    }),
+  );
+
+  assert.equal(statusFor(report, "rule_approval"), "pass");
+});
+
+test("rejects non-owner approval for root convention changes", () => {
+  const report = buildPolicyReport(
+    createInput({
+      files: [{ filename: "convention.md", additions: 1, deletions: 0 }],
+      commits: [{ commit: { message: "docs: update convention" } }],
+      comments: [{ body: "승인", user: { login: "example-contributor" } }],
+    }),
+  );
+
+  assert.equal(statusFor(report, "rule_approval"), "warning");
+});
+
+test("rejects non-exact owner approval for root convention changes", () => {
+  const report = buildPolicyReport(
+    createInput({
+      files: [{ filename: "convention.md", additions: 1, deletions: 0 }],
+      commits: [{ commit: { message: "docs: update convention" } }],
+      comments: [{ body: "승인합니다", user: { login: "blahaj94" } }],
+    }),
+  );
+
+  assert.equal(statusFor(report, "rule_approval"), "warning");
+});
+
+test("does not classify nested convention lookalike paths as the root Rule", () => {
+  const report = buildPolicyReport(
+    createInput({
+      files: [{ filename: "docs/reference/convention.md", additions: 1, deletions: 0 }],
+      commits: [{ commit: { message: "docs: update a reference example" } }],
+    }),
+  );
+
+  assert.equal(statusFor(report, "rule_approval"), "skipped");
+});
+
+test("does not classify suffixed convention lookalike paths as the root Rule", () => {
+  const report = buildPolicyReport(
+    createInput({
+      files: [{ filename: "convention.md.example", additions: 1, deletions: 0 }],
+      commits: [{ commit: { message: "docs: update an example" } }],
+    }),
+  );
+
+  assert.equal(statusFor(report, "rule_approval"), "skipped");
+});
+
 test("warns when the approximate logic diff exceeds 300 lines", () => {
   const report = buildPolicyReport(
     createInput({
