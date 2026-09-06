@@ -74,6 +74,53 @@ describe('Desktop AuthCoordinator login', () => {
     )
   })
 
+  it.each(['discontinuous', 'expired', 'reversed'] as const)(
+    'beginLogin의 동기 expiry 검사에서 %s이면 만료 상태를 보존하고 다시 시작할 수 있다',
+    async (reason) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      const startedAt = harness.clock.read()
+      const isDiscontinuous = reason === 'discontinuous'
+      const isExpired = reason === 'expired'
+      const isReversed = reason === 'reversed'
+      const checkedAt = {
+        wallMs: startedAt.wallMs + (isExpired ? 600_000 : 0),
+        monotonicMs: startedAt.monotonicMs + (isExpired ? 600_000 : 0) - (isReversed ? 1 : 0),
+        discontinuous: isDiscontinuous
+      }
+      const readClock = vi.spyOn(harness.clock, 'read')
+      readClock.mockReturnValueOnce(startedAt).mockReturnValueOnce(checkedAt)
+
+      const result = await coordinator.beginLogin('google')
+
+      expect(result.snapshot).toMatchObject({
+        phase: 'signedOut',
+        login: null,
+        notice: 'LOGIN_EXPIRED'
+      })
+      expect(harness.http.createLoginRequest).not.toHaveBeenCalled()
+      expect(harness.browser.open).not.toHaveBeenCalled()
+      readClock.mockRestore()
+      await beginWaitingLogin(coordinator)
+    }
+  )
+
+  it('signedOut의 pending 없는 정상 복귀는 HTTP 없이 새 로그인 안내를 공개한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      login: null,
+      notice: 'LOGIN_RESTART_REQUIRED'
+    })
+    expect(harness.http.exchange).not.toHaveBeenCalled()
+  })
+
   it('독립 PKCE로 request를 만들고 검증한 browser URL을 한 번만 연다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
