@@ -1,11 +1,11 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: blocking
 scope: web-desktop-ui
 last-reviewed: 2026-09-06
 rationale: 공통 Token과 Component를 사용하면서도 화면별 선택과 override로 디자인이 달라지는 것을 방지한다.
-evidence: "Issue #86: https://github.com/blahaj94/ldb/issues/86"
+evidence: "PR #89 사용자 승인: https://github.com/blahaj94/ldb/pull/89#issuecomment-5559313457"
 exceptions: 화면별 공용 Component 외형 override의 예외는 허용하지 않는다.
 review-after: 최초 기준 화면과 공용 자산의 사용자 Review 완료 시
 ---
@@ -14,7 +14,7 @@ review-after: 최초 기준 화면과 공용 자산의 사용자 Review 완료 �
 
 ## 적용 상태와 범위
 
-이 document는 [Issue #86](https://github.com/blahaj94/ldb/issues/86)의 합의에서 공통 자산의 책임과 화면별 외형 override 금지를 정리한 Rule 제안이다. [Change Control](change-control.md)에 따른 Draft PR의 명시적인 `승인` comment 확인 전에는 구현 근거로 사용하지 않는다. `blocking`은 승인 후 위반을 Review에서 수정해야 한다는 뜻이며, 자동 검사 도입이나 검증 성공을 의미하지 않는다.
+이 document는 [Issue #86](https://github.com/blahaj94/ldb/issues/86)의 합의에 대한 [PR #89 사용자 승인](https://github.com/blahaj94/ldb/pull/89#issuecomment-5559313457)을 반영한 Rule이다. 공통 자산의 책임과 화면별 외형 override 금지가 승인 범위다. `blocking`은 위반을 Review에서 수정해야 한다는 뜻이며, 자동 검사 도입이나 검증 성공을 의미하지 않는다.
 
 승인 후 새로 만드는 UI와 수정하는 UI에 적용한다. 기존 화면의 전면 교체를 이 Rule의 승인만으로 착수하지 않는다. 기존 사용처에 영향을 주는 공용 자산 변경은 아래 변경·Review 절차를 따른다.
 
