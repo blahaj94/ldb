@@ -705,6 +705,50 @@ describe('Desktop AuthCoordinator login', () => {
     })
   })
 
+  it.each(['cancel', 'logout'] as const)(
+    'exchanging 동기 listener의 %s 뒤에는 exchange writer를 시작하지 않는다',
+    async (action) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      await beginWaitingLogin(coordinator)
+      const isLogout = action === 'logout'
+      const clearMarker = deferred<'confirmed'>()
+      if (isLogout) {
+        harness.store.establishWaits.push(clearMarker.promise)
+      }
+      const invalidations: ReturnType<typeof coordinator.logout>[] = []
+      const unsubscribe = coordinator.subscribe((snapshot) => {
+        const isExchanging = snapshot.phase === 'exchanging'
+        if (isExchanging) {
+          invalidations.push(isLogout ? coordinator.logout() : coordinator.cancelLogin(ATTEMPT_ID))
+        }
+      })
+
+      const exchange = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+      await settle()
+
+      expect(invalidations).toHaveLength(1)
+      expect(harness.http.exchange).not.toHaveBeenCalled()
+      expect(harness.store.establishTransition.mock.calls).toEqual(isLogout ? [['clear']] : [])
+      expect(harness.store.commitCredential).not.toHaveBeenCalled()
+      expect(harness.store.clearCredential).not.toHaveBeenCalled()
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: isLogout ? 'signingOut' : 'signedOut',
+        login: null,
+        notice: isLogout ? null : 'LOGIN_CANCELLED'
+      })
+
+      clearMarker.resolve('confirmed')
+      await Promise.all([exchange, ...invalidations])
+      expect(harness.store.clearCredential).toHaveBeenCalledTimes(isLogout ? 1 : 0)
+      expect(harness.http.exchange).not.toHaveBeenCalled()
+      expect(harness.store.inspection).toEqual({ status: 'empty' })
+      unsubscribe()
+      await beginWaitingLogin(coordinator)
+    }
+  )
+
   it('exchange 취소 뒤 늦은 token을 publish하지 않고 서버 폐기와 local clear를 끝낸다', async () => {
     const harness = createAuthHarness()
     const exchange = deferred<Awaited<ReturnType<typeof harness.http.value.exchange>>>()
@@ -1463,6 +1507,59 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     expect(harness.store.clearCredential).toHaveBeenCalledTimes(1)
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: null })
   })
+
+  it.each(['once', 'persistent'] as const)(
+    'signingOut의 %s listener가 logout에 재진입해도 같은 flight와 단일 정리를 공유한다',
+    async (listenerMode) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await restoreSignedIn(coordinator, harness)
+      harness.store.establishTransition.mockClear()
+      harness.store.removeTransition.mockClear()
+      const serverLogout = deferred<void>()
+      harness.http.logout.mockImplementationOnce(() => serverLogout.promise)
+      const reentrant: ReturnType<typeof coordinator.logout>[] = []
+      let signingOutCount = 0
+      const isPersistent = listenerMode === 'persistent'
+      const unsubscribe = coordinator.subscribe((snapshot) => {
+        const isSigningOut = snapshot.phase === 'signingOut'
+        if (!isSigningOut) {
+          return
+        }
+        signingOutCount += 1
+        const isFirstNotification = signingOutCount === 1
+        // Red에서 stack overflow 대신 반복 publication을 유한하게 관측한다.
+        const isWithinRecursionLimit = signingOutCount <= 8
+        const shouldJoin = (isPersistent || isFirstNotification) && isWithinRecursionLimit
+        if (shouldJoin) {
+          reentrant.push(coordinator.logout())
+        }
+      })
+
+      const logout = coordinator.logout()
+      expect(coordinator.getSnapshot().phase).toBe('signingOut')
+      await expect(coordinator.authorization()).resolves.toEqual({ status: 'unavailable' })
+      await expect(coordinator.beginLogin('google')).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'AUTH_BUSY' }
+      })
+      await settle()
+      serverLogout.resolve()
+      const results = await Promise.all([logout, ...reentrant])
+
+      expect(signingOutCount).toBe(1)
+      expect(reentrant).toHaveLength(1)
+      expect(reentrant[0]).toBe(logout)
+      expect(results[1]).toBe(results[0])
+      expect(harness.store.establishTransition.mock.calls).toEqual([['clear']])
+      expect(harness.http.logout).toHaveBeenCalledTimes(1)
+      expect(harness.store.clearCredential).toHaveBeenCalledTimes(1)
+      expect(harness.store.removeTransition).toHaveBeenCalledTimes(1)
+      expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: null })
+      unsubscribe()
+      await beginWaitingLogin(coordinator)
+    }
+  )
 
   it('동시 logout은 서버 요청과 결과를 공유하고 server/local 결과 우선순위를 지킨다', async () => {
     const harness = createAuthHarness()
