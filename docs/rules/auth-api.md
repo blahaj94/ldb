@@ -14,6 +14,8 @@ review-after: 최초 인증 integration validation 또는 client boundary 변경
 
 이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 승인된 contract는 현재 구현·검증 성공을 뜻하지 않는다. 사용자가 미결정 gate 유지와 구현 금지를 명시했으므로 후속 착수 지시 전에는 구현하지 않으며 [`change-control.md`](change-control.md)를 따른다. OAuth는 [`auth-oauth.md`](auth-oauth.md), token/session은 [`auth-session.md`](auth-session.md), 활동은 [`auth-activity.md`](auth-activity.md), schema는 [`auth-database.md`](auth-database.md), dependency·운영 gate는 [`auth-runtime.md`](auth-runtime.md)가 canonical contract다.
 
+탈퇴 전용 endpoint·statusToken 자격과 정제 오류는 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)가 canonical source다. 아래 기존 login/session/account endpoint와 별도 extension이며, shared pre-parser/no-store/log 규칙을 재사용하되 status/resume 자격을 일반 JWT 기능 권한으로 확대하지 않는다. 제품 endpoint 구현 완료나 기존 검증 AC 변경을 뜻하지 않는다.
+
 ## Client와 transport
 
 - Desktop은 public client이며 자체 `clientId`는 `"desktop"`만 허용한다. 등록 항목 선택값이지 인증 secret·정품 앱 증명·provider OAuth client ID가 아니다. Web/mobile client나 요청자가 제공하는 provider client ID를 추가하지 않는다.

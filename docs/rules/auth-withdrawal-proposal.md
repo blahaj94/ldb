@@ -1,32 +1,32 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: account withdrawal, identity races, deletion retention and recovery
 last-reviewed: 2026-09-06
 rationale: cascade 밖의 탈퇴 진행 상태와 삭제 보존을 하나의 승인 가능한 정책으로 연결한다.
-evidence: "Issue #69; 부모 Issue #37의 탈퇴 gate; Issue #39 Proposal Revision 2"
-exceptions: 사용자 승인 전 active Rule을 대체하지 않으며 제품 구현과 실제 외부/삭제/복원 실행을 허용하지 않는다.
-review-after: 사용자 정책 결정, 운영 저장소 선정 또는 최초 경합·복원 통합 검증 시
+evidence: "PR #72 D1–D5 사용자 승인: https://github.com/blahaj94/ldb/pull/72#issuecomment-5557976162 ; 사용자 merge: 9b7777313923b31dc78075e05b0cd5169016d6fd ; 설계 근거: Issue #69, Issue #39 Proposal Revision 2"
+exceptions: D1–D5는 승인됐으며 제품 구현·실제 외부/삭제/복원 실행은 별도 착수 지시와 환경 검증을 요구한다.
+review-after: 승인 정책 변경, 운영 저장소 선정 또는 최초 경합·복원 통합 검증 시
 ---
 
-# 탈퇴·삭제·재가입·복원 승인안
+# 탈퇴·삭제·재가입·복원 Contract
 
-**전체가 미승인 proposal이다.** [Design #69](https://github.com/blahaj94/ldb/issues/69)의 설계안 작성 결과이며 Rule 승인과 구현 검증은 별개다. [#39 최종 설계](https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691)와 현재 [DB](auth-database.md)·[OAuth](auth-oauth.md)·[runtime](auth-runtime.md) Rule의 미결정 gate를 구체화한다. 승인 전에는 현재 contract와 #68·refresh 작업의 AC를 유지한다. 이 문서는 제품 code·schema 실행물·운영 runbook이 아니다.
+이 문서는 [PR #72의 D1–D5 전체 사용자 승인](https://github.com/blahaj94/ldb/pull/72#issuecomment-5557976162) (2026-09-06T08:17:09Z)과 사용자 merge를 반영한 **active Rule**이다. [Design #69](https://github.com/blahaj94/ldb/issues/69)의 설계 작성·독립 review 결과를 승인했으며 제품 구현과 실제 환경 검증은 별개다. [#39 최종 설계](https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691)와 [DB](auth-database.md)·[OAuth](auth-oauth.md)·[runtime](auth-runtime.md)의 탈퇴 정책 gate를 구체화한다. 기존 로그인/refresh의 검증 AC를 소급 변경하지 않으며 탈퇴 extension의 구현·통합 검증은 별도 착수 범위다. 이 문서는 제품 code·schema 실행물·운영 runbook이 아니다.
 
-## 권장안과 사용자 결정
+## 승인된 선택과 근거
 
-권장안은 **새 재인증으로 확정한 탈퇴를 되돌리지 않고, revoke를 한 번 시도한 뒤 외부 결과와 구분하여 LDB 데이터를 삭제**하는 것이다. 동일 계정 확인 뒤 임시 차단하고, 복원 대상 밖 삭제 intent의 내구성 확보를 취소 불가 확정점으로 삼는다. 재가입은 완료 후 600초를 기다리고 새 로그인 요청으로만 허용한다. 삭제 결과는 별도 읽기 자격으로 24시간 조회한다. 삭제 회원 UUID는 복원 차단 목적만으로 한정 보관하고 provider identity는 짧은 경합 차단에만 쓴다.
+승인된 정책은 **새 재인증으로 확정한 탈퇴를 되돌리지 않고, revoke를 한 번 시도한 뒤 외부 결과와 구분하여 LDB 데이터를 삭제**하는 것이다. 동일 계정 확인 뒤 임시 차단하고, 복원 대상 밖 삭제 intent의 내구성 확보를 취소 불가 확정점으로 삼는다. 재가입은 완료 후 600초를 기다리고 새 로그인 요청으로만 허용한다. 삭제 결과는 별도 읽기 자격으로 24시간 조회한다. 삭제 회원 UUID는 복원 차단 목적만으로 한정 보관하고 provider identity는 짧은 경합 차단에만 쓴다.
 
-| 승인 항목 | 권장 선택·이유 | 선택하지 않은 대안과 영향 |
+| 승인 항목 | 승인된 선택·이유 | 선택하지 않은 대안과 영향 |
 | --- | --- | --- |
 | D1 탈퇴 확정/취소 | 최종 확인과 동일 계정의 새 OAuth round trip 뒤 임시 차단하고, 별도 journal의 durable intent를 확정점으로 한다. Provider session 재사용은 허용한다. 준비 중에는 결과 판정까지 취소를 유보하며 확정 뒤 취소 없다. 준비 전 취소/만료는 회원 유지. 경합의 단일 기준을 만든다. | 항상 비밀번호/추가 인증을 강제하는 대안은 provider별 보장과 계정 접근 상실 복구 정책이 필요하다. 삭제 유예/복구 UI도 별도 보관·권한 설계가 필요하다. |
 | D2 provider 실패 | 확정 뒤 revoke의 실패/불명도 로컬 삭제를 막지 않는다. 결과를 분리해 표시하고 삭제 뒤 자동/서버 revoke 재시도는 하지 않는다. Provider 장애가 회원 보관을 무기한 연장하지 않게 한다. | Revoke 확인 때까지 삭제 보류는 장애·계정 접근 상실 시 탈퇴를 끝내지 못한다. Token을 암호화 저장해 재시도하면 현재 비보관 정책·key·queue·보관기간을 추가로 바꿔야 한다. |
 | D3 재가입/진행 로그인 | 완료 후 600초 대기, 그 이후 생성한 요청만 새 UUID·nickname·session으로 가입. 기존/대기 중 OAuth로 자동 재가입하지 않는다. 기존 login TTL 600초에 맞춘 작은 차단 구간이다. | 즉시 새 요청 재가입은 가능하지만 이전 revoke의 지연 효력과 새 동의가 더 쉽게 경합한다. 장기 차단은 provider 식별 보관을 늘린다. 600초도 provider 효력 완료를 보장하지 않는다. |
-| D4 삭제 후 식별/조회 | 조회 자격은 생성부터 고정 86,400초, identity HMAC fence는 완료부터 최대 1,200초, 삭제 UUID journal은 아래 8일 정책. 재가입 계정에는 이전 결과를 연결하지 않는다. | 조회 자격 없음은 응답 유실 복구를 어렵게 한다. 장기 receipt·원문 subject tombstone은 불필요한 추적/보관을 늘린다. HMAC도 익명정보로 간주하지 않는다. 저장소 장애로 삭제 불가 시에는 기간 상한을 보장할 수 없는 격리 잔여와 복구 후 우선 삭제를 예외로 제안하며 별도 승인한다. |
+| D4 삭제 후 식별/조회 | 조회 자격은 생성부터 고정 86,400초, identity HMAC fence는 완료부터 최대 1,200초, 삭제 UUID journal은 아래 8일 정책. 재가입 계정에는 이전 결과를 연결하지 않는다. | 조회 자격 없음은 응답 유실 복구를 어렵게 한다. 장기 receipt·원문 subject tombstone은 불필요한 추적/보관을 늘린다. HMAC도 익명정보로 간주하지 않는다. 저장소 장애로 삭제 불가 시에는 기간 상한을 보장할 수 없는 격리 잔여와 복구 후 우선 삭제를 D4 장애 예외로 승인했다. |
 | D5 복원/백업 | 성공 dump 최대 7개와 snapshot 나이 7일 상한을 함께 적용한다. 별도 삭제 journal 없이는 복원 공개 금지. 복원 시 전 회원 session/refresh/OAuth·receipt 무효화와 JWT key 교체, 600초 신규 로그인 중단을 수용한다. | 성공본 개수만 제한하면 백업 실패 동안 오래된 개인정보가 무기한 남는다. 선택적 session 복원은 옛 credential과 삭제 경계를 재검증하는 복잡성을 추가한다. |
 
-D1–D5와 아래 수치/권한/한계를 Draft PR의 명시적인 `승인` comment로 결정해야 한다. 이 수치는 법적 보관기간을 주장하지 않는 제품·운영 제안이다. 일부 선택만 승인하면 의존 항목의 수정안을 먼저 검토한다. 설계 승인 뒤에도 공유 Rule/schema 후속 구현과 실제 환경 실행은 별도 착수 지시가 필요하다.
+D1–D5와 아래 수치/권한/한계는 위 명시적 승인으로 확정됐다. 이 수치는 법적 보관기간을 주장하지 않는 제품·운영 정책이다. 선택을 변경할 때는 의존 항목의 영향까지 포함해 다시 승인받는다. 정책 승인 뒤에도 공유 schema·기능의 후속 구현과 실제 환경 실행은 별도 착수 지시가 필요하다.
 
 ## 권한과 시간 기준
 
@@ -34,7 +34,7 @@ D1–D5와 아래 수치/권한/한계를 Draft PR의 명시적인 `승인` comm
 - 요청 생성은 유효 Access JWT와 존재·소유·활성·idle 미만료 user/session을 요구한다. 원 user UUID, 원 session UUID, provider, client/등록 snapshot을 서버가 결정한다. Client의 임의 subject/user ID·email·nickname은 삭제 대상 증명이 아니다.
 - 앱 main은 독립 32-byte CSPRNG `statusToken`을 canonical base64url 43자로 만들고 요청 UUID와 함께 전송한다. 서버는 strict decode한 32byte의 SHA-256만 저장한다. Request UUID 단독·JWT·refresh·새 재가입 계정·browser cookie는 이 자격을 대체하지 않는다. Raw 자격은 URL/renderer/로그에 넣지 않으며 main의 기존 보안 저장 경계에서 만료 또는 결과 확인 후 지운다. 구체적 IPC/OS 구현은 후속 범위다.
 - `statusToken`은 해당 요청의 정제 상태 읽기와 이미 검증된 preparing의 결과 판정과 확정된 로컬 작업 재개만 허용한다. User/profile 조회·탈퇴 확정·새 재인증·provider 호출·다른 요청 조작·재가입 자격으로 쓰지 않는다. 유출 시 해당 탈퇴 진행 사실은 노출될 수 있으므로 credential로 취급한다.
-- 동일 계정 재인증은 별도 purpose=`withdrawal`로 수행한다. 기존 OAuth의 provider snapshot, state+cookie, nonce, PKCE, identity 검증을 재사용하되 로그인 exchange code·user/session/refresh는 발급하지 않는다. 요청 목적·원 user/session·provider+subject·유효한 browser attempt를 모두 비교한다. 여기서 재인증은 새 code 교환·nonce/PKCE와 동일 identity 검증을 뜻한다. Provider session 재사용을 허용하며 비밀번호 재입력/최근 password 인증을 보장하지 않는다. Account chooser 표시만으로 통과시키지 않는다. 이 보장 수준도 D1 승인 대상이다.
+- 동일 계정 재인증은 별도 purpose=`withdrawal`로 수행한다. 기존 OAuth의 provider snapshot, state+cookie, nonce, PKCE, identity 검증을 재사용하되 로그인 exchange code·user/session/refresh는 발급하지 않는다. 요청 목적·원 user/session·provider+subject·유효한 browser attempt를 모두 비교한다. 여기서 재인증은 새 code 교환·nonce/PKCE와 동일 identity 검증을 뜻한다. Provider session 재사용을 허용하며 비밀번호 재입력/최근 password 인증을 보장하지 않는다. Account chooser 표시만으로 통과시키지 않는다. 이 보장 수준은 D1에서 승인됐다.
 - 최종 확인 화면은 취소 불가 시점, 해당 provider grant 전체에 줄 영향, revoke 미확인이어도 LDB 삭제 진행, 재가입 대기, receipt 만료를 안내한다. `confirmation="delete_account"` 제출 후 시작한 재인증이 일치해야 확정할 수 있다. Login 요청을 withdrawal로 전환하거나 callback alone으로 새 삭제 요청을 만들 수 없다.
 
 ## 상태 전이와 원자 경계
@@ -85,12 +85,12 @@ Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction loc
 | Refresh 또는 계정 기능이 preparing 전에 lock/commit | 기존 승인 결과가 먼저 완료될 수 있음. 이후 deleting을 확인한 refresh·GET/PATCH는 401, 기존 refresh 전체는 최종 cascade. Admission만 먼저 완료된 계정 기능은 기능 단계에서 lifecycle 재확인해 결과/변경 0. |
 | 탈퇴 preparing 후 refresh·계정 기능 | user.lifecycle 검사에서 401, 새 token·조회·nickname 변경 없음. 탈퇴/status/revoke는 session 활동이 아님. |
 | Logout·refresh reuse·session cleanup | 기존 session별 의미를 유지. Preparing 진입 전에 원 session이 끝나면 준비 실패. Preparing 이후 logout/만료는 journal 판정을 취소하지 않으며 durable intent가 있으면 삭제, 부재를 확정한 복구는 미확정 종결. |
-| 검색과 deleting/삭제 | 기존 residual 정책 유지: 유효 JWT의 검색은 exp까지 가능, session-only 활동을 먼저 기록할 수 있지만 삭제가 cascade함. 검색으로 user/session 재생성 없음. 이 제안은 JWT 즉시 검색 차단을 약속하지 않음. |
+| 검색과 deleting/삭제 | 기존 residual 정책 유지: 유효 JWT의 검색은 exp까지 가능, session-only 활동을 먼저 기록할 수 있지만 삭제가 cascade함. 검색으로 user/session 재생성 없음. 이 정책은 JWT 즉시 검색 차단을 약속하지 않음. |
 | 신규 재가입 후 늦은 기존 executor/receipt | 삭제 대상 oldUserId만 사용하고 provider identity로 현재 user를 찾아 DELETE하지 않음. 새 user와 session 보존, 서버 revoke 재시도 없음. |
 
 ## 최소 state/schema/API 변경
 
-아래는 승인 대상 논리 schema이며 EntitySchema/SQL/Migration을 추가하지 않는다. 새 dependency는 제안하지 않는다. Index·CHECK·Migration은 후속에서 이 상태별 null·단일성·잠금 의미를 검증해야 하며 새로운 보관 field를 임의로 늘릴 수 없다.
+아래는 승인된 논리 schema이며 EntitySchema/SQL/Migration 구현 완료를 뜻하지 않는다. 새 dependency는 포함하지 않는다. Index·CHECK·Migration은 후속에서 이 상태별 null·단일성·잠금 의미를 검증해야 하며 새로운 보관 field를 임의로 늘릴 수 없다.
 
 | 대상 | 최소 변경 |
 | --- | --- |
@@ -100,7 +100,7 @@ Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction loc
 | `auth_identity_fences` (신규) | HMAC digest+key version PK, rejoin_not_before, expires_at. FK/원 user UUID/원문 subject 없음. 필요한 기존 user identity는 삭제 transaction 메모리에서만 HMAC으로 변환. |
 | 복원 control store (신규 운영 state) | 삭제 journal의 단조 sequence·deletionId unique·oldUserId·preparedAt/acceptedAt·완료 확인 시각, durable writer generation·현재/직전 checkpoint, 승인된 backup inventory의 snapshot 시각/만료/폐기 evidence·journal checkpoint. Auth DB 복원으로 되감지 않는 독립 volume/권한 경계. 현재 writer generation만 append 가능하며 복원/owner 교체 때 atomic fencing한다. Provider identity·token·receipt hash 없음. |
 
-| API proposal | 자격·정제 결과 |
+| 승인된 탈퇴 API | 자격·정제 결과 |
 | --- | --- |
 | `POST /auth/withdrawal-requests` | JWT + `{requestId,clientId:"desktop",statusToken,confirmation:"delete_account"}`. 201 `{requestId,status,reauthUrl,reauthExpiresAt,receiptExpiresAt}`. 같은 key의 재전송 200, 소비된 launch URL은 재발급하지 않음. |
 | `POST /auth/withdrawal-requests/:id/reauthorize` | 원 user/session JWT + `{statusToken}`. `awaiting_reauth`의 남은 TTL에 새 일회용 browser attempt를 201로 제공. 이전 attempt는 무효화. Preparing 이후 거절. |
@@ -127,11 +127,11 @@ Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction loc
 | Checkpoint·writer generation | 현재/직전 sequence·generation·무결성 증거, 개인정보 field 없음 | 현재 값은 서비스 수명 동안 단일 값으로 유지·교체 시 직전 값만 최대 8일 뒤 삭제. 서비스 폐기 때 전부 삭제. UUID를 포함한 옛 segment 사본 보관은 금지. |
 | 운영 log | 개인식별 없는 route template·결과 code·duration·집계 | 7일 뒤 삭제. User/deletion/request UUID·HMAC·receipt·provider raw 응답은 기록하지 않음. 장애 잔여는 D4 예외에 포함. |
 
-**D4 장애 예외도 승인 대상이다.** 저장소 접근/폐기·key 파괴가 불가능하면 물리 잔여에는 유한 상한을 보장하지 못한다. 이를 숨긴 24시간/8일 삭제 보장을 약속하는 대신, 확인 가능한 삭제까지 필요한 최소 데이터만 격리하고 접근 권한 TTL은 그대로 종료하며 unsafe 복원/계정 재활성화를 금지하는 안을 권장한다. 24시간 초과부터 책임자가 사용자에게 미완료/지연을 안내하고 매 24시간 incident 상태·복구/폐기 경로를 재검토한다. 복구 시 다른 서비스 재개보다 삭제·compaction을 먼저 실행하고 완료 evidence 뒤 잔여를 없앤다. 조사·사업 목적의 임의 hold는 없다. 이 예외를 수용하지 않으면 독립 crypto-erasure/매체 파괴로 hard limit을 충족하는 운영 수단을 먼저 설계·승인할 때까지 탈퇴 운영을 출시할 수 없다. 실제 매체 접근 자체가 불가능한 경우에는 그 대안도 검증 없이 삭제 성공으로 표시할 수 없다.
+**D4 장애 예외는 승인됐다.** 저장소 접근/폐기·key 파괴가 불가능하면 물리 잔여에는 유한 상한을 보장하지 못한다. 이를 숨긴 24시간/8일 삭제 보장을 약속하는 대신, 확인 가능한 삭제까지 필요한 최소 데이터만 격리하고 접근 권한 TTL은 그대로 종료하며 unsafe 복원/계정 재활성화를 금지하는 정책이다. 24시간 초과부터 책임자가 사용자에게 미완료/지연을 안내하고 매 24시간 incident 상태·복구/폐기 경로를 재검토한다. 복구 시 다른 서비스 재개보다 삭제·compaction을 먼저 실행하고 완료 evidence 뒤 잔여를 없앤다. 조사·사업 목적의 임의 hold는 없다. 이 예외를 수용하지 않는 정책으로 변경하려면 독립 crypto-erasure/매체 파괴로 hard limit을 충족하는 운영 수단을 먼저 설계·승인해야 하며 그 전 해당 정책으로 탈퇴 운영을 출시할 수 없다. 실제 매체 접근 자체가 불가능한 경우에는 그 대안도 검증 없이 삭제 성공으로 표시할 수 없다.
 
 ## 삭제를 보존하는 복원 기준과 순서
 
-복원 허용 조건은 **복원할 사본의 신뢰할 snapshot 시각/lineage + 현재 시점까지 누락 없는 별도 삭제 journal + 외부 checkpoint의 rollback 불가 확인**이다. 단순 checksum은 변조/되감기 부재 증명이 아니다. Journal과 최신 checkpoint/inventory는 auth DB의 restore 범위 밖에 있어야 하며 실제 저장 매체·내구성 ack·권한·동시 장애 범위는 운영 gate다. 같은 DB dump 안 tombstone만 복원하거나 최신 journal을 잃은 채 “백업 성공”만 확인해 공개하지 않는다. 외부 백업 서비스 도입은 이 제안에 포함하지 않는다.
+복원 허용 조건은 **복원할 사본의 신뢰할 snapshot 시각/lineage + 현재 시점까지 누락 없는 별도 삭제 journal + 외부 checkpoint의 rollback 불가 확인**이다. 단순 checksum은 변조/되감기 부재 증명이 아니다. Journal과 최신 checkpoint/inventory는 auth DB의 restore 범위 밖에 있어야 하며 실제 저장 매체·내구성 ack·권한·동시 장애 범위는 운영 gate다. 같은 DB dump 안 tombstone만 복원하거나 최신 journal을 잃은 채 “백업 성공”만 확인해 공개하지 않는다. 외부 백업 서비스 도입은 승인 범위에 포함하지 않는다.
 
 1. 유지보수 gate로 API ingress·background executor·callback·exchange·refresh·account 쓰기와 기존 process를 멈춘다. Control store의 writer generation을 먼저 바꿔 이전 executor의 append를 fence하고 journal을 최종 대조한다. Preparing/accepted/완료를 durable intent로 판정한다. Primary에서만 preparing이었고 최종 journal에 없으면 미확정 실패이며 복원 user를 탈퇴 완료로 오표시하지 않는다. Journal 최신성/old writer 차단을 증명할 수 없으면 복원을 시작하지 않는다.
 2. 별도 DB에 나이 7일 미만인 승인 snapshot만 복원한다. 전체 journal checkpoint/연속성·pending intent와 backup lineage를 확인한다. 누락·복제본 미등록·clock 불명·journal/storage 손실은 fail closed이며 임의로 옛 DB를 공개하지 않는다.
@@ -145,7 +145,7 @@ Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction loc
 
 ## 기존 contract 변경점·후속 연결점·환경 gate
 
-| 현재 기준 | 이 proposal 승인 시 필요한 후속 변경 |
+| 기본 contract | 승인된 탈퇴 extension과 후속 구현 경계 |
 | --- | --- |
 | [auth-database.md](auth-database.md): 4개 auth table, cascade와 삭제 gate | lifecycle·withdrawal/fence·복원 journal 도입, identity lock 선행·상태별 null/unique·cleanup·Migration matrix 갱신. 기존 4-table 검증을 지금 실패 처리하지 않음. |
 | [auth-oauth.md](auth-oauth.md): login-only, callback 10초, token 비보관·탈퇴 원칙 | 별도 withdrawal purpose·새 OAuth round trip·같은 계정 확인·추가 revoke deadline, 실패/불명에도 삭제하는 선택. Login callback retry/TTL은 유지. |
@@ -153,17 +153,17 @@ Lock 순서는 **자기 OAuth 또는 withdrawal row → identity transaction loc
 | [desktop-auth.md](desktop-auth.md)·[desktop-auth-lifecycle.md](desktop-auth-lifecycle.md) | 기존 login의 memory-only pending·status/polling 없음은 유지. Withdrawal 전용 main 보관 statusToken·정제 IPC/state·재시작 결과 조회를 추가하는 별도 확장. 아래 최소 연결안을 후속 Rule에 조율해 반영. |
 | [auth-runtime.md](auth-runtime.md), #37/#39 백업 방향 | 개수 외 7일 age cap·별도 control store·복원 gate·전원 logout. 실제 topology·durability·clock·retention 실행·운영 key 절차는 여전히 미확인. |
 
-현재 관련 구현 위치는 `apps/api/src/auth/login/callback.ts`, `apps/api/src/auth/login/exchange.ts`, `apps/api/src/auth/identity-session.ts`, `apps/api/src/database/schemas/`, `apps/api/src/database/migrations/`다. 이번에는 이 파일을 변경하지 않는다. 기존 code/config에는 deleting/withdrawal/fence가 없으며 이는 알려진 미구현 gate이고 승인 contract 위반으로 보지 않는다.
+후속 구현의 연결 위치는 `apps/api/src/auth/login/callback.ts`, `apps/api/src/auth/login/exchange.ts`, `apps/api/src/auth/identity-session.ts`, `apps/api/src/database/schemas/`, `apps/api/src/database/migrations/`다. 이 Rule 반영은 해당 제품 파일의 변경·구현 완료를 뜻하지 않는다. 기존 로그인/refresh 기반과 deleting/withdrawal/fence의 별도 구현 착수·통합 gate를 구분하며, 탈퇴 extension이 해당 기존 작업에 구현됐다고 가정하지 않는다.
 
-Desktop 최소 연결안은 main이 withdrawal requestId/statusToken/receipt deadline만 기존 암호화 저장 경계에 별도로 보관하고 renderer에는 정제 phase/result만 보내는 것이다. 서버 등록 browser HTML은 “앱으로 돌아가 상태 확인”을 안내하며 신규 deep-link credential을 추가하지 않는다. 자동 polling 없이 사용자 상태 확인 gesture와 재시작 시 1회 status 조회만 허용한다. Preparing/deleting 진입을 확인하면 기존 local auth/capture를 정리하고 receipt만 남기며, 확인 실패는 완료로 처리하지 않는다. Local delete 실패는 기존 storageBlocked 경계다. Receipt 만료/완료 확인 때 저장물을 제거하고 원 user나 재가입 계정에 다시 묶지 않는다. 새 feature IPC 이름·sender 검증·OS 실행은 후속 승인 Rule/구현 범위이며 일반 로그인 설계를 다시 만들지 않는다.
+승인된 Desktop 최소 연결은 main이 withdrawal requestId/statusToken/receipt deadline만 기존 암호화 저장 경계에 별도로 보관하고 renderer에는 정제 phase/result만 보내는 것이다. 서버 등록 browser HTML은 “앱으로 돌아가 상태 확인”을 안내하며 신규 deep-link credential을 추가하지 않는다. 자동 polling 없이 사용자 상태 확인 gesture와 재시작 시 1회 status 조회만 허용한다. Preparing/deleting 진입을 확인하면 기존 local auth/capture를 정리하고 receipt만 남기며, 확인 실패는 완료로 처리하지 않는다. Local delete 실패는 기존 storageBlocked 경계다. Receipt 만료/완료 확인 때 저장물을 제거하고 원 user나 재가입 계정에 다시 묶지 않는다. 새 feature IPC 이름·sender 검증·OS 실행은 후속 승인 Rule/구현 범위이며 일반 로그인 설계를 다시 만들지 않는다.
 
-후속 순서는 (1) D1–D5 승인과 기존 Rule/`docs/README.md` 소유 조율, (2) 승인된 공유 schema·admission/정리/복원 state를 별도 bounded 작업으로 구현, (3) 재인증/revoke·탈퇴 API와 Desktop 완료 조회 연결, (4) 경합·부분 실패·복원 통합 검증이다. 여기서 새 Issue나 Worker를 자동 배정하지 않는다. Google #68/refresh는 현재 승인 contract로 독립 검증하고 이 proposal로 AC를 즉시 바꾸지 않는다.
+D1–D5 승인은 완료됐으며 관련 Rule과 `docs/README.md`는 이 canonical 문서로 연결한다. 후속은 승인된 공유 schema·admission/정리/복원 state 구현 → 재인증/revoke·탈퇴 API와 Desktop 완료 조회 연결 → 경합·부분 실패·복원 통합 검증 순서다. 각 단계는 별도 bounded 범위와 착수 지시를 확인하며 이 Rule로 새 Issue나 Worker를 자동 배정하지 않는다. 기존 Google/login/refresh 작업의 AC를 소급 변경하지 않는다.
 
-운영 미결정 gate는 provider별 실제 callback/client 등록·동일 계정 재인증과 취소의 UI 검증·revoke 응답/권한·project grant 공유 영향, Discord PKCE gate, control store의 auth DB와 독립된 내구성/rollback 감지·권한, 모든 사본 inventory·암호화/폐기, single-writer/clock·24시간 장애 대응 책임자, 실제 재인증/복원 E2E와 platform이다. 환경이 없다는 사실과 정책을 아직 승인하지 않았다는 사실을 구분한다. 실제 credential·provider 호출·삭제·복원은 이번에 하지 않는다.
+운영 미결정 gate는 provider별 실제 callback/client 등록·동일 계정 재인증과 취소의 UI 검증·revoke 응답/권한·project grant 공유 영향, Discord PKCE gate, control store의 auth DB와 독립된 내구성/rollback 감지·권한, 모든 사본 inventory·암호화/폐기, single-writer/clock·24시간 장애 대응 책임자, 실제 재인증/복원 E2E와 platform이다. 위 정책 승인을 환경 확보/실행 검증 완료로 해석하지 않는다. 실제 credential·provider 호출·삭제·복원은 별도 허가된 운영 범위에서만 수행한다.
 
 ## Validation matrix — 설계 검토와 후속 실행 구분
 
-각 행의 기대 결과를 문서와 독립 review로 검토한다. 이번 문서 검증은 link/구조/diff scope/whitespace다. 아래 runtime·DB·provider·restore case는 승인 후 구현 검증 항목이며 지금 test/build 실행이나 성공을 요구하지 않는다.
+각 행의 기대 결과는 설계 문서와 독립 review로 검토한 승인 기준이다. 문서 검증은 link/구조/diff scope/whitespace를 확인한다. 아래 runtime·DB·provider·restore case는 별도 착수한 후속 구현 검증 항목이며 Rule 승인이나 문서 정합화의 test/build 성공 evidence로 취급하지 않는다.
 
 | Case | 기대 결과/확인 invariant |
 | --- | --- |

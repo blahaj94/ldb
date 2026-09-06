@@ -111,4 +111,4 @@ Capture component는 signedIn home에서 mount한다. 로그인 이탈 시 unmou
 
 권장안은 main 단독 소유 + feature IPC + memory-only pending/access + 암호화 refresh 보관 + 등록 private protocol + 최소 welcome/home이다. Renderer token 보관은 bridge 노출면을 늘리고, provider embedded login은 승인된 외부 browser 경계와 다르므로 채택하지 않는다. 저장/protocol의 실질 대안 비교는 platform 문서에 둔다.
 
-이 flow에 필수인 서버 정책 변경은 없다. Browser 취소를 앱에 즉시 push하는 기능, 서버 pending 취소/status endpoint, code/refresh 응답 유실의 idempotent 재전달, onboarding 완료 저장, 계정 연결은 현 API에 없다. 필요해지면 별도 서버 Rule 결정으로 제시한다. 이번 설계는 polling·error URL parameter·refresh grace를 몰래 추가하지 않는다.
+이 flow에 필수인 서버 정책 변경은 없다. Browser 취소를 앱에 즉시 push하는 기능, 서버 pending 취소/status endpoint, code/refresh 응답 유실의 idempotent 재전달, onboarding 완료 저장, 계정 연결은 현 API에 없다. 필요해지면 별도 서버 Rule 결정으로 제시한다. 이 로그인 설계는 polling·error URL parameter·refresh grace를 추가하지 않는다. [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 withdrawal 전용 status/resume·main-owned receipt·재시작 1회/사용자 gesture 조회는 별도로 승인된 확장이다. 기존 login pending의 memory-only/재시작 복구 없음과 혼합하지 않으며 구체적 feature IPC·UI/OS 구현과 검증은 후속 범위다.

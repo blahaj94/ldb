@@ -72,7 +72,7 @@ Cancel/provider 실패/만료/crash는 성공이 아니다. Provider code는 재
 
 로그인 직후나 기기 logout에 provider revoke를 자동 실행하지 않는다. 폐기와 grant revoke는 다르고 revoke는 다른 grant/token에도 영향을 줄 수 있다. Provider 설정에서 동의 철회가 발생해도 자체 JWT/session 자동 폐기를 추정하지 않는다. 자체 idle/logout/reuse 정책을 유지하고 다음 소셜 로그인에서 다시 provider 검증하는 정책이 승인됐다. 즉각 연동 폐기는 별도 event/계정 정책 대안이다.
 
-연결 해제 endpoint/UI는 범위 밖이다. 탈퇴의 재인증→동일 계정 확인→새 token revoke→DB 삭제 원칙은 별도 설계 근거이며 삭제 상태·동시 로그인·백업 복원 gate를 해결하기 전 구현 authority가 없다.
+일반 연결 해제 endpoint/UI는 이 로그인 범위 밖이다. 탈퇴의 purpose-bound 재인증·동일 계정 확인·preparing/durable intent 확정·revoke 결과와 로컬 삭제 분리·진행 login 차단은 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 D1–D5를 따른다. Login callback의 기존 TTL/deadline·자동 retry 0과 구분되는 탈퇴 extension이며, token 비보관은 유지하고 별도 구현 착수·provider 환경/경합 검증을 요구한다.
 
 ## 근거의 범위
 
