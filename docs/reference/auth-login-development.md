@@ -48,6 +48,7 @@ Authorization URL의 Google `openid profile`, Discord `identify`, 독립 S256은
 
 - 요청 생성은 transient row만 쓴다. Launch는 hash로 row를 잠가 한 번 소비하고 browser cookie·state·Google nonce·암호화 provider proof를 연결한다.
 - Callback은 browser/provider/TTL을 확인해 `processing`을 commit한 뒤 외부 verifier를 호출한다. Provider 처리가 멈춘 동안 별도 connection에서 해당 row의 `FOR UPDATE NOWAIT`가 성공한다. Claim commit 지연을 포함한 단일 10초 deadline으로 제한하며 늦은 결과는 무시한다.
+- Provider 검증의 `finally`에서 claim이 보유한 raw provider code와 복호화한 verifier 참조를 함께 해제한다. 성공 저장 또는 실패 정리의 후속 DB 대기 전에 수행하며 JS string의 즉각 zeroization이나 GC 시점은 보장하지 않는다.
 - 검증 완료 시각을 먼저 고정해 code TTL이 이후 row lock 대기로 연장되지 않게 한다. Exchange-ready commit에서는 더 이상 필요 없는 browser/provider proof도 정리하고 앱 proof·subject·code hash·deadline만 남긴다.
 - Exchange는 OAuth row→user→새 session→refresh 순서의 하나의 transaction을 사용한다. User/identity uniqueness 대기 및 JWT 준비 뒤에도 fresh DB 정수 초로 TTL을 재확인한다. TTL을 넘으면 준비한 회원/session 쓰기를 rollback하고 별도 짧은 transaction에서 만료 row를 정리한다.
 - `createIdentitySession`과 JWT issuer의 반환은 commit 전 임시 값이다. Authorize·callback claim/완료·exchange는 `DataSource.transaction`의 commit·release 완료 뒤 각 함수에서 명시적인 결과를 확인한다. 성공 결과만 다음 단계 또는 HTTP에 전달하고, `rejected`는 요청 정리를 commit한 뒤 오류를 던진다. Transaction 안에서 던진 오류는 DB 쓰기를 rollback한다. 요청 생성과 별도 실패 정리는 단순 transaction 오류를 정제하는 `loginTransaction`을 사용한다. Commit 결과 불명은 정제된 503이며 response/token cache, 자동 retry, 재전달 grace가 없다. 실제 commit됐다면 replay는 400이다.
@@ -77,7 +78,7 @@ git diff --check
 
 - `apps/api/test-support/login-primitives.test.mjs`: encoding·hash 입력 차이·정확한 field·callback parameter·registry·PKCE key/AAD.
 - `login-http.test.mjs`, `login-log-probe.mjs`: 실제 HTTP stream 상한·우선순위·HTML·redirect·정제 오류와 별도 process log sink.
-- `login-state.test.mjs`: commit 결과 불명 뒤 만료 processing/active read의 terminal 정리 regression.
+- `login-state.test.mjs`: commit 결과 불명 뒤 만료 processing/active read의 terminal 정리, provider 검증 성공·예외·잘못된 identity·timeout 뒤 DB 대기 전 claim의 code/verifier 참조 해제 regression. Transaction test double에서 claim 결과를 관측하고 후속 transaction을 보류하며, timeout은 test timer로 구동한다.
 - `login-database.mjs`: 실제 상태 흐름·회원 쓰기 0·잘못된 proof·replay·기존 identity와 독립 session·서명 실패 rollback.
 - `login-concurrency.mjs`, `login-test-control.mjs`: 실제 PostgreSQL blocker를 관측한 ticket/exchange/identity 경합, provider 동안 lock 해제, OAuth/user lock 뒤 fresh time, 정확 만료, code TTL cap, callback timeout. 정확한 경계 equality는 실제 SQL/row lock과 함께 test에서 clock 결과를 고정하며, 잠금 대기의 만료는 실제 DB clock으로 별도 검증한다. 두 번째 waiter가 첫 waiter의 tuple lock 뒤에 대기하는 경우도 실제 blocker로 확인한다.
 - `login-failures.mjs`: 실제 consumed UPDATE 뒤 rollback, commit 전 실패/commit 성공 뒤 응답 유실, callback claim/완료 응답 유실, snapshot/key 변경과 비자격 요청의 무변경.
