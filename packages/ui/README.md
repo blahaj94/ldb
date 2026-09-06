@@ -30,7 +30,7 @@ Loading은 disabled를 포함하지 않는 공식 상태다. Busy 작업에서 a
 
 `node packages/ui/scripts/prepare-seed-source.mjs`는 고정 source hash를 확인한 뒤 Snippet을 생성한다. Source 직접 수정 대신 이 생성 script에서 필요한 변환을 관리한다. DialogTrigger의 동일한 public type을 명시해 declaration의 pnpm private 경로 참조를 방지하고 LayoutBlock content slot을 연결하는 변환을 적용한다. Interaction과 시각 값은 변경하지 않는다. TypeScript는 build-time `node` type을 명시하며 library declaration에는 Node runtime을 노출하지 않는다.
 
-`notices`는 SEED source와 별도 icon package의 LICENSE/NOTICE를 보존한다. `build/notices.ts`는 각 build에서 고지·source provenance와 bundle 입력 graph(미사용 입력 포함)의 dependency license/NOTICE·module 목록을 산출물 `notices`에 기록한다. 수정 source 자체와 해당 declaration에 LDB changed-file 고지를 넣고, 모든 JS bundle의 banner와 `notices/LDB-MODIFICATIONS.txt`에도 변경 내역을 보존한다. Absolute filesystem path는 이 목록에 저장하지 않는다. 최초 Red와 정정한 두 기대값의 근거는 `test/contract-corrections.md`에 남겼다.
+`notices`는 SEED source와 별도 icon package의 LICENSE/NOTICE를 보존한다. `build/notices.ts`는 각 build에서 고지·source provenance와 bundle 입력 graph(미사용 입력 포함)의 dependency license/NOTICE·module 목록을 산출물 `notices`에 기록한다. 수정 source 자체와 해당 declaration에 LDB changed-file 고지를 넣고, `notices/bundle-files.json`에 기록된 생성 JS bundle의 banner와 `notices/LDB-MODIFICATIONS.txt`에도 변경 내역을 보존한다. Absolute filesystem path는 이 목록에 저장하지 않는다. 최초 Red와 정정한 두 기대값의 근거는 `test/contract-corrections.md`에 남겼다.
 
 ## 소비 entry와 실제 UI 확인
 
@@ -44,3 +44,5 @@ Browser에서는 `dev:examples`와 `preview:examples`, Web의 `dev`·`preview`�
 - `pnpm --filter @ldb/desktop ui:fixture example dark`
 
 두 번째 인자는 `system`, `light`, `dark`이며 fixture process의 Theme만 변경한다. 제품 main/preload/auth는 로드하지 않는다. Source 목록과 선택은 synthetic bridge이며 native media API는 거절 stub으로 교체한다. Stub 설치 확인 전 window를 보이지 않고 실패 시 종료하며 fallback하지 않는다. Start는 `UI fixture: media capture blocked.` 상태로 callback 진입만 확인하고 stream·OCR를 실행하지 않는다. 실제 capture 성공이나 OS permission 검증은 이 evidence의 범위가 아니다. Desktop App component test와 fixture 검증의 경계를 구분한다.
+
+Changed-file 검사는 생성 bundle 목록을 대상으로 한다. Desktop의 기존 OCR worker처럼 수정하지 않고 복사하는 third-party asset에 LDB 수정 고지를 임의로 붙이지 않는다.

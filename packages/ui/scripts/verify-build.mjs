@@ -13,10 +13,8 @@ const output = resolve(outputPath)
 const uiRoot = fileURLToPath(new URL('../', import.meta.url))
 const files = await readdir(output, { recursive: true })
 const graph = JSON.parse(await readFile(resolve(output, 'notices/bundle-modules.json'), 'utf8'))
-const javaScriptFiles = files.filter((file) => {
-  const isJavaScript = file.endsWith('.js')
-  return isJavaScript
-})
+const javaScriptFiles = JSON.parse(await readFile(resolve(output, 'notices/bundle-files.json'), 'utf8'))
+assert.ok(javaScriptFiles.length > 0, 'Generated JS bundle list must not be empty')
 for (const file of javaScriptFiles) {
   const code = await readFile(resolve(output, file), 'utf8')
   assert.ok(code.startsWith('/*! LDB modified SEED source:'), `Distributed modification notice: ${file}`)

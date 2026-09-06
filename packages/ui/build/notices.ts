@@ -32,13 +32,20 @@ export function uiNotices() {
         fileName: 'notices/LDB-MODIFICATIONS.txt',
         source: changes.join('\n\n')
       })
-      for (const chunk of Object.values(bundle)) {
+      const generatedJavaScriptFiles: string[] = []
+      for (const [fileName, chunk] of Object.entries(bundle)) {
         const isJavaScript = chunk.type === 'chunk'
         const hasCode = typeof chunk.code === 'string'
         const shouldMarkSource = isJavaScript && hasCode
         if (!shouldMarkSource) continue
+        generatedJavaScriptFiles.push(fileName)
         chunk.code = '/*! LDB modified SEED source: see notices/LDB-MODIFICATIONS.txt and notices/seed-provenance.json. */\n' + chunk.code
       }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'notices/bundle-files.json',
+        source: JSON.stringify(generatedJavaScriptFiles, null, 2)
+      })
       for (const name of readdirSync(join(uiRoot, 'notices'))) {
         this.emitFile({
           type: 'asset',
