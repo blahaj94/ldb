@@ -830,6 +830,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       entry: null,
       notice: null
     })
+    if (!isCurrentPending(value)) {
+      return Promise.resolve()
+    }
     const exchange = exchangeLogin(value, requestId, parsed.code)
     value.exchangePromise = exchange
     const writer = exchange.then(() => undefined)
@@ -1288,7 +1291,12 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return Promise.resolve(success())
     }
 
-    const operation = performLogout()
+    let resolveLogout!: (result: AuthCommandResult) => void
+    let rejectLogout!: (reason: unknown) => void
+    const operation = new Promise<AuthCommandResult>((resolve, reject) => {
+      resolveLogout = resolve
+      rejectLogout = reject
+    })
     logoutFlight = operation
     const clearLogout = (): void => {
       if (logoutFlight === operation) {
@@ -1296,6 +1304,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
     }
     void operation.then(clearLogout, clearLogout)
+    void performLogout().then(resolveLogout, rejectLogout)
     return operation
   }
 
