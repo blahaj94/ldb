@@ -29,7 +29,7 @@ last-reviewed: 2026-09-06
 | `apps/api/src/auth/login/crypto.ts` | Canonical 32-byte proof/code, S256, decoded-byte hash, provider PKCE 암호화 |
 | `apps/api/src/auth/login/registry.ts` | 설정 검증·복제·불변 snapshot과 historical version 조회 |
 | `apps/api/src/auth/login/input.ts` | JSON field/domain 및 OAuth callback parameter 검증 |
-| `apps/api/src/auth/login/state.ts` | READ COMMITTED transaction, fresh DB clock, terminal 정리, cookie binding |
+| `apps/api/src/auth/login/state.ts` | 단순 READ COMMITTED transaction 오류 정제, fresh DB clock, 명시적 실패 정리, cookie binding |
 | `apps/api/src/auth/login/start.ts` | 요청 생성·launch ticket 단일 소비·authorization redirect 준비 |
 | `apps/api/src/auth/login/callback.ts` | Callback claim·외부 검증 deadline·검증 결과와 exchange-ready commit |
 | `apps/api/src/auth/login/exchange.ts` | Proof/TTL 재검증·기존 identity-session/JWT 합성 |
@@ -50,12 +50,14 @@ Authorization URL의 Google `openid profile`, Discord `identify`, 독립 S256은
 - Callback은 browser/provider/TTL을 확인해 `processing`을 commit한 뒤 외부 verifier를 호출한다. Provider 처리가 멈춘 동안 별도 connection에서 해당 row의 `FOR UPDATE NOWAIT`가 성공한다. Claim commit 지연을 포함한 단일 10초 deadline으로 제한하며 늦은 결과는 무시한다.
 - 검증 완료 시각을 먼저 고정해 code TTL이 이후 row lock 대기로 연장되지 않게 한다. Exchange-ready commit에서는 더 이상 필요 없는 browser/provider proof도 정리하고 앱 proof·subject·code hash·deadline만 남긴다.
 - Exchange는 OAuth row→user→새 session→refresh 순서의 하나의 transaction을 사용한다. User/identity uniqueness 대기 및 JWT 준비 뒤에도 fresh DB 정수 초로 TTL을 재확인한다. TTL을 넘으면 준비한 회원/session 쓰기를 rollback하고 별도 짧은 transaction에서 만료 row를 정리한다.
-- `createIdentitySession`과 JWT issuer의 반환은 commit 전 임시 값이다. Exchange는 `DataSource.transaction`의 commit·release 완료 뒤 같은 함수에서 `ExchangeCommitResult`를 확인한다. `issued`는 token을 반환하고, `rejected`는 요청 정리를 commit한 뒤 오류를 던진다. Transaction 안에서 던진 오류는 DB 쓰기를 rollback한다. 요청 생성·callback은 기존 `loginTransaction` 경계를 사용한다. Commit 결과 불명은 정제된 503이며 response/token cache, 자동 retry, 재전달 grace가 없다. 실제 commit됐다면 replay는 400이다.
+- `createIdentitySession`과 JWT issuer의 반환은 commit 전 임시 값이다. Authorize·callback claim/완료·exchange는 `DataSource.transaction`의 commit·release 완료 뒤 각 함수에서 명시적인 결과를 확인한다. 성공 결과만 다음 단계 또는 HTTP에 전달하고, `rejected`는 요청 정리를 commit한 뒤 오류를 던진다. Transaction 안에서 던진 오류는 DB 쓰기를 rollback한다. 요청 생성과 별도 실패 정리는 단순 transaction 오류를 정제하는 `loginTransaction`을 사용한다. Commit 결과 불명은 정제된 503이며 response/token cache, 자동 retry, 재전달 grace가 없다. 실제 commit됐다면 replay는 400이다.
 - 취소·provider 실패·유효한 만료 read는 terminal commit에서 민감 field를 null 처리한다. Crash/DB 장애 뒤 남은 row의 물리 삭제는 별도 cleanup/운영 범위다. Cleanup 미구현이 TTL 뒤 교환을 허용하지 않는다.
 
 ## HTTP·노출 검증
 
 Pre-parser는 media/encoding을 먼저 확인하고 실제 payload를 최대 16,384 byte만 buffer한다. Chunked body의 종료를 기다리지 않고 초과 시 413과 connection close를 반환한다. 전체 body가 상한 이하면 strict UTF-8·JSON·정확한 field를 검증한다. 선언된 Content-Length 초과는 조기 거절하고, 상충한 Content-Length/Transfer-Encoding 같은 HTTP framing 오류는 Node의 선행 거절로 구분한다. Framing 밖 bytes를 제품 JSON body로 재해석하지 않는다.
+
+Controller와 직접 호출 가능한 service는 각각 입력을 검증한다. Service 내부 callback은 한 번 parsing한 성공/code 또는 실패/error 입력을 claim 단계로 전달하며, claim이 성공한 결과만 provider code를 보유한 검증 입력으로 사용한다.
 
 모든 factory 응답은 no-store이며 browser 응답은 no-referrer와 active content/frame을 차단하는 CSP를 사용한다. 완료 HTML에는 등록 return URL의 자체 code만 둔다. Nest logger와 TypeORM raw logging을 끄고 오류 객체·URL·body·cookie·credential·identity를 출력하지 않는다. 별도 API process에서 stdout/stderr와 canary 요청을 검증한다. 실제 proxy/APM/OS history 수집 차단을 이 test로 대신하지 않는다.
 
