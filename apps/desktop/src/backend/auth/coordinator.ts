@@ -146,7 +146,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     state = next
     const current = snapshot()
     for (const listener of listeners) {
-      listener(current)
+      try {
+        listener(current)
+      } catch {
+        // Snapshot consumer 실패가 main의 credential state 전이를 되돌리지 않게 한다.
+      }
     }
     return current
   }
@@ -400,7 +404,10 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return true
     }
     if (inspection.status === 'recovery-required') {
-      const cleared = await clearLocal()
+      let cleared = false
+      await startWriter(async () => {
+        cleared = await clearLocal()
+      })
       if (!isCurrentPending(value)) {
         return false
       }
@@ -819,9 +826,15 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
   }
 
-  async function restoreReadyCredential(refreshToken: string): Promise<void> {
+  async function restoreReadyCredential(
+    refreshToken: string,
+    operationGeneration: number
+  ): Promise<void> {
+    const isCurrent = generation === operationGeneration
+    if (!isCurrent) {
+      return
+    }
     knownRefreshToken = refreshToken
-    const operationGeneration = generation
     await startWriter(async () => {
       await rotateCredential(refreshToken, operationGeneration)
     })
@@ -831,12 +844,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
   }
 
-  async function restoreFromStore(): Promise<AuthSnapshot> {
+  async function restoreFromStore(operationGeneration: number): Promise<AuthSnapshot> {
     let inspection
     try {
       inspection = await dependencies.store.inspect()
     } catch {
       inspection = { status: 'unavailable' as const }
+    }
+    const isCurrent = generation === operationGeneration
+    if (!isCurrent) {
+      return snapshot()
     }
 
     if (inspection.status === 'unavailable') {
@@ -849,7 +866,14 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return snapshot()
     }
     if (inspection.status === 'recovery-required') {
-      const cleared = await clearLocal()
+      let cleared = false
+      await startWriter(async () => {
+        cleared = await clearLocal()
+      })
+      const canPublish = generation === operationGeneration
+      if (!canPublish) {
+        return snapshot()
+      }
       if (cleared) {
         blockedMode = null
         publish({
@@ -865,13 +889,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return snapshot()
     }
 
-    await restoreReadyCredential(inspection.refreshToken)
+    await restoreReadyCredential(inspection.refreshToken, operationGeneration)
     return snapshot()
   }
 
   function start(): Promise<AuthSnapshot> {
     if (startPromise == null) {
-      startPromise = restoreFromStore()
+      startPromise = restoreFromStore(generation)
     }
     return startPromise
   }
@@ -955,7 +979,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           return failure('AUTH_OPERATION_FAILED')
         }
         publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
-        await restoreReadyCredential(refreshToken)
+        await restoreReadyCredential(refreshToken, generation)
         return success()
       }
       publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
@@ -976,18 +1000,30 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
     if (blockedMode === 'cleanup') {
+      const operationGeneration = generation
       let inspection
       try {
         inspection = await dependencies.store.inspect()
       } catch {
         inspection = { status: 'unavailable' as const }
       }
+      const isCurrent = generation === operationGeneration
+      if (!isCurrent) {
+        return success()
+      }
       if (inspection.status === 'unavailable') {
         storageBlocked('SECURE_STORAGE_UNAVAILABLE', 'cleanup')
         return success()
       }
       if (inspection.status !== 'empty') {
-        const cleared = await clearLocal()
+        let cleared = false
+        await startWriter(async () => {
+          cleared = await clearLocal()
+        })
+        const canPublish = generation === operationGeneration
+        if (!canPublish) {
+          return success()
+        }
         if (!cleared) {
           storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
           return success()
@@ -1004,7 +1040,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return success()
     }
 
-    await restoreFromStore()
+    await restoreFromStore(generation)
     return success()
   }
 

@@ -492,6 +492,21 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
   })
 
+  it('logout 중 늦게 끝난 initial inspection은 credential restore를 다시 시작하지 않는다', async () => {
+    const harness = createAuthHarness()
+    const inspection = deferred<{ status: 'ready'; refreshToken: string }>()
+    harness.store.inspect.mockImplementationOnce(() => inspection.promise)
+    const coordinator = createAuthCoordinator(harness.dependencies)
+
+    const starting = coordinator.start()
+    const logout = coordinator.logout()
+    inspection.resolve({ status: 'ready', refreshToken: REFRESH_0 })
+    await Promise.all([starting, logout])
+
+    expect(harness.http.refresh).not.toHaveBeenCalled()
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut', user: null })
+  })
+
   it('corrupt/transition recovery는 credential을 사용하지 않고 clear 확인 뒤 재로그인을 요구한다', async () => {
     const harness = createAuthHarness()
     harness.store.inspection = { status: 'recovery-required' }
