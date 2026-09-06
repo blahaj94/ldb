@@ -807,7 +807,9 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
   it('refresh 401/결과 불명은 R0를 다시 쓰지 않고 clear 뒤 재로그인을 요구한다', async () => {
     for (const failure of [
       new AuthHttpFailure('authentication-required'),
-      new AuthHttpFailure('network', 'unknown')
+      new AuthHttpFailure('network', 'unknown'),
+      new AuthHttpFailure('unavailable'),
+      new AuthHttpFailure('invalid-response')
     ]) {
       const harness = createAuthHarness()
       harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
@@ -818,6 +820,8 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
 
       expect(harness.http.refresh).toHaveBeenCalledTimes(1)
       expect(harness.http.refresh).toHaveBeenCalledWith(REFRESH_0, expect.any(AbortSignal))
+      expect(harness.http.logout).toHaveBeenCalledTimes(1)
+      expect(harness.http.logout).toHaveBeenCalledWith(REFRESH_0, expect.any(AbortSignal))
       expect(harness.store.clearCredential).toHaveBeenCalledTimes(1)
       expect(coordinator.getSnapshot()).toMatchObject({
         phase: 'signedOut',
