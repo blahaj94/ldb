@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-07
 rationale: 작은 GitHub Issue의 책임과 Worker 배정·완료를 명확히 하여 중복 착수와 agent 사이의 context·비용을 제한한다.
 evidence: "GitHub Issue #26, #44, #79, #81"
 exceptions: 긴급 작업도 change-control approval boundary와 사용자 merge 권한은 생략하지 않는다.
@@ -25,8 +25,8 @@ review-after: Execution Issue 10개 적용 후
 - 사용자가 지정한 repository 전체의 활성 Planner 한 명이 Issue contract, 배정, 상태 전이와 결과 검토를 순서대로 관리한다. 대화나 terminal마다 별도 Planner를 자동으로 두지 않는다.
 - 여러 독립 결과나 architecture 판단이 필요한 큰 요청만 분해한다. 이미 bounded한 요청에는 별도 planning 단계를 만들지 않는다.
 - Dependency 제외 범위의 근거와 library·자체 공통 package의 별도 판단은 [`Dependency 선택과 비용`](change-control.md#dependency-선택과-비용)을 따른다. 비용 증가를 예상하면 설계·배정 전에 사용자 선택이 필요한지 확인한다.
-- 메인 context에는 오래 유지할 요구, 확정된 결정, 배정, dependency와 결과 evidence를 둔다. Code 탐색·구현·test의 상세 context는 Worker에게 맡긴다.
-- 메인 세션의 Planner는 Worker 역할을 겸하지 않는다. 직접 code 탐색·구현·test를 수행하거나 같은 탐색과 raw log 재검토로 대기를 채우지 않고 상세 작업은 별도 Worker context에 둔다.
+- 메인 context에는 오래 유지할 요구, 확정된 결정, 배정, dependency와 결과 evidence를 둔다. 위임 수행에서는 code 탐색·구현·test의 상세 context를 Worker에게 맡긴다.
+- Planner의 Worker 겸임은 아래 수행 모드 선택의 조건을 모두 만족하는 단독 직접 수행에서만 허용한다. 위임 수행에서는 직접 code 탐색·구현·test를 수행하거나 같은 탐색과 raw log 재검토로 대기를 채우지 않고 상세 작업을 별도 Worker context에 둔다.
 - High-capability model은 큰 작업의 decomposition, architecture, security, 높은 uncertainty 판단에 사용한다.
 
 ### Worker
@@ -41,8 +41,8 @@ review-after: Execution Issue 10개 적용 후
 
 - Issue마다 한 명을 지정한다. Issue 통합 branch와 결과 채택 순서, 충돌 처리, 최종 head validation을 책임진다.
 - Worker의 상세 탐색을 다시 수행하지 않고 bounded result, diff와 validation evidence를 검토한다.
-- Semantic conflict나 누락을 직접 구현해 메우지 않고 관련 Worker에게 같은 범위의 후속 작업으로 돌려보낸다. 메인이 아닌 통합 담당이 수정까지 맡아야 하면 별도 bounded Worker scope로 정식 배정하고 roster에 기록한다.
-- Planner가 통합 담당을 겸할 수 있지만 branch 조정·결과 검토·validation만 맡고 상세 code 탐색·구현·test는 Worker context에 둔다. 배정·승인·완료 기록의 단일 책임도 유지한다.
+- 위임 수행의 통합 담당은 semantic conflict나 누락을 직접 구현해 메우지 않고 관련 Worker에게 같은 범위의 후속 작업으로 돌려보낸다. 메인이 아닌 통합 담당이 수정까지 맡아야 하면 별도 bounded Worker scope로 정식 배정하고 roster에 기록한다.
+- Planner가 통합 담당을 겸할 수 있다. 위임 수행에서는 branch 조정·결과 검토·validation만 맡고 상세 code 탐색·구현·test는 Worker context에 둔다. 단독 직접 수행에서는 아래 조건과 정식 Worker slot 안에서만 구현을 겸하며, 배정·승인·완료 기록의 단일 책임을 유지한다.
 
 ### Reviewer
 
@@ -50,6 +50,22 @@ review-after: Execution Issue 10개 적용 후
 - Worker conversation, 전체 reasoning과 shell history를 요구하지 않는다.
 - Low-cost first-pass review를 기본으로 하고 escalation 조건에 해당할 때만 high-capability reviewer 또는 사람에게 넘긴다.
 - Agent Reviewer는 Approve와 merge를 수행하지 않는다.
+
+## 수행 모드 선택
+
+이 절의 직접 수행 예외와 실행 효율 계약은 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)과 merge를 반영한다. 여기서 parent는 현재 Issue의 Planner다.
+
+직접 수행은 다음 조건을 모두 만족할 때만 선택한다.
+
+- Scope와 AC가 승인된 결정·기존 Rule 안에서 확정됐고 필요한 실행 허용과 preflight가 있다.
+- 기존 pattern으로 처리할 수 있으며 uncertainty와 risk가 모두 `low`다. 단순해 보여도 새 의미·설계 판단이 필요하면 이 조건을 충족하지 않는다.
+- 관련 context가 bounded하고 별도 Worker context 유지의 이점보다 위임·인계·검토 비용이 크다고 짧게 설명할 수 있다.
+- 다른 미완료 Worker 산출물과 결합하지 않고 file·public contract·generated output·port·DB 등 shared state와 충돌하지 않는다.
+- High-risk, architecture, security, Rule 변경의 즉석 직접 구현 예외로 사용하지 않는다. 승인·dependency 선택·Red-Green·review 경계는 그대로다.
+
+단독 직접 수행과 위임 수행의 roster·branch·통합 책임 및 전환은 [`수행 모드와 소유권`](agent-execution.md#수행-모드와-소유권)을 따른다. 단독 parent도 Issue·승인·preflight·검증·review·완료 기록을 생략하지 않는다.
+
+긴 command라는 이유만으로 위임하지 않는다. Parent가 다른 독립 판단을 계속할 수 있는지, packet 작성·실행 시작·대기·인계·review·오류 복구까지의 비용이 줄어드는지 비교한다. 시간이나 변경 줄 수만으로 수행 모드를 고르지 않는다.
 
 ## Issue 종류
 
@@ -79,7 +95,7 @@ Workflow, Rule, architecture의 대안, trade-off, open question, decision histo
 - Dependency: `Blocked by #123`, `Blocks #456` 형식
 - Escalation condition
 
-`worker_count`는 같은 bounded outcome의 현재 계획에 포함된 Worker scope 수다. 모든 Worker가 동시에 실행된다는 뜻이 아니며 Planner, read-only Scout·Reviewer와 실행 attempt 누계를 세지 않는다. 통합만 수행하는 담당도 세지 않지만 메인이 아닌 통합 담당이 code·Rule 수정 scope를 정식 배정받으면 Worker로 세고 roster에 기록한다. 완료된 scope도 Issue가 끝나거나 계획을 명시적으로 갱신할 때까지 현재 roster에 남는다. 재배정은 같은 slot의 공개 식별자를 바꾸므로 retry 자체로 count를 늘리지 않는다.
+`worker_count`는 같은 bounded outcome의 현재 계획에 포함된 Worker scope 수다. 모든 Worker가 동시에 실행된다는 뜻이 아니며 조정만 맡은 Planner, read-only Scout·Reviewer, 실행 전담 Runner와 실행 attempt 누계를 세지 않는다. 단독 직접 수행 parent는 Worker slot 1개로 센다. 통합만 수행하는 담당도 세지 않지만 메인이 아닌 통합 담당이 code·Rule 수정 scope를 정식 배정받으면 Worker로 세고 roster에 기록한다. 완료된 scope도 Issue가 끝나거나 계획을 명시적으로 갱신할 때까지 현재 roster에 남는다. 재배정은 같은 slot의 공개 식별자를 바꾸므로 retry 자체로 count를 늘리지 않는다.
 
 현재 실행 contract와 metadata의 source of truth는 Issue body다. Goal·AC·scope·constraint와 현재 작업 유형·상태·실행 조건, 담당 Planner, 통합 담당과 Worker roster를 한 곳에 모으고 승인·선행 결과·검증은 정확한 comment·PR·commit pointer로 연결한다. 결정이나 조건이 바뀌면 body를 갱신하고 과거 상태와 결정 근거는 comment 이력으로 남긴다. Label은 실제 automation trigger 또는 Issue 단위 `in process`·`done` 상태에만 사용한다. `Ready`·`Blocked`는 body의 실행 조건값이며 배정 상태나 Rule 승인 evidence가 아니다.
 
@@ -96,9 +112,12 @@ Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전�
 - `high` tier는 큰 작업 planning, architecture/security ambiguity, high-risk final review와 escalation에 사용한다.
 - Provider 또는 model 이름은 Issue마다 반복해 고정하지 않는다. 실행 환경은 승인된 runtime mapping으로 capability tier를 실제 model에 매핑한다.
 
+실행 전담 Runner는 [`agent-runner.md`](agent-runner.md)의 고정 command 실행·monitor·사실 보고만 맡는 검증 보조 역할이다. 구현·조사·판정 설계는 parent의 허용된 직접 scope 또는 판단 Worker가 맡는다. Runner의 기록과 count 경계는 [`실행 보조 기록`](agent-execution.md#실행-보조-기록)을 따른다.
+
 ### Code Worker runtime mapping
 
 - Code 작성·수정에는 implementation, bug fix, refactor, test, script와 tooling code가 모두 포함된다.
+- Code를 직접 수행하는 parent도 이 mapping과 실제 model·effort 확인 의무를 따른다.
 - Code Worker의 기본 실행 설정은 `gpt-6-astra`, reasoning effort `medium`이다. `standard` tier의 일반 implementation은 이 설정에 매핑하며, 작업이 단순하다는 이유로 `low` tier나 더 낮은 effort에 배정하지 않는다.
 - `gpt-5.3-codex-spark`, reasoning effort `high`는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능한 bounded test와 fixture에 사용할 수 있다. Unit test와 parameterized test가 그 예이며, `test`라는 이름이나 `.py`·`.mjs` 확장자만으로 예외를 적용하지 않는다.
 - Spark High는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능하며, 중요한 state를 바꾸지 않는 작은 `.py`·`.mjs` 보조 script에도 사용할 수 있다. 범위는 local file 읽기, JSON·CSV 변환, file 목록 검사와 결과 집계 등이며, 적용 근거는 Issue의 기존 context pointer와 validation command로 확인한다.
@@ -109,6 +128,23 @@ Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전�
 - 사용자가 model 또는 effort를 명시하면 그 선택을 우선한다. 다른 model이나 더 높은 effort는 사용자의 명시적 선택 또는 승인된 runtime mapping에 따라 사용할 수 있지만, `gpt-6-astra`와 `medium` 요청을 자동으로 낮추지 않는다.
 - Planner와 Worker는 착수 전에 실제 model과 effort가 선택되었는지 확인한다. 선택한 설정을 사용할 수 없거나 확인할 수 없으면 조용히 다른 model이나 effort로 바꾸지 않고 가용성 문제를 알리며, 확인하지 못한 설정을 적용했다고 보고하지 않는다.
 - 이 mapping은 Issue의 capability tier metadata를 대체하지 않으며 Issue마다 provider/model 이름을 반복해 고정하지 않는다. Model 선택과 관계없이 [`../../convention.md`](../../convention.md), [`testing.md`](testing.md), 이 문서의 review·escalation 기준을 모두 적용한다.
+
+## 실행 효율 계약의 재검토
+
+```yaml
+status: active
+enforcement: approval-required
+rationale: 작은 작업의 위임·인계·검토와 command 실행·monitor·중복 검증 비용을 줄이면서 승인과 evidence 책임을 유지한다.
+evidence: "Issue #105, PR #106 사용자 승인: https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716"
+exceptions: 직접 수행 조건이나 고정된 실행 입력이 충족되지 않으면 기존 역할 분리와 escalation을 유지한다.
+review-after: canonical 반영 후 실제 Execution Issue 3개에서 직접 수행·실행 전담·PASS 재사용 사례와 누락을 검토한다. 사례가 없던 항목은 검증됐다고 간주하지 않는다.
+```
+
+수행 모드 선택 이유, 위임·인계·review 추가 작업, 중복 command 생략, 재실행 이유, evidence 누락과 총사용량 snapshot을 검토한다. 기존 시각·사용량 기록만 활용하며 정밀 timing을 위한 새 wrapper·rerun은 하지 않는다. 누락·소유권 충돌·잘못된 PASS 채택이 있으면 해당 예외의 확대를 멈추고 수정 또는 폐기를 제안한다. 관측하지 못한 사례나 절감량은 추정하지 않는다.
+
+공통 routing 판단·소유권·evidence 계약은 canonical Rule에서 관리한다. 향후 skill은 역할 선택과 필요한 Rule pointer만, custom-agent TOML은 model·effort·역할 제한 등 실행 설정만 담는 얇은 adapter로 둔다. 원문 지침을 여러 파일에 복제하지 않는다. 이 계약은 Luna Xhigh나 Astra Low를 새 mapping으로 확정하지 않는다. Model 변경 실험은 별도 bounded 제안·승인·실제 실행 evidence가 필요하다. 실제 adapter 설치나 제품 구현 착수는 이 계약의 승인과 구분하고 후속 Issue에서 scope·실행 조건을 확인한다.
+
+Runtime이 요구한 custom role·model·effort를 지원하지 않거나 확인할 수 없으면 적용했다고 주장하거나 조용히 다른 model로 바꾸지 않는다. 가용성 문제를 알리고 기존 승인 설정의 허용된 owner가 실행하거나 새 선택을 요청한다.
 
 ## Escalation
 

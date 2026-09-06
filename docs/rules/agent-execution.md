@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-07
 rationale: 한 Issue의 독립 작업을 여러 Worker가 수행할 때 배정·context·통합 상태를 분리해 중복 작업과 stale 결과를 막는다.
 evidence: "GitHub Issue #81, PR #82 사용자 승인: https://github.com/blahaj94/ldb/pull/82#issuecomment-5558848884"
 exceptions: 복수 Worker가 이점이 없거나 독립성을 증명할 수 없으면 한 Worker를 사용한다.
@@ -14,9 +14,24 @@ review-after: 복수 Worker Execution Issue 5개 적용 후
 
 ## 범위와 권한
 
-이 문서는 [`agent-workflow.md`](agent-workflow.md)의 Execution Issue를 여러 Worker에게 나눌 때의 실행 계약이다. [PR #82의 사용자 승인](https://github.com/blahaj94/ldb/pull/82#issuecomment-5558848884)으로 확정된 active Rule이며 이후 Rule 변경과 구현 허용, 사용자 merge 권한은 [`change-control.md`](change-control.md)를 따른다.
+이 문서는 [`agent-workflow.md`](agent-workflow.md)의 Execution Issue 수행 모드와 배정·handoff·통합 계약이다. [PR #82의 사용자 승인](https://github.com/blahaj94/ldb/pull/82#issuecomment-5558848884)과 [PR #106의 직접 수행·실행 효율 계약 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)을 반영한 active Rule이다. 이후 Rule 변경과 구현 허용, 사용자 merge 권한은 [`change-control.md`](change-control.md)를 따른다.
 
-한 Issue의 담당 Planner가 전체 contract와 상태에 단일 책임을 지고, 통합 담당 한 명이 Issue 통합 branch의 정확성을 책임진다. 각 Worker는 배정된 bounded scope와 자신의 branch만 책임진다. 이 구분은 Planner나 통합 담당이 Worker의 누락·충돌을 직접 구현할 권한을 만들지 않는다.
+한 Issue의 담당 Planner가 전체 contract와 상태에 단일 책임을 지고, 통합 담당 한 명이 Issue 통합 branch의 정확성을 책임진다. 각 Worker는 배정된 bounded scope와 기록된 branch만 책임진다. 위임 수행에서 이 구분은 Planner나 통합 담당이 Worker의 누락·충돌을 직접 구현할 권한을 만들지 않는다. 단독 직접 수행의 겸임은 아래 조건과 Worker slot 안에서만 허용한다.
+
+## 수행 모드와 소유권
+
+[`수행 모드 선택`](agent-workflow.md#수행-모드-선택)의 모든 조건을 만족할 때만 단독 직접 수행을 선택한다.
+
+| 모드 | Issue roster와 `worker_count` | Branch·worktree와 통합 책임 |
+| --- | --- | --- |
+| 단독 직접 수행 | Parent가 맡은 bounded Worker scope를 공개 식별자와 함께 roster에 기록한다. `worker_count: 1`이며 Planner·Worker·통합 담당을 겸한다는 사실과 선택 근거를 명시한다. | 유일한 editor인 parent가 Issue 통합 branch·전용 worktree에서 구현과 통합을 맡는 제한적 예외다. 별도 Worker branch를 중복 생성하지 않으며 main 직접 작업은 금지한다. |
+| 위임 수행 | 기존 Worker roster·count·상태·배정 절차를 유지한다. Parent는 Planner·통합 역할만 맡는다. | 각 editor는 기록된 integration head에서 별도 branch·worktree를 사용한다. 통합 checkout의 owner는 한 명이며 parent가 맡긴 scope를 직접 보정하지 않는다. |
+
+단독 parent도 Issue·승인·preflight·scope·base·상태·result commit·검증·완료 기록을 생략하지 않는다. 자신의 result를 통합한 경우도 exact result와 최종 head evidence를 구분하고 필요한 독립 review와 사용자 merge를 유지한다.
+
+모드를 바꾸기 전에 진행 작업을 멈추고 결과·미완료 변경·검증·shared resource를 인계한다. Planner가 roster·count·base·branch·owner와 변경 이유를 갱신·재조회한 뒤 새 모드를 시작한다. 다른 Worker가 남아 있는 동안 parent를 추가 editor로 끼워 넣지 않는다. 복수 editor가 필요하면 위임 모드와 별도 branch·worktree를 사용한다. 재배정은 [중단·재배정과 retry](#중단재배정과-retry)에 따라 기존 Worker의 중단·인계를 확인하고 새 공개 식별자를 사용하며 이전 배정과 retry 이력을 보존한다.
+
+이미 배정한 scope의 수정·추가 검증은 유효한 기존 Worker에게 변경분만 전달한다. Parent가 기다리는 동안 같은 탐색·구현·검증을 반복하지 않는다. 통합 담당의 scope·diff·evidence review와 아래 필수 gate 검증은 유지하며, evidence 결손이나 관련 입력 변화가 있을 때만 추가 검증의 이유를 남긴다.
 
 ## Worker roster와 상태
 
@@ -53,6 +68,12 @@ Issue label은 Worker 상태와 분리한다.
 한 Worker의 응답 종료, `handed-off`·`integrated`, Draft PR 생성이나 일부 acceptance criteria 충족은 Issue 완료가 아니다.
 
 부모 추적 Issue나 아직 Execution contract가 없는 RFC는 무라벨이어도 배정 후보가 아니다. 부모 추적 Issue는 진행 중 `in process`를 사용하지 않고 body와 자식 pointer로 상태를 추적하며, 부모 자체의 완료 조건을 충족할 때만 `done`을 붙인다.
+
+## 실행 보조 기록
+
+Runner는 Worker scope를 대체하지 않으며 `worker_count`에 더하지 않는다. Issue에는 별도 실행 보조 기록으로 공개 식별자, 요청 owner, 대상 checkout owner·head, check/job 식별자, 상태와 evidence를 남긴다. Result commit이 없으면 `없음 — 실행 전담`으로 기록한다. 실행만 남은 Issue도 결과와 AC를 책임지는 parent의 단독 Worker slot 또는 판단 Worker slot을 유지하므로 count를 0으로 만들지 않는다. 실제 실행 slot과 사용량에는 Runner를 포함한다.
+
+Runner의 입력 고정·배타적 checkout 접근·packet·실행과 monitor·보고 계약은 [`agent-runner.md`](agent-runner.md)를 따른다.
 
 ## 배정 절차
 
@@ -106,10 +127,10 @@ File 이름만으로 충돌을 판단하지 않는다. Public type·API, schema,
 
 Branch·worktree의 생성과 충돌 처리는 [`change-control.md`](change-control.md)를 따른다. 통합 담당은 Worker result마다 다음을 확인한다.
 
-1. 공개 식별자, scope, result commit과 validation이 최신 roster와 일치한다.
+1. 공개 식별자, scope, result commit과 validation이 최신 roster와 일치한다. 단독 직접 수행도 자신의 result와 최종 head evidence를 구분한다.
 2. 기준 commit이 기록과 일치하고 result가 승인된 scope만 변경한다.
 3. 기준 commit 이후 integration head의 변경이 file, public contract, generated artifact, test 의미나 shared state에 영향을 주는지 검토한다.
-4. 유효한 result를 정해진 순서로 반영하고 현재 head에서 필요한 validation을 실행한다.
+4. 유효한 result를 정해진 순서로 반영하고 현재 head에서 필요한 validation을 실행한다. Evidence 재사용과 필수 gate는 [`Validation`](testing.md#validation)과 [`검증 evidence 재사용`](testing.md#검증-evidence-재사용)을 따른다.
 5. 채택된 exact result, integration head와 validation evidence를 Planner에게 반환한다.
 
 Issue body와 label은 Planner만 갱신하고 재조회한다. 통합 담당과 Worker는 상태·result evidence를 Planner에게 반환하며 roster를 직접 수정하지 않는다.
