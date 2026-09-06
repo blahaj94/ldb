@@ -524,15 +524,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       await startWriter(async () => {
         cleared = await clearLocal()
       })
-      if (!isCurrentPending(value)) {
+      const isLogoutCleaning = logoutFlight != null
+      if (isLogoutCleaning) {
         return false
       }
-      if (cleared) {
-        return true
+      if (!cleared) {
+        generation += 1
+        storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
+        return false
       }
-      generation += 1
-      storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
-      return false
+      return isCurrentPending(value)
     }
 
     generation += 1
