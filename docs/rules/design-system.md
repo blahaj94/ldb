@@ -24,7 +24,7 @@ SEED 채택 변경분은 [채택 결정](https://github.com/blahaj94/ldb/issues/
 
 - [SEED Design](https://seed-design.io/)의 공식 styled Component·recipe·Token·Variant·State와 기본값을 직접 사용한다. 같은 역할·조건에는 공식 이름과 semantic 선택을 유지하고, 공식 정의가 있는 palette·spacing·Typography·Radius·border·shadow·밀도 등을 독자적으로 다시 정하지 않는다.
 - 공식 Foundations의 [Typography](https://seed-design.io/foundations/typography)와 system font stack, 기본 system mode의 Theme, [responsive Layout](https://seed-design.io/foundations/layout), Pattern의 적용 조건을 따른다. 별도 font나 LDB 전용 scale로 대체하지 않는다. 전체 화면 구성이 공식 Example과 같다는 뜻은 아니며, 재사용한 요소와 조합의 출처를 구분한다.
-- [Motion](https://seed-design.io/foundations/motion)은 해당 공식 Component·recipe·Snippet의 transition·duration·easing·scale feedback·진입/퇴장 동작과 reduced-motion 처리를 유지한다. 독자 Apple Motion preset이나 추가 Motion engine을 초기 기준으로 만들지 않는다. 공식 구현에 없는 동작·접근성 요구는 누락을 명시하고 공용 변경으로 검토한다.
+- [Motion](https://seed-design.io/foundations/motion)은 해당 공식 Component·recipe·Snippet의 transition·duration·easing·scale feedback·진입/퇴장 동작을 유지한다. Reduced-motion은 해당 공식 구현이 제공하는 처리를 보존·검증하고, 제공되지 않거나 검증하지 못한 범위를 기록한다. 모든 Component에 동일한 지원이 있다고 가정하지 않는다. 독자 Apple Motion preset이나 추가 Motion engine을 초기 기준으로 만들지 않는다. 공식 구현에 없는 동작·접근성 요구는 누락을 명시하고 공용 변경으로 검토한다.
 - 공식 Snippet은 해당 styled Component와 의존 Snippet을 함께 연결한다. 재사용 가능한 공식 Layout block·Pattern이 있으면 그 구조·반응형 조건을 따른다. 대응물이 없으면 **LDB composition**으로 표시하고 사용한 공식 요소와 추가 조합·선택 이유를 기록한다. 없는 값을 공식 SEED 값이라고 부르거나 공식 시각 기준을 임의로 대체하지 않는다.
 - SEED의 상표·로고·제품 예시 content를 LDB의 정체성이나 domain으로 복제하지 않는다. 공용 package와 CSS 소유 책임은 [Shared UI boundary](../architecture/overview.md#shared-ui-boundary)를 따른다.
 
@@ -43,7 +43,7 @@ SEED 채택 변경분은 [채택 결정](https://github.com/blahaj94/ldb/issues/
 - 문서·Snippet registry의 기준은 [공식 source commit `08b3600989597f4e9017731484a409685c08aa68`](https://github.com/daangn/seed-design/tree/08b3600989597f4e9017731484a409685c08aa68)이다. CLI version만으로 원격 registry가 고정되지 않으므로 가져올 source revision과 내용도 확인한다. 이 Rule 제안에서는 source를 vendor하거나 CLI를 실행하지 않는다.
 - Snippet을 가져올 때 upstream repository·commit·file path, 의존 Snippet·package, local destination, license·NOTICE와 local 변경 이유·diff를 추적한다. Action Button에는 `loading-indicator`, Text Field Input에는 공식 icon, Dialog에는 공식 icon과 `action-button` 및 그 전이 의존 Snippet이 필요하다.
 - 가져오는 각 source·package의 license와 고지를 확인하고 [LICENSE](https://github.com/daangn/seed-design/blob/08b3600989597f4e9017731484a409685c08aa68/LICENSE)·[NOTICE](https://github.com/daangn/seed-design/blob/08b3600989597f4e9017731484a409685c08aa68/NOTICE)의 적용되는 저작권·귀속 고지를 보존한다. 수정 source에는 변경 사실을 기록한다. Icon 등 별도 package의 고지까지 SEED repository의 license로 대신하지 않는다.
-- Published package의 정확한 version·integrity, source SHA, live 문서 확인 시점을 구분해 기록한다. Package와 Snippet·문서가 불일치하면 영향받는 채택·구현을 멈추고 Planner에게 근거와 차이를 전달한다. 새 문서나 CLI의 최신 결과로 조용히 덮어쓰지 않는다.
+- Published package의 정확한 version·integrity, source SHA, live 문서 확인 시점을 구분해 기록한다. Package와 Snippet·문서 사이에 해당 API·behavior·style·요구 조건의 불일치가 있으면 영향받는 채택·구현을 멈추고 Planner에게 근거와 차이를 전달한다. 독립적인 package version 숫자나 선택한 version을 함께 허용하는 peer 범위의 표기 차이만으로 호환성 문제를 단정하지 않는다. 새 문서나 CLI의 최신 결과로 조용히 덮어쓰지 않는다.
 - Upgrade에서는 release note·migration guide·peer 범위와 실제 dependency graph, Token·recipe·기본 Variant·Theme·Motion·Snippet 변경 및 local diff를 확인한다. 소비 app과 Example의 고정 조합을 함께 갱신하고 아래 검증 matrix를 재실행한다. Peer 범위가 맞는다는 사실만으로 runtime 호환성이나 시각 동등성을 선언하지 않는다.
 
 ## 용어

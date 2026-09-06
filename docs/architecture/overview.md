@@ -69,7 +69,7 @@ PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상
 
 - `@ldb/ui`는 `@seed-design/react`, `@seed-design/css`, React·React DOM을 peer dependency로 선언한다. 개발·test에 필요한 사본은 dev dependency로 둔다. SEED React와 CSS의 peer 범위를 각각 명시하고, 소비 app·Example은 Design System Contract의 동일한 exact SEED 조합을 제공한다. React도 소비 환경과 일치시키며 검증하지 않은 지원 범위를 주장하지 않는다.
 - Library를 bundle하면 `@seed-design/*`와 React·React DOM 및 JSX runtime entry를 external 처리한다. 산출물에 별도 SEED runtime·CSS 또는 React 사본이 포함되지 않는지 확인한다. Peer 선언만으로 external 처리가 보장된다고 가정하지 않는다.
-- Library source에서 `@seed-design/css/*.css`를 직접 import하지 않는다. 각 소비 app·Example의 browser entry가 `@seed-design/css/base.css`를 한 번 import하고 Theme 초기화 책임을 가진다. SEED recipe가 연결하는 Component CSS를 library의 별도 CSS 사본으로 vendor하지 않는다.
+- Library source에서 `@seed-design/css/*.css`를 직접 import하지 않는다. 선택한 공식 Vite 통합은 `base.css`와 Component recipe CSS를 사용하는 경로다. 이 경로에서 각 소비 app·Example의 browser entry가 `@seed-design/css/base.css`를 한 번 import하고 Theme 초기화 책임을 가진다. SEED recipe가 연결하는 Component CSS를 library의 별도 CSS 사본으로 vendor하지 않는다.
 - Web·Desktop renderer·Example은 공식 `@seed-design/vite-plugin` 통합을 사용한다. Desktop의 electron-vite renderer 설정과 실제 Electron 실행 호환성은 후속 검증 대상이다. 하나의 alias만을 위해 `vite-tsconfig-paths`를 추가하지 않고 기존 Vite의 `resolve.alias`를 사용한다.
 - 공식 icon package는 필요한 Snippet의 runtime dependency로, CLI는 authoring 도구로 구분한다. CLI를 제품 runtime에 포함하지 않는다. 초기 채택 이외의 dependency·역할 변경은 기존 approval boundary를 따른다.
 
