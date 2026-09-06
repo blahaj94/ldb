@@ -91,6 +91,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
 - [`rules/agent-execution.md`](rules/agent-execution.md): 복수 Worker의 roster, context, 상태와 통합 계약
+- [`rules/agent-efficiency-proposal.md`](rules/agent-efficiency-proposal.md): parent 직접 수행·실행 전담·검증 재사용 제안. 승인 전 비적용이며 기존 active Rule이 우선
 - [`architecture/overview.md`](architecture/overview.md): 현재 system boundary·Shared UI boundary 제안·peer/CSS 책임과 architecture approval 지점
 
 - [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 계약
