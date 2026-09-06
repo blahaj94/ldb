@@ -86,7 +86,131 @@ test('public JWKS caches, rotates once for unknown kid and never follows token j
   assert.equal(keyRequests, 3)
   const empty = createGoogleProviderVerifier(transport.configuration)
   await providerFailure(empty(f.input))
-  assert.equal(keyRequests, 4, 'fresh unknown kid does not trigger a second fetch')
+  assert.equal(keyRequests, 5, 'cold unknown kid performs one initial fetch and one bounded refresh')
+})
+
+test('cold and expired JWKS each refresh once to verify a newly propagated RS256 key', async (t) => {
+  const rotated = await signingKey('propagated-google-key')
+  for (const initialCache of ['cold', 'expired']) {
+    await t.test(initialCache, async (caseTest) => {
+      const f = verificationInput()
+      let clock = Date.now()
+      caseTest.mock.method(Date, 'now', () => clock)
+      let response = await tokenResponse(key, f.nonce)
+      let tokenRequests = 0
+      let keyRequests = 0
+      let rotationStartedAt = 0
+      let rotating = false
+      const signals = []
+      const transport = adapterConfiguration(key, response, { fetch: async (url, options) => {
+        signals.push(options.signal)
+        if (url === tokenEndpoint) {
+          tokenRequests += 1
+          return Response.json(response)
+        }
+        assert.equal(url, jwksUri)
+        keyRequests += 1
+        const propagated = rotating && keyRequests - rotationStartedAt === 2
+        return Response.json({ keys: [propagated ? rotated.jwk : key.jwk] }, {
+          headers: { 'cache-control': 'max-age=60' },
+        })
+      } })
+      const verify = createGoogleProviderVerifier(transport.configuration)
+      if (initialCache === 'expired') {
+        await verify(f.input)
+        clock += 60_000
+      }
+      rotationStartedAt = keyRequests
+      const previousTokenRequests = tokenRequests
+      rotating = true
+      response = await tokenResponse(rotated, f.nonce)
+
+      const identity = await verify(f.input)
+
+      assert(identity.provider === 'google' && identity.subject === 'FixtureSubject')
+      assert.equal(keyRequests - rotationStartedAt, 2)
+      assert.equal(tokenRequests - previousTokenRequests, 1)
+      assert(signals.every((signal) => signal === f.input.signal))
+    })
+  }
+})
+
+test('persistent cold unknown kid stops after two JWKS fetches and never repeats token exchange', async () => {
+  const unknown = await signingKey('never-propagated-google-key')
+  const f = verificationInput()
+  const response = await tokenResponse(unknown, f.nonce)
+  let tokenRequests = 0
+  let keyRequests = 0
+  const transport = adapterConfiguration(key, response, { fetch: async (url) => {
+    if (url === tokenEndpoint) {
+      tokenRequests += 1
+      return Response.json(response)
+    }
+    keyRequests += 1
+    return Response.json({ keys: [key.jwk] })
+  } })
+
+  await providerFailure(createGoogleProviderVerifier(transport.configuration)(f.input))
+
+  assert.equal(tokenRequests, 1)
+  assert.equal(keyRequests, 2)
+})
+
+test('unknown kid refresh uses the caller signal and drops an aborted late second response', async () => {
+  const rotated = await signingKey('late-propagated-google-key')
+  const f = verificationInput()
+  const response = await tokenResponse(rotated, f.nonce)
+  const refreshEntered = Promise.withResolvers()
+  const lateRefresh = Promise.withResolvers()
+  let keyRequests = 0
+  let tokenRequests = 0
+  const signals = []
+  const transport = adapterConfiguration(key, response, { fetch: async (url, options) => {
+    signals.push(options.signal)
+    if (url === tokenEndpoint) {
+      tokenRequests += 1
+      return Response.json(response)
+    }
+    keyRequests += 1
+    if (keyRequests === 1) return Response.json({ keys: [key.jwk] })
+    refreshEntered.resolve()
+    return lateRefresh.promise
+  } })
+  const pending = createGoogleProviderVerifier(transport.configuration)(f.input)
+  const reachedRefresh = await Promise.race([
+    refreshEntered.promise.then(() => true),
+    pending.then(() => false, () => false),
+  ])
+  assert(reachedRefresh, 'unknown kid must reach its bounded refresh')
+  f.controller.abort()
+  await providerFailure(pending)
+  lateRefresh.resolve(Response.json({ keys: [rotated.jwk] }))
+  await setImmediate()
+  assert.equal(tokenRequests, 1)
+  assert.equal(keyRequests, 2)
+  assert(signals.every((signal) => signal === f.input.signal))
+})
+
+test('network failure during unknown kid refresh does not trigger another attempt', async () => {
+  const unknown = await signingKey('unavailable-propagated-google-key')
+  const f = verificationInput()
+  const response = await tokenResponse(unknown, f.nonce)
+  let keyRequests = 0
+  let tokenRequests = 0
+  const transport = adapterConfiguration(key, response, { fetch: async (url) => {
+    if (url === tokenEndpoint) {
+      tokenRequests += 1
+      return Response.json(response)
+    }
+    keyRequests += 1
+    if (keyRequests === 1) return Response.json({ keys: [key.jwk] })
+    throw new Error('fixture-raw-error')
+  } })
+
+  await providerFailure(createGoogleProviderVerifier(transport.configuration)(f.input))
+
+  assert.equal(tokenRequests, 1)
+  assert.equal(keyRequests, 2)
 })
 
 test('JWKS HTTP no-store/no-cache/expired age prevent stale cache reuse', async () => {
@@ -249,13 +373,16 @@ test('missing historical secret and malformed trusted JWKS fail without retry or
     await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
     assert.equal(invalid.requests.length, 0)
   }
-  for (const keys of [null, [], { keys: [] }, { keys: ['invalid'] }, { keys: [{ kty: 'RSA', n: 'broken', e: 'AQAB' }] }]) {
+  for (const [keys, expectedRequests] of [
+    [null, 2], [[], 2], [{ keys: [] }, 3], [{ keys: ['invalid'] }, 2],
+    [{ keys: [{ kty: 'RSA', n: 'broken', e: 'AQAB' }] }, 3],
+  ]) {
     let calls = 0
     const invalid = adapterConfiguration(key, response, { fetch: async (url) => {
       calls += 1
       return Response.json(url === tokenEndpoint ? response : keys)
     } })
     await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
-    assert.equal(calls, 2)
+    assert.equal(calls, expectedRequests)
   }
 })
