@@ -888,6 +888,44 @@ describe('Desktop AuthCoordinator login', () => {
     })
   })
 
+  it.each([
+    ['cancel', 'failed'],
+    ['expiry', 'unknown']
+  ] as const)(
+    'login 준비 cleanup 중 %s 뒤 clear=%s는 storage recovery 상태를 공개한다',
+    async (invalidation, clearOutcome) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      harness.store.inspection = { status: 'recovery-required' }
+      const clear = deferred<'failed' | 'unknown'>()
+      harness.store.clearWaits.push(clear.promise)
+      await coordinator.beginLogin('google')
+      await vi.waitFor(() => expect(harness.store.clearCredential).toHaveBeenCalledTimes(1))
+
+      const isCancelled = invalidation === 'cancel'
+      if (isCancelled) {
+        await coordinator.cancelLogin(ATTEMPT_ID)
+      } else {
+        harness.clock.advance(600_000)
+      }
+      clear.resolve(clearOutcome)
+
+      await vi.waitFor(() => {
+        expect(coordinator.getSnapshot()).toMatchObject({
+          phase: 'storageBlocked',
+          notice: 'LOCAL_CLEAR_UNCONFIRMED',
+          login: null
+        })
+      })
+      expect(harness.store.inspection).toEqual({ status: 'recovery-required' })
+      expect(harness.http.createLoginRequest).not.toHaveBeenCalled()
+      expect(harness.browser.open).not.toHaveBeenCalled()
+      await coordinator.retryAuth()
+      expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut' })
+    }
+  )
+
   it('잘못된 target은 무시하고 같은 callback과 reject fingerprint를 재전송하지 않는다', async () => {
     const harness = createAuthHarness()
     const exchange = deferred<Awaited<ReturnType<typeof harness.http.value.exchange>>>()
