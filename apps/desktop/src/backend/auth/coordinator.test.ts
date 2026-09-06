@@ -916,6 +916,117 @@ describe('Desktop AuthCoordinator login', () => {
     expect(harness.http.exchange).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    ['cancel', 'confirmed', 'confirmed'],
+    ['expiry', 'confirmed', 'confirmed'],
+    ['cancel', 'failed', 'confirmed'],
+    ['expiry', 'failed', 'confirmed'],
+    ['cancel', 'unknown', 'confirmed'],
+    ['expiry', 'unknown', 'confirmed'],
+    ['cancel', 'confirmed', 'failed'],
+    ['expiry', 'confirmed', 'failed'],
+    ['cancel', 'confirmed', 'unknown'],
+    ['expiry', 'confirmed', 'unknown']
+  ] as const)(
+    'rejected exchange cleanup 중 %s: clear=%s, marker 재확립=%s 결과를 공개한다',
+    async (invalidation, clearOutcome, markerOutcome) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      await beginWaitingLogin(coordinator)
+      harness.http.exchange.mockRejectedValueOnce(new AuthHttpFailure('exchange-invalid'))
+      const clear = deferred<'confirmed' | 'failed' | 'unknown'>()
+      harness.store.clearWaits.push(clear.promise)
+      const isMarkerUnconfirmed = markerOutcome !== 'confirmed'
+      if (isMarkerUnconfirmed) {
+        harness.store.removeOutcomes.push('unknown')
+        harness.store.unknownRemoveApplied.push(true)
+        harness.store.reestablishOutcomes.push(markerOutcome)
+      }
+
+      const returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+      await vi.waitFor(() => expect(harness.store.clearCredential).toHaveBeenCalledTimes(1))
+      const isCancelled = invalidation === 'cancel'
+      if (isCancelled) {
+        await coordinator.cancelLogin(ATTEMPT_ID)
+      } else {
+        harness.clock.advance(600_000)
+      }
+      const invalidationNotice = isCancelled ? 'LOGIN_CANCELLED' : 'LOGIN_EXPIRED'
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: 'signedOut',
+        notice: invalidationNotice
+      })
+      await expect(coordinator.beginLogin('discord')).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'AUTH_BUSY' }
+      })
+
+      clear.resolve(clearOutcome)
+      await returning
+      await settle()
+
+      const isClearConfirmed = clearOutcome === 'confirmed'
+      const isLocalClean = isClearConfirmed && !isMarkerUnconfirmed
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: isLocalClean ? 'signedOut' : 'storageBlocked',
+        notice: isLocalClean ? invalidationNotice : 'LOCAL_CLEAR_UNCONFIRMED',
+        login: null,
+        user: null,
+        entry: null
+      })
+      expect(harness.store.transitionMarker).toBe(isClearConfirmed ? null : 'clear')
+      if (isMarkerUnconfirmed) {
+        expect(harness.store.reestablishTransition).toHaveBeenCalledWith('clear')
+      }
+      expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+      expect(harness.http.logout).not.toHaveBeenCalled()
+      expect(harness.store.commitCredential).not.toHaveBeenCalled()
+      if (!isLocalClean) {
+        await expect(coordinator.beginLogin('discord')).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'AUTH_BUSY' }
+        })
+        await coordinator.retryAuth()
+        expect(coordinator.getSnapshot().phase).toBe('signedOut')
+      }
+    }
+  )
+
+  it.each(['confirmed', 'unknown'] as const)(
+    'rejected exchange cleanup 실패 중 active logout이 최종 clear=%s를 소유한다',
+    async (logoutClearOutcome) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      await beginWaitingLogin(coordinator)
+      harness.http.exchange.mockRejectedValueOnce(new AuthHttpFailure('exchange-invalid'))
+      const rejectedClear = deferred<'failed'>()
+      const logoutClear = deferred<'confirmed' | 'unknown'>()
+      harness.store.clearWaits.push(rejectedClear.promise, logoutClear.promise)
+      const returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+      await vi.waitFor(() => expect(harness.store.clearCredential).toHaveBeenCalledTimes(1))
+
+      const loggingOut = coordinator.logout()
+      rejectedClear.resolve('failed')
+      await vi.waitFor(() => expect(harness.store.clearCredential).toHaveBeenCalledTimes(2))
+      expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signingOut', notice: null })
+      expect(coordinator.logout()).toBe(loggingOut)
+      logoutClear.resolve(logoutClearOutcome)
+      await returning
+      const result = await loggingOut
+
+      const isLocalClean = logoutClearOutcome === 'confirmed'
+      expect(result.snapshot).toMatchObject({
+        phase: isLocalClean ? 'signedOut' : 'storageBlocked',
+        notice: isLocalClean ? null : 'LOCAL_CLEAR_UNCONFIRMED'
+      })
+      expect(harness.store.transitionMarker).toBe(isLocalClean ? null : 'clear')
+      expect(harness.http.logout).not.toHaveBeenCalled()
+      expect(harness.store.clearCredential).toHaveBeenCalledTimes(2)
+    }
+  )
+
   it('browser 실패는 pending을 폐기하고 정제 notice만 남긴다', async () => {
     const harness = createAuthHarness()
     harness.browser.open.mockRejectedValueOnce(new Error(`browser ${CODE}`))
