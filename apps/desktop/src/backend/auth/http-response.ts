@@ -1,9 +1,9 @@
+import { z } from 'zod'
 import { isCanonicalOpaque } from './pkce'
 import { validateBrowserLaunchUrl } from './protocol'
 import type { AuthTokens, LoginExchangeResponse, LoginRequestResponse, MeResponse } from './types'
 
 const AUTH_RESPONSE_MAX_BYTES = 16_384
-const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 const COMPACT_JWS_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 const UTC_ISO_PATTERN = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/
 
@@ -28,49 +28,24 @@ export class AuthHttpFailure extends Error {
   }
 }
 
-type ErrorCode =
-  | 'INVALID_AUTH_REQUEST'
-  | 'LOGIN_EXCHANGE_INVALID'
-  | 'AUTHENTICATION_REQUIRED'
-  | 'AUTH_INTERNAL_ERROR'
-  | 'AUTH_UNAVAILABLE'
+const ERROR_DEFINITIONS = [
+  { code: 'INVALID_AUTH_REQUEST', message: '인증 요청을 확인해 주세요.' },
+  {
+    code: 'LOGIN_EXCHANGE_INVALID',
+    message: '로그인 요청이 유효하지 않습니다. 다시 로그인해 주세요.'
+  },
+  { code: 'AUTHENTICATION_REQUIRED', message: '로그인이 필요합니다.' },
+  { code: 'AUTH_INTERNAL_ERROR', message: '인증 요청을 처리하지 못했습니다.' },
+  {
+    code: 'AUTH_UNAVAILABLE',
+    message: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+  }
+] as const
 
-const ERROR_MESSAGES = {
-  INVALID_AUTH_REQUEST: '인증 요청을 확인해 주세요.',
-  LOGIN_EXCHANGE_INVALID: '로그인 요청이 유효하지 않습니다. 다시 로그인해 주세요.',
-  AUTHENTICATION_REQUIRED: '로그인이 필요합니다.',
-  AUTH_INTERNAL_ERROR: '인증 요청을 처리하지 못했습니다.',
-  AUTH_UNAVAILABLE: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
-} as const satisfies Record<ErrorCode, string>
+type ErrorCode = (typeof ERROR_DEFINITIONS)[number]['code']
 
-function hasExactFields(value: object, fields: readonly string[]): boolean {
-  const keys = Object.keys(value)
-  const hasExpectedCount = keys.length === fields.length
-  const hasEveryField = fields.every((field) => Object.hasOwn(value, field))
-  const hasOnlyExpectedFields = hasExpectedCount && hasEveryField
-
-  return hasOnlyExpectedFields
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  const isNonNull = value != null
-  const hasObjectType = isNonNull && typeof value === 'object'
-  const isArray = hasObjectType && Array.isArray(value)
-  const isRecord = hasObjectType && !isArray
-
-  return isRecord
-}
-
-function isUuid(value: unknown): value is string {
-  const isString = typeof value === 'string'
-  const isValidUuid = isString && UUID_PATTERN.test(value)
-
-  return isValidUuid
-}
-
-function isUtcIso(value: unknown): value is string {
-  const isString = typeof value === 'string'
-  const match = isString ? UTC_ISO_PATTERN.exec(value) : null
+function isUtcIso(value: string): boolean {
+  const match = UTC_ISO_PATTERN.exec(value)
   const hasIsoShape = match != null
   if (!hasIsoShape) {
     return false
@@ -86,182 +61,69 @@ function isUtcIso(value: unknown): value is string {
   return isValidUtcIso
 }
 
-function isWellFormedString(value: unknown): value is string {
-  if (typeof value !== 'string') {
-    return false
-  }
+const utcIsoSchema = z.string().refine(isUtcIso)
+const tokenSchema = z.strictObject({
+  tokenType: z.literal('Bearer'),
+  accessToken: z.string().regex(COMPACT_JWS_PATTERN).max(8_192),
+  accessTokenExpiresAt: utcIsoSchema,
+  refreshToken: z.string().refine(isCanonicalOpaque),
+  sessionExpiresAt: utcIsoSchema
+})
+const userSchema = z.strictObject({
+  id: z.guid(),
+  nickname: z.string().refine((value) => value.isWellFormed())
+})
+const loginRequestSchema = z.strictObject({
+  requestId: z.guid(),
+  browserUrl: z.string(),
+  expiresAt: utcIsoSchema
+})
+const exchangeSchema = z.strictObject({
+  ...tokenSchema.shape,
+  user: userSchema,
+  isNewUser: z.boolean()
+})
+const meSchema = z.strictObject({ user: userSchema })
+const errorSchema = z.strictObject({
+  error: z.union(
+    ERROR_DEFINITIONS.map(({ code, message }) =>
+      z.strictObject({ code: z.literal(code), message: z.literal(message) })
+    )
+  )
+})
 
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index)
-    const isHighSurrogate = codeUnit >= 0xd800 && codeUnit <= 0xdbff
-    const isLowSurrogate = codeUnit >= 0xdc00 && codeUnit <= 0xdfff
-    if (isHighSurrogate) {
-      const next = value.charCodeAt(index + 1)
-      const hasLowSurrogate = next >= 0xdc00 && next <= 0xdfff
-      if (!hasLowSurrogate) {
-        return false
-      }
-      index += 1
-    } else if (isLowSurrogate) {
-      return false
-    }
+function parseResponse<T>(schema: z.ZodType<T>, value: unknown): T {
+  const result = schema.safeParse(value)
+  if (!result.success) {
+    throw new AuthHttpFailure('invalid-response')
   }
-
-  return true
+  return result.data
 }
 
 export function parseTokens(value: unknown): AuthTokens {
-  const isTokenObject = isObject(value)
-  if (!isTokenObject) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  const fields = [
-    'tokenType',
-    'accessToken',
-    'accessTokenExpiresAt',
-    'refreshToken',
-    'sessionExpiresAt'
-  ]
-  const hasTokenFields = hasExactFields(value, fields)
-  const isBearer = value.tokenType === 'Bearer'
-  const accessTokenField = value.accessToken
-  const isAccessTokenString = typeof accessTokenField === 'string'
-  const isAccessTokenWithinLimit = isAccessTokenString && accessTokenField.length <= 8_192
-  const isCompactAccessToken =
-    isAccessTokenWithinLimit && COMPACT_JWS_PATTERN.test(accessTokenField)
-  const hasAccessExpiry = isUtcIso(value.accessTokenExpiresAt)
-  const hasRefreshToken = isCanonicalOpaque(value.refreshToken)
-  const hasSessionExpiry = isUtcIso(value.sessionExpiresAt)
-  const isValidTokenResponse =
-    hasTokenFields &&
-    isBearer &&
-    isCompactAccessToken &&
-    hasAccessExpiry &&
-    hasRefreshToken &&
-    hasSessionExpiry
-  if (!isValidTokenResponse) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  return {
-    tokenType: 'Bearer',
-    accessToken: value.accessToken as string,
-    accessTokenExpiresAt: value.accessTokenExpiresAt as string,
-    refreshToken: value.refreshToken as string,
-    sessionExpiresAt: value.sessionExpiresAt as string
-  }
-}
-
-function parseUser(value: unknown): Readonly<{ id: string; nickname: string }> {
-  const isUserObject = isObject(value)
-  if (!isUserObject) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  const hasUserFields = hasExactFields(value, ['id', 'nickname'])
-  const hasUserId = isUuid(value.id)
-  const hasNickname = isWellFormedString(value.nickname)
-  const isValidUser = hasUserFields && hasUserId && hasNickname
-  if (!isValidUser) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  return { id: value.id as string, nickname: value.nickname as string }
+  return parseResponse(tokenSchema, value)
 }
 
 export function parseLoginRequest(value: unknown, apiOrigin: string): LoginRequestResponse {
-  const isResponseObject = isObject(value)
-  if (!isResponseObject) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  const hasFields = hasExactFields(value, ['requestId', 'browserUrl', 'expiresAt'])
-  const hasRequestId = isUuid(value.requestId)
-  const hasExpiry = isUtcIso(value.expiresAt)
-  let browserUrl: string
+  const response = parseResponse(loginRequestSchema, value)
   try {
-    browserUrl = validateBrowserLaunchUrl(value.browserUrl, apiOrigin)
+    validateBrowserLaunchUrl(response.browserUrl, apiOrigin)
   } catch {
     throw new AuthHttpFailure('invalid-response')
   }
-  const isValidResponse = hasFields && hasRequestId && hasExpiry
-  if (!isValidResponse) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  return {
-    requestId: value.requestId as string,
-    browserUrl,
-    expiresAt: value.expiresAt as string
-  }
+  return response
 }
 
 export function parseExchange(value: unknown): LoginExchangeResponse {
-  const isResponseObject = isObject(value)
-  if (!isResponseObject) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  const fields = [
-    'tokenType',
-    'accessToken',
-    'accessTokenExpiresAt',
-    'refreshToken',
-    'sessionExpiresAt',
-    'user',
-    'isNewUser'
-  ]
-  const hasFields = hasExactFields(value, fields)
-  const isNewUser = typeof value.isNewUser === 'boolean'
-  if (!hasFields || !isNewUser) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  const tokens = parseTokens({
-    tokenType: value.tokenType,
-    accessToken: value.accessToken,
-    accessTokenExpiresAt: value.accessTokenExpiresAt,
-    refreshToken: value.refreshToken,
-    sessionExpiresAt: value.sessionExpiresAt
-  })
-  const user = parseUser(value.user)
-
-  return { ...tokens, user, isNewUser: value.isNewUser as boolean }
+  return parseResponse(exchangeSchema, value)
 }
 
 export function parseMe(value: unknown): MeResponse {
-  const isResponseObject = isObject(value)
-  if (!isResponseObject) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  const hasFields = hasExactFields(value, ['user'])
-  if (!hasFields) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  return { user: parseUser(value.user) }
+  return parseResponse(meSchema, value)
 }
 
 function parseError(value: unknown): ErrorCode {
-  const isResponseObject = isObject(value)
-  const hasErrorOnly = isResponseObject && hasExactFields(value, ['error'])
-  const errorValue = hasErrorOnly ? value.error : null
-  const isErrorObject = isObject(errorValue)
-  const hasErrorFields = isErrorObject && hasExactFields(errorValue, ['code', 'message'])
-  const code = hasErrorFields ? errorValue.code : null
-  const message = hasErrorFields ? errorValue.message : null
-  const isKnownCode = typeof code === 'string' && Object.hasOwn(ERROR_MESSAGES, code)
-  const hasExpectedMessage =
-    isKnownCode && typeof message === 'string' && ERROR_MESSAGES[code as ErrorCode] === message
-  const isValidError =
-    hasErrorOnly && isErrorObject && hasErrorFields && isKnownCode && hasExpectedMessage
-  if (!isValidError) {
-    throw new AuthHttpFailure('invalid-response')
-  }
-
-  return code as ErrorCode
+  return parseResponse(errorSchema, value).error.code
 }
 
 export async function readJson(response: Response, signal?: AbortSignal): Promise<unknown> {
