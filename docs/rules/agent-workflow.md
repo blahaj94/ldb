@@ -91,10 +91,11 @@ Metadata의 source of truth는 Issue body다. 현재 작업 유형·상태·실�
 - Code 작성·수정에는 implementation, bug fix, refactor, test, script와 tooling code가 모두 포함된다.
 - Code Worker의 기본 실행 설정은 `gpt-5.6-sol`, reasoning effort `high`다. `standard` tier의 일반 implementation은 이 설정에 매핑하며, 작업이 단순하다는 이유로 `low` tier나 더 낮은 effort에 배정하지 않는다.
 - `gpt-5.3-codex-spark`, reasoning effort `high`는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능한 unit test, parameterized test와 fixture에 사용할 수 있다. `test`라는 이름이나 `.py`·`.mjs` 확장자만으로 예외를 적용하지 않는다.
-- 같은 Spark High 예외는 local file 읽기, JSON·CSV 변환, file 목록 검사와 결과 집계처럼 중요한 state를 바꾸지 않는 작은 `.py`·`.mjs` 보조 script에 사용할 수 있다. 적용 근거는 Issue의 기존 context pointer와 validation command로 확인한다.
+- Spark High는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능하며, 중요한 state를 바꾸지 않는 작은 `.py`·`.mjs` 보조 script에도 사용할 수 있다. 범위는 local file 읽기, JSON·CSV 변환, file 목록 검사와 결과 집계 등이며, 적용 근거는 Issue의 기존 context pointer와 validation command로 확인한다.
 - 일반 code, bug fix와 refactor, test 의미·경계 조건 설계, 인증·동시성·transaction·복잡한 integration harness에는 Sol High를 유지한다. 배포·database 변경·data 삭제 등 중요한 state를 바꾸는 script도 Spark 예외에서 제외한다.
 - Spark 작업도 [`testing.md`](testing.md)의 Red-Green과 test integrity를 따른다. 기대값은 승인된 Rule 또는 합의된 acceptance criteria에서 가져오며, assertion·validation을 약화하거나 test를 통과시키려고 제품 code를 수정하지 않는다.
-- Spark 작업에서 판단이 필요해지거나 범위 확대·실패가 발생하면 실행을 멈추고, 같은 담당 Worker와 기존 retry budget을 유지한 채 Sol High 전환 또는 아래 escalation 절차를 따른다. Model 전환은 재배정이나 retry budget 초기화가 아니다.
+- Spark 작업에서 승인된 Rule 또는 합의된 acceptance criteria에 없는 기대값·설계 판단이나 scope 확대가 필요하면 실행을 중단하고 Sol High 전환 또는 아래 escalation 절차를 따른다. 예상하지 못한 실패에는 기존 최대 1회 retry를 적용하며 반복 실패 시 같은 절차를 따른다. 기대한 Red 실패는 작업 실패나 retry budget 소진으로 계산하지 않는다.
+- 실행 환경이 같은 Worker의 model 설정 변경을 지원하면 Sol High로 재개한다. 새 Worker가 필요하면 기존 Worker의 중단 확인·인계·재배정 절차를 따르고 retry budget을 그대로 이관한다.
 - 사용자가 model 또는 effort를 명시하면 그 선택을 우선한다. 다른 model이나 더 높은 effort는 사용자의 명시적 선택 또는 승인된 runtime mapping에 따라 사용할 수 있지만, `gpt-5.6-sol`과 `high` 요청을 자동으로 낮추지 않는다.
 - Planner와 Worker는 착수 전에 실제 model과 effort가 선택되었는지 확인한다. 선택한 설정을 사용할 수 없거나 확인할 수 없으면 조용히 다른 model이나 effort로 바꾸지 않고 가용성 문제를 알리며, 확인하지 못한 설정을 적용했다고 보고하지 않는다.
 - 이 mapping은 Issue의 capability tier metadata를 대체하지 않으며 Issue마다 provider/model 이름을 반복해 고정하지 않는다. Model 선택과 관계없이 [`../../convention.md`](../../convention.md), [`testing.md`](testing.md), 이 문서의 review·escalation 기준을 모두 적용한다.
