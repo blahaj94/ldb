@@ -6,13 +6,13 @@ scope: apps/api core authentication database
 last-reviewed: 2026-09-05
 rationale: identity uniqueness·단일 소비·경합·보관 정책을 DB invariant와 연결한다.
 evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: 사용자 구현 금지 조건을 유지하며 탈퇴 state·삭제/재가입·백업 복원은 이 schema로 해결하지 않는다.
+exceptions: 이 핵심 schema만으로 탈퇴를 해결하지 않으며 승인된 auth-withdrawal-proposal.md extension의 구현·통합 검증은 별도다.
 review-after: 최초 Docker constraint·migration·cleanup 경합 validation 시
 ---
 
 # Authentication Database Contract
 
-이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 현재 schema 구현·DB 검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다. OAuth 상태는 [`auth-oauth.md`](auth-oauth.md), 시간/refresh는 [`auth-session.md`](auth-session.md), 활동은 [`auth-activity.md`](auth-activity.md), dependency/Migration 실행은 [`auth-runtime.md`](auth-runtime.md)를 따른다. 승인된 schema는 기본 영구 3개 테이블과 회원 생성 전 로그인용 transient table 하나다.
+이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. 현재 schema 구현·DB 검증 성공을 뜻하지 않으며 미결정 gate 유지와 구현 금지 조건을 따른다. OAuth 상태는 [`auth-oauth.md`](auth-oauth.md), 시간/refresh는 [`auth-session.md`](auth-session.md), 활동은 [`auth-activity.md`](auth-activity.md), dependency/Migration 실행은 [`auth-runtime.md`](auth-runtime.md)를 따른다. 이 문서의 핵심 schema는 기본 영구 3개 테이블과 회원 생성 전 로그인용 transient table 하나다. [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 추가 lifecycle/schema는 별도 후속 구현 범위이며 초기 4-table Migration 검증과 구분한다.
 
 ## 공통 schema 규격
 
@@ -57,7 +57,7 @@ Key 교체 시 이전 pending request 최대 10분이 끝날 때까지 decrypt k
 
 ## Transaction과 잠금 순서
 
-하나의 TypeORM QueryRunner/transaction manager와 연결만 사용하고 transaction manager 밖 repository를 섞지 않는다. 일반 순서는 **필요한 user → session → refresh**이며 여러 row는 UUID 오름차순이다. Exchange는 자신의 OAuth row를 먼저 잠그고 user→새 session→refresh로 간다. 다른 session 작업이 OAuth row를 뒤에 잠그지 않는다. 검색 활동은 session만 잠그고 뒤에 user/refresh를 잠그지 않아 역순 cycle을 만들지 않는다.
+하나의 TypeORM QueryRunner/transaction manager와 연결만 사용하고 transaction manager 밖 repository를 섞지 않는다. 일반 순서는 **필요한 user → session → refresh**이며 여러 row는 UUID 오름차순이다. Exchange는 자신의 OAuth row를 먼저 잠그고 user→새 session→refresh로 간다. 다른 session 작업이 OAuth row를 뒤에 잠그지 않는다. 검색 활동은 session만 잠그고 뒤에 user/refresh를 잠그지 않아 역순 cycle을 만들지 않는다. 탈퇴를 통합할 때 필요한 identity 선행 lock과 preparing/삭제 경합은 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)를 따르며 기존 로그인 기반에 구현 완료됐다고 보지 않는다.
 
 Raw token hash의 잠금 없는 조회는 ID hint다. Lock 뒤 FK·소유관계·hash 존재·상태를 다시 확인한다. 시간은 lock 뒤 fresh T이며 거래 시작 시각을 재사용하지 않는다.
 
@@ -74,6 +74,6 @@ Raw token hash의 잠금 없는 조회는 ID hint다. Lock 뒤 FK·소유관계�
 
 ## 삭제 경계
 
-User 삭제 시 sessions→refresh cascade는 기본 구조다. JWT sub/sid로 삭제 계정/session을 재생성하거나 다른 새 user에 연결하지 않는다. **User 삭제 후에도 남을 탈퇴 결과 state, pending login과 삭제의 자동 재가입 경합, 백업 복원 후 삭제 회원 방지**는 이 cascade로 해결되지 않는다. 별도 정책/schema 승인 전 탈퇴 endpoint를 구현하지 않으며 tombstone·복구 유예·장기 provider 식별 보관을 임의 추가하지 않는다.
+User 삭제 시 sessions→refresh cascade는 기본 구조다. JWT sub/sid로 삭제 계정/session을 재생성하거나 다른 새 user에 연결하지 않는다. **User 삭제 후에도 남을 탈퇴 결과 state, pending login과 삭제의 자동 재가입 경합, 백업 복원 후 삭제 회원 방지**는 이 cascade로 해결되지 않는다. 해당 정책과 최소 schema는 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 D1–D5로 승인됐다. 기존 4-table/cascade만으로 구현된 것으로 보지 않으며 별도 착수·Migration/경합/복원 검증을 요구한다. 그 승인 범위 밖 tombstone·복구 유예·장기 provider 식별 보관을 임의 추가하지 않는다.
 
 근거는 #39가 2026-09-05에 검토한 [constraints](https://www.postgresql.org/docs/current/ddl-constraints.html), [partial index](https://www.postgresql.org/docs/current/indexes-partial.html), [INSERT/ON CONFLICT](https://www.postgresql.org/docs/current/sql-insert.html), [row lock/deadlock](https://www.postgresql.org/docs/current/explicit-locking.html)다. Schema/DB 실행 성공 evidence가 아니다.

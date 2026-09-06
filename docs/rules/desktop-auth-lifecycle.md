@@ -14,6 +14,8 @@ review-after: 최초 로그인·refresh·저장 실패 integration validation �
 
 승인 상태와 process/IPC/화면은 [Desktop contract](desktop-auth.md), OS·durable write protocol은 [platform](desktop-auth-platform.md)이 canonical source다. 아래 상태는 승인된 contract이며 현재 구현·실행 evidence가 아니다. 서버의 [auth API](auth-api.md)·[OAuth](auth-oauth.md)·[session](auth-session.md)·[활동](auth-activity.md) 계약을 그대로 소비한다.
 
+이 문서의 pending/credential 수명은 기존 로그인·기기 session 범위다. 탈퇴 전용 statusToken과 준비/확정 이후 local auth 정리·재시작 상태 조회는 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 최소 연결을 따른다. 이 확장으로 아래 login의 polling 없음·pending memory-only·refresh 단일 실행을 바꾸지 않는다.
+
 ## 상태·credential 수명
 
 | 항목 | 위치·생성 | 수명·폐기 |

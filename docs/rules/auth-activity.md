@@ -44,6 +44,8 @@ Account entry는 최근 60초 reservation 또는 살아 있는 admission 요청�
 
 ## 계정 API 활동과 기능 단계
 
+탈퇴 preparing 이후 계정 기능의 lifecycle 재확인·차단은 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)를 따른다. 아래 기존 admission/기능 2단계·인정한 활동 보존과 residual 검색 원칙은 유지하며, 탈퇴 extension의 구현·경합 검증은 별도다.
+
 `GET /me`, `PATCH /me/nickname`을 계정 기능 활동으로 인정하는 분류가 승인됐다. JWT → 입력 → 해당 endpoint에 향후 승인된 제한 → user/session lock → 활성·미만료 확인 → 활동 commit → 기능 처리 순서다. Nickname 횟수/cooldown 제한은 없고 검색 quota를 공유하지 않는다.
 
 최초 admission의 인증/입력 거절은 활동 0이다. 이후 기능 실패에도 인정한 활동을 유지하므로 nickname update 실패와 함께 activity commit을 임의 rollback하지 않는다. 계정 조회/nickname mutation 기능 단계는 다시 user/session 유효성을 잠금 안에서 확인해 logout/삭제 뒤 조회·변경을 막는다.

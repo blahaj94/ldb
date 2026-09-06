@@ -38,9 +38,11 @@ JWT verify 자체는 session revocation DB 조회를 하지 않는다. 검색 �
 
 Key를 boot마다 생성하지 않는다. 운영 secret 저장소/배포 secret file에 두고 source·DB·image layer·log에 넣지 않는다. **90일마다 새 signing key**와 충분히 임의인 새 kid, active signing key 하나·verify key 여러 개를 사용한다.
 
-새 public key를 verifier에 먼저 배포 → signer 전환 → 이전 key의 마지막 발급 후 최소 900초 경과와 이전 token 만료 확인 → 이전 private/public key 제거 순서다. 침해 시 해당 kid를 즉시 제거해 JWT를 거절하며 정상 logout의 지연 허용과 구분한다. Refresh hash를 signing key에 결합하지 않는다. Key 누락·중복 kid·알고리즘 불일치는 listen 전 정제 실패다. 90일 주기는 승인됐으며 실제 운영 교체 절차는 별도 gate다.
+새 public key를 verifier에 먼저 배포 → signer 전환 → 이전 key의 마지막 발급 후 최소 900초 경과와 이전 token 만료 확인 → 이전 private/public key 제거 순서다. 침해 시 해당 kid를 즉시 제거해 JWT를 거절하며 정상 logout의 지연 허용과 구분한다. Refresh hash를 signing key에 결합하지 않는다. Key 누락·중복 kid·알고리즘 불일치는 listen 전 정제 실패다. 90일 주기는 승인됐으며 실제 운영 교체 절차는 별도 gate다. **백업 복원에는 이 정상 overlap의 승인된 예외**가 있다. [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 순서대로 옛 verify key와 전체 credential을 무효화하고 모든 verifier의 반영 확인 전 ingress를 열지 않는다. 이 예외는 일반 logout/refresh나 정상 key 교체에 적용하지 않는다.
 
 ## Refresh transaction
+
+아래는 기존 rotation/reuse의 기본 contract다. 탈퇴 통합 시 preparing 이후 user lifecycle에 따른 발급 차단은 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)를 따르며, 해당 extension의 구현·경합 검증을 기존 refresh core 검증과 구분한다.
 
 `randomBytes(32)`를 canonical base64url로 발급한다. Strict decode/re-encode로 32byte를 확인한 뒤 그 값의 SHA-256을 검증 key로 사용한다. Password용 느린 hash와 구분하고 pepper를 추가하지 않는다. DB hash 자체를 원문 credential로 받지 않는다. Random 충돌 시 전체 transaction rollback과 새 random 처리를 사용하며 uniqueness를 약화시키지 않는다.
 
@@ -67,7 +69,7 @@ Logout은 제출한 known current/consumed refresh의 session만 잠그고 폐�
 | 활동이 경계 전 lock·판정·commit | Refresh는 갱신한 deadline으로 검증. |
 | 경계 전 요청 시작, lock 획득 시 경계 이상 | Fresh T로 401. 활동·rotation으로 부활 없음. |
 | Logout 먼저, 검색 활동 나중 | JWT가 유효하면 정상 DB에서 residual 검색, revoked_at/last_active_at 변경 없음. |
-| User 삭제와 refresh/계정 기능 | 관련 잠금으로 삭제 전에 완료하거나 삭제 후 없음/401. 삭제한 identity를 JWT로 복원하지 않음. Pending OAuth·탈퇴 orchestration은 별도 gate. |
+| User 삭제와 refresh/계정 기능 | 관련 잠금으로 삭제 전에 완료하거나 삭제 후 없음/401. 삭제한 identity를 JWT로 복원하지 않음. Pending OAuth·preparing 이후 기능 차단은 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)를 따르며 orchestration 구현/경합 검증은 별도다. |
 
 활성 session의 전체 발급/소비 이력은 보존하고 종료 뒤 정리는 [`auth-database.md`](auth-database.md)를 따른다. 30일 활동 기준을 absolute session lifetime으로 바꾸지 않는다.
 
