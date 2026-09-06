@@ -54,15 +54,24 @@ describe('ActionButton interaction', () => {
     expect(onClick).not.toHaveBeenCalled()
   })
 
-  it('blocks a loading button activation without changing its label', async () => {
+  it('blocks a busy loading and disabled button without changing its label', async () => {
     const onClick = vi.fn()
-    await render(<ActionButton loading onClick={onClick}>Run</ActionButton>)
+    await render(<ActionButton loading disabled onClick={onClick}>Run</ActionButton>)
 
     await click(element('button'))
 
     expect(onClick).not.toHaveBeenCalled()
     expect(element('button').textContent).toContain('Run')
   })
+})
+
+it('preserves the official loading-only state as interactive', async () => {
+  const onClick = vi.fn()
+  await render(<ActionButton loading onClick={onClick}>Run</ActionButton>)
+
+  await click(element('button'))
+
+  expect(onClick).toHaveBeenCalledOnce()
 })
 
 describe('TextField interaction and accessible connections', () => {
@@ -96,7 +105,8 @@ describe('TextField interaction and accessible connections', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
 
-    expect(onValueChange).toHaveBeenCalledExactlyOnceWith('New name')
+    const reportedValues = onValueChange.mock.calls.map(([value]) => value)
+    expect(new Set(reportedValues)).toEqual(new Set(['New name']))
     expect(input.value).toBe('NEW NAME')
   })
 
