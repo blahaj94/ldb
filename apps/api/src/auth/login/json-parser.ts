@@ -3,71 +3,119 @@ import { LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure } from '../../errors/login.js'
 import type { LoginErrorDefinition } from '../../types/login.js'
 
-export function jsonError(response: Response, definition: Pick<LoginFailure, 'status' | 'code' | 'message'>): void {
-  response.status(definition.status).json({ error: { code: definition.code, message: definition.message } })
+export function jsonError(
+  response: Response,
+  definition: Pick<LoginFailure, 'status' | 'code' | 'message'>,
+): void {
+  response.status(definition.status).json({
+    error: { code: definition.code, message: definition.message },
+  })
 }
 
-function headers(request: Request, name: string): string[] {
-  return request.rawHeaders.flatMap((value, index, all) => index % 2 === 0 && value.toLowerCase() === name ? [all[index + 1]] : [])
+function readHeaderValues(request: Request, name: string): string[] {
+  // 중복 header도 확인할 수 있도록 rawHeaders의 name/value pair를 읽는다.
+  return request.rawHeaders.flatMap((value, index, headers) => {
+    const isHeaderName = index % 2 === 0
+    if (isHeaderName && value.toLowerCase() === name) {
+      return [headers[index + 1]]
+    }
+    return []
+  })
 }
 
 /** Nest/Express parser를 끈 app에서 가장 먼저 실제 payload stream을 제한한다. */
 export function loginJsonParser(request: Request, response: Response, next: NextFunction): void {
   const path = request.path.toLowerCase().replace(/\/+$/, '')
-  if (request.method !== 'POST' || !['/auth/login-requests', '/auth/exchange'].includes(path)) { next(); return }
-  const media = headers(request, 'content-type'), encoding = headers(request, 'content-encoding')
-  const rejectAndClose = (definition: LoginErrorDefinition): void => {
+  if (request.method !== 'POST' || !['/auth/login-requests', '/auth/exchange'].includes(path)) {
+    next()
+    return
+  }
+
+  const contentTypes = readHeaderValues(request, 'content-type')
+  const contentEncodings = readHeaderValues(request, 'content-encoding')
+  const rejectPayloadAndClose = (definition: LoginErrorDefinition): void => {
     request.pause()
     response.setHeader('Connection', 'close')
     jsonError(response, definition)
   }
-  if (media.length !== 1 || !/^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(media[0]) ||
-    encoding.length > 1 || (encoding.length === 1 && !/^identity$/i.test(encoding[0]))) {
-    rejectAndClose(LOGIN_ERRORS.MEDIA)
+
+  // 1. Media/encoding 오류를 크기·JSON 오류보다 먼저 거절한다.
+  if (
+    contentTypes.length !== 1 ||
+    !/^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(contentTypes[0]) ||
+    contentEncodings.length > 1 ||
+    (contentEncodings.length === 1 && !/^identity$/i.test(contentEncodings[0]))
+  ) {
+    rejectPayloadAndClose(LOGIN_ERRORS.MEDIA)
     return
   }
-  const declared = headers(request, 'content-length')
-  if (declared.length === 1 && /^\d+$/.test(declared[0]) && Number(declared[0]) > LOGIN.jsonBytes) {
-    rejectAndClose(LOGIN_ERRORS.TOO_LARGE)
+
+  // 2. 선언 길이로 조기 거절할 수 있지만 실제 byte 상한 검사는 아래 stream에서 수행한다.
+  const contentLengths = readHeaderValues(request, 'content-length')
+  if (
+    contentLengths.length === 1 &&
+    /^\d+$/.test(contentLengths[0]) &&
+    Number(contentLengths[0]) > LOGIN.jsonBytes
+  ) {
+    rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
     return
   }
+
   const chunks: Buffer[] = []
-  let length = 0
-  let done = false
-  const clear = (): void => {
-    done = true
+  let receivedBytes = 0
+  let finished = false
+
+  const clearPayload = (): void => {
+    finished = true
     chunks.length = 0
-    request.off('data', data)
-    request.off('end', end)
+    request.off('data', onData)
+    request.off('end', onEnd)
   }
-  const data = (chunk: Buffer): void => {
-    if (done) return
-    length += chunk.length
-    if (length > LOGIN.jsonBytes) {
-      clear()
-      rejectAndClose(LOGIN_ERRORS.TOO_LARGE)
+
+  const onData = (chunk: Buffer): void => {
+    if (finished) {
+      return
+    }
+
+    // 3. 초과 chunk는 저장하지 않고 body 종료 전에 연결을 닫는다.
+    receivedBytes += chunk.length
+    if (receivedBytes > LOGIN.jsonBytes) {
+      clearPayload()
+      rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
       return
     }
     chunks.push(chunk)
   }
-  const end = (): void => {
-    if (done) return
+
+  const onEnd = (): void => {
+    if (finished) {
+      return
+    }
+
     try {
-      const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks, length))
+      // 4. 상한 이하의 전체 body만 strict UTF-8로 해석한 뒤 JSON을 읽는다.
+      const payload = Buffer.concat(chunks, receivedBytes)
+      const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+      const decoded = decoder.decode(payload)
       request.body = JSON.parse(decoded) as unknown
-      clear()
+      clearPayload()
       next()
     } catch {
-      clear()
+      clearPayload()
       next(new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST))
     }
   }
-  request.on('data', data)
-  request.once('end', end)
+
+  request.on('data', onData)
+  request.once('end', onEnd)
   request.once('error', () => {
-    if (done) return
-    clear()
-    if (!response.headersSent && !response.destroyed) jsonError(response, LOGIN_ERRORS.INVALID_REQUEST)
+    if (finished) {
+      return
+    }
+    clearPayload()
+    if (!response.headersSent && !response.destroyed) {
+      jsonError(response, LOGIN_ERRORS.INVALID_REQUEST)
+    }
   })
-  request.once('aborted', clear)
+  request.once('aborted', clearPayload)
 }
