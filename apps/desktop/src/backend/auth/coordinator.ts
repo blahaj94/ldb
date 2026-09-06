@@ -388,6 +388,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (prepared === 'established') {
         await handleStaleTransition()
       }
+      const isUnconfirmed = prepared === 'unconfirmed'
+      const isLogoutCleaning = logoutFlight != null
+      if (isUnconfirmed && !isLogoutCleaning) {
+        storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
+      }
       return false
     }
     if (prepared === 'established') {
@@ -662,7 +667,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
 
       const cleared = await clearLocal()
-      if (!isCurrentPending(value)) {
+      const isLogoutCleaning = logoutFlight != null
+      if (isLogoutCleaning) {
         return
       }
       if (!cleared) {
@@ -1137,6 +1143,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return failure('AUTH_BUSY')
     }
 
+    const operationGeneration = generation
     if (isRestorePaused) {
       const currentCredential = credential
       if (currentCredential == null) {
@@ -1145,14 +1152,21 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           return failure('AUTH_OPERATION_FAILED')
         }
         publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
-        await restoreReadyCredential(refreshToken, generation)
+        const canRestore = generation === operationGeneration
+        if (!canRestore) {
+          return success()
+        }
+        await restoreReadyCredential(refreshToken, operationGeneration)
         return success()
       }
       publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
+      const canResume = generation === operationGeneration
+      if (!canResume) {
+        return success()
+      }
       const checkedAt = dependencies.clock.read()
       const canUseAccess =
         !checkedAt.discontinuous && checkedAt.wallMs < currentCredential.accessTokenExpiresAtMs
-      const operationGeneration = generation
       if (!canUseAccess) {
         await startWriter(async () => {
           await rotateCredential(currentCredential.refreshToken, operationGeneration)
@@ -1165,8 +1179,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
 
     publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
+    const canRetry = generation === operationGeneration
+    if (!canRetry) {
+      return success()
+    }
     if (blockedMode === 'cleanup') {
-      const operationGeneration = generation
       let inspection
       try {
         inspection = await dependencies.store.inspect()
@@ -1206,7 +1223,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return success()
     }
 
-    await restoreFromStore(generation)
+    await restoreFromStore(operationGeneration)
     return success()
   }
 
