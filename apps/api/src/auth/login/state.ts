@@ -2,21 +2,16 @@ import type { DataSource, EntityManager } from 'typeorm'
 import { AuthLoginRequestSchema } from '../../database/schemas/auth-login-requests.js'
 import type { AuthLoginRequest } from '../../database/schemas/auth-login-requests.js'
 import { CLEARED_LOGIN_FIELDS, LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
-import { LoginFailure, loginFailure } from '../../errors/login.js'
-import type { LoginRegistry } from './registry.js'
+import { loginFailure } from '../../errors/login.js'
 import { decodeOpaque, equalHash, opaqueHash } from './crypto.js'
 
-/** Failure 반환은 terminal 정리를 commit한다. Throw는 호출자 쓰기까지 rollback한다. */
+/** 단순 transaction의 오류를 정제한다. 정리 commit 후 거절하는 결과는 각 호출부에서 처리한다. */
 export async function loginTransaction<T>(
   source: DataSource,
-  operation: (manager: EntityManager) => Promise<T | LoginFailure>,
+  operation: (manager: EntityManager) => Promise<T>,
 ): Promise<T> {
   try {
-    const result = await source.transaction('READ COMMITTED', operation)
-    if (result instanceof LoginFailure) {
-      throw result
-    }
-    return result
+    return await source.transaction('READ COMMITTED', operation)
   } catch (error) {
     // Commit 응답 유실·release 실패도 결과를 폐기한다. Token 재전달/retry 경로는 없다.
     throw loginFailure(error, LOGIN_ERRORS.UNAVAILABLE)
@@ -49,19 +44,6 @@ export async function markLoginRequestFailed(
     status: 'failed',
     consumedAt: null,
   })
-}
-
-export async function terminal(manager: EntityManager, row: AuthLoginRequest, consumedAt: Date | null = null): Promise<void> {
-  await manager.getRepository(AuthLoginRequestSchema).update({ id: row.id }, {
-    ...CLEARED_LOGIN_FIELDS, status: consumedAt ? 'consumed' : 'failed', consumedAt,
-  })
-}
-
-export async function resolveRegistration(manager: EntityManager, row: AuthLoginRequest, registry: LoginRegistry) {
-  try { return registry.resolve(row) } catch {
-    await terminal(manager, row)
-    return new LoginFailure(LOGIN_ERRORS.INTERNAL)
-  }
 }
 
 export function browserCookie(id: string, value: string, seconds: number): string {
