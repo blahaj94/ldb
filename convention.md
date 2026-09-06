@@ -1,6 +1,6 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: warning
 scope: repository handwritten source, tests, scripts and tooling
 last-reviewed: 2026-09-06
@@ -16,7 +16,7 @@ review-after: 승인 후 서로 다른 app 또는 tooling의 코드 PR 3개에 �
 
 프로젝트에서 직접 작성하는 모든 코드의 공통 작성·수정·review 기준이다. API, Web, Desktop의 main/preload/renderer, package, script, tooling과 test에 동일하게 적용한다. 파일 위치나 언어가 다르다는 이유로 제외하지 않는다.
 
-현재는 Rule 제안이다. [Change Control](docs/rules/change-control.md)에 따른 Draft PR의 명시적 승인과 active 전환 전에는 새로운 구현 권한으로 사용하지 않는다. 승인 후 새 코드와 수정·review하는 기존 코드에 적용하며, 전체 기존 코드의 일괄 refactor를 자동으로 시작하지 않는다.
+이 Rule은 [PR #75의 사용자 승인](https://github.com/blahaj94/ldb/pull/75#issuecomment-5558145217)을 반영한다. 새 코드와 수정·review하는 기존 코드에 적용하며, 전체 기존 코드의 일괄 refactor를 자동으로 시작하지 않는다. 이후 변경은 [Change Control](docs/rules/change-control.md)을 따른다.
 
 Generated/vendor 코드는 산출물을 직접 고치지 않고 소유한 생성 source나 template에서 기준을 적용한다. 실행 조건이 없는 정적 markup·선언·data에 boolean을 만들지는 않는다. JSX의 조건부 렌더링이나 설정·query 생성 코드처럼 판단이 있는 곳에는 같은 기준을 적용한다.
 
