@@ -2,7 +2,7 @@
 type: rule
 status: proposed
 enforcement: warning
-scope: backend source and related tests
+scope: backend server source and related tests
 last-reviewed: 2026-09-06
 rationale: 사람이 Backend code의 처리 순서와 결과를 이해하기 위해 추가로 해야 하는 해석·추적 부담을 줄인다.
 evidence: "PR #59와 PR #64의 가독성 비교 및 PR #64 a613912의 사용자 검토"
@@ -16,7 +16,7 @@ review-after: 승인 뒤 Backend 구현 PR 3개에서 사람이 읽고 수정하
 
 독자가 처리 순서, 판단 근거, 상태 변경과 실패 결과를 code에서 직접 따라갈 수 있게 작성한다. 이를 위해 필요한 명시성과 길이를 허용한다.
 
-적용 대상은 `apps/api`를 포함한 Backend source와 직접 관련된 test다. 사람의 재진입 기준은 TypeScript와 async/await를 이해하고 관련 contract를 읽은 유지보수자다. 특정 module의 내부 관례를 이미 외웠다고 가정하지 않는다.
+적용 대상은 `apps/api`와 향후 서버용 app/package의 source 및 직접 관련된 test다. 사람의 재진입 기준은 TypeScript와 async/await를 이해하고 관련 contract를 읽은 유지보수자다. 특정 module의 내부 관례를 이미 외웠다고 가정하지 않는다.
 
 이 문서는 [`code-quality.md`](code-quality.md)의 유지보수성 기준을 Backend 작업에 구체화한다. 승인·scope·dependency는 [`change-control.md`](change-control.md), 검증은 [`testing.md`](testing.md)를 따른다. 현재는 제안이며 Draft PR의 명시적 승인 전에는 active Rule이나 구현 권한으로 취급하지 않는다.
 
