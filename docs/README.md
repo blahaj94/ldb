@@ -33,7 +33,8 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 | 작업                             | Required document                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
 | 모든 code 작성·수정·review       | [`convention.md`](../convention.md), `docs/rules/change-control.md`, `docs/rules/testing.md`, `docs/rules/code-quality.md` |
-| 큰 작업 분해 또는 agent handoff  | `docs/rules/agent-workflow.md`                                                        |
+| 큰 작업 분해와 역할·Issue contract | `docs/rules/agent-workflow.md`                                                       |
+| Worker 배정·상태·handoff·통합   | `docs/rules/agent-execution.md`                                                       |
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
 | 실행 command 또는 file 위치 확인 | `docs/reference/repository-map.md`                                                    |
 | API runtime·검색 작업 | `docs/rules/api-runtime.md`, `docs/rules/character-search.md` |
@@ -60,6 +61,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
+- [`rules/agent-execution.md`](rules/agent-execution.md): 복수 Worker의 roster, context, 상태와 통합 계약
 - [`architecture/overview.md`](architecture/overview.md): 현재 system boundary와 architecture approval 지점
 
 - [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 계약
