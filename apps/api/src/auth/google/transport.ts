@@ -1,9 +1,13 @@
 import type { ProviderVerificationInput } from '../../types/login.js'
 import type { GoogleProviderConfiguration, GoogleProviderRegistration } from './types.js'
+import { LOGIN_ERRORS } from '../../constants/login.js'
+import { LoginFailure } from '../../errors/login.js'
 
 export function discardResponse(response: Response): void {
   // 이미 읽기 중인 native stream은 fetch의 같은 signal로 취소된다.
-  void response.body?.cancel().catch(() => undefined)
+  const body = response.body
+  const hasBody = body != null
+  if (hasBody) void body.cancel().catch(() => undefined)
 }
 
 /** Callback의 단일 signal만 사용한다. 신호를 무시하는 외부 구현의 늦은 결과도 버린다. */
@@ -17,16 +21,20 @@ export function withAbort<T>(
     const aborted = () => {
       finished = true
       signal.removeEventListener('abort', aborted)
-      reject(new Error('Google provider verification was aborted'))
+      reject(new LoginFailure(LOGIN_ERRORS.PROVIDER))
     }
     signal.addEventListener('abort', aborted, { once: true })
-    if (signal.aborted) aborted()
+    const isAlreadyAborted = signal.aborted
+    if (isAlreadyAborted) aborted()
 
     operation.then((value) => {
       signal.removeEventListener('abort', aborted)
-      if (finished || signal.aborted) {
-        discard?.(value)
-        reject(new Error('Google provider result arrived after cancellation'))
+      const isAbortRequested = !finished && signal.aborted
+      const isLateResult = finished || isAbortRequested
+      if (isLateResult) {
+        const canDiscard = discard != null
+        if (canDiscard) discard(value)
+        reject(new LoginFailure(LOGIN_ERRORS.PROVIDER))
         return
       }
       finished = true
@@ -44,12 +52,25 @@ export async function readProviderJson(
   signal: AbortSignal,
 ): Promise<unknown> {
   try {
-    signal.throwIfAborted()
-    if (!response) throw new TypeError('Google provider HTTP response is missing')
-    if (response.status !== 200) throw new Error('Google provider HTTP status is not successful')
-    return await withAbort(response.json(), signal)
+    const isAborted = signal.aborted
+    if (isAborted) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    const providerResponse = response
+    const hasResponse = providerResponse != null
+    if (!hasResponse) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    const isSuccessfulResponse = providerResponse.status === 200
+    if (!isSuccessfulResponse) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    let body: Promise<unknown>
+    try {
+      // Provider JSON/stream 예외는 원문 객체가 정제 경계를 넘기 전에 분류한다.
+      body = providerResponse.json().catch(() => { throw new LoginFailure(LOGIN_ERRORS.PROVIDER) })
+    } catch {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    return await withAbort(body, signal)
   } finally {
-    if (response) discardResponse(response)
+    const pendingResponse = response
+    const hasResponse = pendingResponse != null
+    if (hasResponse) discardResponse(pendingResponse)
     response = undefined
   }
 }
@@ -66,45 +87,70 @@ export async function exchangeGoogleCode(
   const request: RequestInit = { method: 'POST', redirect: 'error', cache: 'no-store' }
 
   try {
-    if (!input) throw new TypeError('Google token exchange input is required')
-    const signal = input.signal
-    signal.throwIfAborted()
-    secret = await withAbort(Promise.resolve(resolveSecret({
-      version: registration.snapshot.version,
-      reference: registration.snapshot.providerSecretRef,
-      signal,
-    })), signal)
-    if (typeof secret !== 'string' || secret.length === 0) {
-      throw new TypeError('Google client secret could not be resolved')
-    }
-    signal.throwIfAborted()
+    let signal: AbortSignal
+    {
+      const providerInput = input
+      const hasInput = providerInput != null
+      if (!hasInput) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+      signal = providerInput.signal
+      const isInitiallyAborted = signal.aborted
+      if (isInitiallyAborted) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+      let secretResolution: Promise<string>
+      try {
+        secretResolution = Promise.resolve(resolveSecret({
+          version: registration.snapshot.version,
+          reference: registration.snapshot.providerSecretRef,
+          signal,
+        })).catch(() => { throw new LoginFailure(LOGIN_ERRORS.PROVIDER) })
+      } catch {
+        throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+      }
+      secret = await withAbort(secretResolution, signal)
+      const isSecretString = typeof secret === 'string'
+      const hasSecret = isSecretString && secret.length > 0
+      const isValidSecret = isSecretString && hasSecret
+      if (!isValidSecret) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+      const isAbortedAfterSecret = signal.aborted
+      if (isAbortedAfterSecret) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
 
-    form = new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: registration.snapshot.providerClientId,
-      client_secret: secret,
-      redirect_uri: registration.snapshot.callbackUrl,
-      code: input.code,
-      code_verifier: input.providerVerifier,
-    })
-    request.headers = { 'content-type': 'application/x-www-form-urlencoded' }
-    request.signal = signal
-    request.body = form
+      form = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: registration.snapshot.providerClientId,
+        client_secret: secret,
+        redirect_uri: registration.snapshot.callbackUrl,
+        code: providerInput.code,
+        code_verifier: providerInput.providerVerifier,
+      })
+      request.headers = { 'content-type': 'application/x-www-form-urlencoded' }
+      request.signal = signal
+      request.body = form
+    }
     input = undefined
     secret = undefined
 
-    response = await withAbort(fetchGoogle(registration.tokenEndpoint, request), signal, discardResponse)
+    let tokenRequest: Promise<Response>
+    try {
+      tokenRequest = fetchGoogle(registration.tokenEndpoint, request)
+        .catch(() => { throw new LoginFailure(LOGIN_ERRORS.PROVIDER) })
+    } catch {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    response = await withAbort(tokenRequest, signal, discardResponse)
     // Headers 뒤 body/ID Token/JWKS 대기에 code·verifier·client secret을 넘기지 않는다.
     for (const key of [...form.keys()]) form.delete(key)
     delete request.body
     form = undefined
     return await readProviderJson(response, signal)
   } finally {
-    if (form) {
-      for (const key of [...form.keys()]) form.delete(key)
+    const pendingForm = form
+    const hasForm = pendingForm != null
+    if (hasForm) {
+      for (const key of [...pendingForm.keys()]) pendingForm.delete(key)
     }
     delete request.body
-    if (response) discardResponse(response)
+    const pendingResponse = response
+    const hasResponse = pendingResponse != null
+    if (hasResponse) discardResponse(pendingResponse)
     form = undefined
     response = undefined
     secret = undefined
