@@ -86,3 +86,15 @@ Chrome의 실제 DevTools UI에서 light와 reduced-motion을 emulation했다. N
 Windows/Linux, 다른 OS font rendering, 실제 capture/OCR·OS capture permission·계정·auth·배포/packaging 성공은 이번 UI evidence의 범위가 아니다. Native Example fixture에서는 CSP가 설정되지 않은 독립 Example을 로드하므로 Electron의 CSP 진단 경고가 표시됐다. 해당 fixture는 제품 main/preload를 사용하지 않고 sandbox·permission 거절·media stub을 유지했다. Security 설정을 완화하거나 Console paste 보호를 해제하지 않았다.
 
 Chrome의 강제 pseudo-state를 모두 해제하고 color-scheme/reduced-motion을 No emulation으로 복구했다. Viewport override를 reset한 뒤 task가 만든 tab만 닫았다. Native device toolbar를 껐고, native media emulation은 해당 disposable fixture의 종료·profile 삭제로 정리했다. Task 소유 Electron process, 네 개의 loopback dev/preview server, 잔여 fixture profile을 정리했다. 사용자 원래 tab/app이나 OS preference는 변경하지 않았다.
+
+## Fresh consumer resolution 수정
+
+PR #104 merge 이후 발견된 cold resolution 회귀의 Green은 `fef07a177a2b8c6e174c206d6c7bc56e0f5a7804`다. Red·격리 조건·실제 command 결과는 `packages/ui/test/consumer-resolution.md`를 따른다. Source alias는 현재 public source를 직접 소비하며, 이전 artifact 선행 build를 cold 성공 근거로 사용하지 않는다.
+
+기준 `1f2434b`와 비교해 `packages/ui/src`, `foundation.css`, Example source, Web/Desktop product source, package manifest와 lockfile은 변경되지 않았다. 여섯 consumer config의 resolution 및 build-time type만 바뀌었으므로 위 interaction·Theme·Motion·responsive matrix를 이 불변 범위에서 재사용했다. 새 전체 matrix를 수행했다는 뜻이 아니다.
+
+- Web `dev`: 실제 Chrome guest window에서 정상 렌더, dark 배경과 SEED ActionButton의 orange/focus 외형을 확인했다. Pointer로 Count 0→1, Space로 1→2가 됐다. 현재 browser connector가 없어 native UI로 확인했으며 새 DOM computed-style 수치는 측정하지 않았다.
+- Desktop dev: 실제 electron-vite renderer config를 읽는 별도 Vite server의 main/App HTTP entry가 정상 해석됐다. `--rendererOnly`도 Electron bootstrap을 호출하므로 제품 `dev`를 실행한 결과로 부르지 않는다.
+- 실제 Electron renderer: 기존 `ui:fixture desktop dark`로 새 production renderer를 열었다. 선택 전 Start disabled, Example window 선택 후 enabled, Start의 media 거절 stub 상태, Tab+Space Stop의 `Capture stopped.`와 SEED 스타일을 확인했다. Fixture는 1100×800 window를 사용했다. 이 확인은 dev URL을 Electron에서 연 결과와 구분한다.
+
+Web guest window와 dev server를 닫고 Electron fixture의 정상 종료를 확인했다. 제품 main/preload·실제 capture/OCR는 실행하지 않았다. 기존 다른 OS·packaging·실제 native 동작의 미검증 범위는 유지한다.

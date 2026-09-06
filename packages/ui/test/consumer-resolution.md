@@ -21,4 +21,4 @@ Desktop 제품 `dev`는 Electron bootstrap을 실행하므로 이 regression에�
 
 기준 `1f2434b033662fd4dd7bf36181f05062398933a2`에서 Web·Desktop test는 App의 `@ldb/ui` import 해석, typecheck와 build는 같은 import의 TS2307로 실패한다. Web dev와 Desktop renderer dev에서도 `/src/App.tsx`가 import-analysis 오류로 HTTP 500을 반환한다. Test harness 설치 실패가 아닌 보고된 consumer integration defect다. Example은 기존 source alias와 TypeScript paths 덕분에 네 경로가 통과한다. 전체 12 case에서 8개의 예상 실패와 4개 통과를 확인한다.
 
-Green에서는 package public API·source·CSS·runtime behavior를 유지하면서 consumer resolution을 연결한다. Final head에서 cold regression과 관련 lint·build artifact/고지를 확인한다. 기존 `docs/reference/ui-validation.md`의 전체 interaction·Theme·Motion·responsive matrix는 source·외형 불변을 확인한 범위에서 재사용하고, 바뀐 소비 경로는 별도 entry smoke로 확인한다.
+Green `fef07a177a2b8c6e174c206d6c7bc56e0f5a7804`는 Web/Desktop의 여섯 config에 exact alias와 TypeScript paths를 연결한다. Web은 이미 설치된 Node type을 compiler에 명시해 공식 Snippet의 development guard도 검사한다. Package public API·source·CSS·runtime behavior는 변경하지 않는다. Cold regression 12 case가 모두 통과하며 UI/Web/Desktop lint와 library·Example·Web·Desktop build 및 네 artifact/고지 검사가 통과한다. 기존 전체 UI matrix 재사용 근거와 작은 실제 entry smoke는 `docs/reference/ui-validation.md`에 기록한다.
