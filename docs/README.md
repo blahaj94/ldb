@@ -32,6 +32,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 | 작업                             | Required document                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
 | 모든 code 변경                   | `docs/rules/change-control.md`, `docs/rules/testing.md`, `docs/rules/code-quality.md` |
+| Backend 구현·refactor·review     | `docs/rules/backend-readability.md`                                                    |
 | 큰 작업 분해 또는 agent handoff  | `docs/rules/agent-workflow.md`                                                        |
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
 | 실행 command 또는 file 위치 확인 | `docs/reference/repository-map.md`                                                    |
@@ -56,6 +57,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 - [`rules/change-control.md`](rules/change-control.md): approval, Issue, branch, commit, PR, parallel 작업
 - [`rules/testing.md`](rules/testing.md): Red-Green workflow와 validation 기준
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
+- [`rules/backend-readability.md`](rules/backend-readability.md): Backend 처리 순서·판단 근거·상태 변경·실패 결과의 가독성 기준
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
 - [`architecture/overview.md`](architecture/overview.md): 현재 system boundary와 architecture approval 지점
 
