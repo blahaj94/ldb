@@ -1,5 +1,6 @@
 const RULE_PATHS = [
   "AGENTS.md",
+  "convention.md",
   "docs/rules/",
   "docs/architecture/",
   "docs/domain/",
