@@ -30,16 +30,25 @@ async function rollbackFailure(source, scenario) {
         throw error
       }
     },
-    commit: async (_runner, commit) => { commits++; await commit() },
+    commit: async (_runner, commit) => {
+      commits++
+      await commit()
+    },
   })
   const signer = f.deps.issueAccessJwt
   if (scenario === 'signing') f.deps.issueAccessJwt = async () => { throw new Error('private detail') }
   try {
     if (scenario === 'entropy') {
-      await rejected(() => f.rotateWithBytes(raw, () => { entropyCalls++; throw new Error('private detail') }), 'AUTH_INTERNAL_ERROR')
+      await rejected(() => f.rotateWithBytes(raw, () => {
+        entropyCalls++
+        throw new Error('private detail')
+      }), 'AUTH_INTERNAL_ERROR')
     } else if (['current-hash', 'old-hash', 'other-device-hash'].includes(scenario)) {
       const collision = scenario === 'other-device-hash' ? other.initial.refreshToken : f.initial.refreshToken
-      await rejected(() => f.rotateWithBytes(raw, () => { entropyCalls++; return Buffer.from(collision, 'base64url') }), 'AUTH_UNAVAILABLE')
+      await rejected(() => f.rotateWithBytes(raw, () => {
+        entropyCalls++
+        return Buffer.from(collision, 'base64url')
+      }), 'AUTH_UNAVAILABLE')
       assert.equal(constraint, 'pk_auth_refresh_tokens')
       assert.equal(consumed, true)
     } else {
@@ -104,7 +113,10 @@ async function uncertainCommit(source, applied, reuse) {
 
 export async function assertRefreshFailures(source, mark) {
   const failures = ['signing', 'entropy', 'insert', 'current-hash', 'old-hash', 'other-device-hash']
-  for (const scenario of failures) { mark(`${scenario} whole-transaction rollback`); await rollbackFailure(source, scenario) }
+  for (const scenario of failures) {
+    mark(`${scenario} whole-transaction rollback`)
+    await rollbackFailure(source, scenario)
+  }
   for (const reuse of [false, true]) {
     for (const applied of [false, true]) {
       mark(`${reuse ? 'reuse revocation' : 'rotation'} uncertain ${applied ? 'committed' : 'rolled back'} outcome`)

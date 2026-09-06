@@ -92,6 +92,9 @@ export async function assertRefreshRotation(source, mark) {
     ['decoded hash, JWT, full history and other devices', assertRotationHistory],
     ['exact idle boundary and expired consumed token', assertBoundary],
   ]
-  for (const [name, run] of cases) { mark(name); await run(source) }
+  for (const [name, run] of cases) {
+    mark(name)
+    await run(source)
+  }
   return cases.length
 }

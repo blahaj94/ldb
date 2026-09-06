@@ -26,12 +26,18 @@ test('rotation hashes decoded bytes, locks in order and returns only after commi
   const committing = new Promise<void>((resolve) => { commitStarted = resolve })
   let releaseCommit!: () => void
   const release = new Promise<void>((resolve) => { releaseCommit = resolve })
-  f.state.beforeCommit = async () => { commitStarted(); await release }
+  f.state.beforeCommit = async () => {
+    commitStarted()
+    await release
+  }
   let returned = false
   const pending = rotateRefreshForTest(f.deps, f.raw, (size) => {
     assert.equal(size, 32)
     return bytes
-  }).then((value) => { returned = true; return value })
+  }).then((value) => {
+    returned = true
+    return value
+  })
   await committing
   assert.equal(returned, false)
   releaseCommit()

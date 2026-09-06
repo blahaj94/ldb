@@ -67,7 +67,10 @@ async function r2BeforeReuse(source) {
   const releaseSigning = Promise.withResolvers()
   let signCalls = 0
   f.deps.issueAccessJwt = async (input) => {
-    if (++signCalls === 1) { signing.resolve(); await releaseSigning.promise }
+    if (++signCalls === 1) {
+      signing.resolve()
+      await releaseSigning.promise
+    }
     return signer(input)
   }
   const first = settled(f.rotate(f.initial.refreshToken))
@@ -148,7 +151,11 @@ async function refreshBeforeLogoutWithLateResult(source) {
   const restore = instrument(source, {
     commit: async (_runner, commit) => {
       await commit()
-      if (!held) { held = true; committed.resolve(); await releaseResult.promise }
+      if (!held) {
+        held = true
+        committed.resolve()
+        await releaseResult.promise
+      }
     },
   })
   const pending = settled(f.rotate(f.initial.refreshToken))
@@ -235,6 +242,9 @@ export async function assertRefreshConcurrency(source, mark) {
     ...['auth_sessions', 'auth_refresh_tokens'].map((kind) => [`${kind} ownership changed after hint`, () => staleOwnership(source, kind)]),
     ['activity commits updated deadline after refresh waits', () => activityBeforeWait(source)],
   ]
-  for (const [name, run] of cases) { mark(name); await run() }
+  for (const [name, run] of cases) {
+    mark(name)
+    await run()
+  }
   return cases.length
 }
