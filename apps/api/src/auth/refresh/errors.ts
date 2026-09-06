@@ -11,7 +11,7 @@ export const REFRESH_ERRORS = {
   },
 } as const
 
-type RefreshErrorDefinition = typeof REFRESH_ERRORS[keyof typeof REFRESH_ERRORS]
+export type RefreshErrorDefinition = typeof REFRESH_ERRORS[keyof typeof REFRESH_ERRORS]
 
 export class RefreshFailure extends Error {
   readonly code: RefreshErrorDefinition['code']

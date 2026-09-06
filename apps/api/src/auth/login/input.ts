@@ -56,6 +56,16 @@ export function parseExchange(value: unknown): LoginExchange {
   return body as unknown as LoginExchange
 }
 
+export function parseRefreshToken(value: unknown): string {
+  const body = requireExactFields(value, ['refreshToken'])
+  const rawToken = body.refreshToken
+  const isRefreshTokenString = typeof rawToken === 'string'
+  if (!isRefreshTokenString) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  return rawToken
+}
+
 export function parseCallback(query: URLSearchParams): LoginCallbackInput {
   try {
     const states = query.getAll('state')
