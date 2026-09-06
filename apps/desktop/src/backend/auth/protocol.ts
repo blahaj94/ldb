@@ -57,7 +57,7 @@ export function validateApiOrigin(apiOrigin: string): string {
   return apiOrigin
 }
 
-function validateReturnTarget(returnTarget: string): string {
+export function validateReturnTarget(returnTarget: string): string {
   const url = parseExactUrl(returnTarget)
   // 실제 owned scheme 값은 bootstrap이 주입한다. Browser/network가 이미 소유한 built-in만 제외한다.
   const isPrivateScheme = !INCOMPATIBLE_APP_PROTOCOLS.has(url.protocol)
