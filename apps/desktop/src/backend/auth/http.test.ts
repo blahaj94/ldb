@@ -33,7 +33,7 @@ afterEach(() => {
 describe('Desktop auth 고정 HTTP client', () => {
   it('login request를 고정 endpoint와 exact JSON body로 한 번 전송한다', async () => {
     const ticket = Buffer.alloc(32, 8).toString('base64url')
-    const fetch = vi.fn(async () =>
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
       jsonResponse(
         {
           requestId: REQUEST_ID,
@@ -76,7 +76,7 @@ describe('Desktop auth 고정 HTTP client', () => {
 
   it('exchange, refresh, GET /me와 logout에 caller URL 없이 고정 schema를 사용한다', async () => {
     const fetch = vi
-      .fn()
+      .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
         jsonResponse({
           ...validTokens(),
@@ -120,7 +120,7 @@ describe('Desktop auth 고정 HTTP client', () => {
       jsonResponse({ ...validTokens(), extra: true }),
       jsonResponse({ ...validTokens(), refreshToken: `${REFRESH_1}=` })
     ]
-    const fetch = vi.fn(async () => responses.shift()!)
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => responses.shift()!)
     const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
 
     for (let index = 0; index < 4; index += 1) {
@@ -132,7 +132,7 @@ describe('Desktop auth 고정 HTTP client', () => {
 
   it('정해진 오류 body만 분류하고 raw body나 외부 Error를 노출하지 않는다', async () => {
     const fetch = vi
-      .fn()
+      .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
         jsonResponse(
           {
@@ -163,7 +163,7 @@ describe('Desktop auth 고정 HTTP client', () => {
 
   it('header부터 response body까지 하나의 15초 deadline으로 취소한다', async () => {
     vi.useFakeTimers()
-    const fetch = vi.fn((_url: string, request?: RequestInit) => {
+    const fetch = vi.fn<typeof globalThis.fetch>((_url, request) => {
       return new Promise<Response>((_resolve, reject) => {
         request?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
       })
@@ -171,9 +171,13 @@ describe('Desktop auth 고정 HTTP client', () => {
     const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
 
     const refresh = client.refresh(REFRESH_0, new AbortController().signal)
+    const rejected = expect(refresh).rejects.toMatchObject({
+      code: 'network',
+      transmission: 'unknown'
+    })
     await vi.advanceTimersByTimeAsync(15_000)
 
-    await expect(refresh).rejects.toMatchObject({ code: 'network', transmission: 'unknown' })
+    await rejected
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 })
