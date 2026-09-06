@@ -453,6 +453,30 @@ describe('Desktop AuthCoordinator login', () => {
     }
   )
 
+  it('폐기 실패가 settle됐어도 writer가 처리하기 전 시작한 logout에 결과를 전달한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+    harness.store.commitOutcomes.push('failed')
+    const disposal = deferred<void>()
+    harness.http.logout.mockImplementationOnce(() => disposal.promise)
+
+    const returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+    await vi.waitFor(() => expect(harness.http.logout).toHaveBeenCalledTimes(1))
+    disposal.reject(new AuthHttpFailure('unavailable'))
+    await Promise.resolve()
+    const logout = coordinator.logout()
+    await Promise.all([returning, logout])
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      notice: 'LOGOUT_SERVER_UNCONFIRMED'
+    })
+    expect(harness.store.inspection).toEqual({ status: 'empty' })
+    expect(harness.http.logout).toHaveBeenCalledTimes(1)
+  })
+
   it('logout 중 stale finalize의 marker 재확립 실패도 서버 폐기 실패를 전달한다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
