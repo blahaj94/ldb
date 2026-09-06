@@ -83,7 +83,7 @@ CHECK에서 실제로 반복되던 진행 중 앱 proof, browser_started/process
 
 API의 TypeORM `1.1.1`, `@nestjs/typeorm` `12.0.1`, TypeScript `5.9.3`은 package와 lockfile에서 확인했으며 이 refactor에서 변경하지 않았다. 별도 naming strategy가 없고 TypeORM 기본 strategy는 property를 snake_case column으로 바꾸지 않으므로 기존 `name`을 유지한다. UUID는 API 생성 책임, 시간은 기존 `timestamptz`·`precision: 0`·기본값 없음, nullable/type·UNIQUE/index/constraint 이름은 그대로다. 기존 Migration을 수정하거나 새 Migration을 추가하지 않는다.
 
-Identity session 쓰기는 `apps/api/src/auth/identity-session.ts`에 구현됐다. 아래 사용 경계대로 동일 transaction manager의 typed Repository를 사용하며 Generic Repository는 두지 않는다. AuthLoginRequest의 공통 상태 전이와 HTTP factory·JWT 합성은 `apps/api/src/auth/login`에 구현됐다. 실제 provider adapter와 기본 main 연결 gate는 [`auth-login-development.md`](auth-login-development.md)를 참고한다.
+Identity session 쓰기는 `apps/api/src/auth/identity-session.ts`에 구현됐다. 아래 사용 경계대로 동일 transaction manager의 typed Repository를 사용하며 Generic Repository는 두지 않는다. AuthLoginRequest의 공통 상태 전이와 HTTP factory·JWT 합성은 `apps/api/src/auth/login`, Google 내부 adapter는 `apps/api/src/auth/google`에 구현됐다. 실제 registry/credential·기본 main 연결 gate와 격리 검증은 [`auth-login-development.md`](auth-login-development.md)를 참고한다.
 
 `apps/api/test/fixtures/auth-login-request-schema.json`은 구조 변경 전 `8614006`의 독립 metadata snapshot이다. `apps/api/test/auth-login-request-schema.test.ts`는 모든 column 옵션·flat property·선언 순서·UNIQUE/index와 23개 CHECK의 이름/SQL을 대조한다. 현재 schema/helper에서 기대값을 다시 만들지 않는다. Schema 의미가 변경되는 후속 작업에서는 승인된 migration과 DB behavior test를 먼저 검토하고 fixture를 명시적으로 갱신한다.
 
