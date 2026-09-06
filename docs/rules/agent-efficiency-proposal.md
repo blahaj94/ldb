@@ -59,7 +59,7 @@ Runner는 Worker scope를 대체하지 않으며 `worker_count`에 더하지 않
 | 실행 계약 | 정확한 cwd, executable·args·options, command별 check ID, 선행 dependency, 기대 exit/result와 PASS·FAIL 기준 |
 | 입력과 checkout | Checkout owner·branch·head, 허용된 미commit 변경 baseline, 관련 source/config/dependency·lockfile/runtime·환경 입력, 실행 전후 비교 command와 기대 기준 |
 | 변경과 자원 | Command가 만드는 generated output·cache·port·DB 등 mutable resource와 허용 범위, 격리 또는 순차 실행 방법, 잔여 자원 확인·회수 owner |
-| 완료와 monitor | Local process/session handle 또는 remote job ID, 전체 job의 terminal state·exit evidence를 얻을 정확한 조회 방법, 인계 시 마지막 확인 상태 |
+| 완료와 monitor | 새 job은 local process/session handle 또는 remote job ID를 수집·보존할 방법을 전달하고 시작 결과에서 실제 handle/ID를 기록한다. 기존 job 인계에는 접근 가능한 실제 handle/ID와 마지막 확인 상태를 전달한다. 두 경우 모두 전체 job의 terminal state·exit evidence를 얻을 정확한 조회 방법을 포함한다. |
 | 제한과 실패 | Job별 deadline, 실패 시 중단할 dependent check와 계속해도 안전한 independent check, 취소 owner·허용 command·확인 방법, 명시된 retry policy와 남은 budget |
 | 반환 | 아래 고정 report, 필요한 evidence 위치, 누락·변경·실패를 돌려보낼 판단 owner |
 
