@@ -5,7 +5,7 @@ enforcement: approval-required
 scope: repository
 last-reviewed: 2026-09-06
 rationale: 작은 GitHub Issue의 handoff와 배정·완료를 명확히 하여 중복 착수와 agent 사이의 context·비용을 제한한다.
-evidence: "GitHub Issue #26, #44"
+evidence: "GitHub Issue #26, #44, #79"
 exceptions: 긴급 작업도 change-control approval boundary와 사용자 merge 권한은 생략하지 않는다.
 review-after: Execution Issue 10개 적용 후
 ---
