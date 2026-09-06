@@ -11,7 +11,9 @@ async function expectUnavailable(operation: Promise<void>): Promise<void> {
     assert('code' in error)
     assert.equal(error.code, 'AUTH_UNAVAILABLE')
     assert.equal('cause' in error, false)
-    assert.doesNotMatch(String('stack' in error ? error.stack : ''), /private|credential|SQL/)
+    const hasStack = 'stack' in error
+    const stack = hasStack ? error.stack : ''
+    assert.doesNotMatch(String(stack), /private|credential|SQL/)
     return true
   })
 }
@@ -112,13 +114,18 @@ test('logout leaves ended, missing and stale ownership sessions unchanged', asyn
 
   for (const scenario of scenarios) {
     const fixture = logoutFixture()
-    if (scenario === 'sessionOwnerChanged') fixture.session.userId = randomUUID()
-    else if (scenario === 'tokenOwnerChanged') fixture.token.sessionId = randomUUID()
-    else if (scenario === 'tokenHashChanged') fixture.token.tokenHash = randomBytes(32)
-    else if (scenario === 'alreadyRevoked') {
+    const shouldChangeSessionOwner = scenario === 'sessionOwnerChanged'
+    const shouldChangeTokenOwner = scenario === 'tokenOwnerChanged'
+    const shouldChangeTokenHash = scenario === 'tokenHashChanged'
+    const shouldMarkAlreadyRevoked = scenario === 'alreadyRevoked'
+    const shouldMarkIdleExpired = scenario === 'idleExpired'
+    if (shouldChangeSessionOwner) fixture.session.userId = randomUUID()
+    else if (shouldChangeTokenOwner) fixture.token.sessionId = randomUUID()
+    else if (shouldChangeTokenHash) fixture.token.tokenHash = randomBytes(32)
+    else if (shouldMarkAlreadyRevoked) {
       fixture.session.revokedAt = checkedAt
       fixture.session.revokedReason = 'refresh_reuse'
-    } else if (scenario === 'idleExpired') {
+    } else if (shouldMarkIdleExpired) {
       fixture.session.lastActiveAt = new Date('2026-08-01T00:00:00.000Z')
     } else {
       fixture.state[scenario] = true
@@ -135,7 +142,8 @@ test('logout sanitizes database and commit uncertainty without retry', async () 
   for (const failurePoint of ['transaction', 'commit'] as const) {
     const fixture = logoutFixture()
     const rawError = new Error('private credential SQL detail')
-    if (failurePoint === 'transaction') fixture.state.transactionFailure = rawError
+    const isTransactionFailure = failurePoint === 'transaction'
+    if (isTransactionFailure) fixture.state.transactionFailure = rawError
     else fixture.state.commitFailure = rawError
 
     await expectUnavailable(logoutSession(fixture.dataSource, fixture.rawToken))

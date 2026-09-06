@@ -51,17 +51,20 @@ export function logoutFixture() {
   const users = {
     findOne: async () => {
       events.push('user-lock')
-      return state.userMissing ? null : user
+      const isUserMissing = state.userMissing
+      return isUserMissing ? null : user
     },
   }
   const sessions = {
     findOneBy: async () => {
       events.push('session-hint')
-      return state.sessionHintMissing ? null : session
+      const isSessionHintMissing = state.sessionHintMissing
+      return isSessionHintMissing ? null : session
     },
     findOne: async () => {
       events.push('session-lock')
-      return state.sessionMissing ? null : session
+      const isSessionMissing = state.sessionMissing
+      return isSessionMissing ? null : session
     },
     update: async (_criteria: unknown, update: { revokedAt: Date; revokedReason: 'logout' }) => {
       events.push('revoke')
@@ -72,17 +75,21 @@ export function logoutFixture() {
   const refresh = {
     findOneBy: async () => {
       events.push('refresh-hint')
-      return state.tokenHintMissing ? null : token
+      const isTokenHintMissing = state.tokenHintMissing
+      return isTokenHintMissing ? null : token
     },
     findOne: async () => {
       events.push('refresh-lock')
-      return state.tokenMissing ? null : token
+      const isTokenMissing = state.tokenMissing
+      return isTokenMissing ? null : token
     },
   }
   const manager = {
     getRepository: (schema: { options: { name: string } }) => {
-      if (schema.options.name === 'User') return users
-      if (schema.options.name === 'AuthSession') return sessions
+      const isUserSchema = schema.options.name === 'User'
+      if (isUserSchema) return users
+      const isSessionSchema = schema.options.name === 'AuthSession'
+      if (isSessionSchema) return sessions
       return refresh
     },
     query: async () => {
@@ -96,18 +103,23 @@ export function logoutFixture() {
       operation: (transactionManager: typeof manager) => Promise<void>,
     ) => {
       events.push('begin')
-      if (state.transactionFailure != null) {
+      const hasTransactionFailure = state.transactionFailure != null
+      if (hasTransactionFailure) {
         throw state.transactionFailure
       }
       await operation(manager)
-      if (state.beforeCommit != null) {
-        await state.beforeCommit()
+      const beforeCommit = state.beforeCommit
+      const hasBeforeCommit = beforeCommit != null
+      if (hasBeforeCommit) {
+        await beforeCommit()
       }
-      if (state.commitFailure != null) {
+      const hasCommitFailure = state.commitFailure != null
+      if (hasCommitFailure) {
         throw state.commitFailure
       }
       events.push('commit')
-      if (isolation !== 'READ COMMITTED') {
+      const hasExpectedIsolation = isolation === 'READ COMMITTED'
+      if (!hasExpectedIsolation) {
         throw new Error('unexpected isolation')
       }
     },

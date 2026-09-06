@@ -73,7 +73,8 @@ export async function logoutSession(dataSource: DataSource, rawToken: unknown): 
     })
   } catch (error) {
     // DB/commit 결과 불명은 원문 상세와 성공 204 없이 정제한다. 자동 retry하지 않는다.
-    if (error instanceof LogoutFailure) throw error
+    const isLogoutFailure = error instanceof LogoutFailure
+    if (isLogoutFailure) throw error
     throw new LogoutFailure(LOGOUT_ERRORS.UNAVAILABLE)
   }
 }

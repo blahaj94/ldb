@@ -47,7 +47,8 @@ const loginService = {
 const sessionService = {
   refresh: async (rawToken) => {
     sessionCalls.refresh.push(rawToken)
-    if (refreshFailure != null) throw refreshFailure
+    const hasRefreshFailure = refreshFailure != null
+    if (hasRefreshFailure) throw refreshFailure
     return {
       tokenType: 'Bearer',
       accessToken: 'session-access',
@@ -58,7 +59,8 @@ const sessionService = {
   },
   logout: async (rawToken) => {
     sessionCalls.logout.push(rawToken)
-    if (logoutFailure != null) throw logoutFailure
+    const hasLogoutFailure = logoutFailure != null
+    if (hasLogoutFailure) throw logoutFailure
   },
 }
 
@@ -141,7 +143,8 @@ test('session routes apply media, size, UTF-8, JSON and exact-shape precedence b
       assert.equal(response.status, status)
       assert.equal(response.headers['cache-control'], 'no-store')
       assert.equal(JSON.parse(response.body).error.code, code)
-      if (status === 413) assert.equal(response.headers.connection, 'close')
+      const isTooLarge = status === 413
+      if (isTooLarge) assert.equal(response.headers.connection, 'close')
     }
   }
   assert.deepEqual(
@@ -164,7 +167,9 @@ test('session routes accept exactly 16,384 UTF-8 bytes and reject the next byte'
       'content-type': 'application/json; charset="utf-8"',
       'content-encoding': 'identity',
     })
-    assert.equal(accepted.status, path.endsWith('logout') ? 204 : 200)
+    const isLogoutPath = path.endsWith('logout')
+    const expectedStatus = isLogoutPath ? 204 : 200
+    assert.equal(accepted.status, expectedStatus)
 
     const rejected = await post(path, [atLimit, ' '])
     assert.equal(rejected.status, 413)

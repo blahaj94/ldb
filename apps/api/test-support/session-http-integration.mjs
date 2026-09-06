@@ -197,7 +197,9 @@ async function noResponseBeforeCommit(source, route) {
         releaseCommit.resolve()
         const result = await pending
         assert.equal(result.error, undefined)
-        assert.equal(result.value.status, route.endsWith('logout') ? 204 : 200)
+        const isLogoutRoute = route.endsWith('logout')
+        const expectedStatus = isLogoutRoute ? 204 : 200
+        assert.equal(result.value.status, expectedStatus)
       } finally {
         releaseCommit.resolve()
       }
@@ -332,12 +334,15 @@ async function uncertainCommit(source, route, applied) {
   const after = await stored(source, f.initial.session.id)
   if (!applied) {
     assert.deepEqual(after, before)
-  } else if (route.endsWith('logout')) {
-    assert.equal(after.session.revoked_reason, 'logout')
-    assert.deepEqual(after.tokens, before.tokens)
   } else {
-    assert.equal(after.session.revoked_at, null)
-    assert.equal(after.tokens.length, before.tokens.length + 1)
+    const isLogoutRoute = route.endsWith('logout')
+    if (isLogoutRoute) {
+      assert.equal(after.session.revoked_reason, 'logout')
+      assert.deepEqual(after.tokens, before.tokens)
+    } else {
+      assert.equal(after.session.revoked_at, null)
+      assert.equal(after.tokens.length, before.tokens.length + 1)
+    }
   }
 }
 
@@ -350,11 +355,13 @@ async function transportAndLogCanary(source) {
   const stdoutWrite = process.stdout.write
   const stderrWrite = process.stderr.write
   process.stdout.write = function (chunk, ...args) {
-    stdout += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
+    const isBufferChunk = Buffer.isBuffer(chunk)
+    stdout += isBufferChunk ? chunk.toString('utf8') : String(chunk)
     return stdoutWrite.call(this, chunk, ...args)
   }
   process.stderr.write = function (chunk, ...args) {
-    stderr += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
+    const isBufferChunk = Buffer.isBuffer(chunk)
+    stderr += isBufferChunk ? chunk.toString('utf8') : String(chunk)
     return stderrWrite.call(this, chunk, ...args)
   }
   try {
