@@ -1,3 +1,4 @@
+import { ActionButton } from '@ldb/ui'
 import { usePartyCapture } from './capture/usePartyCapture'
 
 function App(): React.JSX.Element {
@@ -38,12 +39,12 @@ function App(): React.JSX.Element {
           <option value={5}>5 seconds</option>
         </select>
       </label>
-      <button disabled={!sourceRegistered} type="button" onClick={() => void startCapture()}>
+      <ActionButton disabled={!sourceRegistered} type="button" onClick={() => void startCapture()}>
         Start
-      </button>
-      <button type="button" onClick={() => stopCapture()}>
+      </ActionButton>
+      <ActionButton type="button" onClick={() => stopCapture()}>
         Stop
-      </button>
+      </ActionButton>
       <pre>
         {[
           status,

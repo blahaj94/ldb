@@ -31,3 +31,16 @@ Loading은 disabled를 포함하지 않는 공식 상태다. Busy 작업에서 a
 `node packages/ui/scripts/prepare-seed-source.mjs`는 고정 source hash를 확인한 뒤 Snippet을 생성한다. Source 직접 수정 대신 이 생성 script에서 필요한 변환을 관리한다. DialogTrigger의 동일한 public type을 명시해 declaration의 pnpm private 경로 참조를 방지하고 LayoutBlock content slot을 연결하는 변환을 적용한다. Interaction과 시각 값은 변경하지 않는다. TypeScript는 build-time `node` type을 명시하며 library declaration에는 Node runtime을 노출하지 않는다.
 
 `notices`는 SEED source와 별도 icon package의 LICENSE/NOTICE를 보존한다. `build/notices.ts`는 각 build에서 고지·source provenance와 bundle 입력 graph(미사용 입력 포함)의 dependency license/NOTICE·module 목록을 산출물 `notices`에 기록한다. Absolute filesystem path는 이 목록에 저장하지 않는다. 최초 Red와 정정한 두 기대값의 근거는 `test/contract-corrections.md`에 남겼다.
+
+## 소비 entry와 실제 UI 확인
+
+각 browser entry는 base.css 다음에 `@ldb/ui/foundation.css`를 한 번 import한다. 이 별도 public asset은 공식 Typography의 system font stack과 body 초기화만 담당하며 library JS가 import하거나 dist에 CSS bundle로 출력하지 않는다. Root font-size는 지정하지 않는다. Source 근거·LDB 초기화 차이는 `seed-provenance.json`의 foundation 항목에 있다.
+
+Web은 기존 counter를 ActionButton으로 바꾸고 충돌하던 counter CSS·root 18px font 초기화를 제거했다. 기존 설명·link·counter 의미를 유지한다. Desktop은 renderer의 Start/Stop만 ActionButton으로 바꾸며 source 선택·interval·callback·disabled 의미와 capture 구현을 보존한다. Desktop의 React·UI package는 기존 renderer dependency 배치에 맞춰 devDependency로 설치하고 renderer bundle에 포함한다.
+
+Browser에서는 `dev:examples`와 `preview:examples`, Web의 `dev`·`preview`를 확인한다. 실제 Electron은 아래 test-only harness에서 각각 production renderer와 Example 산출물을 연다.
+
+- `pnpm --filter @ldb/desktop ui:fixture desktop light`
+- `pnpm --filter @ldb/desktop ui:fixture example dark`
+
+두 번째 인자는 `system`, `light`, `dark`이며 fixture process의 Theme만 변경한다. 제품 main/preload/auth는 로드하지 않는다. Source 목록과 선택은 synthetic bridge이며 native media API는 거절 stub으로 교체한다. Stub 설치 확인 전 window를 보이지 않고 실패 시 종료하며 fallback하지 않는다. Start는 `UI fixture: media capture blocked.` 상태로 callback 진입만 확인하고 stream·OCR를 실행하지 않는다. 실제 capture 성공이나 OS permission 검증은 이 evidence의 범위가 아니다. Desktop App component test와 fixture 검증의 경계를 구분한다.

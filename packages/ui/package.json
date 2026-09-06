@@ -7,7 +7,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./foundation.css": "./foundation.css"
   },
   "scripts": {
     "test": "vitest run",
@@ -47,6 +48,7 @@
     "dist",
     "notices",
     "seed-provenance.json",
-    "README.md"
+    "README.md",
+    "foundation.css"
   ]
 }

@@ -36,11 +36,13 @@ export function uiNotices() {
         if (!isDependency) continue
         const sourcePath = moduleId.split('?')[0]
         let directory = dirname(sourcePath)
-        while (!existsSync(join(directory, 'package.json'))) {
+        let hasManifest = existsSync(join(directory, 'package.json'))
+        while (!hasManifest) {
           const parent = dirname(directory)
           const isFilesystemRoot = parent === directory
           if (isFilesystemRoot) throw new Error('Bundled dependency has no package manifest')
           directory = parent
+          hasManifest = existsSync(join(directory, 'package.json'))
         }
         const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'))
         const isFirstModule = !packages.has(directory)
@@ -55,7 +57,7 @@ export function uiNotices() {
         packages.get(directory)?.modules.push(relative(directory, sourcePath))
       }
 
-      const thirdParty = []
+      const thirdParty: string[] = []
       for (const [directory, metadata] of packages) {
         const noticeNames = readdirSync(directory).filter((name) => {
           const isNotice = /^(licen[cs]e|notice|copying)(\.|$)/i.test(name)

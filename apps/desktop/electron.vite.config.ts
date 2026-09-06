@@ -1,6 +1,8 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { seedDesignPlugin } from '@seed-design/vite-plugin'
+import { uiNotices } from '../../packages/ui/build/notices.ts'
 
 export default defineConfig({
   main: {
@@ -28,6 +30,6 @@ export default defineConfig({
         '@frontend': resolve('src/frontend/src')
       }
     },
-    plugins: [react()]
+    plugins: [react(), seedDesignPlugin(), uiNotices()]
   }
 })

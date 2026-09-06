@@ -20,7 +20,8 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run prepare:ocr-assets && electron-vite build && electron-builder --mac",
-    "build:linux": "npm run prepare:ocr-assets && electron-vite build && electron-builder --linux"
+    "build:linux": "npm run prepare:ocr-assets && electron-vite build && electron-builder --linux",
+    "ui:fixture": "tsc scripts/ui-fixture-preload.cts --outDir node_modules/.tmp/ui-fixture --module commonjs --moduleResolution node --target es2022 --strict --skipLibCheck && electron scripts/ui-fixture.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -47,11 +48,15 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "jsdom": "^30.0.1",
     "prettier": "^3.7.4",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@ldb/ui": "workspace:*",
+    "@seed-design/react": "2.4.1",
+    "@seed-design/css": "2.7.0",
+    "@seed-design/vite-plugin": "2.1.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

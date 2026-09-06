@@ -289,6 +289,18 @@ importers:
       '@electron-toolkit/tsconfig':
         specifier: ^2.0.0
         version: 2.0.0(@types/node@22.20.1)
+      '@ldb/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@seed-design/css':
+        specifier: 2.7.0
+        version: 2.7.0
+      '@seed-design/react':
+        specifier: 2.4.1
+        version: 2.4.1(@seed-design/css@2.7.0)(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(embla-carousel@8.6.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@seed-design/vite-plugin':
+        specifier: 2.1.0
+        version: 2.1.0(@seed-design/css@2.7.0)(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0))
       '@types/node':
         specifier: ^22.19.1
         version: 22.20.1
@@ -329,10 +341,10 @@ importers:
         specifier: ^3.7.4
         version: 3.9.6
       react:
-        specifier: ^19.2.1
+        specifier: 19.2.8
         version: 19.2.8
       react-dom:
-        specifier: ^19.2.1
+        specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
       typescript:
         specifier: ^5.9.3
@@ -346,13 +358,25 @@ importers:
 
   apps/web:
     dependencies:
+      '@ldb/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@seed-design/css':
+        specifier: 2.7.0
+        version: 2.7.0
+      '@seed-design/react':
+        specifier: 2.4.1
+        version: 2.4.1(@seed-design/css@2.7.0)(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(embla-carousel@8.6.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
-        specifier: ^19.2.8
+        specifier: 19.2.8
         version: 19.2.8
       react-dom:
-        specifier: ^19.2.8
+        specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@seed-design/vite-plugin':
+        specifier: 2.1.0
+        version: 2.1.0(@seed-design/css@2.7.0)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0))
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
@@ -6424,10 +6448,20 @@ snapshots:
       - '@types/react-dom'
       - embla-carousel
 
+  '@seed-design/vite-plugin@2.1.0(@seed-design/css@2.7.0)(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0))':
+    dependencies:
+      '@seed-design/css': 2.7.0
+      vite: 7.3.6(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.33.0)
+
   '@seed-design/vite-plugin@2.1.0(@seed-design/css@2.7.0)(vite@8.2.0(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0))':
     dependencies:
       '@seed-design/css': 2.7.0
       vite: 8.2.0(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)
+
+  '@seed-design/vite-plugin@2.1.0(@seed-design/css@2.7.0)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0))':
+    dependencies:
+      '@seed-design/css': 2.7.0
+      vite: 8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)
 
   '@sindresorhus/is@4.6.0': {}
 

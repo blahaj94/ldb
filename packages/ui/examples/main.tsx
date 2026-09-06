@@ -1,6 +1,7 @@
 import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@seed-design/css/base.css'
+import '@ldb/ui/foundation.css'
 import {
   ActionButton, ContentStack, DialogAction, DialogBody, DialogContent,
   DialogFooter, DialogRoot, DialogTrigger, ExampleSection, LayoutBlock,

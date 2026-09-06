@@ -1,0 +1,9 @@
+/* 고정 SEED Typography의 system font stack. Component recipe와 Token은 덮어쓰지 않는다. */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  color: var(--seed-color-fg-neutral);
+  background: var(--seed-color-bg-layer-default);
+}

@@ -12,8 +12,11 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "@ldb/ui": "workspace:*",
+    "@seed-design/react": "2.4.1",
+    "@seed-design/css": "2.7.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -24,6 +27,7 @@
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
     "vitest": "4.1.11",
-    "jsdom": "30.0.1"
+    "jsdom": "30.0.1",
+    "@seed-design/vite-plugin": "2.1.0"
   }
 }

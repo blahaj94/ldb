@@ -100,5 +100,15 @@
         "notices/ICONS-NOTICE"
       ]
     }
+  },
+  "foundation": {
+    "local": "foundation.css",
+    "localSha256": "ce22e17499fc43c85fce96fe471c88c444eeff1719b8df81a3b46432d7aab1cc",
+    "source": "docs/content/foundations/typography.mdx",
+    "changes": [
+      "공식 system font stack을 body에 적용한다. Root font-size를 지정하지 않고 사용자 browser 기본값을 유지한다.",
+      "LDB 초기화: full-viewport Layout의 body 기본 여백을 제거하고 @seed-design/css@2.7.0의 bg.layerDefault·fg.neutral Token을 body 환경에 연결한다. Component selector·Token 재정의 없음."
+    ],
+    "packageEntryAudit": "@seed-design/css@2.7.0은 base/all 및 layered/min 변형만 제공하며 body font/reset entry는 없다."
   }
 }
