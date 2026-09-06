@@ -5,7 +5,7 @@ import { request } from 'node:http'
 import process from 'node:process'
 import { createLoginHttpApp, createSessionHttpService } from '../dist/auth/login/http.js'
 import { opaque } from './login-fixtures.mjs'
-import { bounded, instrument, settled } from './login-test-control.mjs'
+import { blockedBy, bounded, instrument, settled } from './login-test-control.mjs'
 import { digest, fixture, stored } from './refresh-fixtures.mjs'
 
 const unavailableBody = {
@@ -210,26 +210,61 @@ async function noResponseBeforeCommit(source, route) {
   }
 }
 
+function observeTransactionStarts() {
+  const pids = []
+  const secondStarted = Promise.withResolvers()
+  return {
+    pids,
+    secondStarted: secondStarted.promise,
+    query: async ({ sql, query, run }) => {
+      const result = await run()
+      const isTransactionStart = sql === 'START TRANSACTION'
+      const needsAnotherPid = pids.length < 2
+      const shouldRecordPid = isTransactionStart && needsAnotherPid
+      if (shouldRecordPid) {
+        const [{ pid }] = await query('SELECT pg_backend_pid() AS pid')
+        pids.push(pid)
+        const hasSecondTransaction = pids.length === 2
+        if (hasSecondTransaction) secondStarted.resolve()
+      }
+      return result
+    },
+  }
+}
+
 async function refreshThenLogoutWithLateResponse(source) {
   const f = await fixture(source)
-  const refreshCommitted = Promise.withResolvers()
+  const otherDevice = await fixture(source, f.identity)
+  const otherBefore = await stored(source, otherDevice.initial.session.id)
+  const firstCommitReached = Promise.withResolvers()
+  const releaseFirstCommit = Promise.withResolvers()
+  const firstCommitApplied = Promise.withResolvers()
   const releaseRefreshResponse = Promise.withResolvers()
-  let firstCommit = true
+  const transactionStarts = observeTransactionStarts()
+  let commitCount = 0
   const restore = instrument(source, {
+    query: transactionStarts.query,
     commit: async (_runner, commit) => {
-      await commit()
-      if (firstCommit) {
-        firstCommit = false
-        refreshCommitted.resolve()
-        await releaseRefreshResponse.promise
+      commitCount++
+      const isRefreshCommit = commitCount === 1
+      if (!isRefreshCommit) {
+        await commit()
+        return
       }
+      firstCommitReached.resolve()
+      await releaseFirstCommit.promise
+      await commit()
+      firstCommitApplied.resolve()
+      await releaseRefreshResponse.promise
     },
   })
   try {
     await withSessionApp(f, async (base) => {
+      let pendingRefresh
+      let pendingLogout
       try {
         let refreshDelivered = false
-        const pendingRefresh = settled(
+        pendingRefresh = settled(
           post(base, '/auth/refresh', { refreshToken: f.initial.refreshToken }).then(
             async (response) => {
               refreshDelivered = true
@@ -237,15 +272,25 @@ async function refreshThenLogoutWithLateResponse(source) {
             },
           ),
         )
-        await bounded(refreshCommitted.promise)
+        await bounded(firstCommitReached.promise)
         assert.equal(refreshDelivered, false)
 
-        const logout = await post(base, '/auth/logout', {
-          refreshToken: f.initial.refreshToken,
-        })
-        assert.equal(logout.status, 204)
-        releaseRefreshResponse.resolve()
+        pendingLogout = settled(
+          post(base, '/auth/logout', { refreshToken: f.initial.refreshToken }),
+        )
+        await bounded(transactionStarts.secondStarted)
+        assert.equal(transactionStarts.pids.length, 2)
+        await blockedBy(source, transactionStarts.pids[1], transactionStarts.pids[0])
+        assert.equal(refreshDelivered, false)
 
+        releaseFirstCommit.resolve()
+        await bounded(firstCommitApplied.promise)
+        const logoutResult = await pendingLogout
+        assert.equal(logoutResult.error, undefined)
+        assert.equal(logoutResult.value.status, 204)
+        assert.equal(refreshDelivered, false)
+
+        releaseRefreshResponse.resolve()
         const refreshResult = await pendingRefresh
         assert.equal(refreshResult.error, undefined)
         assert.equal(refreshResult.value.response.status, 200)
@@ -255,11 +300,19 @@ async function refreshThenLogoutWithLateResponse(source) {
           }),
         )
         assert.equal((await stored(source, f.initial.session.id)).session.revoked_reason, 'logout')
+        assert.deepEqual(await stored(source, otherDevice.initial.session.id), otherBefore)
       } finally {
+        releaseFirstCommit.resolve()
         releaseRefreshResponse.resolve()
+        const pendingRequests = [pendingRefresh, pendingLogout].filter((pending) => {
+          const hasPendingRequest = pending != null
+          return hasPendingRequest
+        })
+        await Promise.all(pendingRequests)
       }
     })
   } finally {
+    releaseFirstCommit.resolve()
     releaseRefreshResponse.resolve()
     restore()
   }
@@ -267,44 +320,65 @@ async function refreshThenLogoutWithLateResponse(source) {
 
 async function logoutThenRefresh(source) {
   const f = await fixture(source)
-  const logoutCommitted = Promise.withResolvers()
-  const releaseLogoutResponse = Promise.withResolvers()
-  let firstCommit = true
+  const otherDevice = await fixture(source, f.identity)
+  const otherBefore = await stored(source, otherDevice.initial.session.id)
+  const firstCommitReached = Promise.withResolvers()
+  const releaseFirstCommit = Promise.withResolvers()
+  const transactionStarts = observeTransactionStarts()
+  let commitCount = 0
   const restore = instrument(source, {
+    query: transactionStarts.query,
     commit: async (_runner, commit) => {
-      await commit()
-      if (firstCommit) {
-        firstCommit = false
-        logoutCommitted.resolve()
-        await releaseLogoutResponse.promise
+      commitCount++
+      const isLogoutCommit = commitCount === 1
+      if (isLogoutCommit) {
+        firstCommitReached.resolve()
+        await releaseFirstCommit.promise
       }
+      await commit()
     },
   })
   try {
     await withSessionApp(f, async (base) => {
+      let pendingLogout
+      let pendingRefresh
       try {
         let logoutDelivered = false
-        const pendingLogout = settled(
+        pendingLogout = settled(
           post(base, '/auth/logout', { refreshToken: f.initial.refreshToken }).then((response) => {
             logoutDelivered = true
             return response
           }),
         )
-        await bounded(logoutCommitted.promise)
+        await bounded(firstCommitReached.promise)
         assert.equal(logoutDelivered, false)
-        await expectAuthenticationRequired(
-          await post(base, '/auth/refresh', { refreshToken: f.initial.refreshToken }),
+        pendingRefresh = settled(
+          post(base, '/auth/refresh', { refreshToken: f.initial.refreshToken }),
         )
-        releaseLogoutResponse.resolve()
+        await bounded(transactionStarts.secondStarted)
+        assert.equal(transactionStarts.pids.length, 2)
+        await blockedBy(source, transactionStarts.pids[1], transactionStarts.pids[0])
+        assert.equal(logoutDelivered, false)
+
+        releaseFirstCommit.resolve()
         const logoutResult = await pendingLogout
         assert.equal(logoutResult.error, undefined)
         assert.equal(logoutResult.value.status, 204)
+        const refreshResult = await pendingRefresh
+        assert.equal(refreshResult.error, undefined)
+        await expectAuthenticationRequired(refreshResult.value)
+        assert.deepEqual(await stored(source, otherDevice.initial.session.id), otherBefore)
       } finally {
-        releaseLogoutResponse.resolve()
+        releaseFirstCommit.resolve()
+        const pendingRequests = [pendingLogout, pendingRefresh].filter((pending) => {
+          const hasPendingRequest = pending != null
+          return hasPendingRequest
+        })
+        await Promise.all(pendingRequests)
       }
     })
   } finally {
-    releaseLogoutResponse.resolve()
+    releaseFirstCommit.resolve()
     restore()
   }
 }
@@ -417,8 +491,8 @@ export async function assertSessionHttpIntegration(source, mark) {
     ['physically deleted session logout is 204 and preserves another device', () => deletedSessionLogout(source)],
     ['refresh response waits for commit', () => noResponseBeforeCommit(source, '/auth/refresh')],
     ['logout response waits for commit', () => noResponseBeforeCommit(source, '/auth/logout')],
-    ['refresh commit then logout with delayed 200 leaves final token invalid', () => refreshThenLogoutWithLateResponse(source)],
-    ['logout commit before refresh prevents issuance', () => logoutThenRefresh(source)],
+    ['refresh-first row lock blocks logout; delayed 200 leaves final token invalid', () => refreshThenLogoutWithLateResponse(source)],
+    ['logout-first row lock blocks refresh and prevents issuance', () => logoutThenRefresh(source)],
     ...['/auth/refresh', '/auth/logout'].flatMap((route) =>
       [false, true].map((applied) => [
         `${route} uncertain ${applied ? 'committed' : 'rolled back'} outcome`,
