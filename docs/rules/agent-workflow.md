@@ -47,7 +47,7 @@ review-after: Execution Issue 10개 적용 후
 - Issue acceptance criteria, 통합된 diff, validation result와 concise Worker summary를 기준으로 consequential defect를 찾는다.
 - Worker conversation, 전체 reasoning과 shell history를 요구하지 않는다.
 - Low-cost first-pass review를 기본으로 하고 escalation 조건에 해당할 때만 high-capability reviewer 또는 사람에게 넘긴다.
-- Agent Reviewer는 사용자 승인과 merge를 수행하지 않는다.
+- Agent Reviewer는 Approve와 merge를 수행하지 않는다.
 
 ## Issue 종류
 
