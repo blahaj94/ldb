@@ -7,6 +7,7 @@ import type {
   AuthTokens,
   CredentialInspection,
   CredentialStore,
+  CredentialTransitionKind,
   StoreMutationOutcome
 } from './types'
 
@@ -95,17 +96,54 @@ export class FakeClock implements AuthClock {
       task.callback()
     }
   }
+
+  elapseWithoutTimers(milliseconds: number): void {
+    this.wallMs += milliseconds
+    this.monotonicMs += milliseconds
+  }
 }
 
 export class FakeStore implements CredentialStore {
-  inspection: CredentialInspection = { status: 'empty' }
   readonly establishOutcomes: StoreMutationOutcome[] = []
+  readonly establishWaits: Promise<StoreMutationOutcome>[] = []
   readonly commitOutcomes: StoreMutationOutcome[] = []
+  readonly commitWaits: Promise<StoreMutationOutcome>[] = []
   readonly clearOutcomes: StoreMutationOutcome[] = []
+  readonly clearWaits: Promise<StoreMutationOutcome>[] = []
   readonly removeOutcomes: StoreMutationOutcome[] = []
   readonly reestablishOutcomes: StoreMutationOutcome[] = []
+  private backendUnavailable = false
+  private refreshToken: string | null = null
+  private marker: CredentialTransitionKind | null = null
 
   constructor(private readonly operations: string[] = []) {}
+
+  get inspection(): CredentialInspection {
+    if (this.backendUnavailable) {
+      return { status: 'unavailable' }
+    }
+    if (this.marker != null) {
+      return { status: 'recovery-required' }
+    }
+    if (this.refreshToken != null) {
+      return { status: 'ready', refreshToken: this.refreshToken }
+    }
+    return { status: 'empty' }
+  }
+
+  set inspection(value: CredentialInspection) {
+    this.backendUnavailable = value.status === 'unavailable'
+    this.marker = value.status === 'recovery-required' ? 'clear' : null
+    this.refreshToken = value.status === 'ready' ? value.refreshToken : null
+  }
+
+  get storedRefreshToken(): string | null {
+    return this.refreshToken
+  }
+
+  get transitionMarker(): CredentialTransitionKind | null {
+    return this.marker
+  }
 
   readonly inspect = vi.fn(async () => {
     this.operations.push('store:inspect')
@@ -113,23 +151,46 @@ export class FakeStore implements CredentialStore {
   })
   readonly establishTransition = vi.fn(async (kind) => {
     this.operations.push(`store:establish:${kind}`)
-    return this.next(this.establishOutcomes)
+    const wait = this.establishWaits.shift()
+    const outcome = wait == null ? this.next(this.establishOutcomes) : await wait
+    if (outcome === 'confirmed') {
+      this.marker = kind
+    }
+    return outcome
   })
-  readonly commitCredential = vi.fn(async () => {
+  readonly commitCredential = vi.fn(async (refreshToken) => {
     this.operations.push('store:commit')
-    return this.next(this.commitOutcomes)
+    const wait = this.commitWaits.shift()
+    const outcome = wait == null ? this.next(this.commitOutcomes) : await wait
+    if (outcome === 'confirmed') {
+      this.refreshToken = refreshToken
+    }
+    return outcome
   })
   readonly clearCredential = vi.fn(async () => {
     this.operations.push('store:clear')
-    return this.next(this.clearOutcomes)
+    const wait = this.clearWaits.shift()
+    const outcome = wait == null ? this.next(this.clearOutcomes) : await wait
+    if (outcome === 'confirmed') {
+      this.refreshToken = null
+    }
+    return outcome
   })
   readonly removeTransition = vi.fn(async () => {
     this.operations.push('store:remove')
-    return this.next(this.removeOutcomes)
+    const outcome = this.next(this.removeOutcomes)
+    if (outcome === 'confirmed') {
+      this.marker = null
+    }
+    return outcome
   })
   readonly reestablishTransition = vi.fn(async (kind) => {
     this.operations.push(`store:reestablish:${kind}`)
-    return this.next(this.reestablishOutcomes)
+    const outcome = this.next(this.reestablishOutcomes)
+    if (outcome === 'confirmed') {
+      this.marker = kind
+    }
+    return outcome
   })
 
   private next(outcomes: StoreMutationOutcome[]): StoreMutationOutcome {
