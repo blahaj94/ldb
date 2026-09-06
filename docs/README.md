@@ -55,7 +55,7 @@ review-after: 승인 후 서로 다른 역할의 Execution Issue 3개에서 누�
 | Read-only Reviewer | Issue AC·통합 diff·validation evidence·짧은 Worker summary와 diff에 적용되는 Rule 본문, [`agent-workflow.md`](rules/agent-workflow.md)의 Reviewer·Escalation. Code review는 [`convention.md`](../convention.md#review에서-확인할-것)의 checklist에서 해당 규칙 본문으로 확장하고 [`change-control.md`](rules/change-control.md)의 승인 기준·[`testing.md`](rules/testing.md)의 evidence·integrity·validation 기준 확인 |
 | 통합 담당 | 채택할 result·base·diff·validation evidence, [`agent-execution.md`](rules/agent-execution.md)의 Branch와 통합·진행, 대기와 완료·PR handoff, [`change-control.md`](rules/change-control.md)의 Branch, worktree, and parallel work·Commit and PR order와 [`testing.md`](rules/testing.md)의 Validation |
 
-단독 직접 수행·Runner route와 검증 재사용은 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)을 반영한다. 수행 조건과 재검토는 [`agent-workflow.md`](rules/agent-workflow.md#수행-모드-선택)의 canonical 계약을 따른다.
+단독 직접 수행·Runner route와 검증 재사용은 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)을 반영한다. 수행 조건은 [`수행 모드 선택`](rules/agent-workflow.md#수행-모드-선택)을, 재검토는 [`실행 효율 계약의 재검토`](rules/agent-workflow.md#실행-효율-계약의-재검토)를 따른다.
 
 Code 작성·수정에서는 적용되는 convention 본문, approval boundary와 testing 의무를 모두 확인한다. Code 예시는 의미가 불명확하거나 해당 pattern을 다룰 때 읽으며 관련 없는 운영 절은 그 역할·작업을 맡을 때 확장한다. Read-only Reviewer가 수정을 맡으면 먼저 Worker 배정과 해당 작성 route를 따른다.
 
