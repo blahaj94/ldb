@@ -48,10 +48,14 @@ review-after: 승인 후 서로 다른 역할의 Execution Issue 3개에서 누�
 | 역할·작업 | 시작 문서·절 |
 | --- | --- |
 | Planner | [`agent-workflow.md`](rules/agent-workflow.md)의 역할과 단일 책임·Execution Issue·Planning과 model tier·Escalation, [`change-control.md`](rules/change-control.md)의 Approval required·Approval evidence·Issue and preflight. 배정할 때 [`agent-execution.md`](rules/agent-execution.md)의 Worker roster와 상태·배정 절차·병렬 가능성·Handoff와 context |
+| 단독 직접 수행 parent | [`agent-workflow.md`의 수행 모드 선택](rules/agent-workflow.md#수행-모드-선택)과 [Code Worker runtime mapping](rules/agent-workflow.md#code-worker-runtime-mapping), [`agent-execution.md`의 수행 모드와 소유권](rules/agent-execution.md#수행-모드와-소유권). 이어서 아래 Code Worker 또는 Code 없는 문서 작업 route의 해당 의무 확인 |
+| 실행 전담 Runner | 현재 실행 packet과 [`agent-runner.md`](rules/agent-runner.md)의 범위와 권한·실행 packet·실행·대기·취소·재시도·고정 결과 형식, [`agent-execution.md`의 실행 보조 기록](rules/agent-execution.md#실행-보조-기록). 판단 owner는 [`testing.md`의 검증 evidence 재사용](rules/testing.md#검증-evidence-재사용) 확인 |
 | Code Worker | [`agent-workflow.md`](rules/agent-workflow.md)의 [Worker](rules/agent-workflow.md#worker)·[Code Worker runtime mapping](rules/agent-workflow.md#code-worker-runtime-mapping)·[Escalation](rules/agent-workflow.md#escalation), [`convention.md`](../convention.md#읽기-안내)의 적용 범위·규칙 본문, [`change-control.md`](rules/change-control.md)의 Approval required·Approval evidence·Issue and preflight·Branch, worktree, and parallel work·Commit and PR order, [`testing.md`](rules/testing.md)의 Red-Green workflow·Required evidence·Test integrity·Validation, [`code-quality.md`](rules/code-quality.md)의 Logic budget·Maintainability·Context budget. 배정·인계에는 [`agent-execution.md`](rules/agent-execution.md)의 해당 절 |
 | Code 없는 문서 작업 | 이 문서의 Document class·Document maintenance, [`change-control.md`](rules/change-control.md)의 승인·preflight·branch·commit·PR 절, 변경 대상의 Rule 본문과 [`code-quality.md`](rules/code-quality.md)의 Context budget. Rule 변경안을 작성할 때 [Experimental Rule lifecycle](rules/code-quality.md#experimental-rule-lifecycle) 확인. `convention.md` 전문은 필요하지 않으며 code 예시를 수정하면 해당 작성 기준 확인 |
 | Read-only Reviewer | Issue AC·통합 diff·validation evidence·짧은 Worker summary와 diff에 적용되는 Rule 본문, [`agent-workflow.md`](rules/agent-workflow.md)의 Reviewer·Escalation. Code review는 [`convention.md`](../convention.md#review에서-확인할-것)의 checklist에서 해당 규칙 본문으로 확장하고 [`change-control.md`](rules/change-control.md)의 승인 기준·[`testing.md`](rules/testing.md)의 evidence·integrity·validation 기준 확인 |
 | 통합 담당 | 채택할 result·base·diff·validation evidence, [`agent-execution.md`](rules/agent-execution.md)의 Branch와 통합·진행, 대기와 완료·PR handoff, [`change-control.md`](rules/change-control.md)의 Branch, worktree, and parallel work·Commit and PR order와 [`testing.md`](rules/testing.md)의 Validation |
+
+단독 직접 수행·Runner route와 검증 재사용은 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)을 반영한다. 수행 조건은 [`수행 모드 선택`](rules/agent-workflow.md#수행-모드-선택)을, 재검토는 [`실행 효율 계약의 재검토`](rules/agent-workflow.md#실행-효율-계약의-재검토)를 따른다.
 
 Code 작성·수정에서는 적용되는 convention 본문, approval boundary와 testing 의무를 모두 확인한다. Code 예시는 의미가 불명확하거나 해당 pattern을 다룰 때 읽으며 관련 없는 운영 절은 그 역할·작업을 맡을 때 확장한다. Read-only Reviewer가 수정을 맡으면 먼저 Worker 배정과 해당 작성 route를 따른다.
 
@@ -90,8 +94,9 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/design-system.md`](rules/design-system.md): SEED 재사용·고정 source·기본값·override 금지·중립 Example·향후 검증 matrix
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
-- [`rules/agent-execution.md`](rules/agent-execution.md): 복수 Worker의 roster, context, 상태와 통합 계약
-- [`rules/agent-efficiency-proposal.md`](rules/agent-efficiency-proposal.md): parent 직접 수행·실행 전담·검증 재사용 제안. 승인 전 비적용이며 기존 active Rule이 우선
+- [`rules/agent-execution.md`](rules/agent-execution.md): 수행 모드, Worker roster, context, 상태와 통합 계약
+- [`rules/agent-runner.md`](rules/agent-runner.md): 실행 전담의 입력·job owner·완료 evidence·취소·retry·보고 계약
+- [`rules/agent-efficiency-proposal.md`](rules/agent-efficiency-proposal.md): PR #106에서 승인·canonical 반영된 제안 이력과 active Rule pointer. 별도 실행 authority 없음
 - [`architecture/overview.md`](architecture/overview.md): 현재 system boundary·Shared UI boundary 제안·peer/CSS 책임과 architecture approval 지점
 
 - [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 계약

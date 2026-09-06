@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: blocking
 scope: repository
-last-reviewed: 2026-08-28
+last-reviewed: 2026-09-07
 ---
 
 # Testing
@@ -52,3 +52,19 @@ Test framework 또는 dependency가 없으면 임의로 추가하지 않는다. 
 - 실행하지 못한 command와 이유를 PR에 명시한다.
 - 검증 실패를 success로 보고하지 않는다.
 - 현재 사용 가능한 command는 [`../reference/repository-map.md`](../reference/repository-map.md)를 확인한다.
+
+## 검증 evidence 재사용
+
+아래 기준은 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)을 반영한다. 실행 전담의 완료 evidence와 보고는 [`agent-runner.md`](agent-runner.md), 재검토 조건은 [`실행 효율 계약의 재검토`](agent-workflow.md#실행-효율-계약의-재검토)를 따른다.
+
+PASS는 기록된 check의 입력과 범위에만 유효하다. Parent 또는 통합 담당이 재사용 여부를 책임지며 다음을 모두 확인한다.
+
+1. 같은 command·options와 성공 기준이며, exit/result·대상 revision·실행 범위가 확인된다.
+2. 관련 source·test·config·dependency·lockfile·generated input·runtime/tool version·환경·외부 state가 동일하거나 유효성이 유지된다는 근거가 있다. Revision이 같다는 사실만으로 미commit 변경이나 외부 state의 안정성을 추정하지 않는다.
+3. 그 check가 요구된 gate를 실제 포함했고 실행 이후 관련 입력 변화가 없거나 무관함을 판단한 근거가 있다. 근거가 없으면 필요한 확인 또는 재검증으로 보완한다.
+
+Aggregate가 성공했고 포함된 command와 범위를 확인할 수 있으면 같은 입력의 개별 command를 중복 실행하지 않는다. 예를 들어 [`Native validation`](../../scripts/README.md#native-validation)의 Desktop build에 포함된 typecheck는 별도 반복을 생략한다. Aggregate가 실패했다면 전체 FAIL을 유지하고, 개별 성공이 명확한 check만 그 범위의 evidence로 기록한다. 후속 check가 실제 실행됐다고 추정하지 않는다.
+
+실패 후에는 판단 owner가 수정 원인·변경 입력과 영향을 받는 check를 정한다. 영향받은 check와 dependent check를 다시 실행하고, 독립된 기존 PASS는 위 근거가 있을 때 재사용한다. 원인을 확인하지 못한 실패를 선택적 재실행으로 숨기거나 acceptance criteria를 줄이지 않는다.
+
+이 재사용은 이 문서의 Required evidence·Test integrity·Red-Green과 [`change-control.md`](change-control.md#branch-worktree-and-parallel-work)의 통합 의무를 완화하지 않는다. Main rebase 또는 semantic conflict 해결 후 전체 validation을 다시 실행하고, 최종 integration exact head에서 필요한 전체 validation을 확인한다. Worker의 PASS만으로 이 gate를 대체하지 않는다. 최종 head에서 이미 성공한 전체 validation에 포함된 개별 command의 중복 실행을 생략하는 것은 가능하다.
