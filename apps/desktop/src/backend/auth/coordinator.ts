@@ -856,7 +856,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
       generation += 1
       const cleanupGeneration = generation
-      await cleanupAfterInvalidation('REAUTH_REQUIRED', cleanupGeneration)
+      await disposeKnownRefresh(refreshToken)
+      const canClear = generation === cleanupGeneration
+      if (canClear) {
+        await cleanupAfterInvalidation('REAUTH_REQUIRED', cleanupGeneration)
+      }
       return null
     }
 
