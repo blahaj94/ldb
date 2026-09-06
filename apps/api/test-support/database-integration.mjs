@@ -7,6 +7,7 @@ import { assertCommonLogin } from './login-database.mjs'
 import { assertLoginConcurrency } from './login-concurrency.mjs'
 import { assertLoginFailures } from './login-failures.mjs'
 import { assertLoginHttpIntegration } from './login-http-integration.mjs'
+import { assertSessionHttpIntegration } from './session-http-integration.mjs'
 import { assertGoogleHttpIntegration } from './google-http-integration.mjs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
@@ -503,6 +504,10 @@ async function primaryScenario() {
       assertRefreshFailures(source, (part) => (currentStage = `refresh failures ${part}`)),
     )
     process.stdout.write(`Refresh core: ${refreshRotation} rotation/history, ${refreshConcurrency} concurrency/TTL, ${refreshFailures} failure scenarios\n`)
+    const sessionHttpFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertSessionHttpIntegration(source, (part) => (currentStage = `session HTTP ${part}`)),
+    )
+    process.stdout.write(`Refresh/logout HTTP/database: ${sessionHttpFlows} scenarios\n`)
     const googleFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
       assertGoogleHttpIntegration(source, (part) => (currentStage = `Google HTTP ${part}`)),
     )
