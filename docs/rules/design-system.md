@@ -7,7 +7,7 @@ last-reviewed: 2026-09-06
 rationale: 공통 Token과 Component를 사용하면서도 화면별 선택과 override로 디자인이 달라지는 것을 방지한다.
 evidence: "PR #89 사용자 승인: https://github.com/blahaj94/ldb/pull/89#issuecomment-5559313457"
 exceptions: 화면별 공용 Component 외형 override의 예외는 허용하지 않는다.
-review-after: 최초 기준 화면과 공용 자산의 사용자 Review 완료 시
+review-after: 최초 Template Example과 공용 자산의 사용자 Review 완료 시
 ---
 
 # Design System Contract
@@ -18,7 +18,26 @@ review-after: 최초 기준 화면과 공용 자산의 사용자 Review 완료 �
 
 승인 후 새로 만드는 UI와 수정하는 UI에 적용한다. 기존 화면의 전면 교체를 이 Rule의 승인만으로 착수하지 않는다. 기존 사용처에 영향을 주는 공용 자산 변경은 아래 변경·Review 절차를 따른다.
 
-구체적인 Theme·Token 값·Component 이름과 API·package 배치·app 간 import direction·dependency는 이 Rule에서 정하지 않는다. Motion의 수치와 동작, 계산기의 기능·domain도 별도 결정 범위다.
+구체적인 Theme·Token 값·Component 이름과 API·package 배치·app 간 import direction·dependency는 이 Rule에서 정하지 않는다. Motion의 수치와 동작, 제품 기능·domain도 별도 결정 범위다.
+
+## 용어
+
+디자인 시스템의 정의와 Example에는 제품 도메인에 종속되지 않는 UI 용어를 사용한다. 아래 용어는 문서와 Review에서 같은 의미로 사용한다.
+
+| 용어 | 의미 |
+| --- | --- |
+| Token | 색상·Typography·간격 등 공통 시각 값을 표현하는 Design Token. |
+| Component | 특정 UI 역할을 담당하는 재사용 가능한 요소. |
+| Variant | Component가 제공하는 용도·외형의 선택지. |
+| State | focus·disabled·selected 등 Component의 현재 상태. |
+| Layout | 요소의 간격·정렬·크기와 공간 배치를 정하는 구조. |
+| Pattern | 반복되는 UI 목적에 대응하는 Component 조합과 상호작용 방식. |
+| Template | Component·Pattern을 배치한 페이지 단위 구조. |
+| Example | Variant·State·조합의 시각 표현과 동작을 확인하는 실행 가능한 예제. |
+
+검토 대상에 따라 `Component Example`, `Pattern Example`, `Template Example`로 부른다. Example은 제품 도메인에 의존하지 않는 예시 content·data를 사용한다. 각 Example의 목록·구현·유지 도구는 별도 범위에서 정하며, 이 용어가 별도의 code layer나 package를 요구하지 않는다.
+
+Component·Pattern·Template의 구분은 [Carbon의 Component](https://carbondesignsystem.com/components/overview/components/)·[Pattern](https://carbondesignsystem.com/patterns/overview/)과 [USWDS의 page template](https://designsystem.digital.gov/templates/landing-page/) 용례를 참고한다. 위 표는 LDB에서 사용할 의미를 정리하며 특정 외부 library의 구조나 API를 채택하는 결정은 아니다.
 
 ## 공통 자산과 화면의 책임
 
