@@ -81,7 +81,9 @@ Workflow, Rule, architecture의 대안, trade-off, open question, decision histo
 
 `worker_count`는 같은 bounded outcome의 현재 계획에 포함된 Worker scope 수다. 모든 Worker가 동시에 실행된다는 뜻이 아니며 Planner, read-only Scout·Reviewer와 실행 attempt 누계를 세지 않는다. 통합만 수행하는 담당도 세지 않지만 메인이 아닌 통합 담당이 code·Rule 수정 scope를 정식 배정받으면 Worker로 세고 roster에 기록한다. 완료된 scope도 Issue가 끝나거나 계획을 명시적으로 갱신할 때까지 현재 roster에 남는다. 재배정은 같은 slot의 공개 식별자를 바꾸므로 retry 자체로 count를 늘리지 않는다.
 
-Metadata의 source of truth는 Issue body다. 현재 작업 유형·상태·실행 조건, 담당 Planner, 통합 담당과 Worker roster를 한 곳에 모으고 과거 상태는 comment 이력으로 남긴다. Label은 실제 automation trigger 또는 Issue 단위 `in process`·`done` 상태에만 사용한다. `Ready`·`Blocked`는 body의 실행 조건값이며 배정 상태나 Rule 승인 evidence가 아니다.
+현재 실행 contract와 metadata의 source of truth는 Issue body다. Goal·AC·scope·constraint와 현재 작업 유형·상태·실행 조건, 담당 Planner, 통합 담당과 Worker roster를 한 곳에 모으고 승인·선행 결과·검증은 정확한 comment·PR·commit pointer로 연결한다. 결정이나 조건이 바뀌면 body를 갱신하고 과거 상태와 결정 근거는 comment 이력으로 남긴다. Label은 실제 automation trigger 또는 Issue 단위 `in process`·`done` 상태에만 사용한다. `Ready`·`Blocked`는 body의 실행 조건값이며 배정 상태나 Rule 승인 evidence가 아니다.
+
+Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전달한다. PR에 Issue contract·preflight·roster를 그대로 복사하지 않고 관련 pointer와 실제 차이·결과를 기록한다. 원문 Rule을 Issue나 PR에 복제하지 않으며 승인·검증 의무는 [`change-control.md`](change-control.md)와 [`testing.md`](testing.md)를 따른다.
 
 전체 목표나 독립적인 완료 기준이 다르면 별도 Issue로 나눈다. 같은 bounded outcome 안에서 독립된 부분만 여러 Worker scope로 나눌 수 있다. 구체적인 독립성·dependency·충돌 판단과 roster 형식은 [`agent-execution.md`](agent-execution.md)를 따른다.
 

@@ -30,9 +30,36 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 
 ## Reading route
 
+아래 역할별 시작점과 연결된 읽기·출력·인계·기록 기준의 변경은 [Issue #98](https://github.com/blahaj94/ldb/issues/98)의 D4 Draft 제안이다. 기존 active Rule의 승인 상태와 의무는 유지하며, 변경안의 승인은 [`change-control.md`](rules/change-control.md#approval-evidence)를 따른다.
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 역할에 필요한 context부터 확인하고 재독·출력·인계·기록의 중복 비용을 줄인다.
+evidence: "Issue #98의 전체 문서 audit·context 측정과 D4 실행 동의"
+exceptions: 적용되는 Rule·AC·승인·보안·검증 의무는 생략하지 않고 불확실하면 관련 본문을 확인한다.
+review-after: 승인 후 서로 다른 역할의 Execution Issue 3개에서 누락과 재독·인계 비용을 확인한다.
+```
+
+### 역할별 시작점
+
+현재 Issue contract를 확인한 뒤 아래 문서·절에서 시작한다. 이어서 작업 topic과 path에 적용되는 Rule 본문을 확인한다. 시작점은 읽기의 순서이며 적용되는 의무의 상한이 아니다. 동일 revision의 재확인 조건은 [`AGENTS.md`](../AGENTS.md#context), 조회 범위와 출력 제한은 [`Context budget`](rules/code-quality.md#context-budget)을 따른다.
+
+| 역할·작업 | 시작 문서·절 |
+| --- | --- |
+| Planner | [`agent-workflow.md`](rules/agent-workflow.md)의 역할과 단일 책임·Execution Issue·Planning과 model tier·Escalation, [`change-control.md`](rules/change-control.md)의 Approval required·Approval evidence·Issue and preflight. 배정할 때 [`agent-execution.md`](rules/agent-execution.md)의 Worker roster와 상태·배정 절차·병렬 가능성·Handoff와 context |
+| Code Worker | [`agent-workflow.md`](rules/agent-workflow.md)의 [Worker](rules/agent-workflow.md#worker)·[Code Worker runtime mapping](rules/agent-workflow.md#code-worker-runtime-mapping)·[Escalation](rules/agent-workflow.md#escalation), [`convention.md`](../convention.md#읽기-안내)의 적용 범위·규칙 본문, [`change-control.md`](rules/change-control.md)의 Approval required·Approval evidence·Issue and preflight·Branch, worktree, and parallel work·Commit and PR order, [`testing.md`](rules/testing.md)의 Red-Green workflow·Required evidence·Test integrity·Validation, [`code-quality.md`](rules/code-quality.md)의 Logic budget·Maintainability·Context budget. 배정·인계에는 [`agent-execution.md`](rules/agent-execution.md)의 해당 절 |
+| Code 없는 문서 작업 | 이 문서의 Document class·Document maintenance, [`change-control.md`](rules/change-control.md)의 승인·preflight·branch·commit·PR 절, 변경 대상의 Rule 본문과 [`code-quality.md`](rules/code-quality.md)의 Context budget. Rule 변경안을 작성할 때 [Experimental Rule lifecycle](rules/code-quality.md#experimental-rule-lifecycle) 확인. `convention.md` 전문은 필요하지 않으며 code 예시를 수정하면 해당 작성 기준 확인 |
+| Read-only Reviewer | Issue AC·통합 diff·validation evidence·짧은 Worker summary와 diff에 적용되는 Rule 본문, [`agent-workflow.md`](rules/agent-workflow.md)의 Reviewer·Escalation. Code review는 [`convention.md`](../convention.md#review에서-확인할-것)의 checklist에서 해당 규칙 본문으로 확장하고 [`change-control.md`](rules/change-control.md)의 승인 기준·[`testing.md`](rules/testing.md)의 evidence·integrity·validation 기준 확인 |
+| 통합 담당 | 채택할 result·base·diff·validation evidence, [`agent-execution.md`](rules/agent-execution.md)의 Branch와 통합·진행, 대기와 완료·PR handoff, [`change-control.md`](rules/change-control.md)의 Branch, worktree, and parallel work·Commit and PR order와 [`testing.md`](rules/testing.md)의 Validation |
+
+Code 작성·수정에서는 적용되는 convention 본문, approval boundary와 testing 의무를 모두 확인한다. Code 예시는 의미가 불명확하거나 해당 pattern을 다룰 때 읽으며 관련 없는 운영 절은 그 역할·작업을 맡을 때 확장한다. Read-only Reviewer가 수정을 맡으면 먼저 Worker 배정과 해당 작성 route를 따른다.
+
+### Topic별 확장
+
 | 작업                             | Required document                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
-| 모든 code 작성·수정·review       | [`convention.md`](../convention.md), `docs/rules/change-control.md`, `docs/rules/testing.md`, `docs/rules/code-quality.md` |
+| Code 작성·수정·review       | 위 역할별 시작점과 [`convention.md`](../convention.md#읽기-안내)에 따라 `change-control.md`, `testing.md`, `code-quality.md`의 적용 본문 확인 |
 | Web·Desktop UI의 시각 기준·공용 자산 | [`rules/design-system.md`](rules/design-system.md) |
 | 큰 작업 분해와 역할·Issue contract | `docs/rules/agent-workflow.md`                                                       |
 | Worker 배정·상태·handoff·통합   | `docs/rules/agent-execution.md`                                                       |

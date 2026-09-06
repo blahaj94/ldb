@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        이 Issue는 하나의 bounded outcome과 acceptance criteria를 정의합니다. 현재 Worker 배정은 body의 roster에서 관리합니다.
+        이 Issue body는 현재 실행 contract와 Worker roster를 관리합니다. 결정·조건이 바뀌면 body를 갱신하고 과거 근거는 comment pointer로 연결합니다. PR은 실제 변경과 AC별 evidence를 기록합니다. 기록 기준은 docs/rules/agent-workflow.md의 Execution Issue를 따릅니다.
 
   - type: textarea
     id: goal
@@ -112,7 +112,7 @@ body:
     id: rules
     attributes:
       label: Context pointers and related Rule documents
-      description: 필요한 file path, symbol, documentation section, Issue, PR, commit, test와 관련 Rule을 작성합니다. Source나 conversation을 복사하지 않습니다.
+      description: docs/README.md의 역할별 시작점을 바탕으로 필요한 file path·symbol·절과 정확한 승인 comment·선행 PR·commit·test pointer를 작성합니다. Rule·source·conversation을 복사하지 않습니다.
       placeholder: |
         docs/rules/testing.md
         apps/example/src/service.ts — targetSymbol
@@ -129,7 +129,7 @@ body:
     id: validation
     attributes:
       label: Validation
-      description: 완료 전에 실행할 test, typecheck, lint, build command와 필요한 manual evidence를 작성합니다.
+      description: 완료 전에 실행할 test, typecheck, lint, build command와 필요한 manual evidence를 작성합니다. PR에는 이 계획의 반복 대신 실제 실행 결과·차이와 evidence를 기록합니다.
     validations:
       required: true
 

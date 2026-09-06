@@ -63,8 +63,11 @@ Logic budget을 넘으면 AI는 구현을 숨기거나 기계적으로 줄 수�
 
 ## Context budget
 
-- Agent는 task에 필요한 document와 module만 읽는다.
-- Code walkthrough를 Markdown에 복제하지 않고 boundary, invariant, contract, command를 기록한다.
+- [`docs/README.md`](../README.md#역할별-시작점)의 역할별 route에서 시작해 task에 필요한 document와 module만 읽는다. 동일 revision의 재확인 조건은 [`AGENTS.md`](../../AGENTS.md#context)를 따른다.
+- 처음에는 file 목록·제목·검색 결과로 대상을 좁히고 필요한 file 본문이나 절을 읽는다. Rule 적용 여부가 불명확하면 본문을 확인하며 목록·제목만으로 지침을 파악했다고 간주하지 않는다.
+- 검색은 `rg --files` 또는 `rg`에 대상 path·glob·pattern을 지정한다. 검색 결과 수와 tool의 최대 출력량을 제한하고, truncation이 발생하면 생략된 부분을 추정하지 않고 범위·절을 좁혀 다시 조회한다.
+- 기존 file·tool 출력·code walkthrough를 Markdown이나 다른 전달물에 복제하지 않고 필요한 결론과 boundary, invariant, contract, command 및 정확한 pointer를 기록한다.
+- 긴 대화·원 대화와 raw log를 새 Worker에게 전달하지 않는 방법은 [`Handoff와 context`](agent-execution.md#handoff와-context)를 따른다.
 - 같은 설명을 여러 file에 중복하지 않고 canonical document를 link한다.
 - `AGENTS.md` 약 150줄, 개별 Rule document 약 250줄을 soft budget으로 사용한다.
 - Budget을 넘으면 topic별로 분리하고 `docs/README.md`에서 routing한다.
