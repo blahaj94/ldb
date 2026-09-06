@@ -19,15 +19,39 @@ export async function assertLoginHttpIntegration(source, mark) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
-    const prepare = async () => {
+    const assertHeadPreservesRequest = async (path, requestId, cookie = '') => {
+      const beforeRequest = await row(source, requestId)
+      const beforeCounts = await counts(source)
+      const beforeProviderCalls = f.verifiedCalls.length
+
+      const response = await fetch(`${base}${path}`, {
+        method: 'HEAD',
+        headers: { cookie },
+        redirect: 'manual',
+      })
+
+      // 회원 수만 확인하면 transient ticket/state의 소비를 놓치므로 row 전체를 비교한다.
+      assert.deepEqual(await row(source, requestId), beforeRequest)
+      assert.deepEqual(await counts(source), beforeCounts)
+      assert.equal(f.verifiedCalls.length, beforeProviderCalls)
+      assert.equal(response.status, 400)
+      assert.equal(await response.text(), '')
+      assert.equal(response.headers.get('cache-control'), 'no-store')
+      assert.equal(response.headers.get('location'), null)
+      assert.equal(response.headers.get('set-cookie'), null)
+    }
+
+    const prepare = async (provider = 'google') => {
       const verifier = opaque()
       const initialCounts = await counts(source)
-      const created = await post('/auth/login-requests', creation(proof(verifier)))
+      const created = await post('/auth/login-requests', creation(proof(verifier), provider))
       assert.equal(created.status, 201)
       assert.equal(created.headers.get('cache-control'), 'no-store')
       const request = await created.json()
       const launchUrl = new URL(request.browserUrl)
-      const launch = await fetch(`${base}${launchUrl.pathname}${launchUrl.search}`, {
+      const launchPath = `${launchUrl.pathname}${launchUrl.search}`
+      await assertHeadPreservesRequest(launchPath, request.requestId)
+      const launch = await fetch(`${base}${launchPath}`, {
         redirect: 'manual',
       })
       assert.equal(launch.status, 303)
@@ -35,13 +59,21 @@ export async function assertLoginHttpIntegration(source, mark) {
       assert.equal(launch.headers.get('referrer-policy'), 'no-referrer')
       const providerUrl = new URL(launch.headers.get('location'))
       const cookie = launch.headers.getSetCookie()[0].split(';')[0]
-      const callback = await fetch(
-        `${base}/auth/callback/google?state=${providerUrl.searchParams.get('state')}&code=fixture-provider-code`,
-        {
-          headers: { cookie },
-          redirect: 'manual',
-        },
+      const callbackPath = `/auth/callback/${provider}?state=${providerUrl.searchParams.get('state')}`
+      await assertHeadPreservesRequest(
+        `${callbackPath}&error=access_denied`,
+        request.requestId,
+        cookie,
       )
+      await assertHeadPreservesRequest(
+        `${callbackPath}&code=fixture-provider-code`,
+        request.requestId,
+        cookie,
+      )
+      const callback = await fetch(`${base}${callbackPath}&code=fixture-provider-code`, {
+        headers: { cookie },
+        redirect: 'manual',
+      })
       assert.equal(callback.status, 200)
       assert.equal(callback.headers.get('cache-control'), 'no-store')
       assert.equal(callback.headers.get('referrer-policy'), 'no-referrer')
@@ -141,7 +173,12 @@ export async function assertLoginHttpIntegration(source, mark) {
     const replay = await post('/auth/exchange', uncertain.exchange)
     assert.equal(replay.status, 400)
     assert.equal((await replay.json()).error.code, 'LOGIN_EXCHANGE_INVALID')
-    return 2
+    mark('HEAD preserves Discord ticket and callback state through a later successful GET/exchange')
+    const discord = await prepare('discord')
+    const discordExchange = await post('/auth/exchange', discord.exchange)
+    assert.equal(discordExchange.status, 200)
+    assertCleared(await row(source, discord.request.requestId), 'consumed')
+    return 3
   } finally {
     await app.close()
   }

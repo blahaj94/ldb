@@ -6,7 +6,7 @@ import { after, before, test } from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { createConnection } from 'node:net'
 import process from 'node:process'
-import { URL } from 'node:url'
+import { URL, URLSearchParams } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { creation, opaque } from './login-fixtures.mjs'
@@ -54,6 +54,34 @@ before(async () => {
 after(async () => {
   await app.close()
 })
+
+for (const route of [
+  { name: 'authorize', path: '/auth/login/authorize', successStatus: 303 },
+  { name: 'Google callback', path: '/auth/callback/google', successStatus: 200 },
+  { name: 'Discord callback', path: '/auth/callback/discord', successStatus: 200 },
+]) {
+  test(`HEAD ${route.name} rejects before the service and preserves the GET route`, async () => {
+    const query =
+      route.name === 'authorize'
+        ? new URLSearchParams({ ticket: opaque() })
+        : new URLSearchParams({ state: opaque(), code: 'fixture-provider-code' })
+    const url = `${base}${route.path}?${query}`
+    const headers = { cookie: '__Host-test=fixture-binding' }
+    const beforeCalls = calls
+
+    const head = await fetch(url, { method: 'HEAD', redirect: 'manual', headers })
+    assert.equal(calls, beforeCalls)
+    assert.equal(head.status, 400)
+    assert.equal(await head.text(), '')
+    assert.equal(head.headers.get('cache-control'), 'no-store')
+    assert.equal(head.headers.get('location'), null)
+    assert.equal(head.headers.get('set-cookie'), null)
+
+    const get = await fetch(url, { redirect: 'manual', headers })
+    assert.equal(get.status, route.successStatus)
+    assert.equal(calls, beforeCalls + 1)
+  })
+}
 
 function post(path, chunks, headers = {}) {
   return new Promise((resolve, reject) => {
