@@ -2,11 +2,108 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { URLSearchParams } from 'node:url'
 import { test } from 'node:test'
-import { opaque } from './login-fixtures.mjs'
+import { opaque, registration } from './login-fixtures.mjs'
 import { digest } from './login-database.mjs'
+import { bounded, settled } from './login-test-control.mjs'
 
 const { completeLoginCallback } = await import('../dist/auth/login/callback.js')
 const { exchangeLogin } = await import('../dist/auth/login/exchange.js')
+const { LOGIN } = await import('../dist/constants/login.js')
+
+for (const outcome of ['success', 'rejection', 'invalid identity', 'timeout']) {
+  test(`provider proof references are released before the next DB wait: ${outcome}`, async (t) => {
+    if (outcome === 'timeout') t.mock.timers.enable({ apis: ['setTimeout'] })
+
+    const state = opaque()
+    const binding = opaque()
+    const verifier = opaque()
+    const snapshot = registration()
+    const stored = {
+      id: randomUUID(),
+      provider: 'google',
+      providerConfigVersion: snapshot.version,
+      returnTargetId: snapshot.returnTarget.id,
+      status: 'browser_started',
+      expiresAt: new Date(Date.now() + 600_000),
+      stateHash: digest(state),
+      browserBindingHash: digest(binding),
+    }
+    const providerEntered = Promise.withResolvers()
+    const finishVerification = Promise.withResolvers()
+    const databaseEntered = Promise.withResolvers()
+    const releaseDatabase = Promise.withResolvers()
+    let claim
+    let signal
+    let providerCalls = 0
+    let transactions = 0
+    let completed = false
+    const manager = {
+      query: async () => [{ now: new Date() }],
+      getRepository: () => ({
+        findOne: async () => ({ ...stored }),
+        update: async (_where, patch) => Object.assign(stored, patch),
+      }),
+    }
+    const deps = {
+      registry: { resolve: () => snapshot },
+      pkceKeys: { decrypt: () => verifier },
+      dataSource: {
+        transaction: async (_isolation, operation) => {
+          if (++transactions === 2) {
+            databaseEntered.resolve()
+            await releaseDatabase.promise
+          }
+          const result = await operation(manager)
+          if (result?.status === 'claimed') claim = result.claim
+          return result
+        },
+      },
+      verifyProvider: async (input) => {
+        providerCalls++
+        assert.equal(input.code, 'fixture-provider-code')
+        assert.equal(input.providerVerifier, verifier)
+        signal = input.signal
+        providerEntered.resolve()
+        await finishVerification.promise
+        if (outcome === 'rejection') throw new Error('fixture provider failure')
+        return { provider: 'google', subject: outcome === 'invalid identity' ? '' : 'fixture-subject' }
+      },
+    }
+    const pending = settled(completeLoginCallback(
+      deps,
+      'google',
+      new URLSearchParams({ state, code: 'fixture-provider-code' }),
+      `__Host-ldb-login-${stored.id}=${binding}`,
+    )).then((result) => {
+      completed = true
+      return result
+    })
+
+    try {
+      await bounded(providerEntered.promise)
+      assert.equal(claim.providerCode, 'fixture-provider-code')
+      assert.equal(claim.providerVerifier, verifier)
+      if (outcome === 'timeout') t.mock.timers.tick(LOGIN.providerDeadlineMs)
+      else finishVerification.resolve()
+
+      // 성공 저장/실패 정리 transaction이 대기 중이어도 proof 참조는 이미 해제돼야 한다.
+      await bounded(databaseEntered.promise)
+      assert.equal(completed, false)
+      assert.equal(signal.aborted, true)
+      assert.equal(claim.providerVerifier, '')
+      assert.equal(claim.providerCode, '')
+      assert.equal(providerCalls, 1)
+    } finally {
+      finishVerification.resolve()
+      releaseDatabase.resolve()
+      await pending
+    }
+
+    const result = await pending
+    assert.equal(result.error?.code, outcome === 'success' ? undefined : 'AUTH_PROVIDER_ERROR')
+    assert.equal(stored.status, outcome === 'success' ? 'exchange_ready' : 'failed')
+  })
+}
 
 test('expired processing callback read commits terminal cleanup after an uncertain prior claim', async () => {
   const state = opaque(),
