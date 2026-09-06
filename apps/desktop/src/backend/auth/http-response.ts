@@ -264,11 +264,16 @@ function parseError(value: unknown): ErrorCode {
   return code as ErrorCode
 }
 
-export async function readJson(response: Response): Promise<unknown> {
+export async function readJson(response: Response, signal?: AbortSignal): Promise<unknown> {
   const contentType = response.headers.get('content-type')
-  const mediaType = contentType?.split(';', 1)[0]?.trim().toLowerCase()
+  const contentTypeParts = contentType?.split(';').map((part) => part.trim().toLowerCase()) ?? []
+  const mediaType = contentTypeParts[0]
+  const parameters = contentTypeParts.slice(1)
   const hasJsonMediaType = mediaType === 'application/json'
-  if (!hasJsonMediaType) {
+  const hasSupportedParameters =
+    parameters.length === 0 || (parameters.length === 1 && parameters[0] === 'charset=utf-8')
+  const hasSupportedContentType = hasJsonMediaType && hasSupportedParameters
+  if (!hasSupportedContentType) {
     throw new AuthHttpFailure('invalid-response')
   }
 
@@ -293,20 +298,28 @@ export async function readJson(response: Response): Promise<unknown> {
   }
 
   const reader = response.body.getReader()
+  const cancelReader = () => {
+    void reader.cancel().catch(() => undefined)
+  }
+  signal?.addEventListener('abort', cancelReader, { once: true })
   const chunks: Uint8Array[] = []
   let bytesRead = 0
-  while (true) {
-    const chunk = await reader.read()
-    if (chunk.done) {
-      break
+  try {
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) {
+        break
+      }
+      bytesRead += chunk.value.byteLength
+      const isWithinLimit = bytesRead <= AUTH_RESPONSE_MAX_BYTES
+      if (!isWithinLimit) {
+        await reader.cancel()
+        throw new AuthHttpFailure('invalid-response')
+      }
+      chunks.push(chunk.value)
     }
-    bytesRead += chunk.value.byteLength
-    const isWithinLimit = bytesRead <= AUTH_RESPONSE_MAX_BYTES
-    if (!isWithinLimit) {
-      await reader.cancel()
-      throw new AuthHttpFailure('invalid-response')
-    }
-    chunks.push(chunk.value)
+  } finally {
+    signal?.removeEventListener('abort', cancelReader)
   }
 
   const body = new Uint8Array(bytesRead)
@@ -362,9 +375,10 @@ function classifyError(status: number, code: ErrorCode): AuthHttpFailure {
 
 export async function requireSuccessJson(
   response: Response,
-  expectedStatus: number
+  expectedStatus: number,
+  signal?: AbortSignal
 ): Promise<unknown> {
-  const value = await readJson(response)
+  const value = await readJson(response, signal)
   const hasExpectedStatus = response.status === expectedStatus
   if (hasExpectedStatus) {
     return value
@@ -374,7 +388,10 @@ export async function requireSuccessJson(
   throw classifyError(response.status, code)
 }
 
-export async function requireLogoutResponse(response: Response): Promise<void> {
+export async function requireLogoutResponse(
+  response: Response,
+  signal?: AbortSignal
+): Promise<void> {
   const isNoContent = response.status === 204
   const hasNoBody = response.body == null
   if (isNoContent && hasNoBody) {
@@ -384,7 +401,7 @@ export async function requireLogoutResponse(response: Response): Promise<void> {
     throw new AuthHttpFailure('invalid-response')
   }
 
-  const value = await readJson(response)
+  const value = await readJson(response, signal)
   const code = parseError(value)
   throw classifyError(response.status, code)
 }

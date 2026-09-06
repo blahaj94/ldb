@@ -87,7 +87,7 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
         credentials: 'omit',
         signal
       })
-      return requireSuccessJson(response, expectedStatus)
+      return requireSuccessJson(response, expectedStatus, signal)
     })
   }
 
@@ -145,7 +145,7 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
           credentials: 'omit',
           signal
         })
-        await requireLogoutResponse(response)
+        await requireLogoutResponse(response, signal)
       })
     },
 

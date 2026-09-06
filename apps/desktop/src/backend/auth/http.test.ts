@@ -132,12 +132,16 @@ describe('Desktop auth 고정 HTTP client', () => {
       new Response('x'.repeat(16_385), { status: 200, headers: jsonHeaders }),
       new Response('{', { status: 200, headers: jsonHeaders }),
       jsonResponse({ ...validTokens(), extra: true }),
-      jsonResponse({ ...validTokens(), refreshToken: `${REFRESH_1}=` })
+      jsonResponse({ ...validTokens(), refreshToken: `${REFRESH_1}=` }),
+      new Response(JSON.stringify(validTokens()), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json; charset=iso-8859-1' }
+      })
     ]
     const fetch = vi.fn<typeof globalThis.fetch>(async () => responses.shift()!)
     const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
 
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 5; index += 1) {
       await expect(client.refresh(REFRESH_0, new AbortController().signal)).rejects.toMatchObject({
         code: 'invalid-response'
       })
@@ -224,6 +228,25 @@ describe('Desktop auth 고정 HTTP client', () => {
     await expect(client.refresh(REFRESH_0, new AbortController().signal)).rejects.toMatchObject({
       code: 'invalid-response'
     })
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('response header 뒤 body가 멈춰도 같은 deadline에 stream을 취소한다', async () => {
+    vi.useFakeTimers()
+    const cancel = vi.fn()
+    const stream = new ReadableStream<Uint8Array>({
+      pull: () => new Promise<void>(() => undefined),
+      cancel
+    })
+    const response = new Response(stream, { status: 200, headers: jsonHeaders })
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => response)
+    const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
+
+    const refresh = client.refresh(REFRESH_0, new AbortController().signal)
+    const rejected = expect(refresh).rejects.toMatchObject({ code: 'network' })
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    await rejected
     expect(cancel).toHaveBeenCalledTimes(1)
   })
 })
