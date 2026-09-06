@@ -194,6 +194,7 @@ async function verifyProviderLogin(
     clearTimeout(deadlineTimer)
     controller.abort()
     claimed.providerVerifier = ''
+    claimed.providerCode = ''
   }
 }
 
