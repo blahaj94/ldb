@@ -2,22 +2,18 @@
 
 - Closes #
 
-## Preflight
+Issue는 현재 실행 contract를, PR은 실제 변경과 AC별 evidence를 기록합니다. 기록 기준은 [Execution Issue](../docs/rules/agent-workflow.md#execution-issue)를 따릅니다. 기존 contract·preflight·roster는 pointer로 연결하고 차이와 결과만 작성합니다. 아래 승인·검증·review 항목은 유지하며 해당하지 않는 항목에는 이유를 적습니다.
 
-- 목적:
-- 변경하지 않은 범위:
-- 영향받는 module:
-- 예상 및 실제 변경 file:
-- Rule 영향:
-- 예상 및 실제 logic 규모:
-- Parallel 작업 충돌:
+## Actual changes
+
+- 현재 Issue contract·preflight pointer:
+- 실제 변경과 이유:
+- 계획 대비 scope·file·Rule·logic·parallel 충돌의 차이:
 
 ## Worker handoff
 
-- Acceptance criteria mapping:
-- Concise implementation summary:
-- 변경 이유:
-- Architecture 또는 domain 영향:
+- AC별 결과·evidence:
+- Worker별 채택 result commit:
 - 사람이 집중해서 확인할 부분:
 
 ## Rule approval

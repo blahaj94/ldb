@@ -58,7 +58,7 @@ Issue label은 Worker 상태와 분리한다.
 
 단일 Planner는 다음 순서를 배정마다 직렬로 수행한다.
 
-1. 최신 Issue body·comment·관련 PR, 기존 담당과 preflight를 읽는다.
+1. 최신 Issue body의 현재 contract·roster·실행 조건과 정확히 연결된 승인·preflight·선행 결과·관련 PR evidence를 확인한다. 연결이 없거나 최신성·결정·기존 담당이 불명확할 때만 관련 comment·PR 이력으로 범위를 넓힌다.
 2. Bounded scope, dependency·단계 허용·승인, 기존 실행과의 file·semantic·shared state 충돌을 확인한다.
 3. 현재 roster, `worker_count`, 공개 식별자, 통합 담당·branch·head와 `in process` label을 갱신한다.
 4. Body와 label을 다시 조회해 모두 반영됐고 상충하는 새 배정이 없는지 확인한다.
@@ -86,18 +86,21 @@ File 이름만으로 충돌을 판단하지 않는다. Public type·API, schema,
 
 ## Handoff와 context
 
-새 Worker에게는 다음 실행 contract만 필요한 만큼 전달한다.
+새 Worker에게는 다음 실행 contract를 짧은 task packet과 정확한 pointer로 전달한다. 시작 문서·절은 [`역할별 시작점`](../README.md#역할별-시작점)을 따른다.
 
 - Bounded scope, out of scope와 확정된 acceptance criteria
 - 승인된 결정과 미결정 escalation boundary
 - 관련 Rule, file path, symbol, Issue·PR·commit·test pointer
 - 정확한 기준 commit과 선행 결과·통합 순서
 - Validation command와 manual evidence
+- 재배정이면 남은 retry budget과 이전 실패·중단·검증의 결론
 - 반환 형식: result commit, 변경 file, validation 결과, 남은 risk·blocker
 
-전체 원 대화, repository 요약, source 전문, reasoning과 raw tool log를 기본으로 복제하지 않는다. Worker가 context 부족을 발견하면 필요한 pointer나 결정만 요청하고 Planner는 변경된 정보만 보충한다.
+실행 환경이 지원하면 새 Worker를 만들 때 원 대화를 상속하지 않는 설정을 명시적으로 선택하고 위 packet을 전달한다. 지원하지 않으면 그 제약을 인식하고 추가 복제와 중복 읽기를 최소화한다. 상속 여부만으로 별도 승인 단계를 만들지 않으며 기존 approval boundary는 유지한다.
 
-같은 scope의 수정·추가 검증이 필요하고 기존 Worker의 배정과 context가 여전히 유효하면 그 Worker를 재사용한다. 새 Worker를 만들어 재탐색시키지 않는다. 기존 Worker가 중단됐거나 base·contract가 무효가 된 경우에는 중단과 인계를 확인한 뒤 재배정 절차를 따른다.
+전체 원 대화, repository 요약, source 전문, reasoning과 raw tool log를 packet에 복제하지 않는다. Worker는 필요한 Rule 본문·승인 evidence를 pointer에서 확인하고, context 부족을 발견하면 필요한 pointer나 결정만 요청한다. 확인하지 않은 내용을 기억한다고 가정하지 않으며 재확인 조건은 [`AGENTS.md`](../../AGENTS.md#context)를 따른다.
+
+같은 scope의 수정·추가 검증이 필요하고 기존 Worker의 배정과 context가 여전히 유효하면 그 Worker를 재사용하고 변경분만 전달한다. 필요한 Rule·승인·AC·base·retry 결론은 유지하며 달라진 값과 새 evidence를 명시한다. 새 Worker를 만들어 재탐색시키지 않는다. 기존 Worker가 중단됐거나 base·contract가 무효가 된 경우에는 중단과 인계를 확인한 뒤 재배정 절차를 따른다.
 
 ## Branch와 통합
 
@@ -142,7 +145,7 @@ Planner는 모든 Worker result의 채택 또는 명시적 제외, 통합 head v
 
 ## PR handoff
 
-통합된 Draft PR은 관련 Issue와 acceptance criteria, Worker별 채택 result, concise final diff, validation, 남은 risk, review finding과 escalation 여부를 제공한다. 전체 reasoning과 shell history는 포함하지 않는다.
+통합된 Draft PR은 관련 Issue pointer와 AC별 evidence, Worker별 채택 result, concise final diff, validation, 남은 risk, review finding과 escalation 여부를 제공한다. 현재 contract와 실제 변경·evidence의 기록 위치는 [`Execution Issue`](agent-workflow.md#execution-issue)를 따른다. 전체 reasoning과 shell history는 포함하지 않는다.
 
 ## PR 사용량 보고
 

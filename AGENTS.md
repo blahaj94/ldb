@@ -6,13 +6,14 @@
 
 다음 순서로 필요한 context만 읽는다.
 
-1. 개발 작업이면 할당된 GitHub Issue
-2. [`docs/README.md`](docs/README.md)
-3. 모든 code 작성·수정·review이면 [`convention.md`](convention.md)
-4. Reading route에서 task와 일치하는 Rule과 Reference
-5. 변경 path에 적용되는 가장 가까운 하위 `AGENTS.md`
+1. 개발 작업이면 할당된 GitHub Issue의 현재 contract와 연결된 승인·evidence
+2. [`docs/README.md`](docs/README.md)의 Document class와 Reading route
+3. Reading route의 역할별 시작 문서·절에서 시작해 task와 일치하는 topic의 Rule과 Reference
+4. 작업 path에 적용되는 가장 가까운 하위 `AGENTS.md`
 
-무관한 document, directory, conversation history는 미리 읽지 않는다. Dependency나 ambiguity가 생길 때만 context를 넓힌다.
+이미 제공받거나 확인한 동일 revision의 본문이 현재 context에 있으면 재독하지 않는다. Base·문서 revision·적용 조건이 바뀌었거나 기억이 불확실하거나 context를 잃었으면 관련 본문을 재확인한다. Pointer만 받았거나 제목만 확인한 것은 본문을 읽은 것으로 보지 않는다.
+
+무관한 document, directory, conversation history는 미리 읽지 않는다. Dependency나 ambiguity가 생기면 관련 context만 넓힌다. Context 축소를 이유로 적용되는 Rule·AC·승인·보안·검증 의무를 생략하지 않는다.
 
 ## Truth and authority
 

@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-08-28
+last-reviewed: 2026-09-06
 ---
 
 # Change Control
@@ -34,13 +34,13 @@ last-reviewed: 2026-08-28
 
 ## Dependency 선택과 비용
 
-아래 정책과 다른 Rule의 연결 문구는 [Issue #96](https://github.com/blahaj94/ldb/issues/96)의 Draft PR 변경안이다. 기존 Rule의 승인 상태를 바꾸거나 특정 library 선정·설치를 승인하지 않는다.
+아래 정책과 다른 Rule의 연결 문구는 [PR #97의 사용자 승인](https://github.com/blahaj94/ldb/pull/97#issuecomment-5559626371)과 merge를 반영한 active Rule이다. 특정 library 선정·설치를 승인하지 않는다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: dependency 제약을 지키려다 범용 기능의 자체 구현·검증 비용이 커지는 선택을 조기에 확인한다.
-evidence: "Issue #96의 사용자 요청과 Issue #84의 dependency·공통 package 제외 및 구현 규모 preflight"
+evidence: "Issue #96, PR #97 사용자 승인: https://github.com/blahaj94/ldb/pull/97#issuecomment-5559626371"
 exceptions: 기존 기능이나 작은 native API 호출·단순 adapter로 요구를 충족하면 별도 비교 문서나 질문을 요구하지 않는다.
 review-after: 승인 후 dependency 선택이 필요한 구현 Issue 3개에서 질문의 적시성과 비교 비용을 확인한다.
 ```
@@ -65,7 +65,7 @@ Rule 변경이 필요하면 AI는 다음 순서로 진행한다.
 
 ## Issue and preflight
 
-모든 개발 작업은 GitHub Issue를 source로 사용한다. AI는 구현 전에 Issue에 다음 preflight를 comment하고, approval boundary가 없으면 기다리지 않고 진행한다.
+모든 개발 작업은 GitHub Issue를 source로 사용한다. AI는 구현 전에 Issue에 다음 preflight를 comment하고, approval boundary가 없으면 기다리지 않고 진행한다. 현재 contract에 이미 있는 항목은 해당 절 pointer로 연결하고 새 판단·변경분을 기록한다. 아래 항목의 확인과 필요한 승인·검증을 생략하지 않는다.
 
 ```text
 목적
@@ -79,7 +79,7 @@ test 전략
 parallel 작업 충돌 가능성
 ```
 
-Issue는 Goal, user-visible behavior, acceptance criteria, in scope, out of scope, 관련 Rule, dependency, constraint를 제공한다. 세부 구현 설계와 일시적인 작업 분해는 Issue comment와 PR에서 관리하며 permanent Rule document에 넣지 않는다.
+Issue의 현재 실행 contract와 PR의 실제 변경·evidence는 [`Execution Issue`](agent-workflow.md#execution-issue)의 기록 기준을 따른다. Preflight는 현재 contract에서 연결하고 PR에는 그 이후 실제 차이와 검증 결과를 기록한다. 세부 구현 설계와 일시적인 작업 분해는 Issue comment와 PR에서 관리하며 permanent Rule document에 넣지 않는다.
 
 ## Branch, worktree, and parallel work
 
