@@ -570,6 +570,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
     scheduleExpiry(value)
+    if (!isCurrentPending(value)) {
+      return
+    }
     publish({
       phase: 'waitingBrowser',
       login: pendingSnapshot(value),
@@ -889,6 +892,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
       generation += 1
       const cleanupGeneration = generation
+      credential = null
+      publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
       await disposeKnownRefresh(refreshToken)
       const canClear = generation === cleanupGeneration
       if (canClear) {
