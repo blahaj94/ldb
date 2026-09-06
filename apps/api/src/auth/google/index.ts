@@ -11,24 +11,43 @@ import { exchangeGoogleCode, withAbort } from './transport.js'
 import type { GoogleProviderConfiguration } from './types.js'
 
 function trustedUrl(value: string): string {
-  const url = new URL(value)
-  const endpointIsInvalid = url.protocol !== 'https:' || url.href !== value ||
-    url.username || url.password || url.search || url.hash || value.includes('*')
-  if (endpointIsInvalid) {
-    throw new TypeError('Google provider endpoint must be an exact HTTPS URL')
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const isHttps = url.protocol === 'https:'
+  const isExactUrl = url.href === value
+  const hasUsername = url.username.length > 0
+  const hasPassword = url.password.length > 0
+  const hasQuery = url.search.length > 0
+  const hasFragment = url.hash.length > 0
+  const hasWildcard = value.includes('*')
+  const isTrustedUrlShape = isHttps && isExactUrl && !hasUsername && !hasPassword &&
+    !hasQuery && !hasFragment && !hasWildcard
+  if (!isTrustedUrlShape) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
   return url.href
 }
 
 function sameSnapshot(expected: ProviderRegistration, actual: ProviderRegistration): boolean {
-  return expected.provider === actual.provider && expected.version === actual.version &&
-    expected.providerClientId === actual.providerClientId &&
-    expected.providerSecretRef === actual.providerSecretRef &&
-    expected.callbackUrl === actual.callbackUrl &&
-    expected.authorizationEndpoint === actual.authorizationEndpoint &&
-    expected.expectedAudience === actual.expectedAudience &&
-    expected.returnTarget.id === actual.returnTarget.id &&
-    expected.returnTarget.url === actual.returnTarget.url
+  // 첫 불일치 뒤 property를 읽지 않도록 기존 short-circuit 순서도 유지한다.
+  const hasSameProvider = expected.provider === actual.provider
+  const hasSameVersion = hasSameProvider && expected.version === actual.version
+  const hasSameClientId = hasSameVersion && expected.providerClientId === actual.providerClientId
+  const hasSameSecretReference = hasSameClientId && expected.providerSecretRef === actual.providerSecretRef
+  const hasSameCallback = hasSameSecretReference && expected.callbackUrl === actual.callbackUrl
+  const hasSameAuthorizationEndpoint = hasSameCallback &&
+    expected.authorizationEndpoint === actual.authorizationEndpoint
+  const hasSameAudience = hasSameAuthorizationEndpoint && expected.expectedAudience === actual.expectedAudience
+  const hasSameReturnTargetId = hasSameAudience && expected.returnTarget.id === actual.returnTarget.id
+  const hasSameReturnUrl = hasSameReturnTargetId && expected.returnTarget.url === actual.returnTarget.url
+  const isSameSnapshot = hasSameProvider && hasSameVersion && hasSameClientId &&
+    hasSameSecretReference && hasSameCallback && hasSameAuthorizationEndpoint &&
+    hasSameAudience && hasSameReturnTargetId && hasSameReturnUrl
+  return isSameSnapshot
 }
 
 function verifyGoogleClaims(
@@ -38,65 +57,108 @@ function verifyGoogleClaims(
   accessToken: unknown,
 ): string {
   // jose의 audience 검사는 array도 수용하므로 Google의 단일 exact string을 추가 확인한다.
-  if (payload.aud !== snapshot.expectedAudience) {
-    throw new Error('Google ID token audience does not match registration')
+  const hasExpectedAudience = payload.aud === snapshot.expectedAudience
+  if (!hasExpectedAudience) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (payload.azp !== undefined && payload.azp !== snapshot.expectedAudience) {
-    throw new Error('Google ID token authorized party does not match registration')
+  const hasAuthorizedParty = payload.azp !== undefined
+  const hasWrongAuthorizedParty = hasAuthorizedParty && payload.azp !== snapshot.expectedAudience
+  if (hasWrongAuthorizedParty) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
 
   const checkedAt = Math.floor(Date.now() / 1000)
-  if (typeof payload.iat !== 'number' || !Number.isFinite(payload.iat)) {
-    throw new TypeError('Google ID token issued time must be a finite number')
+  const issuedAt = payload.iat
+  const isIssuedAtNumber = typeof issuedAt === 'number'
+  const isIssuedAtFinite = isIssuedAtNumber && Number.isFinite(issuedAt)
+  const isValidIssuedAt = isIssuedAtNumber && isIssuedAtFinite
+  if (!isValidIssuedAt) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (payload.iat > checkedAt) {
-    throw new RangeError('Google ID token issued time is in the future')
+  const isIssuedInFuture = issuedAt > checkedAt
+  if (isIssuedInFuture) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
-    throw new TypeError('Google ID token expiration must be a finite number')
+  const expiresAt = payload.exp
+  const isExpiryNumber = typeof expiresAt === 'number'
+  const isExpiryFinite = isExpiryNumber && Number.isFinite(expiresAt)
+  const isValidExpiry = isExpiryNumber && isExpiryFinite
+  if (!isValidExpiry) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (checkedAt >= payload.exp) {
-    throw new RangeError('Google ID token has expired')
+  const isExpired = checkedAt >= expiresAt
+  if (isExpired) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (typeof payload.sub !== 'string') {
-    throw new TypeError('Google subject must be a string')
+  const subject = payload.sub
+  const isSubjectString = typeof subject === 'string'
+  if (!isSubjectString) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (payload.sub.length === 0 || payload.sub.length > 255) {
-    throw new RangeError('Google subject length is outside the accepted range')
+  const hasSubject = subject.length > 0
+  const isSubjectWithinLimit = subject.length <= 255
+  const isValidSubjectLength = hasSubject && isSubjectWithinLimit
+  if (!isValidSubjectLength) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if ([...payload.sub].some((character) => character.charCodeAt(0) > 127)) {
-    throw new TypeError('Google subject must contain only ASCII characters')
+  const hasNonAsciiSubject = [...subject].some((character) => {
+    const isNonAscii = character.charCodeAt(0) > 127
+    return isNonAscii
+  })
+  if (hasNonAsciiSubject) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
 
   // 기존 생성·저장 함수와 동일한 canonical 32-byte decode/hash를 재사용한다.
-  if (typeof payload.nonce !== 'string') {
-    throw new TypeError('Google nonce must be a string')
+  const nonce = payload.nonce
+  const isNonceString = typeof nonce === 'string'
+  if (!isNonceString) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (!equalHash(nonceHash, opaqueHash(payload.nonce))) {
-    throw new Error('Google nonce does not match the login request')
+  let candidateNonceHash: Buffer
+  try {
+    // 공통 opaque parser의 형식 오류를 provider 응답 검증의 정제 오류로 변환한다.
+    candidateNonceHash = opaqueHash(nonce)
+  } catch {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
-  if (payload.at_hash !== undefined) {
+  const hasExpectedNonce = equalHash(nonceHash, candidateNonceHash)
+  if (!hasExpectedNonce) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+  }
+  const hasAccessHash = payload.at_hash !== undefined
+  if (hasAccessHash) {
     const accessHash = payload.at_hash
-    const accessHashIsMalformed = typeof accessHash !== 'string' ||
-      !/^[A-Za-z0-9_-]{22}$/.test(accessHash)
-    if (accessHashIsMalformed) {
-      throw new TypeError('Google access-token hash must use canonical base64url')
+    const isAccessHashString = typeof accessHash === 'string'
+    const hasAccessHashEncoding = isAccessHashString && /^[A-Za-z0-9_-]{22}$/.test(accessHash)
+    const isValidAccessHashShape = isAccessHashString && hasAccessHashEncoding
+    if (!isValidAccessHashShape) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
-    const accessTokenIsInvalid = typeof accessToken !== 'string' || accessToken.length === 0 ||
-      [...accessToken].some((character) => character.charCodeAt(0) > 127)
-    if (accessTokenIsInvalid) {
-      throw new TypeError('Google access token must be present as ASCII for at_hash')
+    const isAccessTokenString = typeof accessToken === 'string'
+    const hasAccessToken = isAccessTokenString && accessToken.length > 0
+    const hasNonAsciiAccessToken = hasAccessToken && [...accessToken].some((character) => {
+      const isNonAscii = character.charCodeAt(0) > 127
+      return isNonAscii
+    })
+    const isValidAccessToken = isAccessTokenString && hasAccessToken && !hasNonAsciiAccessToken
+    if (!isValidAccessToken) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
     const claimedHash = Buffer.from(accessHash, 'base64url')
     const expectedHash = createHash('sha256').update(accessToken, 'ascii').digest().subarray(0, 16)
-    if (claimedHash.length !== 16 || claimedHash.toString('base64url') !== accessHash) {
-      throw new TypeError('Google access-token hash encoding is not canonical')
+    const hasHashBytes = claimedHash.length === 16
+    const isCanonicalHash = hasHashBytes && claimedHash.toString('base64url') === accessHash
+    const isValidHashEncoding = hasHashBytes && isCanonicalHash
+    if (!isValidHashEncoding) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
-    if (!timingSafeEqual(claimedHash, expectedHash)) {
-      throw new Error('Google access-token hash does not match the access token')
+    const hasExpectedAccessHash = timingSafeEqual(claimedHash, expectedHash)
+    if (!hasExpectedAccessHash) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
   }
-  return payload.sub
+  return subject
 }
 
 /** 실제 값의 저장 정책을 정하지 않는 server-only composition 경계다. Listen 전에 생성한다. */
