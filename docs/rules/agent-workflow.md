@@ -90,7 +90,7 @@ Metadata의 source of truth는 Issue body다. 현재 작업 유형·상태·실�
 
 - Code 작성·수정에는 implementation, bug fix, refactor, test, script와 tooling code가 모두 포함된다.
 - Code Worker의 기본 실행 설정은 `gpt-5.6-sol`, reasoning effort `high`다. `standard` tier의 일반 implementation은 이 설정에 매핑하며, 작업이 단순하다는 이유로 `low` tier나 더 낮은 effort에 배정하지 않는다.
-- `gpt-5.3-codex-spark`, reasoning effort `high`는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능한 unit test, parameterized test와 fixture에 사용할 수 있다. `test`라는 이름이나 `.py`·`.mjs` 확장자만으로 예외를 적용하지 않는다.
+- `gpt-5.3-codex-spark`, reasoning effort `high`는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능한 bounded test와 fixture에 사용할 수 있다. Unit test와 parameterized test가 그 예이며, `test`라는 이름이나 `.py`·`.mjs` 확장자만으로 예외를 적용하지 않는다.
 - Spark High는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능하며, 중요한 state를 바꾸지 않는 작은 `.py`·`.mjs` 보조 script에도 사용할 수 있다. 범위는 local file 읽기, JSON·CSV 변환, file 목록 검사와 결과 집계 등이며, 적용 근거는 Issue의 기존 context pointer와 validation command로 확인한다.
 - 일반 code, bug fix와 refactor, test 의미·경계 조건 설계, 인증·동시성·transaction·복잡한 integration harness에는 Sol High를 유지한다. 배포·database 변경·data 삭제 등 중요한 state를 바꾸는 script도 Spark 예외에서 제외한다.
 - Spark 작업도 [`testing.md`](testing.md)의 Red-Green과 test integrity를 따른다. 기대값은 승인된 Rule 또는 합의된 acceptance criteria에서 가져오며, assertion·validation을 약화하거나 test를 통과시키려고 제품 code를 수정하지 않는다.
