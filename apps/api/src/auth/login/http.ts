@@ -88,6 +88,11 @@ class LoginController {
 
   @Get('login/authorize')
   async authorize(@Req() request: Request, @Res() response: Response): Promise<void> {
+    // Express의 HEAD→GET fallback이 일회용 ticket을 소비하지 못하게 한다.
+    if (request.method !== 'GET') {
+      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+    }
+
     const query = readOriginalQuery(request)
     if (query.size !== 1 || query.getAll('ticket').length !== 1) {
       throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
@@ -115,6 +120,11 @@ class LoginController {
     request: Request,
     response: Response,
   ): Promise<void> {
+    // HEAD는 완료 HTML을 받지 못하므로 callback claim이나 provider 검증을 시작하지 않는다.
+    if (request.method !== 'GET') {
+      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+    }
+
     const query = readOriginalQuery(request)
     // 별도 service를 주입해도 HTTP 입력 검증은 이 경계에서 수행한다.
     parseCallback(query)
