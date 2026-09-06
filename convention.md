@@ -158,6 +158,47 @@ if (isTokenResponseInvalid) {
 }
 ```
 
+### 정적 오류 catalog에서 타입 파생
+
+- TypeScript에서 runtime으로 사용하는 정적 오류 목록은 catalog 한 곳에 정의한다. `as const`로 literal type을 유지하고 `satisfies`로 항목 형태를 검사한다. 이미 같은 역할의 형태 type이 있으면 재사용한다.
+- 구체적인 오류 union은 `typeof CATALOG[keyof typeof CATALOG]`로 파생하고 Error class의 field 타입도 그 정의에서 가져온다. Code·status·message의 구체 목록을 별도 union이나 interface에 중복 작성하지 않는다.
+- 호출부는 catalog 항목을 선택해 해당 module의 Error class에 전달한다. 새 오류는 기존 계약과 변경 절차에 따라 catalog에 추가하며 호출부에서 임의의 정의를 만들지 않는다. 공통 catalog를 spread할 때 원본 literal type과 key 중복·덮어쓰기 의도를 확인한다.
+- 아래 code·status·message는 로그인 오류의 예시다. Catalog의 필드는 각 module의 기존 오류 계약에 맞추며 모든 오류에 HTTP status나 새 공통 Error framework를 강제하지 않는다.
+- `as const`와 `satisfies`는 compile-time 표현이다. Runtime validation이나 객체 동결을 대신하지 않는다. `stack`·`cause`의 보존·정제는 기존 진단·노출 계약을 따른다.
+
+```ts
+type ErrorDefinitionShape = Readonly<{
+  code: string
+  status: number
+  message: string
+}>
+
+export const REFRESH_ERRORS = {
+  AUTHENTICATION_REQUIRED: {
+    code: 'AUTHENTICATION_REQUIRED',
+    status: 401,
+    message: '로그인이 필요합니다.',
+  },
+} as const satisfies Record<string, ErrorDefinitionShape>
+
+type RefreshErrorDefinition =
+  typeof REFRESH_ERRORS[keyof typeof REFRESH_ERRORS]
+
+export class RefreshFailure extends Error {
+  readonly code: RefreshErrorDefinition['code']
+  readonly status: RefreshErrorDefinition['status']
+
+  constructor(definition: RefreshErrorDefinition) {
+    super(definition.message)
+    this.name = 'RefreshFailure'
+    this.code = definition.code
+    this.status = definition.status
+  }
+}
+
+throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
+```
+
 ## 5. 이름·표현·함수 경계
 
 - 여러 request, code, token, 설정, 결과가 함께 있으면 실제 역할이 구분되는 이름을 사용한다. 시간은 어떤 사건이나 검사 시점인지 나타낸다. 생성 시각과 생성 후 재검사 시각을 혼용하지 않는다.
@@ -183,9 +224,10 @@ if (isTokenResponseInvalid) {
 2. 개별 검사 결과를 debugger에서 볼 수 있고 최종 boolean이 그 결과들로 합성되는가?
 3. 단순 조건·검증 함수 내부·test라는 이유로 기준을 생략하지 않았는가?
 4. 실패를 판단한 위치가 적절한 오류를 선택하고 이미 분류된 오류가 보존되는가?
-5. Nullish 존재 여부와 boolean·빈 값·내용 검사를 구분하고 nonboolean truthiness를 피했는가?
-6. Property 접근·type narrowing·평가 시점·side effect·민감 값 수명이 보존되는가?
-7. Helper와 주석이 책임·이유를 드러내며 불필요한 이동이나 중복 설명을 늘리지 않는가?
+5. 정적 오류의 runtime 정의·형태 검사·구체 타입이 연결되고 호출부가 catalog 항목을 선택하는가?
+6. Nullish 존재 여부와 boolean·빈 값·내용 검사를 구분하고 nonboolean truthiness를 피했는가?
+7. Property 접근·type narrowing·평가 시점·side effect·민감 값 수명이 보존되는가?
+8. Helper와 주석이 책임·이유를 드러내며 불필요한 이동이나 중복 설명을 늘리지 않는가?
 
 기준을 충족하지 못하면 위치·이유·더 작은 개선안을 review에 남긴다. 문법·library 계약에 따른 제한은 구체적인 근거로 기록한다. 별도의 승인 단계를 추가하지 않으며 변경 절차와 logic/context budget은 기존 Rule을 따른다.
 
