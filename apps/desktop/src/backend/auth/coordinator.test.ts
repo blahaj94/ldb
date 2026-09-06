@@ -532,6 +532,12 @@ describe('Desktop AuthCoordinator login', () => {
       expect(harness.http.logout).toHaveBeenCalledTimes(1)
 
       await beginWaitingLogin(coordinator)
+      await coordinator.logout()
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: 'signedOut',
+        notice: 'LOGIN_CANCELLED'
+      })
+      await beginWaitingLogin(coordinator)
       await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${OTHER_CODE}`)
       await coordinator.logout()
 

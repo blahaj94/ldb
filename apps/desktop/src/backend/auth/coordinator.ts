@@ -1203,6 +1203,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     verificationController?.abort()
     const writer = activeWriter
+    const writerDisposal = writer == null ? undefined : disposalFlight?.promise
     const credentialHttpWasStarted = activeCredentialHttpStarted
     const refreshToken = knownRefreshToken
     publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
@@ -1224,12 +1225,18 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         refreshToken == null ? Promise.resolve(true) : disposeKnownRefresh(refreshToken)
     }
     const serverConfirmed = await serverLogout
+    const writerDisposalResult = await writerDisposal
+    const hasWriterDisposalFailure = writerDisposalResult === false
+    const hasKnownLogoutCredential = refreshToken != null
     const localConfirmed = localPrepared && (await finishLocalClear())
     credential = null
     knownRefreshToken = null
     disposalFlight = null
     blockedMode = localConfirmed ? null : 'cleanup'
-    const isServerConfirmed = serverConfirmed && !lateDisposalUnconfirmed
+    const isServerConfirmed =
+      serverConfirmed &&
+      !lateDisposalUnconfirmed &&
+      (hasKnownLogoutCredential || !hasWriterDisposalFailure)
     lateDisposalUnconfirmed = false
     const isCurrentLogout = generation === logoutGeneration
     if (!isCurrentLogout) {
