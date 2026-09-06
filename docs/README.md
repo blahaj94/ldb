@@ -33,7 +33,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 | 작업                             | Required document                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
 | 모든 code 작성·수정·review       | [`convention.md`](../convention.md), `docs/rules/change-control.md`, `docs/rules/testing.md`, `docs/rules/code-quality.md` |
-| Web·Desktop UI의 시각 기준·공용 자산 | [`rules/design-system.md`](rules/design-system.md) — 제안 상태; 승인 전 구현 근거로 사용하지 않음 |
+| Web·Desktop UI의 시각 기준·공용 자산 | [`rules/design-system.md`](rules/design-system.md) |
 | 큰 작업 분해와 역할·Issue contract | `docs/rules/agent-workflow.md`                                                       |
 | Worker 배정·상태·handoff·통합   | `docs/rules/agent-execution.md`                                                       |
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
@@ -60,7 +60,7 @@ AI는 변경을 제안하고 Draft PR에 commit할 수 있지만, 사용자의 �
 - [`rules/change-control.md`](rules/change-control.md): approval, Issue, branch, commit, PR, parallel 작업
 - [`rules/testing.md`](rules/testing.md): Red-Green workflow와 validation 기준
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
-- [`rules/design-system.md`](rules/design-system.md): 공통 자산·용도별 기본값·Layout·밀도와 화면별 외형 override 금지 제안
+- [`rules/design-system.md`](rules/design-system.md): 공통 자산·용도별 기본값·Layout·밀도와 화면별 외형 override 금지
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
 - [`rules/agent-execution.md`](rules/agent-execution.md): 복수 Worker의 roster, context, 상태와 통합 계약
