@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        이 Issue는 task의 목적과 acceptance criteria를 정의합니다. 세부 구현 분해는 comment와 PR에서 관리합니다.
+        이 Issue는 하나의 bounded outcome과 acceptance criteria를 정의합니다. 현재 Worker 배정은 body의 roster에서 관리합니다.
 
   - type: textarea
     id: goal
@@ -55,7 +55,7 @@ body:
     id: execution_metadata
     attributes:
       label: Execution metadata
-      description: Provider 또는 model 이름 대신 작업 특성과 필요한 capability를 기록합니다. Worker 수는 아래 worker_count 항목에서 1로 고정합니다.
+      description: Provider 또는 model 이름 대신 작업 특성과 필요한 capability를 기록합니다. 전체 목표가 다르면 별도 Issue로 나눕니다.
       placeholder: |
         complexity: low | medium | high
         uncertainty: low | medium | high
@@ -70,12 +70,43 @@ body:
     id: worker_count
     attributes:
       label: worker_count
-      description: Issue당 담당 Worker는 한 명입니다. 독립 구현 작업은 별도 Issue로 분리합니다.
+      description: 1–8 중 현재 배정 계획의 Worker roster slot 수를 선택합니다. 동시 process, Scout·Reviewer와 누적 retry는 세지 않습니다.
       options:
         - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+        - "6"
+        - "7"
+        - "8"
       default: 0
+      multiple: false
     validations:
       required: true
+
+  - type: textarea
+    id: worker_roster
+    attributes:
+      label: Worker roster and integration
+      description: 배정 전에 Planner·통합 담당과 worker_count만큼의 현재 Worker를 기록하고 상태·head가 바뀔 때 갱신합니다. 과거 배정은 comment 이력으로 남깁니다.
+      placeholder: |
+        planner:
+        integration_owner:
+        integration_branch:
+        integration_head:
+        workers:
+          - worker_id:
+            scope:
+            out_of_scope:
+            dependencies:
+            status: assigned | working | waiting | handed-off | integrated | stopped | failed
+            branch:
+            base:
+            integration_order:
+            result:
+            validation:
+            blocker:
 
   - type: textarea
     id: rules
