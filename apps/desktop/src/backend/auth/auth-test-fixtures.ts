@@ -105,12 +105,32 @@ export class FakeStore implements CredentialStore {
   readonly removeOutcomes: StoreMutationOutcome[] = []
   readonly reestablishOutcomes: StoreMutationOutcome[] = []
 
-  readonly inspect = vi.fn(async () => this.inspection)
-  readonly establishTransition = vi.fn(async () => this.next(this.establishOutcomes))
-  readonly commitCredential = vi.fn(async () => this.next(this.commitOutcomes))
-  readonly clearCredential = vi.fn(async () => this.next(this.clearOutcomes))
-  readonly removeTransition = vi.fn(async () => this.next(this.removeOutcomes))
-  readonly reestablishTransition = vi.fn(async () => this.next(this.reestablishOutcomes))
+  constructor(private readonly operations: string[] = []) {}
+
+  readonly inspect = vi.fn(async () => {
+    this.operations.push('store:inspect')
+    return this.inspection
+  })
+  readonly establishTransition = vi.fn(async (kind) => {
+    this.operations.push(`store:establish:${kind}`)
+    return this.next(this.establishOutcomes)
+  })
+  readonly commitCredential = vi.fn(async () => {
+    this.operations.push('store:commit')
+    return this.next(this.commitOutcomes)
+  })
+  readonly clearCredential = vi.fn(async () => {
+    this.operations.push('store:clear')
+    return this.next(this.clearOutcomes)
+  })
+  readonly removeTransition = vi.fn(async () => {
+    this.operations.push('store:remove')
+    return this.next(this.removeOutcomes)
+  })
+  readonly reestablishTransition = vi.fn(async (kind) => {
+    this.operations.push(`store:reestablish:${kind}`)
+    return this.next(this.reestablishOutcomes)
+  })
 
   private next(outcomes: StoreMutationOutcome[]): StoreMutationOutcome {
     return outcomes.shift() ?? 'confirmed'
@@ -121,7 +141,8 @@ export type AuthHarness = ReturnType<typeof createAuthHarness>
 
 export function createAuthHarness() {
   const clock = new FakeClock()
-  const store = new FakeStore()
+  const operations: string[] = []
+  const store = new FakeStore(operations)
   const uuidValues = [RUN_ID, ATTEMPT_ID, NEXT_ATTEMPT_ID]
   const byteValues = [Buffer.alloc(32, 1), Buffer.alloc(32, 2), Buffer.alloc(32, 3)]
 
@@ -133,22 +154,38 @@ export function createAuthHarness() {
     })
   }
   const browser = {
-    open: vi.fn(async () => undefined)
+    open: vi.fn(async () => {
+      operations.push('browser:open')
+    })
   }
   const http: AuthHttp = {
-    createLoginRequest: vi.fn(async () => ({
-      requestId: REQUEST_ID,
-      browserUrl: `${API_ORIGIN}/auth/login/authorize?ticket=${Buffer.alloc(32, 8).toString('base64url')}`,
-      expiresAt: '2026-09-06T12:10:00.000Z'
-    })),
-    exchange: vi.fn(async () => ({
-      ...tokenResponse(),
-      user: { id: USER_ID, nickname: '모험가000001' },
-      isNewUser: true
-    })),
-    refresh: vi.fn(async () => tokenResponse()),
-    logout: vi.fn(async () => undefined),
-    me: vi.fn(async () => ({ user: { id: USER_ID, nickname: '모험가000001' } }))
+    createLoginRequest: vi.fn(async () => {
+      operations.push('http:create-login')
+      return {
+        requestId: REQUEST_ID,
+        browserUrl: `${API_ORIGIN}/auth/login/authorize?ticket=${Buffer.alloc(32, 8).toString('base64url')}`,
+        expiresAt: '2026-09-06T12:10:00.000Z'
+      }
+    }),
+    exchange: vi.fn(async () => {
+      operations.push('http:exchange')
+      return {
+        ...tokenResponse(),
+        user: { id: USER_ID, nickname: '모험가000001' },
+        isNewUser: true
+      }
+    }),
+    refresh: vi.fn(async () => {
+      operations.push('http:refresh')
+      return tokenResponse()
+    }),
+    logout: vi.fn(async () => {
+      operations.push('http:logout')
+    }),
+    me: vi.fn(async () => {
+      operations.push('http:me')
+      return { user: { id: USER_ID, nickname: '모험가000001' } }
+    })
   }
 
   const dependencies: AuthCoordinatorDependencies = {
@@ -167,6 +204,7 @@ export function createAuthHarness() {
     browser,
     clock,
     entropy,
+    operations,
     http: {
       value: http,
       createLoginRequest: vi.mocked(http.createLoginRequest),
