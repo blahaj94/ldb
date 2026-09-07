@@ -6,6 +6,27 @@ import { accountFixture, withAccountApp, accountRequest, rawAccountRequest, expe
 import { instrument, bounded, settled, databaseNow, waitUntil, blockedBy } from './login-test-control.mjs'
 import { setDeadline, withLock } from './refresh-fixtures.mjs'
 
+async function headPreservesActivity(source) {
+  const f = await accountFixture(source)
+  const before = await snapshot(source, f)
+  await withAccountApp(f, async (base) => {
+    const head = await fetch(`${base}/me`, {
+      method: 'HEAD', headers: { authorization: `Bearer ${f.token.accessToken}` },
+    })
+    assert.equal(head.status, 400)
+    assert.equal(head.headers.get('cache-control'), 'no-store')
+    assert.equal(await head.text(), '')
+    assert.deepEqual(await snapshot(source, f), before)
+
+    // 같은 JWT의 GET 성공과 활동 갱신으로 HEAD 거절이 무효 자격 때문이 아님을 확인한다.
+    const get = await accountRequest(base, f)
+    assert.equal(get.status, 200)
+    assert.deepEqual(await get.json(), { user: { id: before.user.id, nickname: before.user.nickname } })
+    const afterGet = await snapshot(source, f)
+    assert(afterGet.session.last_active_at > before.session.last_active_at)
+  })
+}
+
 async function normal(source) {
   const f = await accountFixture(source)
   const before = await snapshot(source, f)
@@ -367,6 +388,7 @@ async function databaseFailure(source, phase, applied, method) {
 
 export async function assertAccountHttpIntegration(source, mark) {
   const cases = [
+    ['valid JWT HEAD refuses without activity and GET still records activity', () => headPreservesActivity(source)],
     ['profile shape, Unicode preservation, duplicate nickname and activity', () => normal(source)],
     ['strict bearer, shape and raw nickname refusals leave activity unchanged', () => initialRejections(source)],
     ...['GET', 'PATCH'].flatMap((method) => [

@@ -6,6 +6,27 @@ import { URL } from 'node:url'
 import { test } from 'node:test'
 import { withAccountApp, rawAccountRequest, expectAccountError } from './account-http-fixtures.mjs'
 
+test('HEAD account fallback rejects before verifier and database calls', async () => {
+  let databaseCalls = 0
+  let verifications = 0
+  const source = { transaction: async () => {
+    databaseCalls++
+    throw new Error('unexpected database call')
+  } }
+  const f = { deps: { dataSource: source }, verifyJwt: async () => {
+    verifications++
+    throw new Error('unexpected verifier call')
+  } }
+  await withAccountApp(f, async (base) => {
+    const head = await fetch(`${base}/me`, { method: 'HEAD' })
+    assert.equal(head.status, 400)
+    assert.equal(head.headers.get('cache-control'), 'no-store')
+    assert.equal(await head.text(), '')
+  })
+  assert.equal(verifications, 0)
+  assert.equal(databaseCalls, 0)
+})
+
 test('GET account verifier failures are sanitized JSON without DB activity', async () => {
   let databaseCalls = 0
   const source = { transaction: async () => {
