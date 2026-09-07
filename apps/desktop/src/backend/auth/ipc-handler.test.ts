@@ -120,8 +120,18 @@ describe('auth IPC trust boundary', () => {
     expect(fixture.contents.send).not.toHaveBeenCalled()
   })
 
+  it('getAuthState의 추가 인자는 정제 rejection이며 snapshot과 effect를 바꾸지 않는다', async () => {
+    const fixture = await setup()
+    const initial = fixture.coordinator.getSnapshot()
+
+    await expect(fixture.invoke('getAuthState', [undefined])).rejects.toThrow(
+      /^INVALID_AUTH_COMMAND$/
+    )
+    expect(fixture.effects.operations).toEqual([])
+    expect(fixture.coordinator.getSnapshot()).toEqual(initial)
+  })
+
   it.each([
-    ['getAuthState', [undefined]],
     ['retryAuth', [{}]],
     ['logout', [null]],
     ['beginLogin', []],
