@@ -15,10 +15,23 @@ const isOcr = process.argv.includes('--ocr')
 app.setPath('userData', profile)
 app.setName('LDB Auth Capture fixture')
 app.on('window-all-closed', () => app.quit())
+let cleanupHandled = false
 app.on('quit', () => {
-  rmSync(profile, { recursive: true, force: true, maxRetries: 3 })
-  const isRemoved = !existsSync(profile)
-  console.log(isRemoved ? 'Capture fixture cleanup PASS' : 'Capture fixture cleanup FAIL')
+  if (cleanupHandled) return
+  cleanupHandled = true
+  let isRemoved = false
+  try {
+    rmSync(profile, { recursive: true, force: true, maxRetries: 3 })
+    isRemoved = !existsSync(profile)
+  } catch {
+    // Filesystem 오류 원문을 출력하지 않고 종료 결과에 실패를 반영한다.
+  }
+  if (isRemoved) {
+    console.log('Capture fixture cleanup PASS')
+    return
+  }
+  console.error('Capture fixture cleanup FAIL')
+  app.exit(1)
 })
 
 app
