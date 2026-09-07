@@ -26,6 +26,8 @@ class SearchQueryRunner extends PostgresQueryRunner {
       ssl: options.ssl as ClientConfig['ssl'],
       // pg 8.23 non-pipeline의 end()는 진행 중 query의 socket을 실제로 종료한다.
       pipeline: false,
+      // PostgreSQL 기본값 0은 lock 대기 중 끊긴 client를 감지하지 못한다. 이 연결에만 적용한다.
+      options: '-c client_connection_check_interval=100ms',
     })
     this.manager = driver.dataSource.createEntityManager(this)
     // Idle connection 오류도 원문을 log하거나 unhandled EventEmitter 오류로 노출하지 않는다.
