@@ -5,11 +5,13 @@ import { AuthPresentation } from './AuthPresentation'
 import { useAuthBridge } from './useAuthBridge'
 
 export function AuthBridge({ api, home }: { api: AuthApi; home?: ReactNode }): React.JSX.Element {
-  const { snapshot, commandPending, connectionFailed, onIntent } = useAuthBridge(api)
+  const { snapshot, presentationEpoch, commandPending, connectionFailed, onIntent } =
+    useAuthBridge(api)
   const hasSnapshot = snapshot != null
   if (hasSnapshot) {
     return (
       <AuthPresentation
+        key={presentationEpoch}
         snapshot={snapshot}
         home={home}
         commandPending={commandPending}

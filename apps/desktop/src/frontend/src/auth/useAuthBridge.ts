@@ -3,6 +3,7 @@ import type { AuthApi, AuthSnapshot } from '../../../preload/common/types/auth'
 import type { AuthIntent } from './presentation'
 
 type BridgeState = {
+  presentationEpoch: number
   snapshot: AuthSnapshot | null
   commandPending: boolean
   connectionFailed: boolean
@@ -10,8 +11,10 @@ type BridgeState = {
 type AuthBridge = BridgeState & { onIntent: (intent: AuthIntent) => void }
 
 export function useAuthBridge(api: AuthApi): AuthBridge {
+  const presentationEpochRef = useRef(0)
   const [state, setState] = useState<BridgeState & { source: AuthApi }>({
     source: api,
+    presentationEpoch: 0,
     snapshot: null,
     commandPending: false,
     connectionFailed: false
@@ -45,8 +48,19 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       }
       const isNewer = !hasCurrent || snapshot.revision > previous.revision
       if (!isNewer) return
+      const wasSignedIn = hasCurrent && previous.phase === 'signedIn'
+      const isSignedIn = snapshot.phase === 'signedIn'
+      const hasLeftSignedIn = wasSignedIn && !isSignedIn
+      // React가 여러 auth event를 한 render로 합쳐도 이전 home을 재사용하지 않는다.
+      if (hasLeftSignedIn) presentationEpochRef.current += 1
       current = snapshot
-      setState({ source: api, snapshot, commandPending: pending, connectionFailed: false })
+      setState({
+        source: api,
+        presentationEpoch: presentationEpochRef.current,
+        snapshot,
+        commandPending: pending,
+        connectionFailed: false
+      })
     }
 
     async function query(expected: number, establish = false): Promise<void> {
@@ -64,7 +78,13 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
         const isActiveEpoch = isCurrent(expected)
         if (!isActiveEpoch) return
         current = null
-        setState({ source: api, snapshot: null, commandPending: pending, connectionFailed: true })
+        setState({
+          source: api,
+          presentationEpoch: presentationEpochRef.current,
+          snapshot: null,
+          commandPending: pending,
+          connectionFailed: true
+        })
       }
     }
 
@@ -78,7 +98,13 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       baselineReady = false
       queued = null
       if (isReconnect)
-        setState({ source: api, snapshot: null, commandPending: false, connectionFailed: false })
+        setState({
+          source: api,
+          presentationEpoch: presentationEpochRef.current,
+          snapshot: null,
+          commandPending: false,
+          connectionFailed: false
+        })
       try {
         unsubscribe = api.onAuthStateChanged((snapshot) => {
           const isActiveEpoch = isCurrent(expected)
@@ -95,7 +121,13 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
         })
         void query(expected, true)
       } catch {
-        setState({ source: api, snapshot: null, commandPending: false, connectionFailed: true })
+        setState({
+          source: api,
+          presentationEpoch: presentationEpochRef.current,
+          snapshot: null,
+          commandPending: false,
+          connectionFailed: true
+        })
       }
     }
 
@@ -147,12 +179,24 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
   const hasSameSource = state.source === api
   if (!hasSameSource) {
     // API 객체가 다시 사용되어도 이전 연결의 계정 state를 복구하지 않는다.
-    setState({ source: api, snapshot: null, commandPending: false, connectionFailed: false })
+    setState({
+      source: api,
+      presentationEpoch: state.presentationEpoch,
+      snapshot: null,
+      commandPending: false,
+      connectionFailed: false
+    })
   }
   const visible = hasSameSource
     ? state
-    : { snapshot: null, commandPending: false, connectionFailed: false }
+    : {
+        presentationEpoch: state.presentationEpoch,
+        snapshot: null,
+        commandPending: false,
+        connectionFailed: false
+      }
   return {
+    presentationEpoch: visible.presentationEpoch,
     snapshot: visible.snapshot,
     commandPending: visible.commandPending,
     connectionFailed: visible.connectionFailed,

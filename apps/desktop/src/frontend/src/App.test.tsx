@@ -93,9 +93,13 @@ it('인증 이탈과 새 signedIn이 한 render로 합쳐져도 이전 capture �
   })
   expect(container.querySelector('select')?.value).toBe('fixture')
 
+  await act(async () => listener?.(snapshot(2, 'signedIn')))
+  expect(container.querySelector('select')?.value).toBe('fixture')
+  expect(capture.listCaptureSources).toHaveBeenCalledOnce()
+
   await act(async () => {
-    listener?.(snapshot(2, 'signedOut'))
-    listener?.(snapshot(3, 'signedIn'))
+    listener?.(snapshot(3, 'signedOut'))
+    listener?.(snapshot(4, 'signedIn'))
   })
 
   expect(container.querySelector('select')?.value).toBe('')
