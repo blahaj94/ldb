@@ -1,20 +1,20 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: self-managed authentication storage, deployment and recovery operations
 last-reviewed: 2026-09-07
-rationale: 인증 DB를 복원해도 확정된 삭제와 사본의 보관 기한을 되돌리지 않는 운영 경계를 제안한다.
-evidence: "Issue #130: https://github.com/blahaj94/ldb/issues/130 ; D1–D5 승인: https://github.com/blahaj94/ldb/pull/72#issuecomment-5557976162"
-exceptions: 설계안이며 환경 확보·dependency 설치·제품 및 인프라 구현·실제 복원 authority가 아니다.
-review-after: 사용자 구성 선택, 저장소·권한·clock 변경 또는 최초 장애/복원 검증 시
+rationale: 인증 DB를 복원해도 확정된 삭제와 사본의 보관 기한을 되돌리지 않는 운영 경계를 정의한다.
+evidence: "PR #132 설계 승인: https://github.com/blahaj94/ldb/pull/132#issuecomment-5572391826 ; D1–D5 승인: https://github.com/blahaj94/ldb/pull/72#issuecomment-5557976162"
+exceptions: 설계 승인은 환경 확보·dependency 설치·제품 및 인프라 구현·실제 복원의 자동 착수 허용이 아니다.
+review-after: 운영 환경 구체화, 저장소·권한·clock 변경 또는 최초 장애/복원 검증 시
 ---
 
-# 인증·탈퇴 운영 구성 제안
+# 인증·탈퇴 운영 구성
 
-추천안은 **API와 auth DB, 삭제 journal, 독립 최신값 저장소를 세 관리 경계로 분리**한다. Auth DB가 과거로 돌아가도 현재 journal로 삭제를 다시 적용하고, journal까지 되돌아가면 독립 최신값과의 불일치로 복원을 중단한다. 세 번째 저장소를 이 문서에서는 witness라고 부른다. 외부 백업 서비스를 사용하지 않는 사용자 소유 구성이다.
+승인된 구성은 **API와 auth DB, 삭제 journal, 독립 최신값 저장소를 세 관리 경계로 분리**한다. Auth DB가 과거로 돌아가도 현재 journal로 삭제를 다시 적용하고, journal까지 되돌아가면 독립 최신값과의 불일치로 복원을 중단한다. 세 번째 저장소를 이 문서에서는 witness라고 부른다. 외부 백업 서비스를 사용하지 않는 사용자 소유 구성이다.
 
-[D1–D5](../rules/auth-withdrawal-proposal.md)는 이미 승인됐다. 이 제안이 새로 선택하는 것은 장비·저장소·권한·실행 책임과 검증 방법이며 정책의 수치·취소 불가 확정점·복원 순서는 바꾸지 않는다. [운영 검증 계획](auth-operations-validation-proposal.md)은 같은 제안의 나머지 부분이다. 작성 완료, Draft PR 승인·merge, 환경 확보, 구현, 실제 복원 검증은 각각 별개 결과다.
+이 문서와 [운영 검증 기준](auth-operations-validation-proposal.md)은 [PR #132의 명시적 사용자 승인](https://github.com/blahaj94/ldb/pull/132#issuecomment-5572391826) (2026-09-07T14:52:14Z, 승인 head `741b759922356c3eb17c6e38709a4f6114e2dce7`)을 반영한 active Rule이다. 기존 `-proposal.md` path는 유지한다. 추천 3대 구성·control 역할/protocol·보관/복원 설계와 `age` 도입 후보 방향이 승인됐으며, [D1–D5](../rules/auth-withdrawal-proposal.md)의 수치·취소 불가 확정점·복원 순서는 유지한다. 설계 작성·승인과 PR merge, 구체 환경 확보, 별도 구현 착수, 실제 복원 검증은 각각 별개다.
 
 ## 구성과 대안
 
@@ -33,22 +33,22 @@ API 탈퇴 executor ── 상호 TLS ── B: 단일 control 조정 process
 복구 담당 ── 격리 network ── 별도 restore DB / 검증 후 cutover
 ```
 
-A/B/C는 논리 이름이다. 실제 장비·주소·domain·TLS 인증서·운영자는 아직 확보됐다고 확인하지 않았다. 아래 모든 운영 배치는 승인 대상이며 [auth-runtime.md](../rules/auth-runtime.md)의 local Docker 검증용 image/volume 승인을 운영 승인으로 확대하지 않는다.
+A/B/C는 논리 이름이다. 실제 장비·주소·domain·TLS 인증서·운영자는 아직 확보됐다고 확인하지 않았다. 아래 추천 구성은 설계로 승인됐으며 2대 구성은 비교 대안으로 남긴다. [auth-runtime.md](../rules/auth-runtime.md)의 local Docker 검증용 image/volume 승인을 구체 운영 image/volume의 승인으로 확대하지 않는다.
 
 | 선택 | 배치와 비용 | 내구성·운영 부담 |
 | --- | --- | --- |
-| **추천: 물리 3대** | A에 API/auth DB, B에 journal과 별도 암호화 backup disk, C에 작은 witness. 별도 전원·disk·관리 자격을 확보한다. C의 용량은 작지만 장비·patch·관측 대상이 늘어난다. | A 손실이나 B의 과거 snapshot을 C와 구분할 수 있다. B payload 전부 또는 C 신뢰를 잃으면 서비스 재개가 불가하다. 자동 failover/HA를 약속하지 않는다. |
+| **승인된 추천안: 물리 3대** | A에 API/auth DB, B에 journal과 별도 암호화 backup disk, C에 작은 witness. 별도 전원·disk·관리 자격을 확보한다. C의 용량은 작지만 장비·patch·관측 대상이 늘어난다. | A 손실이나 B의 과거 snapshot을 C와 구분할 수 있다. B payload 전부 또는 C 신뢰를 잃으면 서비스 재개가 불가하다. 자동 failover/HA를 약속하지 않는다. |
 | **대안: 물리 2대** | A에 API/auth DB와 별도 witness process·전용 disk·OS/DB 계정, B에 journal과 backup disk. A auth volume만 복원할 권한을 분리한다. | 같은 protocol과 중단 조건을 유지한다. A 전체 장비 손실·전체 image 복원은 witness 신뢰도 잃으므로 가용성이 더 낮다. A의 root가 두 경계를 관리하는 위험을 수용하고 전체 host 복원 경로를 제거해야 한다. |
 
 같은 auth dump 안 journal, 같은 snapshot 안 journal+최신 checkpoint, journal에 대한 비동기 checkpoint 후처리만 있는 안은 채택하지 않는다. C를 없애고 B만 신뢰하면 B와 head의 조용한 공동 rollback을 감지할 수 없어 이번 대안의 동등한 안전성을 제공하지 않는다.
 
 ### 저장소 선택과 비용
 
-B와 C도 PostgreSQL 18의 transaction·row lock·WAL을 재사용하는 안을 추천한다. B에는 기존 Node/pg 기반의 **단일 control 조정 process**를 별도 서비스로 제안한다. API의 상호 TLS 신원을 확인하고, B transaction/연결을 유지한 채 C의 별도 연결로 예약·완료를 호출하는 주체다. PostgreSQL 저장 함수 자체가 다른 DB에 접속하는 것으로 가정하지 않는다.
+B와 C도 PostgreSQL 18의 transaction·row lock·WAL을 재사용하는 설계가 승인됐다. B에는 기존 Node/pg 기반의 **단일 control 조정 process**를 별도 서비스로 둔다. API의 상호 TLS 신원을 확인하고, B transaction/연결을 유지한 채 C의 별도 연결로 예약·완료를 호출하는 주체다. PostgreSQL 저장 함수 자체가 다른 DB에 접속하는 것으로 가정하지 않는다.
 
-이 안은 승인된 driver version을 바꾸지는 않지만 PostgreSQL·Node/pg의 새 운영 역할, 내부 인증 연결과 저장 연산 구현은 승인 대상이다. 조정 process는 원자적인 B/C 함수 호출·불명 결과 판정만 맡고 generation 검사·권한·잠금·멱등성은 저장소가 강제한다. 별도 합의 알고리즘·범용 journal library를 직접 만들지 않으며, 이 작은 protocol도 PostgreSQL만 설치하면 생기는 것은 아니다. 구현 규모가 커지면 [dependency 비용 기준](../rules/change-control.md#dependency-선택과-비용)에 따라 다시 비교한다.
+이 안은 승인된 driver version을 바꾸지 않는다. PostgreSQL·Node/pg의 새 운영 역할, 내부 인증 연결과 저장 protocol의 설계는 승인됐고 구현은 별도 착수 범위다. 조정 process는 원자적인 B/C 함수 호출·불명 결과 판정만 맡고 generation 검사·권한·잠금·멱등성은 저장소가 강제한다. 별도 합의 알고리즘·범용 journal library를 직접 만들지 않으며, 이 작은 protocol도 PostgreSQL만 설치하면 생기는 것은 아니다. 구현 규모가 커지면 [dependency 비용 기준](../rules/change-control.md#dependency-선택과-비용)에 따라 다시 비교한다.
 
-Backup은 소규모 DB의 일별 `pg_dump`를 출발점으로 제안한다. 데이터 증가에 따른 dump/restore 시간과 잠금 영향을 검증한 뒤 사용하며 PITR·WAL archive·standby는 이번 최소안에 추가하지 않는다. 원문 dump를 disk에 먼저 쓰지 않고 암호화 stream으로 전달한다. 파일 암호화는 유지보수되는 `age` CLI를 후보로 제안한다. 직접 암호화 format을 만드는 비용을 피하지만 새 운영 dependency·exact version·binary 검증·복구키 관리의 승인이 필요하다. 기존 OS의 검증된 암호화 volume 안에서만 dump를 보관하는 대안은 dependency가 줄지만 외부로 파일이 복사될 때 암호화 경계가 사라지므로 모든 복사 경로를 더 좁혀야 한다. 이번 문서는 설치나 key 생성을 수행하지 않는다.
+Backup은 소규모 DB의 일별 `pg_dump`를 출발점으로 삼는 설계다. 데이터 증가에 따른 dump/restore 시간과 잠금 영향을 검증한 뒤 사용하며 PITR·WAL archive·standby는 이번 최소안에 추가하지 않는다. 원문 dump를 disk에 먼저 쓰지 않고 암호화 stream으로 전달한다. 파일 암호화의 `age` CLI 도입 후보 방향은 승인됐지만 exact version·binary 선택과 검증·복구키 관리의 구체 결정은 남아 있다. 직접 암호화 format을 만드는 비용을 피하는 후보이며 설치가 허용된 exact dependency로 간주하지 않는다. 기존 OS의 검증된 암호화 volume 안에서만 dump를 보관하는 대안은 dependency가 줄지만 외부로 파일이 복사될 때 암호화 경계가 사라지므로 모든 복사 경로를 더 좁혀야 한다. 이번 문서는 설치나 key 생성을 수행하지 않는다.
 
 ## 저장과 권한
 
@@ -63,16 +63,16 @@ Backup은 소규모 DB의 일별 `pg_dump`를 출발점으로 제안한다. 데�
 | Control 관리 담당 / B, 독립 witness 관리 담당 / C | 승인된 schema·계정·장비 유지보수와 continuity 확인. C 관리 자격은 일상 배포/복구 계정과 분리. | Root/DB superuser를 앱이나 backup job에 배포하지 않음. C를 빈 저장소/옛 image로 바꾸고 현 lineage를 계속 쓰지 않음. |
 | Secret 관리 담당 / DB 밖 파일·복구키 | 서비스별 최소 secret을 읽기 전용 주입, version·교체·폐기와 복구키 사본 목록 관리. | Source·image layer·dump·journal·일반 log에 private key/provider credential 없음. |
 
-모든 역할은 책임 제안이며 사람이나 다른 Issue에 배정한 것이 아니다. 실제 담당자와 긴급 접근자를 정하기 전 운영 준비 완료로 표시하지 않는다. B/C의 table owner는 별도 `NOLOGIN` 역할로 두고 runtime 역할의 membership을 막는다. 제한 함수는 신뢰된 schema의 고정 `search_path`, 명시적 객체 이름, `PUBLIC EXECUTE` 회수와 필요한 역할만의 권한을 갖춰야 한다. 슈퍼유저를 공격자로부터 보호하는 기능이라고 주장하지 않는다.
+모든 역할은 승인된 책임 경계이며 사람이나 다른 Issue에 배정한 것이 아니다. 실제 담당자와 긴급 접근자를 정하기 전 운영 준비 완료로 표시하지 않는다. B/C의 table owner는 별도 `NOLOGIN` 역할로 두고 runtime 역할의 membership을 막는다. 제한 함수는 신뢰된 schema의 고정 `search_path`, 명시적 객체 이름, `PUBLIC EXECUTE` 회수와 필요한 역할만의 권한을 갖춰야 한다. 슈퍼유저를 공격자로부터 보호하는 기능이라고 주장하지 않는다.
 
 ### Network·volume·설정 인계
 
 - 공개 port는 HTTPS ingress만 둔다. API는 사설 interface, auth DB는 API·명시 Migration·backup/복구 network만 허용한다. B/C는 공개 listen 없이 allowlist와 서버 신원 검증 TLS로 연결한다. Ingress 우회 주소도 함께 차단할 수 있어야 한다.
 - A auth data, B control data/WAL, B backup, C witness data는 별도 volume이다. Container에는 자기 volume과 secret만 mount하고 host disk·Docker socket·다른 서비스 root를 주지 않는다. 단순 volume 이름 차이를 물리 장애 분리로 세지 않는다.
-- [#125의 PR #128 제안](https://github.com/blahaj94/ldb/pull/128)은 `a8022ad`에서 `AUTH_CONFIG_FILE`의 절대 경로 단일 JSON, 시작 때 한 번 읽기·교체 시 재시작, 역사적 `(version, reference)`의 정확한 key mapping을 제안한다. 그 schema를 여기서 복제하거나 확정하지 않는다. 승인 전에는 운영 입력 후보이며 변경되면 인계만 다시 맞춘다.
+- [#125의 PR #128](https://github.com/blahaj94/ldb/pull/128)의 `a8022ad` 설정 입력 설계는 [별도 사용자 승인](https://github.com/blahaj94/ldb/pull/128#issuecomment-5572382154)을 받았다. `AUTH_CONFIG_FILE`의 절대 경로 단일 JSON, 시작 때 한 번 읽기·교체 시 재시작, 역사적 `(version, reference)`의 정확한 key mapping을 연결점으로 삼는다. 그 schema를 여기서 복제하거나 변경하지 않으며 후속 변경이 있으면 인계를 다시 맞춘다. #125의 구현·검증 완료는 별도다.
 - 기존 `DB_*`, `PORT`, `NEOPLE_API_KEY`, 필수 설정의 listen 전 정제 검증, 자동 Migration 없음은 기존 계약을 따른다. 운영 배포는 선택된 입력 형태에 맞춰 secret file을 읽기 전용으로 주입하고 원자적 파일 교체 후 재시작한다. Secret 내용·환경 전체·인증 포함 DSN을 관측 evidence에 남기지 않는다.
 - JWT/PKCE/fence key와 DB·provider credential, backup 복구키를 분리한다. 정상 key 교체의 역사적 verify/decrypt key 보존은 [session](../rules/auth-session.md)·[DB](../rules/auth-database.md) Rule대로 처리한다. 복원 때는 옛 key를 secret file에 다시 포함하지 않는다.
-- 운영 조정은 ingress 중지→executor 중지→진행 요청 종료/취소→DB 연결 종료를 확인한다. PR #128의 `app.close()` 검색 취소 뒤 DB 종료 제안과 접합하되, #125가 이번 witness·복원 gate를 구현한다고 요구하지 않는다. 강제 종료가 필요하면 journal 판정은 저장소에서 계속 확인한다.
+- 운영 조정은 ingress 중지→executor 중지→진행 요청 종료/취소→DB 연결 종료를 확인한다. PR #128의 승인된 `app.close()` 검색 취소 뒤 DB 종료 설계와 접합하되, #125가 이번 witness·복원 gate를 구현한다고 요구하지 않는다. 강제 종료가 필요하면 journal 판정은 저장소에서 계속 확인한다.
 
 ## Journal 최신성과 writer 교체
 
@@ -80,15 +80,15 @@ Backup은 소규모 DB의 일별 `pg_dump`를 출발점으로 제안한다. 데�
 
 B는 UUID를 포함한 최소 journal과 backup inventory를, C는 개인정보 없는 현재·직전 `(lineage, generation, sequence, digest)` 및 단일 진행 표식을 보유한다. Digest는 retained journal·compaction 경계·inventory의 일관된 상태를 결합한다. 현재 C 값이 B 밖에 있으므로 B의 정상 checksum을 가진 옛 snapshot도 불일치로 감지한다. Digest 자체는 최신성 증명이 아니다.
 
-C는 **되복원하지 않는 신뢰 authority**다. 별도 물리 disk의 bare-metal 저장소를 제안하며 VM/image/filesystem snapshot·PITR·backup import·이전 cluster 승격 경로를 제공하지 않는다. 복구 계정에는 C SSH/root/DB owner/block device 접근이 없고, C의 저장 함수는 head/generation 감소·lineage 재초기화를 거절한다. C root는 별도 관리자가 통제하며 장비·disk identity, 허용된 계정/함수, snapshot 부재와 유지보수 이력을 서비스 시작·복구·관리 변경 시 대조한다. 대안 구성에서는 A root와 C disk의 공동 권한이 추가 신뢰 가정이다.
+C는 **되복원하지 않는 신뢰 authority**다. 별도 물리 disk의 bare-metal 저장소를 두는 설계이며 VM/image/filesystem snapshot·PITR·backup import·이전 cluster 승격 경로를 제공하지 않는다. 복구 계정에는 C SSH/root/DB owner/block device 접근이 없고, C의 저장 함수는 head/generation 감소·lineage 재초기화를 거절한다. C root는 별도 관리자가 통제하며 장비·disk identity, 허용된 계정/함수, snapshot 부재와 유지보수 이력을 서비스 시작·복구·관리 변경 시 대조한다. 대안 구성에서는 A root와 C disk의 공동 권한이 추가 신뢰 가정이다.
 
-보장 범위는 A auth restore/손실, B journal의 누락·부분 손상·단독 snapshot rollback, process crash·응답 유실·network 단절·이전 writer의 재접속이다. C의 silent rollback을 감지하는 더 바깥의 anchor는 이 최소안에 없다. **C 관리자 침해, C disk의 조용한 clone 교체와 B/C의 일치하는 공동 rewind를 cryptography로 탐지한다고 주장하지 않는다.** 이를 하지 않는 독립 관리/장비 경계가 승인·검증돼야 한다. C 초기화·disk 교체·전체 image 복구·관리권 침해 또는 continuity 증거 불명은 이 가정의 상실이며, 빈 C를 다시 만들어 기존 auth를 공개하지 않는다. 해당 위협까지 견뎌야 한다면 장비 기반 단조 anchor 등 다른 설계가 선행돼야 한다.
+보장 범위는 A auth restore/손실, B journal의 누락·부분 손상·단독 snapshot rollback, process crash·응답 유실·network 단절·이전 writer의 재접속이다. C의 silent rollback을 감지하는 더 바깥의 anchor는 이 최소안에 없다. **C 관리자 침해, C disk의 조용한 clone 교체와 B/C의 일치하는 공동 rewind를 cryptography로 탐지한다고 주장하지 않는다.** 이를 하지 않는 독립 관리/장비 경계를 신뢰하는 설계가 승인됐으며 실제 확보와 검증은 남아 있다. C 초기화·disk 교체·전체 image 복구·관리권 침해 또는 continuity 증거 불명은 이 가정의 상실이며, 빈 C를 다시 만들어 기존 auth를 공개하지 않는다. 해당 위협까지 견뎌야 한다면 장비 기반 단조 anchor 등 다른 설계가 선행돼야 한다.
 
 B/C는 `fsync=on`, `full_page_writes=on`, 각 변경 transaction의 `synchronous_commit=on`을 요구하는 안이다. 비동기 성공·unlogged journal·메모리 ack는 허용하지 않는다. Storage가 flush를 실제 안정 매체까지 보장하는지 전원 손실 시험과 장비 근거가 필요하다. Mirroring/UPS는 권장 장비 후보이지만 fsync의 대체나 전체 손실 복구 증명이 아니다.
 
 ### Durable append와 crash 판정
 
-다음은 구현할 protocol의 제안이며 D1의 확정점은 **B의 journal intent가 durable commit된 순간** 그대로다. C 완료나 HTTP 응답이 그 시점을 늦추지 않는다. 새 intent와 inventory/compaction/head 변경은 한 번에 하나만 진행한다.
+다음은 승인된 protocol 설계이며 D1의 확정점은 **B의 journal intent가 durable commit된 순간** 그대로다. C 완료나 HTTP 응답이 그 시점을 늦추지 않는다. 새 intent와 inventory/compaction/head 변경은 한 번에 하나만 진행한다.
 
 1. 조정 process가 B 연결에서 transaction을 시작하고 저장 함수가 control row를 잠가 session identity·인증된 API caller binding·generation을 검사한다. 잠금을 transaction 끝까지 유지하며 deletionId 중복은 같은 payload만 허용한다. 새로운 연속 sequence와 payload digest를 정한다. PostgreSQL의 gap 가능한 sequence 값만으로 journal의 연속성을 판단하지 않는다.
 2. 조정 process가 B 연결과 잠금을 유지하며 C의 별도 연결을 호출한다. B commit **전에** C가 직전 head에 대한 CAS로 다음 generation/sequence/digest의 reservation을 durable 기록한다. C 예약이 확인되기 전 B는 intent를 commit하지 않는다. C 응답 유실이면 같은 reservation을 조회하고, 불명인 채 새 연산을 시작하지 않는다.
@@ -129,7 +129,7 @@ Inventory 확인은 등록 table 조회로 끝내지 않는다. 허용된 모든
 
 ### Backup 매체의 교체와 독립 폐기
 
-공유 `age` recipient나 volume key는 파일별 폐기 경계가 아니다. Backup에는 **현 매체와 별도로 전체 sanitize할 수 있는 암호화 후보 매체를 번갈아 사용하는 방식**을 제안한다. 파일을 unlink하고 같은 매체를 계속 쓰는 것으로 만료본을 폐기했다고 표시하지 않는다. 새 dump·이관 임시물은 후보 매체에만 쓰므로 실패해도 현 매체의 유효 성공본을 함께 지울 필요가 없다. 독립 폐기가 가능한 매체 최소 2개, 전체 유효본을 복사할 용량·시간과 검증 가능한 sanitize가 추가 비용이다. 공유 recipient key를 파괴해 아직 유효한 성공본까지 읽을 수 없게 만드는 방법은 쓰지 않는다.
+공유 `age` recipient나 volume key는 파일별 폐기 경계가 아니다. Backup에는 **현 매체와 별도로 전체 sanitize할 수 있는 암호화 후보 매체를 번갈아 사용하는 방식**이 승인됐다. 파일을 unlink하고 같은 매체를 계속 쓰는 것으로 만료본을 폐기했다고 표시하지 않는다. 새 dump·이관 임시물은 후보 매체에만 쓰므로 실패해도 현 매체의 유효 성공본을 함께 지울 필요가 없다. 독립 폐기가 가능한 매체 최소 2개, 전체 유효본을 복사할 용량·시간과 검증 가능한 sanitize가 추가 비용이다. 공유 recipient key를 파괴해 아직 유효한 성공본까지 읽을 수 없게 만드는 방법은 쓰지 않는다.
 
 1. Backup 조정 담당이 다른 backup/이관 writer를 멈추고, 원 age가 유효한 성공본 중 보존할 집합과 폐기할 집합을 정한다. 새 dump가 있으면 최종 성공본 집합이 최대 7개가 되도록 정하며 이관 중 만료될 가능성도 확인한다. 새 dump가 없어도 만료본을 제거하는 교체를 수행한다.
 2. B/C protocol로 원 매체·후보 매체·각 물리 copy·partial file의 생성/이관 중 상태를 먼저 durable 등록한다. 보존할 사본만 후보 매체로 복사하고 snapshot ID·원 snapshot 시각·부모 lineage·digest를 유지한다. 새 dump도 후보 매체에서 암호화하며 평문 임시물을 공유 매체에 쓰지 않는다.
@@ -147,21 +147,21 @@ WAL의 crash 복구와 disk 재사용만으로 물리 삭제를 보장하지 않
 
 ## 승인·환경 선택과 후속 결과
 
-사용자 선택은 추천/대안 배치와 실제 장비·독립 관리 책임, B/C의 PostgreSQL 역할·저장 함수/protocol, 파일 암호화 도구 또는 volume 한정 대안, clock 소스·판정값·일일 시각, 지원 매체의 폐기 방법이다. Journal 또는 witness 완전 손실 뒤 기존 auth를 다시 공개할 수 있다는 RPO/RTO는 제안하지 않는다. 다른 손실 수용 정책을 이번 작업에서 정하지 않는다.
+추천 3대 배치·B/C의 PostgreSQL 역할·저장 protocol과 보관/복원 설계의 승인은 완료됐다. 실제 장비·독립 관리 담당자·domain/TLS, `age` 후보의 exact version/binary와 복구키 관리, clock 소스·판정값·일일 시각, 지원 매체의 폐기 방법은 구체 결정·확보·검증이 남아 있다. 비교 대안으로 바꾸려면 승인된 설계와의 영향을 다시 확인한다. Journal 또는 witness 완전 손실 뒤 기존 auth를 다시 공개할 수 있다는 RPO/RTO는 제안하지 않는다. 다른 손실 수용 정책을 이번 작업에서 정하지 않는다.
 
 아래는 독립 완료할 수 있는 결과와 선행 관계이며 새 Issue나 담당 배정이 아니다.
 
 | 결과 | 완료가 관측되는 상황과 선행 관계 |
 | --- | --- |
-| 운영 선택 기록·환경 목록 | 사용자 구성 승인, 장비/역할/domain/TLS/clock/폐기 근거가 연결됨. 이 설계안 완료와 별개. |
+| 운영 환경 목록 | 완료된 설계 승인 근거에 실제 장비/역할/domain/TLS/clock/폐기 근거를 연결함. 구체 환경 확보는 설계 승인과 별개. |
 | 배포·Migration·secret 입력 연결 | 선택된 운영안과 #125의 최종 승인 입력에 따라 단일 API의 시작/종료·명시 Migration이 검증됨. 운영 witness gate의 구현은 별도 결과. |
-| Journal/witness·inventory·fencing | 승인된 저장 protocol에 crash와 이전 writer 시험을 통과하고 inventory completeness와 compaction 증거를 얻음. 운영 선택이 선행. |
+| Journal/witness·inventory·fencing | 승인된 저장 protocol에 crash와 이전 writer 시험을 통과하고 inventory completeness와 compaction 증거를 얻음. 구체 운영 환경과 별도 구현 착수가 선행. |
 | 탈퇴 lifecycle·보관 연결 | 기존 승인 schema/lifecycle·재인증/revoke와 위 저장 결과를 통합해 D1–D5 경합/정리를 검증함. 다른 진행 작업의 AC를 소급 확대하지 않음. |
 | 복원 조정·실제 실행 증거 | 앞 결과와 복구용 환경을 확보한 뒤 [검증 matrix](auth-operations-validation-proposal.md#후속-실행-matrix)를 실제 수행하고 중지/재개를 확인함. Credential/provider/DB/backup 실행의 별도 허용이 필요. |
 
 ## 공식 근거와 한계
 
-다음은 **2026-09-07 공식 문서 확인**이며 LDB 장비/구현 검증 결과가 아니다. 역할·protocol·배치 선택은 이 근거를 적용한 제안이다.
+다음은 **2026-09-07 공식 문서 확인**이며 LDB 장비/구현 검증 결과가 아니다. 역할·protocol·배치 선택은 이 근거를 적용한 승인된 설계다.
 
 - PostgreSQL [WAL durability](https://www.postgresql.org/docs/18/wal-reliability.html)와 [WAL 설정](https://www.postgresql.org/docs/18/runtime-config-wal.html): flush를 존중하는 실제 storage가 전제이고 `synchronous_commit`/`fsync` 의미를 구분한다.
 - PostgreSQL [row lock](https://www.postgresql.org/docs/18/explicit-locking.html#LOCKING-ROWS)·[CONNECT 권한](https://www.postgresql.org/docs/18/ddl-priv.html#PRIVILEGE-CONNECT)·[SECURITY DEFINER](https://www.postgresql.org/docs/18/sql-createfunction.html): transaction lock과 함수 권한을 조합해야 하며 접속 시작 때의 CONNECT 검사만으로 기존 writer를 차단할 수 없다.
