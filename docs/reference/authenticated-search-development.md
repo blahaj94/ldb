@@ -14,7 +14,7 @@ Contract는 `docs/rules/character-search.md`, `docs/rules/auth-activity.md`, `do
 
 `apps/api/src/characters/authenticated-search.ts`는 단일 Bearer JWT → original URL query → API key 설정 → account admission 순서로 처리한다. `apps/api/src/auth/bearer.ts`는 원본 header pair의 중복과 exact Bearer 형태만 검사하며 JWT signature·claim 검증은 기존 verifier가 담당한다. Account service도 이 작은 parser만 공유한다.
 
-`apps/api/src/characters/query.ts`는 첫 `?` 뒤의 raw query를 `&`와 각 component의 첫 `=`로 나눈다. `+`를 space로 바꾼 뒤 `decodeURIComponent`로 한 번 decode하므로 잘못된 escape·UTF-8을 거절한다. Decode 후 unknown/bracket/duplicate key를 거절하고 code point 길이·공백·server map·십진 limit을 검증한다. 생략한 server와 limit에만 `all`, `10`을 적용한다.
+`apps/api/src/characters/query.ts`의 진입 함수는 `decodeRawQuery` → `validateSearchQuery` 두 단계를 보여 준다. 첫 단계는 첫 `?` 뒤의 raw query를 `&`와 각 component의 첫 `=`로 나누고 `+`를 space로 바꾼 뒤 한 번 strict decode한다. 잘못된 escape·UTF-8은 거절하며 decoded pair 목록의 중복은 그대로 보존한다. 두 번째 단계가 unknown/bracket/duplicate key를 거절한 뒤 code point 길이·공백·server map·십진 limit을 검증한다. 생략한 server와 limit에만 `all`, `10`을 적용한다.
 
 `apps/api/src/characters/http.ts`는 HEAD→GET fallback을 인증·활동 전에 차단한다. 요청의 응답 연결이 완료 전에 끊어지면 admission의 abort signal을 취소한다. 기존 login filter는 `/characters`의 `NeopleSearchFailure`를 정제된 JSON으로 보존하고 429에는 정수 `Retry-After`를 붙인다. 모든 응답의 no-store 설정을 유지한다.
 
