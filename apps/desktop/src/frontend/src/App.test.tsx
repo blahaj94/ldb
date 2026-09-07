@@ -106,3 +106,24 @@ it('인증 이탈과 새 signedIn이 한 render로 합쳐져도 이전 capture �
   expect(capture.selectCaptureSource).toHaveBeenLastCalledWith('')
   expect(capture.listCaptureSources).toHaveBeenCalledTimes(2)
 })
+
+it('main runId 재연결 조회가 같은 render에 완료돼도 이전 capture를 재사용하지 않는다', async () => {
+  auth.getAuthState.mockResolvedValue(snapshot(1, 'signedIn'))
+  await act(async () => root.render(<App />))
+  const selection = container.querySelector('select')
+  await act(async () => {
+    if (selection != null) {
+      selection.value = 'fixture'
+      selection.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+  })
+  expect(container.querySelector('select')?.value).toBe('fixture')
+
+  const reconnected = { ...snapshot(1, 'signedIn'), runId: 'next-fixture-run' }
+  auth.getAuthState.mockResolvedValue(reconnected)
+  await act(async () => listener?.(reconnected))
+
+  expect(container.querySelector('select')?.value).toBe('')
+  expect(capture.selectCaptureSource).toHaveBeenLastCalledWith('')
+  expect(capture.listCaptureSources).toHaveBeenCalledTimes(2)
+})
