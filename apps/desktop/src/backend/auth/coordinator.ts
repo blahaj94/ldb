@@ -1,3 +1,4 @@
+import { AuthState } from './auth-state'
 import { decideLocalCleanup } from './cleanup-result'
 import { CredentialSession } from './credential-session'
 import type { CredentialWriter, SessionCredential } from './credential-session'
@@ -8,12 +9,10 @@ import type { ClaimedExchange } from './pending-login'
 import { parseReturnUrl, validateApiOrigin, validateReturnTarget } from './protocol'
 import type {
   AuthAuthorization,
-  AuthCommandError,
   AuthCommandResult,
   AuthCoordinator,
   AuthCoordinatorDependencies,
   AuthNotice,
-  AuthPhase,
   AuthProvider,
   AuthSnapshot,
   AuthTokens,
@@ -22,14 +21,6 @@ import type {
 } from './types'
 
 const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
-
-type SnapshotState = Readonly<{
-  phase: AuthPhase
-  login: AuthSnapshot['login']
-  user: AuthSnapshot['user']
-  entry: AuthSnapshot['entry']
-  notice: AuthNotice | null
-}>
 
 function isAuthProvider(value: unknown): value is AuthProvider {
   const isGoogle = value === 'google'
@@ -60,68 +51,14 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     throw new Error('Auth coordinator configuration is invalid.')
   }
 
-  let revision = 0
   let generation = 0
-  let state: SnapshotState = {
-    phase: 'restoring',
-    login: null,
-    user: null,
-    entry: null,
-    notice: null
-  }
+  const state = new AuthState(runId, providers)
   let pending: PendingLogin | null = null
   const session = new CredentialSession(dependencies.http, dependencies.store)
   let blockedMode: 'inspect' | 'cleanup' | null = null
   let startPromise: Promise<AuthSnapshot> | null = null
   let logoutFlight: Promise<AuthCommandResult> | null = null
   let verificationController: AbortController | null = null
-  const listeners = new Set<(snapshot: AuthSnapshot) => void>()
-
-  function snapshot(): AuthSnapshot {
-    return {
-      runId,
-      revision,
-      phase: state.phase,
-      providers: [...providers],
-      login:
-        state.login == null
-          ? null
-          : {
-              attemptId: state.login.attemptId,
-              provider: state.login.provider,
-              expiresAt: state.login.expiresAt
-            },
-      user: state.user == null ? null : { nickname: state.user.nickname },
-      entry: state.entry,
-      notice: state.notice
-    }
-  }
-
-  function publish(next: SnapshotState): AuthSnapshot {
-    const canIncrement = revision < Number.MAX_SAFE_INTEGER
-    if (!canIncrement) {
-      throw new Error('Auth snapshot revision is exhausted.')
-    }
-    revision += 1
-    state = next
-    const current = snapshot()
-    for (const listener of listeners) {
-      try {
-        listener(current)
-      } catch {
-        // Snapshot consumer 실패가 main의 credential state 전이를 되돌리지 않게 한다.
-      }
-    }
-    return current
-  }
-
-  function success(current = snapshot()): AuthCommandResult {
-    return { ok: true, snapshot: current }
-  }
-
-  function failure(code: AuthCommandError): AuthCommandResult {
-    return { ok: false, error: { code }, snapshot: snapshot() }
-  }
 
   function isCurrentPending(value: PendingLogin): boolean {
     const hasSamePending = pending === value
@@ -157,13 +94,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     generation += 1
     clearPendingReference(value)
-    publish({
-      phase: 'signedOut',
-      login: null,
-      user: null,
-      entry: null,
-      notice: 'LOGIN_EXPIRED'
-    })
+    state.signedOut('LOGIN_EXPIRED')
   }
 
   function storageBlocked(
@@ -175,13 +106,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (pending != null) {
       clearPendingReference(pending)
     }
-    publish({
-      phase: 'storageBlocked',
-      login: null,
-      user: null,
-      entry: null,
-      notice
-    })
+    state.storageBlocked(notice)
   }
 
   async function cleanupAfterInvalidation(
@@ -201,7 +126,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
     session.discard()
-    publish({ phase: 'signedOut', login: null, user: null, entry: null, notice })
+    state.signedOut(notice)
   }
 
   async function handleStaleTransition(refreshToken?: string): Promise<void> {
@@ -343,7 +268,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     generation += 1
     clearPendingReference(value)
-    publish({ phase: 'signedOut', login: null, user: null, entry: null, notice })
+    state.signedOut(notice)
   }
 
   function loginRequestNotice(error: unknown): AuthNotice {
@@ -428,13 +353,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isCurrentPending(value)) {
       return
     }
-    publish({
-      phase: 'waitingBrowser',
-      login: value.snapshot(),
-      user: null,
-      entry: null,
-      notice: null
-    })
+    state.waitingForBrowser(value.snapshot())
 
     if (!isCurrentPending(value)) {
       return
@@ -467,13 +386,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
 
     value.resumeWaiting()
-    publish({
-      phase: 'waitingBrowser',
-      login: value.snapshot(),
-      user: null,
-      entry: null,
-      notice: 'LOGIN_RETURN_INVALID'
-    })
+    state.waitingForBrowser(value.snapshot(), 'LOGIN_RETURN_INVALID')
   }
 
   async function exchangeLogin(
@@ -535,40 +448,34 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     clearPendingReference(value)
     blockedMode = null
-    publish({
-      phase: 'signedIn',
-      login: null,
-      user: { nickname: exchanged.user.nickname },
-      entry: exchanged.isNewUser ? 'welcome' : 'home',
-      notice: null
-    })
+    state.signedIn(exchanged.user.nickname, exchanged.isNewUser ? 'welcome' : 'home')
   }
 
   function beginLogin(provider: unknown): Promise<AuthCommandResult> {
     if (!isAuthProvider(provider)) {
-      return Promise.resolve(failure('INVALID_AUTH_COMMAND'))
+      return Promise.resolve(state.failure('INVALID_AUTH_COMMAND'))
     }
     const isEnabled = providers.includes(provider)
     if (!isEnabled) {
-      return Promise.resolve(failure('AUTH_NOT_ALLOWED'))
+      return Promise.resolve(state.failure('AUTH_NOT_ALLOWED'))
     }
     const hasActiveOperation = session.hasWriter || logoutFlight != null
     const isSignedOut = state.phase === 'signedOut'
     if (hasActiveOperation || !isSignedOut) {
-      return Promise.resolve(failure('AUTH_BUSY'))
+      return Promise.resolve(state.failure('AUTH_BUSY'))
     }
 
     generation += 1
     const attemptId = dependencies.entropy.uuid()
     const isValidAttemptId = isCanonicalUuid(attemptId)
     if (!isValidAttemptId) {
-      return Promise.resolve(failure('AUTH_OPERATION_FAILED'))
+      return Promise.resolve(state.failure('AUTH_OPERATION_FAILED'))
     }
     let pkce
     try {
       pkce = createPkce(dependencies.entropy.bytes)
     } catch {
-      return Promise.resolve(failure('AUTH_OPERATION_FAILED'))
+      return Promise.resolve(state.failure('AUTH_OPERATION_FAILED'))
     }
     const startedAt = dependencies.clock.read()
     const value = new PendingLogin(
@@ -579,41 +486,29 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     pending = value
     value.scheduleExpiry()
     if (!isCurrentPending(value)) {
-      return Promise.resolve(success())
+      return Promise.resolve(state.success())
     }
-    const starting = publish({
-      phase: 'startingLogin',
-      login: value.snapshot(),
-      user: null,
-      entry: null,
-      notice: null
-    })
+    const starting = state.loginStarted(value.snapshot())
     void continueLoginStart(value, pkce.challenge)
 
-    return Promise.resolve(success(starting))
+    return Promise.resolve(state.success(starting))
   }
 
   function cancelLogin(attemptId: unknown): Promise<AuthCommandResult> {
     if (!isCanonicalUuid(attemptId)) {
-      return Promise.resolve(failure('INVALID_AUTH_COMMAND'))
+      return Promise.resolve(state.failure('INVALID_AUTH_COMMAND'))
     }
     const value = pending
     const hasCurrentPending = value != null
     const hasSameAttempt = hasCurrentPending && value.attemptId === attemptId
     if (!hasSameAttempt) {
-      return Promise.resolve(failure('STALE_ATTEMPT'))
+      return Promise.resolve(state.failure('STALE_ATTEMPT'))
     }
 
     generation += 1
     clearPendingReference(value)
-    const cancelled = publish({
-      phase: 'signedOut',
-      login: null,
-      user: null,
-      entry: null,
-      notice: 'LOGIN_CANCELLED'
-    })
-    return Promise.resolve(success(cancelled))
+    const cancelled = state.signedOut('LOGIN_CANCELLED')
+    return Promise.resolve(state.success(cancelled))
   }
 
   function handleReturnUrl(raw: unknown): Promise<void> {
@@ -628,13 +523,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (value == null) {
       const needsNewLogin = state.phase === 'signedOut'
       if (needsNewLogin) {
-        publish({
-          phase: 'signedOut',
-          login: null,
-          user: null,
-          entry: null,
-          notice: 'LOGIN_RESTART_REQUIRED'
-        })
+        state.signedOut('LOGIN_RESTART_REQUIRED')
       }
       return Promise.resolve()
     }
@@ -653,13 +542,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return claim.promise
     }
 
-    publish({
-      phase: 'exchanging',
-      login: value.snapshot(),
-      user: null,
-      entry: null,
-      notice: null
-    })
+    state.exchangeStarted(value.snapshot())
     if (!isCurrentPending(value)) {
       return Promise.resolve()
     }
@@ -705,13 +588,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         }
         if (removed) {
           session.retainForRestore(refreshToken)
-          publish({
-            phase: 'restorePaused',
-            login: null,
-            user: null,
-            entry: null,
-            notice: 'NETWORK_UNAVAILABLE'
-          })
+          state.restorePaused('NETWORK_UNAVAILABLE')
           return null
         }
       }
@@ -719,7 +596,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       generation += 1
       const cleanupGeneration = generation
       session.blockAccess()
-      publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
+      state.signingOut()
       await session.dispose(refreshToken)
       const canClear = generation === cleanupGeneration
       if (canClear) {
@@ -752,13 +629,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         return
       }
       blockedMode = null
-      publish({
-        phase: 'signedIn',
-        login: null,
-        user: { nickname: response.user.nickname },
-        entry: 'home',
-        notice: null
-      })
+      state.signedIn(response.user.nickname, 'home')
     } catch (error) {
       const isStillCurrent = generation === operationGeneration
       if (!isStillCurrent) {
@@ -779,13 +650,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         return
       }
       const isNetwork = error instanceof AuthHttpFailure && error.code === 'network'
-      publish({
-        phase: 'restorePaused',
-        login: null,
-        user: null,
-        entry: null,
-        notice: isNetwork ? 'NETWORK_UNAVAILABLE' : 'AUTH_SERVICE_UNAVAILABLE'
-      })
+      state.restorePaused(isNetwork ? 'NETWORK_UNAVAILABLE' : 'AUTH_SERVICE_UNAVAILABLE')
     } finally {
       if (verificationController === controller) {
         verificationController = null
@@ -820,17 +685,17 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     const isCurrent = generation === operationGeneration
     if (!isCurrent) {
-      return snapshot()
+      return state.getSnapshot()
     }
 
     if (inspection.status === 'unavailable') {
       storageBlocked('SECURE_STORAGE_UNAVAILABLE', 'inspect')
-      return snapshot()
+      return state.getSnapshot()
     }
     if (inspection.status === 'empty') {
       blockedMode = null
-      publish({ phase: 'signedOut', login: null, user: null, entry: null, notice: null })
-      return snapshot()
+      state.signedOut()
+      return state.getSnapshot()
     }
     if (inspection.status === 'recovery-required') {
       let cleared = false
@@ -847,19 +712,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
       if (cleanup.canContinue) {
         blockedMode = null
-        publish({
-          phase: 'signedOut',
-          login: null,
-          user: null,
-          entry: null,
-          notice: 'REAUTH_REQUIRED'
-        })
+        state.signedOut('REAUTH_REQUIRED')
       }
-      return snapshot()
+      return state.getSnapshot()
     }
 
     await restoreReadyCredential(inspection.refreshToken, operationGeneration)
-    return snapshot()
+    return state.getSnapshot()
   }
 
   function start(): Promise<AuthSnapshot> {
@@ -920,11 +779,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const isRestorePaused = state.phase === 'restorePaused'
     const isStorageBlocked = state.phase === 'storageBlocked'
     if (!isRestorePaused && !isStorageBlocked) {
-      return failure('AUTH_NOT_ALLOWED')
+      return state.failure('AUTH_NOT_ALLOWED')
     }
     const hasActiveOperation = session.hasWriter || logoutFlight != null
     if (hasActiveOperation) {
-      return failure('AUTH_BUSY')
+      return state.failure('AUTH_BUSY')
     }
 
     const operationGeneration = generation
@@ -933,20 +792,20 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (currentCredential == null) {
         const refreshToken = session.knownRefresh
         if (refreshToken == null) {
-          return failure('AUTH_OPERATION_FAILED')
+          return state.failure('AUTH_OPERATION_FAILED')
         }
-        publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
+        state.restoring()
         const canRestore = generation === operationGeneration
         if (!canRestore) {
-          return success()
+          return state.success()
         }
         await restoreReadyCredential(refreshToken, operationGeneration)
-        return success()
+        return state.success()
       }
-      publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
+      state.restoring()
       const canResume = generation === operationGeneration
       if (!canResume) {
-        return success()
+        return state.success()
       }
       const checkedAt = dependencies.clock.read()
       const canUseAccess =
@@ -959,13 +818,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (generation === operationGeneration && session.current != null) {
         await verifyRestoredUser(operationGeneration)
       }
-      return success()
+      return state.success()
     }
 
-    publish({ phase: 'restoring', login: null, user: null, entry: null, notice: null })
+    state.restoring()
     const canRetry = generation === operationGeneration
     if (!canRetry) {
-      return success()
+      return state.success()
     }
     if (blockedMode === 'cleanup') {
       let inspection
@@ -976,11 +835,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
       const isCurrent = generation === operationGeneration
       if (!isCurrent) {
-        return success()
+        return state.success()
       }
       if (inspection.status === 'unavailable') {
         storageBlocked('SECURE_STORAGE_UNAVAILABLE', 'cleanup')
-        return success()
+        return state.success()
       }
       if (inspection.status !== 'empty') {
         let cleared = false
@@ -996,22 +855,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
         }
         if (!cleanup.canContinue) {
-          return success()
+          return state.success()
         }
       }
       blockedMode = null
-      publish({
-        phase: 'signedOut',
-        login: null,
-        user: null,
-        entry: null,
-        notice: 'REAUTH_REQUIRED'
-      })
-      return success()
+      state.signedOut('REAUTH_REQUIRED')
+      return state.success()
     }
 
     await restoreFromStore(operationGeneration)
-    return success()
+    return state.success()
   }
 
   async function performLogout(): Promise<AuthCommandResult> {
@@ -1023,33 +876,21 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     verificationController?.abort()
     const reservation = session.beginLogout()
-    publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
+    state.signingOut()
 
     const { localConfirmed, serverConfirmed } = await session.finishLogout(reservation)
     blockedMode = localConfirmed ? null : 'cleanup'
     const isCurrentLogout = generation === logoutGeneration
     if (!isCurrentLogout) {
-      return success()
+      return state.success()
     }
     if (!localConfirmed) {
-      publish({
-        phase: 'storageBlocked',
-        login: null,
-        user: null,
-        entry: null,
-        notice: 'LOCAL_CLEAR_UNCONFIRMED'
-      })
-      return success()
+      state.storageBlocked('LOCAL_CLEAR_UNCONFIRMED')
+      return state.success()
     }
 
-    publish({
-      phase: 'signedOut',
-      login: null,
-      user: null,
-      entry: null,
-      notice: serverConfirmed ? null : 'LOGOUT_SERVER_UNCONFIRMED'
-    })
-    return success()
+    state.signedOut(serverConfirmed ? null : 'LOGOUT_SERVER_UNCONFIRMED')
+    return state.success()
   }
 
   function logout(): Promise<AuthCommandResult> {
@@ -1063,7 +904,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     const isAlreadySignedOut = state.phase === 'signedOut' && !session.hasWriter
     if (isAlreadySignedOut) {
-      return Promise.resolve(success())
+      return Promise.resolve(state.success())
     }
 
     let resolveLogout!: (result: AuthCommandResult) => void
@@ -1084,11 +925,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   }
 
   return {
-    getSnapshot: snapshot,
-    subscribe(listener: (snapshot: AuthSnapshot) => void): () => void {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
+    getSnapshot: state.getSnapshot,
+    subscribe: state.subscribe,
     start,
     beginLogin,
     cancelLogin,
