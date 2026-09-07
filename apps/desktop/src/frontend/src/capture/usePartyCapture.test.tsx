@@ -221,6 +221,32 @@ describe('usePartyCapture', () => {
     expect(worker.terminate).toHaveBeenCalledOnce()
   })
 
+  it('unmount 뒤 완료한 OCR은 안정화 통지를 보내지 않는다', async () => {
+    const { stream, worker } = captureResources()
+    const crop = document.createElement('canvas')
+    const pendingRecognition = Promise.withResolvers<{ data: { text: string } }>()
+    let loopOptions: LoopOptions | undefined
+    getDisplayMedia.mockResolvedValue(stream)
+    moduleMocks.createPartyOcrWorker.mockResolvedValue(worker)
+    moduleMocks.capturePartyNicknameCrops.mockReturnValue([crop, null, null, null])
+    moduleMocks.runSerialLoop.mockImplementation((options: LoopOptions) => {
+      loopOptions = options
+      return new Promise<void>(() => undefined)
+    })
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+    await act(async () => hook.getCurrent().startCapture())
+    await act(async () => loopOptions?.runCycle())
+    worker.recognize.mockReturnValueOnce(pendingRecognition.promise)
+    const lateCycle = loopOptions?.runCycle()
+    await hook.unmount()
+    pendingRecognition.resolve({ data: { text: 'Alice' } })
+    await act(async () => lateCycle)
+    expect(api.notifyStableNicknameDetected).not.toHaveBeenCalled()
+    expect(api.selectCaptureSource).toHaveBeenLastCalledWith('')
+  })
+
   it('stops a stream that resolves after capture was cancelled', async () => {
     const { track, stream } = captureResources()
     const pendingStream = Promise.withResolvers<MediaStream>()
