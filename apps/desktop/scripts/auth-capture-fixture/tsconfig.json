@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.web.json",
+  "compilerOptions": { "types": ["node", "electron-vite/node"] },
+  "include": [
+    "./*.ts",
+    "../auth-capture-fixture.config.ts",
+    "../../src/preload/index.d.ts",
+    "../../src/frontend/auth-capture-fixture/**/*.ts",
+    "../../src/frontend/auth-capture-fixture/**/*.tsx"
+  ]
+}

@@ -1,0 +1,11 @@
+/* OCR fixture의 승인된 1920×1080 입력 좌표이며 제품 UI 외형이 아니다. */
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+}
+canvas {
+  display: block;
+  width: 1920px;
+  height: 1080px;
+}

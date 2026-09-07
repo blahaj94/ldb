@@ -24,7 +24,11 @@
     "ui:fixture": "tsc scripts/ui-fixture-preload.cts --outDir node_modules/.tmp/ui-fixture --module commonjs --moduleResolution node --target es2022 --strict --skipLibCheck && electron scripts/ui-fixture.mjs",
     "auth:fixture:build": "tsc --noEmit -p scripts/auth-bridge-fixture/tsconfig.json --composite false && electron-vite build --config scripts/auth-bridge-fixture.config.ts",
     "auth:fixture": "electron out/auth-bridge-fixture/main/main.cjs",
-    "auth:fixture:smoke": "electron out/auth-bridge-fixture/main/main.cjs --smoke"
+    "auth:fixture:smoke": "electron out/auth-bridge-fixture/main/main.cjs --smoke",
+    "capture:fixture:build": "npm run prepare:ocr-assets && tsc --noEmit -p scripts/auth-capture-fixture/tsconfig.json --composite false && electron-vite build --config scripts/auth-capture-fixture.config.ts",
+    "capture:fixture": "electron out/auth-capture-fixture/main/main.cjs",
+    "capture:fixture:smoke": "electron out/auth-capture-fixture/main/main.cjs --smoke",
+    "capture:fixture:ocr": "electron out/auth-capture-fixture/main/main.cjs --ocr"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
