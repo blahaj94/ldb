@@ -229,17 +229,24 @@ export async function createLoginHttpApp(
   })
   class LoginHttpModule {}
 
-  const app = await NestFactory.create(LoginHttpModule, { logger: false, bodyParser: false })
-  app.use((request: Request, response: Response, next: () => void) => {
-    response.setHeader('Cache-Control', 'no-store')
-    response.removeHeader('X-Powered-By')
-    if (request.method === 'GET') {
-      response.setHeader('Referrer-Policy', 'no-referrer')
-      response.setHeader('Content-Security-Policy', LOGIN.contentSecurityPolicy)
-    }
-    next()
+  const app = await NestFactory.create(LoginHttpModule, {
+    logger: false, bodyParser: false, abortOnError: false,
   })
-  app.use(loginJsonParser)
-  app.useGlobalFilters(new LoginHttpFilter())
-  return app
+  try {
+    app.use((request: Request, response: Response, next: () => void) => {
+      response.setHeader('Cache-Control', 'no-store')
+      response.removeHeader('X-Powered-By')
+      if (request.method === 'GET') {
+        response.setHeader('Referrer-Policy', 'no-referrer')
+        response.setHeader('Content-Security-Policy', LOGIN.contentSecurityPolicy)
+      }
+      next()
+    })
+    app.use(loginJsonParser)
+    app.useGlobalFilters(new LoginHttpFilter())
+    return app
+  } catch (error) {
+    await app.close().catch(() => undefined)
+    throw error
+  }
 }
