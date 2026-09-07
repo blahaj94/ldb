@@ -7,7 +7,7 @@ last-reviewed: 2026-09-07
 
 # Desktop Auth Core
 
-Desktop main 인증의 현재 독립 core는 `apps/desktop/src/backend/auth`에 있다. 이 구현은 승인된 `docs/rules/desktop-auth.md`, `docs/rules/desktop-auth-lifecycle.md`, `docs/rules/desktop-auth-platform.md`를 소비한다. `apps/desktop/src/backend/main.ts` bootstrap, protocol/IPC/UI, 실제 `safeStorage`·file adapter에는 아직 연결되지 않았다.
+Desktop main 인증의 현재 독립 core는 `apps/desktop/src/backend/auth`에 있다. 이 구현은 승인된 `docs/rules/desktop-auth.md`, `docs/rules/desktop-auth-lifecycle.md`, `docs/rules/desktop-auth-platform.md`를 소비한다. `apps/desktop/src/backend/main.ts`의 실제 auth effects, OS protocol, `safeStorage`·file adapter는 아직 구성되지 않았다. Core의 IPC/UI 연결은 [auth bridge](desktop-auth-bridge.md), 현재 capture 권한·수명 연결은 [auth capture](desktop-auth-capture.md)를 따른다.
 
 ## Module 경계
 
