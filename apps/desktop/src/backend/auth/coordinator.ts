@@ -756,6 +756,15 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (!canAuthorize) {
         return { status: 'unavailable' }
       }
+      const checkedAt = dependencies.clock.read()
+      const step = selectCredentialRecoveryStep(
+        checkedAt,
+        refreshedCredential.accessTokenExpiresAtMs
+      )
+      const canUseAccess = step === 'verify-user'
+      if (!canUseAccess) {
+        return { status: 'unavailable' }
+      }
       return {
         status: 'available',
         accessToken: refreshedCredential.accessToken,
