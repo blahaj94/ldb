@@ -5,9 +5,17 @@ const mocks = vi.hoisted(() => ({
   loadURL: vi.fn(),
   loadFile: vi.fn(),
   registerWindow: vi.fn(),
+  permissionCheck: vi.fn(),
+  permissionRequest: vi.fn(),
   bootstrap: undefined as Promise<void> | undefined
 }))
 vi.mock('electron', () => ({
+  session: {
+    defaultSession: {
+      setPermissionCheckHandler: mocks.permissionCheck,
+      setPermissionRequestHandler: mocks.permissionRequest
+    }
+  },
   app: {
     whenReady: () => ({
       then: (callback: () => void): Promise<void> => {
@@ -71,4 +79,18 @@ it.each([
   await mocks.bootstrap
   expect(mocks.loadURL).toHaveBeenCalledExactlyOnceWith(expected)
   expect(mocks.registerWindow).toHaveBeenCalledWith(expect.anything(), expected)
+})
+
+it('인증 미구성 기본 entry는 legacy를 포함한 media permission을 명시적으로 거절한다', async () => {
+  vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
+  await import('./main')
+  await mocks.bootstrap
+  expect(mocks.permissionCheck).toHaveBeenCalledOnce()
+  expect(mocks.permissionRequest).toHaveBeenCalledOnce()
+  const check = mocks.permissionCheck.mock.calls[0][0]
+  const request = mocks.permissionRequest.mock.calls[0][0]
+  expect(check(null, 'media', 'file://', { mediaType: 'unknown', isMainFrame: true })).toBe(false)
+  const callback = vi.fn()
+  request({}, 'media', callback, { mediaTypes: [], isMainFrame: true })
+  expect(callback).toHaveBeenCalledExactlyOnceWith(false)
 })
