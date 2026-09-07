@@ -1,9 +1,9 @@
 import 'reflect-metadata'
 import { closeApp, createApp } from './app.js'
-import { parsePort } from './port.js'
+import { readRuntimeConfiguration } from './runtime/configuration.js'
 
 async function main(): Promise<void> {
-  const port = parsePort(process.env.PORT)
+  const { port } = await readRuntimeConfiguration(process.env)
   const app = await createApp()
   const shutdown = (): void => {
     void closeApp(app)
