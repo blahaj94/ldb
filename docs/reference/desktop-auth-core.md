@@ -37,7 +37,7 @@ Exchange는 PendingLogin의 동기 claim → `exchanging` 알림 → current 재
 
 `prepare`, `writeCredential`, `finalize`, `reestablish`, `releaseUnsentTransition`은 원래 저장 Promise를 그대로 반환한다. 저장 완료를 기다리는 위치와 예외 분류·current generation 확인은 coordinator에 남는다. 추가 Promise 변환 계층으로 인증 실패의 즉시 사용 차단을 늦추지 않으며, 성공과 실패 모두 결과 적용 직전의 generation·logout 소유권을 따른다.
 
-`beginLogout`은 known current/consumed refresh, 기존 writer completion과 HTTP 시작 여부, 이미 settle됐을 수 있는 disposal Promise를 한 reservation에 고정한다. `finishLogout`은 결과 Promise를 먼저 등록한 뒤 writer 대기·서버 폐기·local clear를 실행해 local/server 확인을 각각 반환한다. Late disposal 실패는 해당 reservation 안에서 합성되며 완료 뒤 다음 session으로 넘기지 않는다. 최종 phase·notice와 generation 확인은 coordinator가 적용한다.
+`beginLogout`은 known current/consumed refresh, 기존 writer 참조와 HTTP 시작 여부, 이미 settle됐을 수 있는 disposal Promise를 한 reservation에 고정한다. `finishLogout`은 결과 Promise를 먼저 등록한 뒤 writer 대기·서버 폐기·local clear를 실행해 local/server 확인을 각각 반환한다. Late disposal 실패는 해당 reservation 안에서 합성되며 완료 뒤 다음 session으로 넘기지 않는다. 최종 phase·notice와 generation 확인은 coordinator가 적용한다.
 
 ```mermaid
 flowchart TD
@@ -56,6 +56,8 @@ flowchart TD
     Verification -->|me| Http
     Coordinator -->|local 결과 적용 판단| Cleanup[cleanup-result]
 ```
+
+Exchange가 token을 확보하지 못한 채 network/5xx/invalid response로 끝나면 coordinator가 해당 writer에 서버 결과 불명 evidence를 남긴다. Logout은 writer completion 뒤 evidence를 읽으므로 예약 뒤 실패와 실패 후 cleanup 중 예약을 모두 반영한다. 명시적인 `exchange-invalid`와 `network/not-sent`는 제외하며 HTTP 시작 여부나 abort만으로 미전송을 추정하지 않는다. Local clear 성공은 `LOGOUT_SERVER_UNCONFIRMED`, local clear 불명은 `LOCAL_CLEAR_UNCONFIRMED`가 우선이다. 이 evidence는 해당 writer와 이를 captured한 logout 수명에만 남고 다음 session에 전달되지 않는다. 알려진 token의 기존 서버 폐기 흐름은 그대로 사용한다.
 
 ## Credential store effect 계약
 
