@@ -44,17 +44,17 @@
 
 ### 작성 기준
 
-아래 제안이 활성화되기 전에는 document 본문을 한국어로 작성하고 technical term은 English로 사용하는 기존 기준을 유지한다. 제안의 활성화와 기존 기준의 대체는 [`change-control.md`](docs/rules/change-control.md#approval-evidence)의 Draft PR 승인 절차를 따른다. 기존 승인·검증·보안 의무는 유지한다.
+아래 기준은 [PR #123의 사용자 승인](https://github.com/blahaj94/ldb/pull/123#issuecomment-5571663306)과 merge를 반영해 적용한다. 기존 승인·검증·보안 의무는 유지한다.
 
-#### 사람이 읽는 설명 작성 기준 (제안)
+#### 사람이 읽는 설명 작성 기준
 
-사용자에게 보내는 답변과 문서 본문, Issue·PR·인계 설명에 적용할 변경안이다.
+사용자에게 보내는 답변과 문서 본문, Issue·PR·인계 설명에 적용한다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: warning
 rationale: 불필요한 영어 작업 분류와 압축 표현을 줄여 사용자가 한 번에 이해할 수 있게 한다.
-evidence: "Issue #122: 영어 검토 보고와 여러 조건을 한 줄에 압축한 완료 조건을 읽기 어렵다는 사용자 피드백. https://github.com/blahaj94/ldb/issues/122"
+evidence: "사용자 피드백: https://github.com/blahaj94/ldb/issues/122; PR #123 사용자 승인: https://github.com/blahaj94/ldb/pull/123#issuecomment-5571663306"
 exceptions: 정확한 식별자·명령어·schema field와 확인에 필요한 원문은 그대로 유지한다.
 review-after: 승인 후 실제 답변·Issue·PR·인계 설명 중 3건을 작성했거나 사용자가 다시 읽기 어렵다고 지적하면, 해당 사례를 바탕으로 기준과 예시를 재검토한다.
 ```
