@@ -1,9 +1,3 @@
-import {
-  clearCredential,
-  finalizeCredentialTransition,
-  finishCredentialClear,
-  prepareCredentialTransition
-} from './credential-operations'
 import { decideLocalCleanup } from './cleanup-result'
 import { CredentialSession } from './credential-session'
 import type { CredentialWriter, SessionCredential } from './credential-session'
@@ -76,7 +70,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     notice: null
   }
   let pending: PendingLogin | null = null
-  const session = new CredentialSession(dependencies.http)
+  const session = new CredentialSession(dependencies.http, dependencies.store)
   let blockedMode: 'inspect' | 'cleanup' | null = null
   let startPromise: Promise<AuthSnapshot> | null = null
   let logoutFlight: Promise<AuthCommandResult> | null = null
@@ -190,38 +184,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     })
   }
 
-  async function clearLocal(): Promise<boolean> {
-    try {
-      const result = await clearCredential(dependencies.store)
-      return result === 'cleared'
-    } catch {
-      return false
-    }
-  }
-
-  async function prepareLocalClear(): Promise<boolean> {
-    try {
-      const prepared = await prepareCredentialTransition(dependencies.store, 'clear')
-      return prepared === 'established'
-    } catch {
-      return false
-    }
-  }
-
-  async function finishLocalClear(): Promise<boolean> {
-    try {
-      const cleared = await finishCredentialClear(dependencies.store)
-      return cleared === 'cleared'
-    } catch {
-      return false
-    }
-  }
-
   async function cleanupAfterInvalidation(
     notice: AuthNotice,
     cleanupGeneration: number
   ): Promise<void> {
-    const cleared = await clearLocal()
+    const cleared = await session.clearLocal()
     const cleanup = decideLocalCleanup({
       cleared,
       isCurrent: generation === cleanupGeneration,
@@ -245,7 +212,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (isLogoutCleaning) {
       return
     }
-    const cleared = await clearLocal()
+    const cleared = await session.clearLocal()
     const cleanup = decideLocalCleanup({
       cleared,
       // 이전 token의 정리를 소유한 writer는 명시 logout에만 결과 처리를 인계한다.
@@ -264,9 +231,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     kind: CredentialTransitionKind,
     operationGeneration: number
   ): Promise<boolean> {
-    let prepared: Awaited<ReturnType<typeof prepareCredentialTransition>>
+    let prepared: Awaited<ReturnType<typeof session.prepare>>
     try {
-      prepared = await prepareCredentialTransition(dependencies.store, kind)
+      prepared = await session.prepare(kind)
     } catch {
       prepared = 'unconfirmed'
     }
@@ -298,9 +265,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     operationGeneration: number,
     isOperationFresh: () => boolean = () => generation === operationGeneration
   ): Promise<boolean> {
-    let credentialCommit: Awaited<ReturnType<typeof dependencies.store.commitCredential>>
+    let credentialCommit: Awaited<ReturnType<typeof session.writeCredential>>
     try {
-      credentialCommit = await dependencies.store.commitCredential(tokens.refreshToken)
+      credentialCommit = await session.writeCredential(tokens.refreshToken)
     } catch {
       credentialCommit = 'unknown'
     }
@@ -323,9 +290,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return false
     }
 
-    let finalized: Awaited<ReturnType<typeof finalizeCredentialTransition>>
+    let finalized: Awaited<ReturnType<typeof session.finalize>>
     try {
-      finalized = await finalizeCredentialTransition(dependencies.store, kind)
+      finalized = await session.finalize(kind)
     } catch {
       finalized = 'clear-unconfirmed'
     }
@@ -335,7 +302,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       let hasDurableMarker = finalized === 'save-failed'
       if (finalized === 'committed') {
         try {
-          hasDurableMarker = (await dependencies.store.reestablishTransition(kind)) === 'confirmed'
+          hasDurableMarker = (await session.reestablish(kind)) === 'confirmed'
         } catch {
           hasDurableMarker = false
         }
@@ -407,7 +374,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (inspection.status === 'recovery-required') {
       let cleared = false
       await session.runWriter(async () => {
-        cleared = await clearLocal()
+        cleared = await session.clearLocal()
       })
       const cleanup = decideLocalCleanup({
         cleared,
@@ -480,7 +447,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   }
 
   async function recoverRejectedExchange(value: PendingLogin): Promise<void> {
-    const cleared = await clearLocal()
+    const cleared = await session.clearLocal()
     const cleanup = decideLocalCleanup({
       cleared,
       isCurrent: isCurrentPending(value),
@@ -526,8 +493,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     let exchanged: LoginExchangeResponse
     try {
-      writer.markHttpStarted()
-      exchanged = await dependencies.http.exchange(claim.input, claim.signal)
+      exchanged = await session.sendExchange(writer, claim.input, claim.signal)
     } catch (error) {
       if (!keepPendingFresh(value)) {
         await handleStaleTransition()
@@ -540,7 +506,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         return
       }
 
-      const cleared = await clearLocal()
+      const cleared = await session.clearLocal()
       const cleanup = decideLocalCleanup({
         cleared,
         isCurrent: isCurrentPending(value),
@@ -714,8 +680,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     let tokens: AuthTokens
     try {
-      writer.markHttpStarted()
-      tokens = await dependencies.http.refresh(refreshToken, new AbortController().signal)
+      tokens = await session.sendRefresh(writer, refreshToken)
     } catch (error) {
       const isCurrent = generation === operationGeneration
       if (!isCurrent) {
@@ -729,7 +694,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (wasNotSent) {
         let removed = false
         try {
-          removed = (await dependencies.store.removeTransition()) === 'confirmed'
+          removed = (await session.releaseUnsentTransition()) === 'confirmed'
         } catch {
           removed = false
         }
@@ -870,7 +835,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (inspection.status === 'recovery-required') {
       let cleared = false
       await session.runWriter(async () => {
-        cleared = await clearLocal()
+        cleared = await session.clearLocal()
       })
       const cleanup = decideLocalCleanup({
         cleared,
@@ -1020,7 +985,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (inspection.status !== 'empty') {
         let cleared = false
         await session.runWriter(async () => {
-          cleared = await clearLocal()
+          cleared = await session.clearLocal()
         })
         const cleanup = decideLocalCleanup({
           cleared,
@@ -1057,34 +1022,10 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       clearPendingReference(value)
     }
     verificationController?.abort()
-    const logoutCredentials = session.beginLogout()
-    const writer = logoutCredentials.writer
-    const credentialHttpWasStarted = logoutCredentials.credentialHttpStarted
-    const refreshToken = logoutCredentials.refreshToken
+    const reservation = session.beginLogout()
     publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
 
-    let localPrepared = false
-    let serverLogout: Promise<boolean>
-    const canStartServerImmediately = writer != null && credentialHttpWasStarted
-    if (canStartServerImmediately) {
-      serverLogout = refreshToken == null ? Promise.resolve(true) : session.dispose(refreshToken)
-      await writer.catch(() => undefined)
-      localPrepared = await prepareLocalClear()
-    } else {
-      if (writer != null) {
-        await writer.catch(() => undefined)
-      }
-      localPrepared = await prepareLocalClear()
-      serverLogout = refreshToken == null ? Promise.resolve(true) : session.dispose(refreshToken)
-    }
-    const serverConfirmed = await serverLogout
-    const writerDisposalResult = await logoutCredentials.writerDisposal
-    const localConfirmed = localPrepared && (await finishLocalClear())
-    const isServerConfirmed = session.completeLogout(
-      logoutCredentials,
-      serverConfirmed,
-      writerDisposalResult
-    )
+    const { localConfirmed, serverConfirmed } = await session.finishLogout(reservation)
     blockedMode = localConfirmed ? null : 'cleanup'
     const isCurrentLogout = generation === logoutGeneration
     if (!isCurrentLogout) {
@@ -1106,7 +1047,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       login: null,
       user: null,
       entry: null,
-      notice: isServerConfirmed ? null : 'LOGOUT_SERVER_UNCONFIRMED'
+      notice: serverConfirmed ? null : 'LOGOUT_SERVER_UNCONFIRMED'
     })
     return success()
   }

@@ -1,16 +1,34 @@
-import type { AuthAuthorization, AuthHttp, AuthTokens } from './types'
+import {
+  clearCredential,
+  finalizeCredentialTransition,
+  finishCredentialClear,
+  prepareCredentialTransition
+} from './credential-operations'
+import type { CredentialCommit, TransitionPreparation } from './credential-operations'
+import type {
+  AuthAuthorization,
+  AuthHttp,
+  AuthTokens,
+  CredentialStore,
+  CredentialTransitionKind,
+  StoreMutationOutcome
+} from './types'
 
 export type SessionCredential = AuthTokens &
   Readonly<{
     accessTokenExpiresAtMs: number
   }>
 
-type LogoutCredentials = Readonly<{
+type LogoutResult = Readonly<{ localConfirmed: boolean; serverConfirmed: boolean }>
+
+type LogoutOperation = {
   refreshToken: string | null
   writer: Promise<void> | null
   credentialHttpStarted: boolean
   writerDisposal: Promise<boolean> | undefined
-}>
+  lateDisposalUnconfirmed: boolean
+  result: Promise<LogoutResult> | null
+}
 
 export class CredentialWriter {
   readonly completion: Promise<void>
@@ -58,10 +76,12 @@ export class CredentialSession {
     generation: number
     promise: Promise<AuthAuthorization>
   }> | null = null
-  private logoutInProgress = false
-  private lateDisposalUnconfirmed = false
+  private logoutOperation: LogoutOperation | null = null
 
-  constructor(private readonly http: Pick<AuthHttp, 'logout'>) {}
+  constructor(
+    private readonly http: Pick<AuthHttp, 'logout' | 'refresh' | 'exchange'>,
+    private readonly store: CredentialStore
+  ) {}
 
   get hasWriter(): boolean {
     return this.activeWriter != null
@@ -116,6 +136,49 @@ export class CredentialSession {
     return promise
   }
 
+  prepare(kind: CredentialTransitionKind): Promise<TransitionPreparation> {
+    return prepareCredentialTransition(this.store, kind)
+  }
+
+  writeCredential(refreshToken: string): Promise<StoreMutationOutcome> {
+    return this.store.commitCredential(refreshToken)
+  }
+
+  finalize(kind: CredentialTransitionKind): Promise<CredentialCommit> {
+    return finalizeCredentialTransition(this.store, kind)
+  }
+
+  reestablish(kind: CredentialTransitionKind): Promise<StoreMutationOutcome> {
+    return this.store.reestablishTransition(kind)
+  }
+
+  async clearLocal(): Promise<boolean> {
+    try {
+      const result = await clearCredential(this.store)
+      return result === 'cleared'
+    } catch {
+      return false
+    }
+  }
+
+  releaseUnsentTransition(): Promise<StoreMutationOutcome> {
+    return this.store.removeTransition()
+  }
+
+  sendExchange(
+    writer: CredentialWriter,
+    input: Parameters<AuthHttp['exchange']>[0],
+    signal: AbortSignal
+  ): ReturnType<AuthHttp['exchange']> {
+    writer.markHttpStarted()
+    return this.http.exchange(input, signal)
+  }
+
+  sendRefresh(writer: CredentialWriter, refreshToken: string): ReturnType<AuthHttp['refresh']> {
+    writer.markHttpStarted()
+    return this.http.refresh(refreshToken, new AbortController().signal)
+  }
+
   get current(): SessionCredential | null {
     return this.credential
   }
@@ -164,10 +227,12 @@ export class CredentialSession {
         return true
       } catch {
         // Known current/consumed token이 있으면 같은 session 폐기는 그 logout 결과로 판단한다.
+        const logout = this.logoutOperation
+        const hasConcurrentLogout = logout != null
         const hasKnownLogoutCredential = this.knownRefreshToken != null
-        const needsLateDisposalConfirmation = this.logoutInProgress && !hasKnownLogoutCredential
+        const needsLateDisposalConfirmation = hasConcurrentLogout && !hasKnownLogoutCredential
         if (needsLateDisposalConfirmation) {
-          this.lateDisposalUnconfirmed = true
+          logout.lateDisposalUnconfirmed = true
         }
         return false
       }
@@ -176,32 +241,93 @@ export class CredentialSession {
     return promise
   }
 
-  beginLogout(): LogoutCredentials {
-    this.logoutInProgress = true
+  beginLogout(): Readonly<LogoutOperation> {
+    const existing = this.logoutOperation
+    const hasLogout = existing != null
+    if (hasLogout) {
+      return existing
+    }
     const writer = this.activeWriter
     const hasWriter = writer != null
-    return {
+    const operation: LogoutOperation = {
       refreshToken: this.knownRefreshToken,
       writer: hasWriter ? writer.completion : null,
       credentialHttpStarted: hasWriter && writer.httpStarted,
-      writerDisposal: hasWriter ? this.disposalFlight?.promise : undefined
+      writerDisposal: hasWriter ? this.disposalFlight?.promise : undefined,
+      lateDisposalUnconfirmed: false,
+      result: null
+    }
+    this.logoutOperation = operation
+    return operation
+  }
+
+  finishLogout(reservation: Readonly<LogoutOperation>): Promise<LogoutResult> {
+    const existing = reservation.result
+    const hasResult = existing != null
+    if (hasResult) {
+      return existing
+    }
+    const operation = this.logoutOperation
+    const isOwner = operation === reservation
+    if (!isOwner) {
+      return Promise.reject(new Error('Credential logout reservation is not current.'))
+    }
+    let resolve!: (result: LogoutResult) => void
+    let reject!: (reason: unknown) => void
+    const promise = new Promise<LogoutResult>((resolveResult, rejectResult) => {
+      resolve = resolveResult
+      reject = rejectResult
+    })
+    operation.result = promise
+    void this.performLogout(operation).then(resolve, reject)
+    return promise
+  }
+
+  private async prepareLocalClear(): Promise<boolean> {
+    try {
+      const prepared = await this.prepare('clear')
+      return prepared === 'established'
+    } catch {
+      return false
     }
   }
 
-  completeLogout(
-    credentials: LogoutCredentials,
-    serverConfirmed: boolean,
-    writerDisposalResult: boolean | undefined
-  ): boolean {
+  private async finishLocalClear(): Promise<boolean> {
+    try {
+      const cleared = await finishCredentialClear(this.store)
+      return cleared === 'cleared'
+    } catch {
+      return false
+    }
+  }
+
+  private async performLogout(operation: LogoutOperation): Promise<LogoutResult> {
+    const { writer, refreshToken } = operation
+    let localPrepared = false
+    let serverLogout: Promise<boolean>
+    const canStartServerImmediately = writer != null && operation.credentialHttpStarted
+    if (canStartServerImmediately) {
+      serverLogout = refreshToken == null ? Promise.resolve(true) : this.dispose(refreshToken)
+      await writer.catch(() => undefined)
+      localPrepared = await this.prepareLocalClear()
+    } else {
+      if (writer != null) {
+        await writer.catch(() => undefined)
+      }
+      localPrepared = await this.prepareLocalClear()
+      serverLogout = refreshToken == null ? Promise.resolve(true) : this.dispose(refreshToken)
+    }
+    const serverConfirmed = await serverLogout
+    const writerDisposalResult = await operation.writerDisposal
     const hasWriterDisposalFailure = writerDisposalResult === false
-    const hasKnownLogoutCredential = credentials.refreshToken != null
+    const hasKnownLogoutCredential = refreshToken != null
+    const localConfirmed = localPrepared && (await this.finishLocalClear())
     const isServerConfirmed =
       serverConfirmed &&
-      !this.lateDisposalUnconfirmed &&
+      !operation.lateDisposalUnconfirmed &&
       (hasKnownLogoutCredential || !hasWriterDisposalFailure)
     this.discard()
-    this.lateDisposalUnconfirmed = false
-    this.logoutInProgress = false
-    return isServerConfirmed
+    this.logoutOperation = null
+    return { localConfirmed, serverConfirmed: isServerConfirmed }
   }
 }
