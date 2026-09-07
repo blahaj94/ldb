@@ -2,7 +2,11 @@ import * as fs from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearCredential, finalizeCredentialTransition } from '../credential-operations'
+import {
+  clearCredential,
+  finalizeCredentialTransition,
+  prepareCredentialTransition
+} from '../credential-operations'
 import { CONTEXT, REFRESH_0, REFRESH_1, createStoreFixture } from './credential-store-test-fixture'
 import type { StoreFixture } from './credential-store-test-fixture'
 import { createMacOsCredentialStore } from './macos-credential-store'
@@ -288,6 +292,20 @@ describe('macOS CredentialStore의 파일 protocol', () => {
     expect(JSON.parse(String(fixture.plaintexts.get(String(record.ciphertext))))).toMatchObject({
       refreshToken: REFRESH_1
     })
+  })
+
+  it('marker rename 적용 전 실패를 재확립한 뒤 완전히 저장한 R1은 재시작에도 ready다', async () => {
+    await fixture.seedReady()
+    fixture.failures.set('rename:transition.v1', ['before'])
+
+    expect(await prepareCredentialTransition(fixture.store, 'refresh')).toBe('established')
+    expect(await fixture.store.commitCredential(REFRESH_1)).toBe('confirmed')
+    expect(await finalizeCredentialTransition(fixture.store, 'refresh')).toBe('committed')
+    expect(await fixture.createStore().inspect()).toEqual({
+      status: 'ready',
+      refreshToken: REFRESH_1
+    })
+    expect(await fs.readdir(fixture.directory)).toEqual(['credential.v1'])
   })
 
   it.each([true, false])(
