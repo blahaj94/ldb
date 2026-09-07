@@ -106,7 +106,7 @@ async function service(f) {
   return createAuthenticatedSearchService(f.deps)
 }
 
-test('search service locks only session, reads fresh time, commits before reserving and starting upstream', async () => {
+test('search service locks only session, reads fresh time, commits before starting upstream', async () => {
   const f = fixture()
   const search = await service(f)
   try {
@@ -146,9 +146,12 @@ test('search missing or revoked session allows residual request with activity ze
     }
     const search = await service(f)
     try {
-      assert.deepEqual(await search.search(headers, originalUrl), { rows: [] })
+      for (let count = 0; count < 10; count += 1) {
+        assert.deepEqual(await search.search(headers, originalUrl), { rows: [] })
+      }
+      await assert.rejects(search.search(headers, originalUrl), { status: 429 })
       assert.equal(f.state.writes, 0)
-      assert.equal(f.state.calls, 1)
+      assert.equal(f.state.calls, 10)
     } finally {
       search.onModuleDestroy()
     }
@@ -195,6 +198,28 @@ test('search commit acknowledgement failure keeps upstream and reservation zero 
     assert.equal(f.state.connections, 11)
     f.state.commit = undefined
     assert.deepEqual(await search.search(headers, originalUrl), { rows: [] })
+  } finally {
+    search.onModuleDestroy()
+  }
+})
+
+// Capacity 판정 시각(0ms)이 아닌 commit 이후 최종 시각(300ms)으로 60초 창을 관측한다.
+test('search service reservation window starts after commit and directly before adapter invocation', async () => {
+  const f = fixture()
+  f.state.commit = async () => { f.advance(300) }
+  const search = await service(f)
+  try {
+    for (let count = 0; count < 10; count += 1) {
+      await search.search(headers, originalUrl)
+    }
+    f.state.commit = undefined
+    f.advance(60_000)
+    await assert.rejects(search.search(headers, originalUrl), { status: 429, retryAfter: 1 })
+    assert.equal(f.state.connections, 10)
+    assert.equal(f.state.calls, 10)
+    f.advance(60_300)
+    await search.search(headers, originalUrl)
+    assert.equal(f.state.calls, 11)
   } finally {
     search.onModuleDestroy()
   }
