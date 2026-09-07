@@ -80,3 +80,25 @@ it('실제 capture는 home에서 선택을 요구하고 인증 이탈·재진입
   })
   expect(start?.disabled).toBe(true)
 })
+
+it('인증 이탈과 새 signedIn이 한 render로 합쳐져도 이전 capture 선택을 정리한다', async () => {
+  auth.getAuthState.mockResolvedValue(snapshot(1, 'signedIn'))
+  await act(async () => root.render(<App />))
+  const selection = container.querySelector('select')
+  await act(async () => {
+    if (selection != null) {
+      selection.value = 'fixture'
+      selection.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+  })
+  expect(container.querySelector('select')?.value).toBe('fixture')
+
+  await act(async () => {
+    listener?.(snapshot(2, 'signedOut'))
+    listener?.(snapshot(3, 'signedIn'))
+  })
+
+  expect(container.querySelector('select')?.value).toBe('')
+  expect(capture.selectCaptureSource).toHaveBeenLastCalledWith('')
+  expect(capture.listCaptureSources).toHaveBeenCalledTimes(2)
+})
