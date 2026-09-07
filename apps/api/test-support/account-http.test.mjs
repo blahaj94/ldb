@@ -1,6 +1,8 @@
 /* global fetch */
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
+import { createConnection } from 'node:net'
+import { URL } from 'node:url'
 import { test } from 'node:test'
 import { withAccountApp, rawAccountRequest, expectAccountError } from './account-http-fixtures.mjs'
 
@@ -16,6 +18,45 @@ test('GET account verifier failures are sanitized JSON without DB activity', asy
     await expectAccountError(response, 401, 'AUTHENTICATION_REQUIRED')
   })
   assert.equal(databaseCalls, 0)
+})
+
+function rawWire(base, wire) {
+  const url = new URL(base)
+  return new Promise((resolve, reject) => {
+    let response = ''
+    const socket = createConnection({ host: url.hostname, port: Number(url.port) })
+    socket.setTimeout(3000, () => {
+      socket.destroy()
+      reject(new Error('raw account HTTP did not close'))
+    })
+    socket.once('connect', () => socket.write(wire))
+    socket.on('data', (chunk) => { response += chunk.toString('utf8') })
+    socket.once('error', reject)
+    socket.once('close', () => resolve(response))
+  })
+}
+
+test('PATCH overflow closes before stream end; Node framing rejection does not expose input', async () => {
+  let verifications = 0
+  const f = { deps: {}, verifyJwt: async () => {
+    verifications++
+    throw new Error('unexpected verifier')
+  } }
+  await withAccountApp(f, async (base) => {
+    const headers = 'PATCH /me/nickname HTTP/1.1\r\nHost: test.invalid\r\nContent-Type: application/json\r\n'
+    const overflow = await rawWire(base, headers + 'Transfer-Encoding: chunked\r\n\r\n' +
+      '2000\r\n' + 'x'.repeat(8192) + '\r\n2001\r\n' + 'x'.repeat(8193) + '\r\n')
+    assert.match(overflow, /^HTTP\/1\.1 413/)
+    assert.match(overflow, /Cache-Control: no-store/i)
+    assert.match(overflow, /Connection: close/i)
+    assert.match(overflow, /REQUEST_TOO_LARGE/)
+
+    const framing = await rawWire(base, headers +
+      'Content-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\ncredential-canary')
+    assert.match(framing, /^HTTP\/1\.1 400/)
+    assert.doesNotMatch(framing, /credential-canary|Parse Error|stack/)
+    assert.equal(verifications, 0)
+  })
 })
 
 test('PATCH real stream transport rejection precedes JWT; JWT precedes field validation', async () => {

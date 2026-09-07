@@ -13,11 +13,13 @@ async function normal(source) {
     const get = await accountRequest(base, f)
     assert.equal(get.status, 200)
     assert.equal(get.headers.get('cache-control'), 'no-store')
+    assert.match(get.headers.get('content-type'), /^application\/json/)
     assert.deepEqual(await get.json(), { user: { id: before.user.id, nickname: before.user.nickname } })
     for (const nickname of ['  👩🏽‍🚀e\u0301  ', '중복', '중복']) {
       const patch = await accountRequest(base, f, 'PATCH', { nickname })
       assert.equal(patch.status, 200)
       assert.equal(patch.headers.get('cache-control'), 'no-store')
+      assert.match(patch.headers.get('content-type'), /^application\/json/)
       assert.deepEqual(await patch.json(), { user: { id: before.user.id, nickname: nickname.trim() } })
     }
   })
@@ -48,6 +50,11 @@ async function initialRejections(source) {
       assert.equal(response.headers['cache-control'], 'no-store')
       assert.equal(JSON.parse(response.body).error.code, 'AUTHENTICATION_REQUIRED')
     }
+    const queryOnlyPatch = await fetch(`${base}/me/nickname?accessToken=${f.token.accessToken}&userId=${f.initial.user.id}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nickname: '새 이름' }),
+    })
+    await expectAccountError(queryOnlyPatch, 401, 'AUTHENTICATION_REQUIRED')
     for (const input of [null, [], {}, { nickname: 'ok', userId: randomUUID() }, { nickname: 'ok', token: f.token.accessToken }]) {
       await expectAccountError(await accountRequest(base, f, 'PATCH', input), 400, 'INVALID_AUTH_REQUEST')
     }
@@ -297,7 +304,10 @@ async function databaseFailure(source, phase, applied, method) {
     query: async ({ sql, run }) => {
       const isNicknameWrite = sql.startsWith('UPDATE "users"')
       const failWrite = phase === 'write' && isNicknameWrite
-      const failRead = phase === 'read' && sql.includes('FROM "users"')
+      const isUserRead = sql.includes('FROM "users"')
+      const isInitialReadFailure = phase === 'read' && isUserRead
+      const isFunctionReadFailure = phase === 'function-read' && commits === 1 && isUserRead
+      const failRead = isInitialReadFailure || isFunctionReadFailure
       if (failWrite || failRead) throw new Error('private SQL nickname identity credential canary')
       return run()
     },
@@ -348,6 +358,7 @@ export async function assertAccountHttpIntegration(source, mark) {
       ...['logout', 'delete'].map((kind) => [`${method} committed activity then ${kind}`, () => betweenPhases(source, kind, method)]),
       ...['logout', 'delete'].map((kind) => [`${method} ${kind} commit blocks admission`, () => removalBeforeAdmission(source, kind, method)]),
       [`${method} database read failure`, () => databaseFailure(source, 'read', false, method)],
+      [`${method} function read failure preserves admitted activity`, () => databaseFailure(source, 'function-read', false, method)],
       ...['admission', 'function'].flatMap((phase) => [false, true].map((applied) => [
         `${method} ${phase} commit acknowledgement unknown applied=${applied}`, () => databaseFailure(source, phase, applied, method),
       ])),
