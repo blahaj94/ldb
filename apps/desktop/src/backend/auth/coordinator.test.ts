@@ -749,6 +749,37 @@ describe('Desktop AuthCoordinator login', () => {
     }
   )
 
+  it('exchanging listener의 cancel 직후 같은 stack에서 새 login을 시작할 수 있다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+    const commands: ReturnType<typeof coordinator.beginLogin>[] = []
+    const unsubscribe = coordinator.subscribe((snapshot) => {
+      const isExchanging = snapshot.phase === 'exchanging'
+      if (isExchanging) {
+        unsubscribe()
+        commands.push(coordinator.cancelLogin(ATTEMPT_ID))
+        commands.push(coordinator.beginLogin('discord'))
+      }
+    })
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+    const [, restarted] = await Promise.all(commands)
+
+    expect(restarted).toMatchObject({ ok: true, snapshot: { phase: 'startingLogin' } })
+    await waitForPhase(coordinator, 'waitingBrowser')
+    expect(coordinator.getSnapshot().login).toMatchObject({
+      attemptId: NEXT_ATTEMPT_ID,
+      provider: 'discord'
+    })
+    expect(harness.http.exchange).not.toHaveBeenCalled()
+    expect(harness.store.establishTransition).not.toHaveBeenCalled()
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${OTHER_CODE}`)
+    expect(coordinator.getSnapshot().phase).toBe('signedIn')
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+  })
+
   it('exchange 취소 뒤 늦은 token을 publish하지 않고 서버 폐기와 local clear를 끝낸다', async () => {
     const harness = createAuthHarness()
     const exchange = deferred<Awaited<ReturnType<typeof harness.http.value.exchange>>>()
