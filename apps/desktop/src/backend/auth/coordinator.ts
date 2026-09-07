@@ -6,7 +6,7 @@ import {
 } from './credential-operations'
 import { decideLocalCleanup } from './cleanup-result'
 import { CredentialSession } from './credential-session'
-import type { SessionCredential } from './credential-session'
+import type { CredentialWriter, SessionCredential } from './credential-session'
 import { AuthHttpFailure } from './http'
 import { createPkce } from './pkce'
 import { PendingLogin } from './pending-login'
@@ -79,10 +79,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   const session = new CredentialSession(dependencies.http)
   let blockedMode: 'inspect' | 'cleanup' | null = null
   let startPromise: Promise<AuthSnapshot> | null = null
-  let activeWriter: Promise<void> | null = null
-  let activeCredentialHttpStarted = false
-  let refreshFlight: Readonly<{ generation: number; promise: Promise<AuthAuthorization> }> | null =
-    null
   let logoutFlight: Promise<AuthCommandResult> | null = null
   let verificationController: AbortController | null = null
   const listeners = new Set<(snapshot: AuthSnapshot) => void>()
@@ -410,7 +406,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     if (inspection.status === 'recovery-required') {
       let cleared = false
-      await startWriter(async () => {
+      await session.runWriter(async () => {
         cleared = await clearLocal()
       })
       const cleanup = decideLocalCleanup({
@@ -513,7 +509,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     })
   }
 
-  async function exchangeLogin(value: PendingLogin, claim: ClaimedExchange): Promise<void> {
+  async function exchangeLogin(
+    value: PendingLogin,
+    claim: ClaimedExchange,
+    writer: CredentialWriter
+  ): Promise<void> {
     const operationGeneration = value.generation
     const prepared = await prepareTransition('exchange', operationGeneration)
     if (!prepared) {
@@ -526,7 +526,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     let exchanged: LoginExchangeResponse
     try {
-      activeCredentialHttpStarted = true
+      writer.markHttpStarted()
       exchanged = await dependencies.http.exchange(claim.input, claim.signal)
     } catch (error) {
       if (!keepPendingFresh(value)) {
@@ -586,7 +586,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isEnabled) {
       return Promise.resolve(failure('AUTH_NOT_ALLOWED'))
     }
-    const hasActiveOperation = activeWriter != null || logoutFlight != null
+    const hasActiveOperation = session.hasWriter || logoutFlight != null
     const isSignedOut = state.phase === 'signedOut'
     if (hasActiveOperation || !isSignedOut) {
       return Promise.resolve(failure('AUTH_BUSY'))
@@ -697,24 +697,15 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isCurrentPending(value)) {
       return Promise.resolve()
     }
-    const exchange = exchangeLogin(value, claim)
-    value.trackExchange(exchange)
-    const writer = exchange.then(() => undefined)
-    activeCredentialHttpStarted = false
-    activeWriter = writer
-    const clearWriter = (): void => {
-      if (activeWriter === writer) {
-        activeWriter = null
-        activeCredentialHttpStarted = false
-      }
-    }
-    void writer.then(clearWriter, clearWriter)
-    return exchange
+    const writer = session.reserveWriter()
+    value.trackExchange(writer.completion)
+    return writer.execute(() => exchangeLogin(value, claim, writer))
   }
 
   async function rotateCredential(
     refreshToken: string,
-    operationGeneration: number
+    operationGeneration: number,
+    writer: CredentialWriter
   ): Promise<SessionCredential | null> {
     const prepared = await prepareTransition('refresh', operationGeneration)
     if (!prepared) {
@@ -723,7 +714,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     let tokens: AuthTokens
     try {
-      activeCredentialHttpStarted = true
+      writer.markHttpStarted()
       tokens = await dependencies.http.refresh(refreshToken, new AbortController().signal)
     } catch (error) {
       const isCurrent = generation === operationGeneration
@@ -780,20 +771,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return committed ? session.current : null
   }
 
-  function startWriter(operation: () => Promise<void>): Promise<void> {
-    activeCredentialHttpStarted = false
-    const writer = operation()
-    activeWriter = writer
-    const clearWriter = (): void => {
-      if (activeWriter === writer) {
-        activeWriter = null
-        activeCredentialHttpStarted = false
-      }
-    }
-    void writer.then(clearWriter, clearWriter)
-    return writer
-  }
-
   async function verifyRestoredUser(operationGeneration: number): Promise<void> {
     const currentCredential = session.current
     const isCurrent = generation === operationGeneration
@@ -827,7 +804,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (needsAuthentication) {
         generation += 1
         const cleanupGeneration = generation
-        await startWriter(async () => {
+        await session.runWriter(async () => {
           await session.dispose(currentCredential.refreshToken)
           const canClear = generation === cleanupGeneration
           if (canClear) {
@@ -860,8 +837,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
     session.retainForRestore(refreshToken)
-    await startWriter(async () => {
-      await rotateCredential(refreshToken, operationGeneration)
+    await session.runWriter(async (writer) => {
+      await rotateCredential(refreshToken, operationGeneration, writer)
     })
     const canVerify = generation === operationGeneration && session.current != null
     if (canVerify) {
@@ -892,7 +869,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     if (inspection.status === 'recovery-required') {
       let cleared = false
-      await startWriter(async () => {
+      await session.runWriter(async () => {
         cleared = await clearLocal()
       })
       const cleanup = decideLocalCleanup({
@@ -933,15 +910,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return Promise.resolve({ status: 'unavailable' })
     }
     const operationGeneration = generation
-    const existing = refreshFlight
-    const canJoin = existing != null && existing.generation === operationGeneration
-    if (canJoin) {
-      return existing.promise
-    }
-
-    const promise = (async (): Promise<AuthAuthorization> => {
-      await startWriter(async () => {
-        await rotateCredential(currentCredential.refreshToken, operationGeneration)
+    return session.shareRefresh(operationGeneration, async () => {
+      await session.runWriter(async (writer) => {
+        await rotateCredential(currentCredential.refreshToken, operationGeneration, writer)
       })
       const refreshedCredential = session.current
       const canAuthorize =
@@ -956,15 +927,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         accessToken: refreshedCredential.accessToken,
         generation: operationGeneration
       }
-    })()
-    refreshFlight = { generation: operationGeneration, promise }
-    const clearRefresh = (): void => {
-      if (refreshFlight?.promise === promise) {
-        refreshFlight = null
-      }
-    }
-    void promise.then(clearRefresh, clearRefresh)
-    return promise
+    })
   }
 
   function authorization(): Promise<AuthAuthorization> {
@@ -994,7 +957,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isRestorePaused && !isStorageBlocked) {
       return failure('AUTH_NOT_ALLOWED')
     }
-    const hasActiveOperation = activeWriter != null || logoutFlight != null
+    const hasActiveOperation = session.hasWriter || logoutFlight != null
     if (hasActiveOperation) {
       return failure('AUTH_BUSY')
     }
@@ -1024,8 +987,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       const canUseAccess =
         !checkedAt.discontinuous && checkedAt.wallMs < currentCredential.accessTokenExpiresAtMs
       if (!canUseAccess) {
-        await startWriter(async () => {
-          await rotateCredential(currentCredential.refreshToken, operationGeneration)
+        await session.runWriter(async (writer) => {
+          await rotateCredential(currentCredential.refreshToken, operationGeneration, writer)
         })
       }
       if (generation === operationGeneration && session.current != null) {
@@ -1056,7 +1019,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
       if (inspection.status !== 'empty') {
         let cleared = false
-        await startWriter(async () => {
+        await session.runWriter(async () => {
           cleared = await clearLocal()
         })
         const cleanup = decideLocalCleanup({
@@ -1094,9 +1057,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       clearPendingReference(value)
     }
     verificationController?.abort()
-    const writer = activeWriter
-    const logoutCredentials = session.beginLogout(writer != null)
-    const credentialHttpWasStarted = activeCredentialHttpStarted
+    const logoutCredentials = session.beginLogout()
+    const writer = logoutCredentials.writer
+    const credentialHttpWasStarted = logoutCredentials.credentialHttpStarted
     const refreshToken = logoutCredentials.refreshToken
     publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
 
@@ -1157,7 +1120,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (hasPendingBeforeExchange) {
       return cancelLogin(pendingLogin.attemptId)
     }
-    const isAlreadySignedOut = state.phase === 'signedOut' && activeWriter == null
+    const isAlreadySignedOut = state.phase === 'signedOut' && !session.hasWriter
     if (isAlreadySignedOut) {
       return Promise.resolve(success())
     }
