@@ -63,12 +63,19 @@ Code result `bd5d5e1`에서 aggregate exit 0, 10 files/53 tests, lint, Desktop b
 | Dark, 360×740, invalidReturn | 새 로그인 Enter→취소 대기 중 두 action disabled→signedOut 안내. 대기 중 provider가 나타나지 않는다. |
 | Dark, 360×740, restorePaused·storageBlocked | retry/logout 순서와 focus, logout 후 signingOut, storageBlocked의 retry만 노출 및 local/server 불명 안내. |
 | Light/Dark, 360×740, 최대 nickname welcome→home | `W` 20 grapheme가 영역 안에 표시된다. 시작하기 Enter 후 home 계정·캡처 안내·logout 표시와 focus를 확인했다. |
-| Dark, reduced-motion run | 실제 DevTools `matchMedia('(prefers-reduced-motion: reduce)').matches === true`, dark true, `window.api` undefined 확인. Keyboard provider activation과 busy 화면 전환 확인. Spinner의 reduced-motion 지속 관측은 아래 미검증 범위 참조. |
+| Dark, reduced-motion run | CLI flag만 사용한 실행에서 실제 DevTools `matchMedia('(prefers-reduced-motion: reduce)').matches === true`, dark true, `window.api` undefined 확인. Wide 화면에서 Tab→provider·Enter→busy→waiting→취소 focus·Enter→busy→signedOut·Tab→provider focus를 확인했다. DevTools는 read-only query에 사용했고 media emulation을 설정하지 않았다. |
 
 유효 최대 nickname 기준은 서버의 1–20 grapheme contract다. 범위 밖의 매우 긴 unbroken stress text는 공용 flex 영역을 넘었지만, 정상 최대 조건과 구분했다. 이 stress만으로 공용 API를 확대하거나 renderer에서 nickname을 잘라 표시하지 않았다. HTML 형태 string은 component test에서 text 출력과 element 미생성을 검증한다.
 
+### Reduced-motion과 정상 종료
+
+같은 fixture 실행을 host 잠금 해제 후 이어서 확인했다. DevTools의 `document.getAnimations()`와 `getComputedStyle()`로 `rotate` animation을 350ms 간격으로 읽었으며 `reduce:true`, `state:running`, duration 1200ms였다. Current time은 142491.9ms에서 142841.9ms로 증가했고 transform은 `matrix(0.133403, -0.991062, 0.991062, 0.133403, 0, 0)`에서 `matrix(0.986812, 0.161868, -0.161868, 0.986812, 0, 0)`로 변했다. 따라서 이번 실제 renderer에서도 reduced-motion 중 spinner 회전이 유지됨을 확인했다. 진단 중 DevTools를 표시한 관측이며 pixel 비교는 아니다.
+
+고정 package의 `@seed-design/css/recipes/progress-circle.css`는 rotate 1.2s animation을 정의한다. 이는 source 근거이며 위 시간차 관측과 구분한다. 공식 동작을 그대로 보존했고 이번 UI에서 회전 정지 지원을 추가했다고 주장하지 않는다. 선행 PR #104 관측과도 일치한다.
+
+Native Quit으로 fixture를 정상 종료한 뒤 command exit 0, main PID 종료, 해당 임시 userData directory 부재와 worker Electron binary 경로의 잔여 process 없음을 확인했다. DevTools를 연 동안 Autofill protocol·Runtime agent 진단 경고가 있었지만 제품 auth 호출은 없었고 종료·정리 gate는 통과했다. 최종 상태에 실행 중인 fixture는 없다.
+
 ## 미검증·후속
 
-- GUI 검증 중 host 잠금으로 reduced-motion spinner의 최종 시간차 관측과 마지막 fixture 종료 정리 재검증이 보류됐다. 잠금 해제 후 이 절과 PR evidence를 갱신한다. 공식 loading에 reduced-motion 중 회전이 남았다는 선행 PR #104 관측을 이번 실행 결과로 대체하지 않는다.
 - 모든 상태×모든 viewport×모든 Theme의 전체 Cartesian matrix나 pixel 동등성을 주장하지 않는다. Button의 공식 loading 표현과 disabled는 구분하며 현재 화면은 둘을 함께 사용한다. 별도 page transition/Motion preset을 추가하지 않았다.
 - 실제 OAuth·계정 API·IPC·native protocol·OS credential 저장·capture 통합, 다른 OS/runtime/font는 후속이다. Synthetic fixture 성공은 제품 인증 검증이 아니다.
