@@ -14,7 +14,7 @@ import { assertCleared, counts, digest, fixture, proof, row } from './login-data
 import { bounded, settled } from './login-test-control.mjs'
 import { jwksUri, signingKey, tokenEndpoint, tokenResponse } from './google-fixtures.mjs'
 
-async function isolatedGoogle() {
+export async function isolatedGoogle() {
   const key = await signingKey()
   const wrongKey = await signingKey(key.kid)
   const subject = randomUUID()
@@ -99,7 +99,7 @@ async function isolatedGoogle() {
     },
   })
   return {
-    verifyProvider, plans, canaries, subject,
+    verifyProvider, plans, canaries, subject, origin,
     get keyEntered() { return keyEntered },
     get releaseKey() { return releaseKey },
     get calls() { return calls },
@@ -131,7 +131,7 @@ async function httpRuntime(source, verifyProvider, overrides = {}) {
   return { ...f, app, base, post }
 }
 
-async function prepare(runtime, google, mode = 'success', blocked = false) {
+export async function prepare(runtime, google, mode = 'success', blocked = false) {
   const verifier = opaque()
   const created = await runtime.post('/auth/login-requests', creation(proof(verifier)))
   assert.equal(created.status, 201)
@@ -159,7 +159,7 @@ async function prepare(runtime, google, mode = 'success', blocked = false) {
   return { request, verifier, plan, callback }
 }
 
-async function completion(flow, response, canaries) {
+export async function completion(flow, response, canaries) {
   assert.equal(response.status, 200)
   assert.equal(response.headers.get('cache-control'), 'no-store')
   const html = await response.text()

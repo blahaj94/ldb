@@ -14,7 +14,7 @@ const unusedLogin = Object.fromEntries(['create', 'authorize', 'callback', 'exch
   name, async () => { throw new Error('unrelated login route called') },
 ]))
 
-export async function withSearchApp(f, operation, overrides = {}) {
+export async function isolatedNeople() {
   const calls = []
   const sockets = new Set()
   const upstream = { status: 200, body: { rows: [] }, respond: undefined, start: undefined, failure: undefined }
@@ -42,8 +42,24 @@ export async function withSearchApp(f, operation, overrides = {}) {
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address()
+  return {
+    origin: `http://127.0.0.1:${port}`, calls, upstream,
+    close: async () => {
+      for (const socket of sockets) socket.destroy()
+      await new Promise((resolve, reject) => server.close((error) => {
+        const hasError = error != null
+        if (hasError) reject(error)
+        else resolve()
+      }))
+    },
+  }
+}
+
+export async function withSearchApp(f, operation, overrides = {}) {
+  const neople = await isolatedNeople()
+  const { calls, upstream } = neople
   const adapter = createNeopleCharacterSearchForTest('synthetic-search-key', {
-    fetch, origin: `http://127.0.0.1:${port}`,
+    fetch, origin: neople.origin,
   })
   const searchCharacters = (input) => {
     upstream.start?.()
@@ -61,12 +77,7 @@ export async function withSearchApp(f, operation, overrides = {}) {
     return result
   } finally {
     await app.close()
-    for (const socket of sockets) socket.destroy()
-    await new Promise((resolve, reject) => server.close((error) => {
-      const hasError = error != null
-      if (hasError) reject(error)
-      else resolve()
-    }))
+    await neople.close()
   }
 }
 
