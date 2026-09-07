@@ -4,11 +4,13 @@ import { LoginFailure } from '../../errors/login.js'
 import type { LoginErrorDefinition } from '../../types/login.js'
 import type { LogoutErrorDefinition } from '../logout/errors.js'
 import type { RefreshErrorDefinition } from '../refresh/errors.js'
+import type { AccountErrorDefinition } from '../account/errors.js'
 
 type AuthJsonErrorCatalogEntry =
   | LoginErrorDefinition
   | LogoutErrorDefinition
   | RefreshErrorDefinition
+  | AccountErrorDefinition
 
 type AuthJsonErrorDefinition = Readonly<{
   status: AuthJsonErrorCatalogEntry['status']
@@ -46,7 +48,11 @@ export function loginJsonParser(request: Request, response: Response, next: Next
     '/auth/refresh',
     '/auth/logout',
   ].includes(path)
-  const shouldParseAuthJson = isPost && isAuthJsonPath
+  const isAuthPost = isPost && isAuthJsonPath
+  const isPatch = request.method === 'PATCH'
+  const isNicknamePath = path === '/me/nickname'
+  const isNicknamePatch = isPatch && isNicknamePath
+  const shouldParseAuthJson = isAuthPost || isNicknamePatch
   if (!shouldParseAuthJson) {
     next()
     return

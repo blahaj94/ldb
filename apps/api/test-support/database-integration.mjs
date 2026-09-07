@@ -8,6 +8,7 @@ import { assertLoginConcurrency } from './login-concurrency.mjs'
 import { assertLoginFailures } from './login-failures.mjs'
 import { assertLoginHttpIntegration } from './login-http-integration.mjs'
 import { assertSessionHttpIntegration } from './session-http-integration.mjs'
+import { assertAccountHttpIntegration } from './account-http-integration.mjs'
 import { assertGoogleHttpIntegration } from './google-http-integration.mjs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
@@ -474,6 +475,10 @@ async function primaryScenario() {
     const stateMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, assertLoginRequestStateMatrix)
     process.stdout.write(`AuthLoginRequest matrix: ${stateMatrix.accepted} accepted, ${stateMatrix.rejected} rejected\n`)
     currentStage = 'identity session module'
+    const accountFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertAccountHttpIntegration(source, (part) => (currentStage = `account HTTP ${part}`)),
+    )
+    process.stdout.write(`Account HTTP/database/JWT: ${accountFlows} scenarios; Node ${process.version}; Unicode ${process.versions.unicode}; ICU ${process.versions.icu}\n`)
     const identityMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
       assertIdentitySessions(source, (part) => (currentStage = `identity session ${part}`)),
     )
