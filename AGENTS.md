@@ -40,5 +40,37 @@
 ## Security and writing
 
 - secret, token, credential, 개인정보를 code, Issue, PR, log, Markdown에 기록하지 않는다.
-- document 본문은 한국어로 작성하고 technical term은 English를 사용한다.
 - source 위치는 file path로만 참조하고 쉽게 낡는 line number는 기록하지 않는다.
+
+### 작성 기준
+
+아래 제안이 활성화되기 전에는 document 본문을 한국어로 작성하고 technical term은 English로 사용하는 기존 기준을 유지한다. 제안의 활성화와 기존 기준의 대체는 [`change-control.md`](docs/rules/change-control.md#approval-evidence)의 Draft PR 승인 절차를 따른다. 기존 승인·검증·보안 의무는 유지한다.
+
+#### 사람이 읽는 설명 작성 기준 (제안)
+
+사용자에게 보내는 답변과 문서 본문, Issue·PR·인계 설명에 적용할 변경안이다.
+
+```yaml
+status: proposed
+enforcement: warning
+rationale: 불필요한 영어 작업 분류와 압축 표현을 줄여 사용자가 한 번에 이해할 수 있게 한다.
+evidence: "Issue #122: 영어 검토 보고와 여러 조건을 한 줄에 압축한 완료 조건을 읽기 어렵다는 사용자 피드백. https://github.com/blahaj94/ldb/issues/122"
+exceptions: 정확한 식별자·명령어·schema field와 확인에 필요한 원문은 그대로 유지한다.
+review-after: 승인 후 실제 답변·Issue·PR·인계 설명 중 3건을 작성했거나 사용자가 다시 읽기 어렵다고 지적하면, 해당 사례를 바탕으로 기준과 예시를 재검토한다.
+```
+
+- 설명 수준은 질문과 대화 맥락에 맞춘다. 이미 이해한 개념은 반복해서 풀이하지 않는다.
+- 본문은 자연스러운 한국어로 쓴다. 익숙한 개발 용어는 유지하고 불필요한 영어 작업 분류나 압축 표현은 풀어 쓴다.
+- 결론이나 기대하는 변화를 먼저 말하고, 이해와 판단에 필요한 근거를 이어서 설명한다.
+- 완료 조건은 구체적인 상황과 기대하는 결과를 짝지어 쓴다. 독립된 조건은 문장이나 항목을 나눈다.
+- 짧게 쓰더라도 중요한 조건과 순서, 실패 가능성은 생략하지 않는다.
+- 확인한 사실과 추정을 구분하고, 확인하지 않은 결과를 확정해서 말하지 않는다.
+- 뜻이 확인되지 않은 내부 용어는 의미를 지어내지 않는다. 필요한 원문을 유지하고 확인이 필요한 부분을 밝힌다.
+- code 식별자·명령어·schema field와 검증에 필요한 식별자는 정확히 유지한다.
+
+아래 예시는 표현을 비교하며 제품 동작이나 기존 Issue의 완료 조건을 새로 정하지 않는다.
+
+| 수정 전 | 수정 후 |
+| --- | --- |
+| `consequential finding 없음` | 이번 검토에서는 수정이 필요한 중요한 문제를 발견하지 못했습니다. |
+| 알림 발행 당시의 snapshot 유지 | 알림에는 알림을 발행한 시점의 상태를 담는다. |

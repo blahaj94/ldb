@@ -79,7 +79,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - `AGENTS.md`는 약 150줄, 개별 Rule document는 약 250줄을 soft budget으로 사용한다.
 - soft budget을 넘으면 정보를 삭제하지 않고 topic별로 분리하고 이 index에서 routing한다.
 - Source 위치는 file path로만 기록한다. Line number는 사용하지 않는다.
-- 본문은 한국어, technical term은 English로 작성한다.
+- 언어와 설명 작성 기준은 [`AGENTS.md`의 작성 기준](../AGENTS.md#작성-기준)을 따른다.
 - secret, token, credential, 개인정보를 기록하지 않는다.
 - Obsidian은 논의와 기록을 위한 공간이며 repository document를 대체하지 않는다.
 
