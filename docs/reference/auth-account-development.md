@@ -12,7 +12,7 @@ Contract는 `docs/rules/auth-api.md`, `docs/rules/auth-activity.md`, `docs/rules
 
 ## 입력과 응답 경계
 
-`apps/api/src/auth/account/http.ts`의 controller는 원본 `rawHeaders`를 account service에 전달한다. Service는 정확히 하나의 Authorization Bearer 값을 기존 verifier에 전달한다. Body/query의 token·user/session ID는 자격으로 사용하지 않는다. `HEAD /me`는 GET fallback으로 활동을 기록하지 않고 거절한다.
+`apps/api/src/auth/account/http.ts`의 controller는 원본 `rawHeaders`를 account service에 전달한다. Service는 정확히 하나의 Authorization Bearer 값을 기존 verifier에 전달한다. Body/query의 token·user/session ID는 자격으로 사용하지 않는다. 같은 파일의 private `assertAccountGet(method): void`가 Express의 HEAD→GET fallback을 service 호출 전에 차단해 `HEAD /me`의 활동 기록을 막는다. 검사와 기존 `AccountFailure(INVALID_REQUEST)` throw를 묶으며 로그인 오류 정책과 합치지 않는다.
 
 PATCH는 기존 `apps/api/src/auth/login/json-parser.ts`의 media/encoding 검사, 실제 stream 16,384-byte 상한, strict UTF-8와 JSON parser를 먼저 거친다. 이후 JWT를 검증하고 정확한 `{ nickname }` object와 domain을 확인한다. 구조 오류는 `INVALID_AUTH_REQUEST`, nickname 값 오류는 `INVALID_NICKNAME`이다. 두 endpoint의 성공 응답은 `{ user: { id, nickname } }`만 포함하며 모든 성공·오류는 no-store JSON이다. Filter는 `/me`의 GET 오류를 browser login HTML과 구분한다.
 
@@ -29,12 +29,13 @@ PATCH는 기존 `apps/api/src/auth/login/json-parser.ts`의 media/encoding 검�
 
 ## 검증 근거와 실행 경계
 
-`apps/api/test-support/account-nickname.test.mjs`는 raw controls·lone surrogate·빈 값·grapheme 경계와 emoji·결합문자·내부 공백 보존을 검증한다. `account-http.test.mjs`는 JWT 이전 transport 거절, field 이전 JWT 거절, GET JSON 오류, 종료 chunk 이전 즉시 overflow 응답을 검증한다. Content-Length와 Transfer-Encoding 충돌은 Node HTTP framing 거절로 따로 검사하며 제품 JSON 오류로 해석하지 않는다.
+`apps/api/test-support/account-nickname.test.mjs`는 raw controls·lone surrogate·빈 값·grapheme 경계와 emoji·결합문자·내부 공백 보존을 검증한다. `account-http.test.mjs`는 HEAD의 verifier·DB 호출 차단, JWT 이전 transport 거절, field 이전 JWT 거절, GET JSON 오류, 종료 chunk 이전 즉시 overflow 응답을 검증한다. Content-Length와 Transfer-Encoding 충돌은 Node HTTP framing 거절로 따로 검사하며 제품 JSON 오류로 해석하지 않는다.
 
-`account-http-fixtures.mjs`는 기존 identity/session fixture와 실제 JWT issuer/verifier를 재사용한다. `account-http-integration.mjs`의 49개 scenario가 기존 `database-integration.mjs`의 Docker-only disposable 수명주기와 Migration에 연결된다.
+`account-http-fixtures.mjs`는 기존 identity/session fixture와 실제 JWT issuer/verifier를 재사용한다. `account-http-integration.mjs`의 50개 scenario가 기존 `database-integration.mjs`의 Docker-only disposable 수명주기와 Migration에 연결된다. HEAD characterization은 assertion 추출 전 기존 구현에서 먼저 통과를 확인했다.
 
 | 검증 경계 | Evidence |
 | --- | --- |
+| HEAD fallback | 유효 JWT의 `HEAD /me`에서 400·no-store·빈 body와 user/session/token snapshot 불변을 확인하고 같은 JWT의 GET 성공·활동 갱신으로 자격 유효성도 확인 |
 | 정상·입력 거절 | 실제 HTTP/DB profile projection, Unicode 저장, 중복·반복 변경, single Bearer, query-only 자격 거절, 구조/domain 거절 후 전체 user/session/token snapshot 불변 |
 | 정확한 만료 | 실제 DB clock statement 응답을 고정한 JWT/idle equality 거절, 기능 단계 JWT 경과 허용과 새 idle equality 거절 |
 | 실제 lock 대기 | User/session 각각 외부 PostgreSQL lock을 가진 동안 HTTP transaction의 다른 backend PID가 `pg_blocking_pids()`에서 대기함을 관측. 실제 DB clock이 JWT/idle deadline에 도달한 뒤 해제하여 최초 활동 없이 401 |
