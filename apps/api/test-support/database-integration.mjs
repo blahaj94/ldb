@@ -9,6 +9,7 @@ import { assertLoginFailures } from './login-failures.mjs'
 import { assertLoginHttpIntegration } from './login-http-integration.mjs'
 import { assertSessionHttpIntegration } from './session-http-integration.mjs'
 import { assertAccountHttpIntegration } from './account-http-integration.mjs'
+import { assertCharacterSearchHttpIntegration } from './character-search-http-integration.mjs'
 import { assertGoogleHttpIntegration } from './google-http-integration.mjs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
@@ -474,6 +475,11 @@ async function primaryScenario() {
     currentStage = 'AuthLoginRequest state matrix'
     const stateMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, assertLoginRequestStateMatrix)
     process.stdout.write(`AuthLoginRequest matrix: ${stateMatrix.accepted} accepted, ${stateMatrix.rejected} rejected\n`)
+    currentStage = 'authenticated character search'
+    const searchFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertCharacterSearchHttpIntegration(source, (part) => (currentStage = `character search ${part}`)),
+    )
+    process.stdout.write(`Character search HTTP/database/JWT/upstream: ${searchFlows} scenarios\n`)
     currentStage = 'identity session module'
     const accountFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
       assertAccountHttpIntegration(source, (part) => (currentStage = `account HTTP ${part}`)),

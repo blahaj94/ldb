@@ -4,6 +4,10 @@ import type { ArgumentsHost, ExceptionFilter, INestApplication } from '@nestjs/c
 import { NestFactory } from '@nestjs/core'
 import type { Request, Response } from 'express'
 import { LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
+import { createAuthenticatedSearchService } from '../../characters/authenticated-search.js'
+import { CHARACTER_SEARCH_SERVICE, CharacterSearchController } from '../../characters/http.js'
+import type { AuthenticatedSearchDependencies } from '../../characters/types.js'
+import { NeopleSearchFailure, neopleSearchFailure } from '../../errors/neople-search.js'
 import { LoginFailure, loginFailure } from '../../errors/login.js'
 import type { AuthProvider } from '../../types/auth.js'
 import type { LoginHttpService, SessionHttpService } from '../../types/login.js'
@@ -70,14 +74,22 @@ class LoginHttpFilter implements ExceptionFilter {
     const context = host.switchToHttp()
     const request = context.getRequest<Request>()
     const response = context.getResponse<Response>()
-    const failure = authHttpFailure(error)
-
     if (response.headersSent) {
       response.end()
       return
     }
 
     const path = request.path.toLowerCase().replace(/\/+$/, '')
+    const isSearchPath = path === '/characters'
+    if (isSearchPath) {
+      const isSearchFailure = error instanceof NeopleSearchFailure
+      const failure = isSearchFailure ? error : neopleSearchFailure('internal')
+      const hasRetryAfter = failure.retryAfter != null
+      if (hasRetryAfter) response.setHeader('Retry-After', String(failure.retryAfter))
+      response.status(failure.status).json(failure.body)
+      return
+    }
+    const failure = authHttpFailure(error)
     const isAccountPath = path === '/me' || path === '/me/nickname'
     const isGet = request.method === 'GET'
     const shouldRenderHtml = isGet && !isAccountPath
@@ -189,19 +201,25 @@ export async function createLoginHttpApp(
   service: LoginHttpService,
   sessionService?: SessionHttpService,
   accountDependencies?: AccountDependencies,
+  searchDependencies?: AuthenticatedSearchDependencies,
 ): Promise<INestApplication> {
   const hasSessionService = sessionService != null
   const hasAccountDependencies = accountDependencies != null
+  const hasSearchDependencies = searchDependencies != null
   const controllers = [
     LoginController,
     ...(hasSessionService ? [SessionController] : []),
     ...(hasAccountDependencies ? [AccountController] : []),
+    ...(hasSearchDependencies ? [CharacterSearchController] : []),
   ]
   const providers = [
     { provide: LOGIN_SERVICE, useValue: service },
     ...(hasSessionService ? [{ provide: SESSION_SERVICE, useValue: sessionService }] : []),
     ...(hasAccountDependencies ? [{
       provide: ACCOUNT_SERVICE, useValue: createAccountService(accountDependencies),
+    }] : []),
+    ...(hasSearchDependencies ? [{
+      provide: CHARACTER_SEARCH_SERVICE, useValue: createAuthenticatedSearchService(searchDependencies),
     }] : []),
   ]
 
