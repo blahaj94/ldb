@@ -27,6 +27,21 @@ review-after: 최초 engine·peer·ESM·DB validation 또는 승인된 version �
 
 Registry의 고정 version 근거: [@nestjs/typeorm](https://registry.npmjs.org/%40nestjs%2Ftypeorm/12.0.1), [typeorm](https://registry.npmjs.org/typeorm/1.1.1), [pg](https://registry.npmjs.org/pg/8.23.0), [jose](https://registry.npmjs.org/jose/6.2.12). 이 문서는 #39의 dated evidence를 옮겼으며 새 metadata 확인·설치/build/DB 검증을 수행했다는 뜻이 아니다. 구현 시 engine/peer와 실제 compiled ESM compatibility를 검증해야 한다. TypeORM 0.3 또는 Nest 통합 없이 DataSource 주입은 비용을 다시 비교할 대안이며 실패를 피하려 임의 채택하지 않는다.
 
+### 제안: 요청별 PostgreSQL 연결의 TypeScript 정의
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 기존 pg Client의 연결·종료 API를 TypeScript에서 직접 사용할 때 필요한 type을 명시한다.
+evidence: "Issue #117의 사용자 선택 A; 이 절의 Draft PR 명시 승인 대기"
+exceptions: 선택만으로 dependency 설치나 선택에 의존하는 구현을 허용하지 않는다.
+review-after: Node 24·TypeScript 5.9 compiled ESM과 실제 연결 취소 검증 완료 시
+```
+
+[Issue #117](https://github.com/blahaj94/ldb/issues/117)의 요청별 연결 선택에 필요한 **Development dependency `@types/pg 8.23.1`** 추가를 제안한다. 역할은 기존 `pg 8.23.0`의 `Client` 설정·연결·종료 API type이며 runtime driver의 version·역할이나 transaction·검색 deadline 정책을 변경하지 않는다. 승인 전에는 위 승인된 직접 dependency 목록에 포함하지 않는다.
+
+[고정 version metadata](https://registry.npmjs.org/@types/pg/8.23.1)의 dependency는 `@types/node`, `pg-types`, `pg-protocol`이다. 기존 Node 24·TypeScript 5.9·pg 8.23.0 조합의 compile·ESM 연결과 TypeORM 1.1.1 QueryRunner 접합·실제 취소 검증은 승인 후 확인하며, type package 선택 자체를 compatibility 성공으로 표시하지 않는다. 상세 구현 선택과 비용·검증 evidence는 Issue와 PR에서 관리한다.
+
 로컬 DB는 승인된 기존 경계대로 Docker만 허용한다. PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상태는 아래 구간만 canonical source로 사용한다.
 
 ## PostgreSQL 선택과 Docker 검증
