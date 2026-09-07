@@ -46,7 +46,9 @@ async function setup(): Promise<IpcFixture> {
     getWindow: () => currentWindow,
     documentUrl: DOCUMENT_URL
   })
-  const handlers = new Map<string, Handler>(electron.handle.mock.calls)
+  const handlers = new Map<string, Handler>(
+    electron.handle.mock.calls.map(([channel, handler]) => [channel, handler])
+  )
   function invoke(channel: string, args: unknown[] = [], sender = event): Promise<unknown> {
     const handler = handlers.get(channel)
     const hasHandler = handler != null
