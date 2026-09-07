@@ -3,6 +3,7 @@ import { assertIdentitySessions } from './identity-session.mjs'
 import { assertRefreshRotation } from './refresh-rotation.mjs'
 import { assertRefreshConcurrency } from './refresh-concurrency.mjs'
 import { assertRefreshFailures } from './refresh-failures.mjs'
+import { assertAuthenticationCleanup } from './cleanup-database.mjs'
 import { assertCommonLogin } from './login-database.mjs'
 import { assertLoginConcurrency } from './login-concurrency.mjs'
 import { assertLoginFailures } from './login-failures.mjs'
@@ -465,6 +466,12 @@ async function primaryScenario() {
     assert.equal(migratedShow.stdout, 'Database migrations current\n')
     assert.equal(migratedShow.stderr, '')
     checkSignal()
+
+    currentStage = 'authentication cleanup'
+    const cleanupScenarios = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
+      assertAuthenticationCleanup(source, resources.configuration, (part) => (currentStage = `authentication cleanup ${part}`)),
+    )
+    process.stdout.write(`Authentication cleanup: ${cleanupScenarios} scenarios\n`)
 
     currentStage = 'schema catalog verification'
     await withDataSource(createDatabaseDataSource, resources.configuration, (dataSource) =>

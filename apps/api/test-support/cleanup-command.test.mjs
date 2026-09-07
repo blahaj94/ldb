@@ -4,10 +4,11 @@ import { readFile } from 'node:fs/promises'
 import process from 'node:process'
 import { test } from 'node:test'
 import { URL } from 'node:url'
+import { bounded } from './login-test-control.mjs'
 
 const load = () => import('../dist/auth/cleanup/command.js')
 
-for (const stage of ['success', 'factory', 'initialize', 'cleanup', 'destroy', 'partial initialize']) {
+for (const stage of ['success', 'factory', 'initialize', 'cleanup', 'destroy', 'partial initialize', 'partial disconnect']) {
   test(`one-shot owns and closes connections: ${stage}`, async () => {
     const { runAuthenticationCleanup } = await load()
     const calls = []
@@ -16,7 +17,7 @@ for (const stage of ['success', 'factory', 'initialize', 'cleanup', 'destroy', '
       isInitialized: false,
       initialize: async () => {
         calls.push('initialize')
-        const hasPartialFailure = stage === 'partial initialize'
+        const hasPartialFailure = stage === 'partial initialize' || stage === 'partial disconnect'
         const hasInitializeFailure = stage === 'initialize'
         if (hasPartialFailure || hasInitializeFailure) fail()
         source.isInitialized = true
@@ -32,7 +33,11 @@ for (const stage of ['success', 'factory', 'initialize', 'cleanup', 'destroy', '
         if (shouldFail) fail()
         source.isInitialized = false
       },
-      driver: { disconnect: async () => { calls.push('disconnect') } },
+      driver: { disconnect: async () => {
+        calls.push('disconnect')
+        const shouldFail = stage === 'partial disconnect'
+        if (shouldFail) fail()
+      } },
     }
     const run = runAuthenticationCleanup(() => {
       calls.push('factory')
@@ -49,12 +54,39 @@ for (const stage of ['success', 'factory', 'initialize', 'cleanup', 'destroy', '
       return true
     })
     const failedBeforeSource = stage === 'factory'
-    const failedBeforeInitialized = stage === 'initialize' || stage === 'partial initialize'
+    const failedBeforeInitialized = stage === 'initialize' || stage === 'partial initialize' || stage === 'partial disconnect'
     if (failedBeforeSource) assert.deepEqual(calls, ['factory'])
     else if (failedBeforeInitialized) assert.deepEqual(calls, ['factory', 'initialize', 'disconnect'])
     else assert.deepEqual(calls, ['factory', 'initialize', 'destroy'])
   })
 }
+
+test('one-shot reports success only after owned connections finish closing', async () => {
+  const { runAuthenticationCleanup } = await load()
+  const closing = Promise.withResolvers()
+  const release = Promise.withResolvers()
+  const source = {
+    isInitialized: true,
+    initialize: async () => undefined,
+    query: async () => [],
+    destroy: async () => {
+      closing.resolve()
+      await release.promise
+    },
+  }
+  let returned = false
+  const pending = runAuthenticationCleanup(() => source).then((result) => {
+    returned = true
+    return result
+  })
+  try {
+    await bounded(closing.promise)
+    assert.equal(returned, false)
+  } finally {
+    release.resolve()
+  }
+  assert.deepEqual(await pending, { sessionsDeleted: 0, loginRequestsDeleted: 0 })
+})
 
 test('compiled command rejects absent DB configuration without exposing values or stack', () => {
   const result = spawnSync(process.execPath, ['--import', 'reflect-metadata', 'dist/auth/cleanup/cli.js'], {

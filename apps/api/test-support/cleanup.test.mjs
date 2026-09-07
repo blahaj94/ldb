@@ -28,7 +28,7 @@ for (const [name, patch, expected] of [
   ['consumed', { status: 'consumed' }, 1],
   ['failed', { status: 'failed' }, 1],
   ['valid exchange', { status: 'exchange_ready', codeExpiresAt: new Date(checkedAt.getTime() + 1000) }, 0],
-  ['expired code with valid request TTL', { status: 'exchange_ready', codeExpiresAt: checkedAt }, 1],
+  ['expired code remains until request TTL or terminal transition', { status: 'exchange_ready', codeExpiresAt: checkedAt }, 0],
 ]) {
   test(`cleanup OAuth eligibility: ${name}`, async () => {
     const { cleanupAuthentication } = await load()
