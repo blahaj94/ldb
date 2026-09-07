@@ -33,7 +33,7 @@ Registry의 고정 version 근거: [@nestjs/typeorm](https://registry.npmjs.org/
 status: proposed
 enforcement: approval-required
 rationale: 기존 pg Client의 연결·종료 API를 TypeScript에서 직접 사용할 때 필요한 type을 명시한다.
-evidence: "Issue #117의 사용자 선택 A; 이 절의 Draft PR 명시 승인 대기"
+evidence: "사용자 선택 기록: https://github.com/blahaj94/ldb/issues/117#issuecomment-5570211777 ; 이 절의 Draft PR 명시 승인 대기"
 exceptions: 선택만으로 dependency 설치나 선택에 의존하는 구현을 허용하지 않는다.
 review-after: Node 24·TypeScript 5.9 compiled ESM과 실제 연결 취소 검증 완료 시
 ```
