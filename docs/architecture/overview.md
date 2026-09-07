@@ -33,13 +33,13 @@ scripts/
 
 현재 workspace·app boundary와 API runtime·검증 기반이 승인됐다. 검색의 입력·응답·오류·계정 제한은 [`../rules/character-search.md`](../rules/character-search.md)를 따른다. 근거는 [PR #42 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)이다. 인증·핵심 DB·서버 통신의 추가 승인 범위는 아래 Authentication boundary contract를 따른다.
 
-PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상태·evidence는 [`../rules/auth-runtime.md`](../rules/auth-runtime.md)의 PostgreSQL 선택 구간만 따른다. 선택 승인은 실제 dependency/ESM/DB/platform compatibility 검증이나 운영 architecture를 확정하지 않는다. 다음 사항은 아직 결정되지 않았다.
+PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상태·evidence는 [`../rules/auth-runtime.md`](../rules/auth-runtime.md)의 PostgreSQL 선택 구간만 따른다. 그 선택 승인만으로 실제 dependency/ESM/DB/platform compatibility 검증이나 구체 운영 image/volume을 확정하지 않는다. 인증 운영 설계의 추가 승인은 아래 Authentication boundary contract를 따르며, 다음 사항은 구체 결정·확보 또는 검증이 남아 있다.
 
-- PostgreSQL 운영 deployment·volume·backup/restore 절차
+- 승인된 인증 운영 설계에 필요한 실제 장비·volume·backup/restore 실행 검증
 - Web/mobile client, 실제 Desktop 지원 OS·배포 identity·callback/protocol 등록값 및 native 저장/복귀 검증
 - 아래 Shared UI boundary 제안 이외의 shared package 종류와 dependency direction
 - 승인된 탈퇴·삭제/재가입·백업 복원 정책의 실제 저장소·권한·provider·실행 검증 gate
-- Production deployment topology
+- 승인된 인증 운영 배치 외의 Production deployment topology
 
 미정 사항을 구현해야 하면 AI는 임의로 architecture를 확정하지 않고 사용자에게 대안과 trade-off를 제시한다.
 
@@ -49,9 +49,9 @@ PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상
 
 위 승인은 서버 인증/DB contract 범위다. 추가로 [PR #60 사용자 승인](https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475)으로 Desktop main/IPC/화면, 인증 lifecycle, OS 저장·protocol 설계가 승인됐다. Canonical contract는 [`../rules/desktop-auth.md`](../rules/desktop-auth.md), [`../rules/desktop-auth-lifecycle.md`](../rules/desktop-auth-lifecycle.md), [`../rules/desktop-auth-platform.md`](../rules/desktop-auth-platform.md)다.
 
-탈퇴 D1–D5의 정책은 [승인된 탈퇴 contract](../rules/auth-withdrawal-proposal.md)를 따른다. 실제 배치·독립 journal/witness·권한·보관은 [인증 운영 구성 제안](auth-operations-proposal.md), 복원 순서의 실행 조건과 장애 matrix는 [운영 검증 제안](auth-operations-validation-proposal.md)에서 proposed로 검토한다.
+탈퇴 D1–D5의 정책은 [승인된 탈퇴 contract](../rules/auth-withdrawal-proposal.md)를 따른다. [PR #132 사용자 승인](https://github.com/blahaj94/ldb/pull/132#issuecomment-5572391826)으로 추천 3대 배치·독립 journal/witness·권한·보관의 [인증 운영 구성](auth-operations-proposal.md)과 복원 실행 조건·장애 matrix의 [운영 검증 기준](auth-operations-validation-proposal.md)이 active Rule이 됐다. `age`는 도입 후보 방향만 승인됐으며 exact version/binary와 실제 환경·운영 검증은 남아 있다.
 
-설계 승인은 현재 구현·검증 성공을 뜻하지 않는다. 아래 UI 제안과 별개인 shared package/import direction, Web/mobile client, 실제 Desktop 지원 OS·domain/protocol 등록값·native 검증, deployment topology와 탈퇴·복원의 실제 운영 환경/통합 검증은 미결정 gate를 유지한다. 별도 착수 지시 전에는 구현하지 않는다.
+설계 승인은 현재 구현·검증 성공을 뜻하지 않는다. 아래 UI 제안과 별개인 shared package/import direction, Web/mobile client, 실제 Desktop 지원 OS·domain/protocol 등록값·native 검증, 탈퇴·복원의 구체 운영 환경/통합 검증은 미결정 gate를 유지한다. PR merge·환경 확보·구현·실제 복원 검증을 설계 승인과 구분하며 별도 착수 지시 전에는 구현하지 않는다.
 
 ## Shared UI boundary
 

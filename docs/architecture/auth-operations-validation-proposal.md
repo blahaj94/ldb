@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: authentication operations recovery verification and failure response
 last-reviewed: 2026-09-07
 rationale: 삭제 보존 복원의 재개 조건과 실패 시 중단 증거를 실제 시험 가능한 형태로 연결한다.
-evidence: "Issue #130: https://github.com/blahaj94/ldb/issues/130 ; D1–D5 승인: https://github.com/blahaj94/ldb/pull/72#issuecomment-5557976162"
+evidence: "PR #132 설계 승인: https://github.com/blahaj94/ldb/pull/132#issuecomment-5572391826 ; D1–D5 승인: https://github.com/blahaj94/ldb/pull/72#issuecomment-5557976162"
 exceptions: 문서 검토용 계획이며 아래 runtime·DB·backup·key·provider 실행을 수행했거나 허가받았다는 뜻이 아니다.
-review-after: 구성 승인 또는 최초 장애/복원 시험과 저장소 변경 시
+review-after: 운영 환경 구체화 또는 최초 장애/복원 시험과 저장소 변경 시
 ---
 
-# 인증 운영 복원·검증 제안
+# 인증 운영 복원·검증 기준
 
-[운영 구성 제안](auth-operations-proposal.md)의 복구 담당은 각 단계의 증거를 확인한 뒤 다음 단계로 간다. 하나라도 불명확하면 유지보수 상태를 유지한다. 아래 순서는 [승인된 복원 순서](../rules/auth-withdrawal-proposal.md#삭제를-보존하는-복원-기준과-순서)를 운영 역할과 관측 결과에 연결하며 D1–D5를 새로 정하지 않는다.
+이 문서는 [PR #132의 사용자 승인](https://github.com/blahaj94/ldb/pull/132#issuecomment-5572391826)을 반영한 active Rule이며 승인 범위와 실행 경계는 [운영 구성](auth-operations-proposal.md)을 따른다. 복구 담당은 각 단계의 증거를 확인한 뒤 다음 단계로 간다. 하나라도 불명확하면 유지보수 상태를 유지한다. 아래 순서는 [승인된 복원 순서](../rules/auth-withdrawal-proposal.md#삭제를-보존하는-복원-기준과-순서)를 운영 역할과 관측 결과에 연결하며 D1–D5를 새로 정하지 않는다.
 
 ## 복원 순서와 재개 조건
 
@@ -79,7 +79,7 @@ review-after: 구성 승인 또는 최초 장애/복원 시험과 저장소 변�
 
 ## 기존 정책과의 정합성 확인표
 
-| Canonical 승인 정책 | 이 제안의 적용 |
+| Canonical 승인 정책 | 운영 설계의 적용 |
 | --- | --- |
 | D1: durable intent 자체가 확정, 응답 유실도 취소 불가 | B commit을 확정점으로 유지한다. 그 전 C reservation, 그 후 C 완료는 최신성 증거 protocol이며 사용자 확정점을 늦추지 않는다. |
 | D2: revoke 10초·retry 0, 실패/불명도 로컬 삭제 | 복구 시 재호출하지 않는다. Fencing의 remote 한계를 별도로 표시한다. |
@@ -92,6 +92,6 @@ review-after: 구성 승인 또는 최초 장애/복원 시험과 저장소 변�
 
 ## 문서 검증과 인계 증거
 
-이번 설계안에는 `git diff --check`, 변경 Markdown의 상대 링크 대상/anchor·fence·구조·diff scope 확인, 위 정합성 대조와 독립 1차·보안/architecture 최종 review가 필요하다. 실행 결과·revision·review finding은 Issue/PR에서 관리하며 이 문서에 완료 로그를 계속 누적하지 않는다.
+이 설계 문서의 변경에는 `git diff --check`, 변경 Markdown의 상대 링크 대상/anchor·fence·구조·diff scope 확인, 위 정합성 대조와 독립 1차·보안/architecture 최종 review가 필요하다. 실행 결과·revision·review finding은 Issue/PR에서 관리하며 이 문서에 완료 로그를 계속 누적하지 않는다.
 
 문서 검증에 app build/test·Docker·Migration·실제 backup/restore 성공을 섞지 않는다. 운영 검증 인계는 선택된 장비/권한·clock·binary revision, fault injection 위치, 기대/실제 결과, gate 상태·폐기 잔여를 구분한다. Source 위치는 file path로만 참조하고 실제 credential·개인식별 값은 포함하지 않는다.
