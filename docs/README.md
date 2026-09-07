@@ -98,6 +98,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/agent-runner.md`](rules/agent-runner.md): 실행 전담의 입력·job owner·완료 evidence·취소·retry·보고 계약
 - [`rules/agent-efficiency-proposal.md`](rules/agent-efficiency-proposal.md): PR #106에서 승인·canonical 반영된 제안 이력과 active Rule pointer. 별도 실행 authority 없음
 - [`architecture/overview.md`](architecture/overview.md): 현재 system boundary·Shared UI boundary 제안·peer/CSS 책임과 architecture approval 지점
+- [`architecture/auth-operations-proposal.md`](architecture/auth-operations-proposal.md): 인증·탈퇴의 자체 운영 배치·journal/witness·권한·보관 제안. 복원 순서·장애 대응과 미실행 matrix는 [`architecture/auth-operations-validation-proposal.md`](architecture/auth-operations-validation-proposal.md). 두 문서는 proposed이며 구현 authority 없음
 
 - [`rules/api-runtime.md`](rules/api-runtime.md): API runtime·dependency·build/test 계약
 - [`rules/character-search.md`](rules/character-search.md): 검색 query·응답·오류·계정 제한 계약
@@ -117,6 +118,8 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 | 탈퇴 재인증·삭제 상태/권한·재가입 경합·provider revoke·보관·백업 복원 | [`rules/auth-withdrawal-proposal.md`](rules/auth-withdrawal-proposal.md) |
 
 탈퇴 D1–D5는 [PR #72 사용자 승인](https://github.com/blahaj94/ldb/pull/72#issuecomment-5557976162)으로 확정됐다. Canonical file의 기존 path는 유지하며 active Rule로 관리한다. 정책 승인과 lifecycle/schema/API의 실제 구현·운영/복원 검증은 별개이고, 기존 login/refresh·초기 4-table 검증 AC를 소급 변경하지 않는다.
+
+배치·저장·backup·복원 환경을 검토할 때는 [인증 운영 구성 제안](architecture/auth-operations-proposal.md)과 [복원·검증 제안](architecture/auth-operations-validation-proposal.md)을 읽는다. 승인된 D1–D5의 변경안이 아니라 운영 선택의 proposed 문서다.
 
 ### Desktop authentication contract routing
 
