@@ -2,7 +2,7 @@
 type: reference
 status: active
 scope: desktop authentication capture integration and isolated media fixture
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 ---
 
 # Desktop Auth Capture
@@ -47,15 +47,19 @@ pnpm --filter @ldb/desktop capture:fixture
 
 Build는 기존 OCR assets 준비, fixture 전용 TypeScript 검사와 Electron Vite build를 포함한다. Output은 `apps/desktop/out/auth-capture-fixture/`다. 실제 앱 window title은 **LDB Auth Capture fixture**, 입력 창은 **LDB Synthetic Capture Source**다. 후자는 기존 `PARTY_SLOTS`·mana color를 사용한 1920×1080 canvas이며 실제 개인 화면을 입력으로 사용하지 않는다.
 
-수동 실행은 Google/Discord 버튼→앱 메뉴의 **Complete login**→**시작하기**→source 목록의 **LDB Synthetic Capture Source**→**Start** 순서다. 로그아웃 후 인식값과 capture UI가 사라지는지, 재로그인 뒤 source와 Start가 다시 필요한지 확인한다. 앱 메뉴의 **Quit LDB Auth Capture fixture**로 종료하면 임시 profile 삭제 여부를 출력한다. 기존 다른 Electron instance를 종료하지 않는다.
+수동 실행은 Google/Discord 버튼→앱 메뉴의 **Complete login**→**시작하기**→source 목록의 **LDB Synthetic Capture Source**→**Start** 순서다. 로그아웃 후 인식값과 capture UI가 사라지는지, 재로그인 뒤 source와 Start가 다시 필요한지 확인한다. 앱 메뉴의 **Quit LDB Auth Capture fixture**로 종료하면 임시 profile 삭제 여부를 출력한다. 삭제 또는 삭제 확인에 실패하면 고정된 cleanup FAIL과 exit 1로 종료하며 raw filesystem 오류를 출력하지 않는다. 기존 다른 Electron instance를 종료하지 않는다.
 
 통합 smoke는 실제 버튼·feature preload·main IPC·media·OCR를 검증하도록 구성됐지만, 현재 아래 native permission 경계 때문에 media 단계에서 통과하지 못한다. 별도 renderer 관측 wrapper는 native `getDisplayMedia`, Worker 생성/종료와 track stop을 그대로 호출하고 횟수·종료 상태만 수집한다. MediaStream이나 OCR 결과를 test double로 대체하지 않는다. 성공 판정에는 실제 stream, worker 초기화, synthetic nickname의 안정화 표시, logout 뒤 track/worker/video 정리와 재로그인 시 자동 capture 0이 필요하다. Raw nickname·credential·URL을 진단 출력으로 반환하지 않는다.
 
 Fixture constructor는 `sandbox:true`, `contextIsolation:true`, `nodeIntegration:false`를 고정한다. Product와 fixture의 preload는 동일 source의 CJS bundle이며 byte 동등성을 비교할 수 있다. Fixture의 `.cjs` 이름은 output 격리용이며 sandbox에서 다른 구현을 사용하는 우회가 아니다. CSP는 제품 entry와 같은 경계를 사용하고 webSecurity를 끄지 않는다. Network·native credential·provider·OS protocol은 사용하지 않는다.
 
+## 실제 UI 관측
+
+통합 head `7dd3b40a`에서 fixture build 후 macOS의 1100×800 dark UI를 CUA로 확인했다. SignedOut에는 capture가 없고 Google 대기→메뉴 Complete login→welcome에서도 capture가 없었다. 시작하기 뒤 기존 capture home에서 synthetic source를 선택하면 Start가 활성화됐다. Start는 현재 명시 차단에 따라 `Permission denied`를 표시했다. Logout 뒤 capture와 해당 안내가 사라졌고, 재로그인 welcome/home에는 빈 source와 비활성 Start가 표시됐다. Quit 메뉴 뒤 command exit 0·cleanup PASS·process 종료를 확인했다. 이 관측은 실제 stream/OCR 통합 성공이 아니다.
+
 ## Native media와 독립 OCR의 관측 구분
 
-Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercontent.com/electron/electron/v39.8.10/shell/browser/web_contents_permission_helper.cc)는 `getDisplayMedia`와 legacy desktop `getUserMedia`를 모두 `media` permission 및 빈 `mediaTypes`로 전달한다. 이 빈 배열만 허용하면 legacy 경로가 display handler의 source·gesture 검사를 우회할 수 있다. 허용 경계를 확정하기 전까지 제품 기본 entry와 현재 fixture는 permission check/request를 모두 거절한다. Renderer API monkey patch나 CSP/webSecurity 완화로 이 차이를 숨기지 않는다.
+Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercontent.com/electron/electron/v39.8.10/shell/browser/web_contents_permission_helper.cc)는 `getDisplayMedia`와 legacy desktop `getUserMedia`를 모두 `media` permission 및 빈 `mediaTypes`로 전달한다. 이 빈 배열만 허용하면 legacy 경로가 display handler의 source·gesture 검사를 우회할 수 있다. 통제된 fixture에 한정한 [media 검증 허용안](../rules/desktop-capture-media-fixture-proposal.md)은 아직 `proposed`이며 실행 권한이 아니다. 허용 경계를 확정하기 전까지 제품 기본 entry와 현재 fixture는 permission check/request를 모두 거절한다. Renderer API monkey patch나 CSP/webSecurity 완화로 이 차이를 숨기지 않는다.
 
 첫 native 관측에서 auth·sandbox·synthetic source 열거/선택은 진행됐고 host screen permission은 `granted`였다. Native media 요청은 `NotAllowedError`, 실제 stream 0·worker 0으로 종료됐으며 profile cleanup은 확인했다. OS 권한이 있다는 사실을 앱의 capture 경계 검증 완료로 해석하지 않는다. `capture:fixture:smoke`의 통합 media 성공은 현재 미완료다.
 
@@ -64,7 +68,7 @@ Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercont
 ## 검증과 제한
 
 ```sh
-pnpm --filter @ldb/desktop exec vitest run src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
+pnpm --filter @ldb/desktop exec vitest run scripts/auth-capture-fixture/main.test.ts src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
 pnpm --filter @ldb/desktop run --sequential '/^(test|lint|build)$/'
 git diff --check
 ```
