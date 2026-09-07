@@ -2,11 +2,7 @@
 import { act, useEffect, type JSX } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi, type Mocked } from 'vitest'
-import type {
-  AuthSnapshot,
-  AuthCommandResult,
-  AuthApi
-} from '../../../../preload/common/types/auth'
+import type { AuthSnapshot, AuthCommandResult, AuthApi } from '../../../preload/common/types/auth'
 import { useAuthBridge } from './useAuthBridge'
 
 function snapshot(revision: number, runId = 'run-one'): AuthSnapshot {
@@ -186,6 +182,8 @@ it('runId 변경은 기존 구독을 버리고 새 조회로 기준을 세우며
   fixture.api.getAuthState.mockReturnValue(query.promise)
   await act(async () => fixture.emit(snapshot(0, 'run-two')))
 
+  expect(current.snapshot).toBeNull()
+  expect(current.commandPending).toBe(false)
   expect(fixture.api.onAuthStateChanged).toHaveBeenCalledTimes(2)
   expect(fixture.api.getAuthState).toHaveBeenCalledTimes(2)
   expect(fixture.listeners.size).toBe(1)
