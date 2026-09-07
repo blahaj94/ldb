@@ -20,7 +20,7 @@ const rendererUrl = 'file:///fixture/index.html'
 const sources = [{ id: 'window:fixture', name: 'Synthetic capture window' }]
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
 type MediaHandler = (
-  request: Electron.DisplayMediaRequest,
+  request: Electron.DisplayMediaRequestHandlerHandlerRequest,
   callback: (result: unknown) => void
 ) => void
 
@@ -30,7 +30,9 @@ async function setup(signedIn = true): Promise<{
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
   event: IpcMainInvokeEvent
   mainFrame: { url: string; isDestroyed: () => boolean }
-  requestMedia: (changes?: Partial<Electron.DisplayMediaRequest>) => Promise<unknown>
+  requestMedia: (
+    changes?: Partial<Electron.DisplayMediaRequestHandlerHandlerRequest>
+  ) => Promise<unknown>
 }> {
   const harness = createAuthHarness()
   if (signedIn) harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
@@ -41,6 +43,7 @@ async function setup(signedIn = true): Promise<{
   const mainFrame = { url: rendererUrl, isDestroyed: () => false }
   const webContents = {
     mainFrame,
+    on: vi.fn(),
     isDestroyed: () => false,
     session: {
       setDisplayMediaRequestHandler: (handler: MediaHandler) => {
@@ -50,8 +53,8 @@ async function setup(signedIn = true): Promise<{
   }
   const window = { webContents, isDestroyed: () => false, on: vi.fn() }
   // 기존 entry의 허용 인자만 확장하며 테스트에서 실제 coordinator를 전달한다.
-  Reflect.apply(registerCaptureIpc, undefined, [auth])
-  Reflect.apply(registerCaptureWindow, undefined, [window as unknown as BrowserWindow, rendererUrl])
+  registerCaptureIpc(auth)
+  registerCaptureWindow(window as unknown as BrowserWindow, rendererUrl)
   const handlers = new Map<string, Handler>()
   for (const [channel, handler] of electron.handle.mock.calls) handlers.set(channel, handler)
   const event = { sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent
@@ -61,7 +64,9 @@ async function setup(signedIn = true): Promise<{
     if (!hasHandler) throw new Error('Capture handler was not registered')
     return Promise.resolve().then(() => handler(event, ...args))
   }
-  const requestMedia = (changes: Partial<Electron.DisplayMediaRequest> = {}): Promise<unknown> => {
+  const requestMedia = (
+    changes: Partial<Electron.DisplayMediaRequestHandlerHandlerRequest> = {}
+  ): Promise<unknown> => {
     const request = {
       frame: mainFrame,
       videoRequested: true,
@@ -70,7 +75,7 @@ async function setup(signedIn = true): Promise<{
       ...changes
     }
     return new Promise<unknown>((resolve) =>
-      mediaHandler?.(request as Electron.DisplayMediaRequest, resolve)
+      mediaHandler?.(request as Electron.DisplayMediaRequestHandlerHandlerRequest, resolve)
     )
   }
   return { auth, harness, invoke, event, mainFrame, requestMedia }
@@ -191,6 +196,20 @@ describe('capture main auth boundary', () => {
       else fixture.mainFrame.url = 'about:blank'
       pending.resolve(sources)
       expect(await media).toEqual({})
+    }
+  )
+
+  it.each(['signedOut', 'logout'])(
+    '%s에서 안정화 nickname 통지는 main 권한으로 거절한다',
+    async (phase) => {
+      const startsSignedIn = phase === 'logout'
+      const fixture = await setup(startsSignedIn)
+      vi.spyOn(console, 'info').mockImplementation(() => undefined)
+      if (startsSignedIn) await fixture.auth.logout()
+      await expect(
+        fixture.invoke('notifyStableNicknameDetected', { slot: 0, nickname: 'SYNTHETIC_CANARY' })
+      ).rejects.toThrow()
+      expect(fixture.harness.http.refresh).not.toHaveBeenCalled()
     }
   )
 
