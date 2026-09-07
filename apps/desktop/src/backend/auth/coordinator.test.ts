@@ -1514,6 +1514,31 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
   })
 
+  it('retry의 access 단계는 restoring 알림 뒤 clock으로 선택한다', async () => {
+    const harness = createAuthHarness()
+    harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+    harness.http.me.mockRejectedValueOnce(new AuthHttpFailure('network'))
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    harness.http.refresh.mockResolvedValueOnce(
+      tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:30:00.000Z')
+    )
+    const unsubscribe = coordinator.subscribe((snapshot) => {
+      const isRestoring = snapshot.phase === 'restoring'
+      if (isRestoring) {
+        harness.clock.advance(16 * 60_000)
+      }
+    })
+
+    await coordinator.retryAuth()
+
+    expect(harness.http.refresh).toHaveBeenCalledTimes(2)
+    expect(harness.http.refresh).toHaveBeenLastCalledWith(REFRESH_1, expect.any(AbortSignal))
+    expect(harness.http.me).toHaveBeenLastCalledWith(ACCESS_2, expect.any(AbortSignal))
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
+    unsubscribe()
+  })
+
   it('refresh가 전송 전 취소된 restore만 R0 marker를 되돌리고 안전하게 다시 보낸다', async () => {
     const harness = createAuthHarness()
     harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
