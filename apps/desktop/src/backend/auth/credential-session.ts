@@ -84,7 +84,8 @@ export class CredentialSession {
   ) {}
 
   get hasWriter(): boolean {
-    return this.activeWriter != null
+    const hasWriter = this.activeWriter != null
+    return hasWriter
   }
 
   reserveWriter(): CredentialWriter {
@@ -110,8 +111,9 @@ export class CredentialSession {
     operation: () => Promise<AuthAuthorization>
   ): Promise<AuthAuthorization> {
     const existing = this.refreshFlight
-    const canJoin = existing != null && existing.generation === generation
-    if (canJoin) {
+    const hasExisting = existing != null
+    const hasSameGeneration = hasExisting && existing.generation === generation
+    if (hasSameGeneration) {
       return existing.promise
     }
     let resolve!: (result: AuthAuthorization) => void
@@ -155,7 +157,8 @@ export class CredentialSession {
   async clearLocal(): Promise<boolean> {
     try {
       const result = await clearCredential(this.store)
-      return result === 'cleared'
+      const isCleared = result === 'cleared'
+      return isCleared
     } catch {
       return false
     }
@@ -216,8 +219,9 @@ export class CredentialSession {
 
   dispose(refreshToken: string): Promise<boolean> {
     const existing = this.disposalFlight
-    const canJoin = existing != null && existing.refreshToken === refreshToken
-    if (canJoin) {
+    const hasExisting = existing != null
+    const hasSameRefreshToken = hasExisting && existing.refreshToken === refreshToken
+    if (hasSameRefreshToken) {
       return existing.promise
     }
 
@@ -286,7 +290,8 @@ export class CredentialSession {
   private async prepareLocalClear(): Promise<boolean> {
     try {
       const prepared = await this.prepare('clear')
-      return prepared === 'established'
+      const isPrepared = prepared === 'established'
+      return isPrepared
     } catch {
       return false
     }
@@ -295,7 +300,8 @@ export class CredentialSession {
   private async finishLocalClear(): Promise<boolean> {
     try {
       const cleared = await finishCredentialClear(this.store)
-      return cleared === 'cleared'
+      const isCleared = cleared === 'cleared'
+      return isCleared
     } catch {
       return false
     }
@@ -303,24 +309,25 @@ export class CredentialSession {
 
   private async performLogout(operation: LogoutOperation): Promise<LogoutResult> {
     const { writer, refreshToken } = operation
+    const hasWriter = writer != null
+    const hasKnownLogoutCredential = refreshToken != null
     let localPrepared = false
     let serverLogout: Promise<boolean>
-    const canStartServerImmediately = writer != null && operation.credentialHttpStarted
+    const canStartServerImmediately = hasWriter && operation.credentialHttpStarted
     if (canStartServerImmediately) {
-      serverLogout = refreshToken == null ? Promise.resolve(true) : this.dispose(refreshToken)
+      serverLogout = hasKnownLogoutCredential ? this.dispose(refreshToken) : Promise.resolve(true)
       await writer.catch(() => undefined)
       localPrepared = await this.prepareLocalClear()
     } else {
-      if (writer != null) {
+      if (hasWriter) {
         await writer.catch(() => undefined)
       }
       localPrepared = await this.prepareLocalClear()
-      serverLogout = refreshToken == null ? Promise.resolve(true) : this.dispose(refreshToken)
+      serverLogout = hasKnownLogoutCredential ? this.dispose(refreshToken) : Promise.resolve(true)
     }
     const serverConfirmed = await serverLogout
     const writerDisposalResult = await operation.writerDisposal
     const hasWriterDisposalFailure = writerDisposalResult === false
-    const hasKnownLogoutCredential = refreshToken != null
     const localConfirmed = localPrepared && (await this.finishLocalClear())
     const isServerConfirmed =
       serverConfirmed &&
