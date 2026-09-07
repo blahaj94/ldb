@@ -164,6 +164,97 @@ describe('Desktop AuthCoordinator login', () => {
     }
   )
 
+  it.each([
+    ['wallMs', 'response'],
+    ['monotonicMs', 'response'],
+    ['wallMs', 'reschedule'],
+    ['monotonicMs', 'reschedule'],
+    ['wallMs', 'callback'],
+    ['monotonicMs', 'callback']
+  ] as const)('최근 clock 관측보다 %s가 %s에서 역행하면 만료한다', async (axis, boundary) => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    const startedAt = harness.clock.read()
+    const advanced = {
+      ...startedAt,
+      wallMs: startedAt.wallMs + 200,
+      monotonicMs: startedAt.monotonicMs + 200
+    }
+    const reversed = { ...advanced, [axis]: startedAt[axis] + 150 }
+    const readClock = vi.spyOn(harness.clock, 'read')
+    readClock
+      .mockReturnValue(advanced)
+      .mockReturnValueOnce(startedAt)
+      .mockReturnValueOnce(advanced)
+    const isResponse = boundary === 'response'
+    const isReschedule = boundary === 'reschedule'
+    const isCallback = boundary === 'callback'
+    if (isResponse) {
+      readClock.mockReturnValue(reversed)
+    } else if (isReschedule) {
+      readClock.mockReturnValueOnce(advanced).mockReturnValue(reversed)
+    }
+
+    await coordinator.beginLogin('google')
+    await settle()
+    if (isCallback) {
+      expect(coordinator.getSnapshot().phase).toBe('waitingBrowser')
+      // Early timer 재예약도 수용한 관측 history를 유지해야 한다.
+      harness.clock.scheduled.at(-1)!.callback()
+      readClock.mockReturnValue(reversed)
+      await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+    }
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      login: null,
+      notice: 'LOGIN_EXPIRED'
+    })
+    expect(harness.http.exchange).not.toHaveBeenCalled()
+    expect(harness.browser.open).toHaveBeenCalledTimes(isCallback ? 1 : 0)
+  })
+
+  it.each([0, 100])('최근 clock 관측과 같거나 %i ms 전진하면 정상 교환한다', async (advance) => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+    harness.clock.elapseWithoutTimers(200)
+    harness.clock.scheduled.at(-1)!.callback()
+    harness.clock.elapseWithoutTimers(advance)
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+
+    expect(coordinator.getSnapshot().phase).toBe('signedIn')
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['monotonic', 'server'] as const)(
+    '최근 clock 관측과 timer 재예약은 최초 %s 만료 상한을 연장하지 않는다',
+    async (deadline) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await coordinator.start()
+      await beginWaitingLogin(coordinator)
+      const startedAt = harness.clock.read()
+      harness.clock.elapseWithoutTimers(200)
+      harness.clock.scheduled.at(-1)!.callback()
+      const isMonotonic = deadline === 'monotonic'
+      harness.clock.wallMs = startedAt.wallMs + (isMonotonic ? 300 : 600_000)
+      harness.clock.monotonicMs = startedAt.monotonicMs + (isMonotonic ? 600_000 : 300)
+
+      await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: 'signedOut',
+        login: null,
+        notice: 'LOGIN_EXPIRED'
+      })
+      expect(harness.http.exchange).not.toHaveBeenCalled()
+    }
+  )
+
   it('최초 clock reading만 불연속이어도 외부 효과 없이 만료되고 새 로그인을 시작할 수 있다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)

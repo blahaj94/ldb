@@ -1,8 +1,14 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
+import { createAuthCoordinator } from './coordinator'
 import { createPkce } from './pkce'
-import { parseReturnUrl, validateBrowserLaunchUrl } from './protocol'
-import { API_ORIGIN, CODE, RETURN_TARGET } from './auth-test-fixtures'
+import {
+  AuthProtocolFailure,
+  parseReturnUrl,
+  validateBrowserLaunchUrl,
+  validateReturnTarget
+} from './protocol'
+import { API_ORIGIN, CODE, RETURN_TARGET, createAuthHarness } from './auth-test-fixtures'
 
 describe('Desktop auth PKCE와 URL 경계', () => {
   it('로그인마다 독립된 32-byte verifier와 ASCII S256 challenge를 만든다', () => {
@@ -53,6 +59,28 @@ describe('Desktop auth PKCE와 URL 경계', () => {
       parseReturnUrl(`${RETURN_TARGET}?code=${CODE.slice(0, -1)}`, RETURN_TARGET)
     ).toThrow()
   })
+
+  it.each(['?', '#', '?#', '#?'])(
+    'return target의 빈 delimiter %s는 coordinator 설정 단계에서 거절한다',
+    (delimiter) => {
+      const harness = createAuthHarness()
+      const returnTarget = `${RETURN_TARGET}${delimiter}`
+
+      expect(() => createAuthCoordinator({ ...harness.dependencies, returnTarget })).toThrow(
+        AuthProtocolFailure
+      )
+      expect(harness.http.createLoginRequest).not.toHaveBeenCalled()
+      expect(harness.browser.open).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([RETURN_TARGET, 'test-ldb:/auth/return', 'test-ldb://auth/return%3F%23'])(
+    '정상 return target %s와 code query 복귀를 그대로 허용한다',
+    (returnTarget) => {
+      expect(validateReturnTarget(returnTarget)).toBe(returnTarget)
+      expect(parseReturnUrl(`${returnTarget}?code=${CODE}`, returnTarget)).toEqual({ code: CODE })
+    }
+  )
 
   it.each(['javascript:alert', 'data:text/plain,value', 'ftp://auth/return'])(
     'app private protocol이 될 수 없는 built-in target %s을 거절한다',
