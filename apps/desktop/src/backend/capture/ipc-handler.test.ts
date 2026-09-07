@@ -136,6 +136,39 @@ describe('capture main auth boundary', () => {
     }
   )
 
+  it.each(['listCaptureSources', 'selectCaptureSource'])(
+    '%s 완료 전 document 변경이면 거절한다',
+    async (channel) => {
+      const fixture = await setup()
+      const pending = deferred<typeof sources>()
+      electron.getSources.mockReturnValue(pending.promise)
+      const isSelection = channel === 'selectCaptureSource'
+      const operation = fixture.invoke(channel, ...(isSelection ? [sources[0].id] : []))
+      const rejection = expect(operation).rejects.toThrow()
+      await Promise.resolve()
+      fixture.mainFrame.url = 'about:blank'
+      pending.resolve(sources)
+      await rejection
+    }
+  )
+
+  it('trusted renderer의 빈 선택도 subframe에서는 cleanup을 허용하지 않는다', async () => {
+    const fixture = await setup(false)
+    Object.assign(fixture.event, { senderFrame: { url: rendererUrl } })
+    await expect(fixture.invoke('selectCaptureSource', '')).rejects.toThrow()
+  })
+
+  it.each([
+    { userGesture: false },
+    { audioRequested: true },
+    { videoRequested: false },
+    { frame: null }
+  ])('기존 media 조건 위반 %j는 계속 거절한다', async (changes) => {
+    const fixture = await setup()
+    await fixture.invoke('selectCaptureSource', sources[0].id)
+    expect(await fixture.requestMedia(changes)).toEqual({})
+  })
+
   it('선택 뒤 logout은 main source를 지우고 media를 거절한다', async () => {
     const fixture = await setup()
     await fixture.invoke('selectCaptureSource', sources[0].id)
@@ -163,6 +196,7 @@ describe('capture main auth boundary', () => {
 
   it('capture 조회·선택·media는 HTTP refresh 없이 실행하고 raw OCR를 log하지 않는다', async () => {
     const fixture = await setup()
+    fixture.harness.clock.elapseWithoutTimers(16 * 60 * 1000)
     const log = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     await fixture.invoke('listCaptureSources')
     await fixture.invoke('selectCaptureSource', sources[0].id)
