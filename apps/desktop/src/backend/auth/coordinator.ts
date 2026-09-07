@@ -409,11 +409,19 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     try {
       exchanged = await session.sendExchange(writer, claim.input, claim.signal)
     } catch (error) {
+      const isHttpFailure = error instanceof AuthHttpFailure
+      const isRejected = isHttpFailure && error.code === 'exchange-invalid'
+      const isNetwork = isHttpFailure && error.code === 'network'
+      const isNotSent = isHttpFailure && error.transmission === 'not-sent'
+      const isKnownNotSent = isNetwork && isNotSent
+      const isServerUnconfirmed = !isRejected && !isKnownNotSent
+      if (isServerUnconfirmed) {
+        writer.markExchangeUnconfirmed()
+      }
       if (!keepPendingFresh(value)) {
         await handleStaleTransition()
         return
       }
-      const isRejected = error instanceof AuthHttpFailure && error.code === 'exchange-invalid'
       if (isRejected) {
         value.rejectCode(claim.input.code)
         await recoverRejectedExchange(value)

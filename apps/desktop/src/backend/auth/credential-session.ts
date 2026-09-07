@@ -23,7 +23,7 @@ type LogoutResult = Readonly<{ localConfirmed: boolean; serverConfirmed: boolean
 
 type LogoutOperation = {
   refreshToken: string | null
-  writer: Promise<void> | null
+  writer: CredentialWriter | null
   credentialHttpStarted: boolean
   writerDisposal: Promise<boolean> | undefined
   lateDisposalUnconfirmed: boolean
@@ -36,6 +36,7 @@ export class CredentialWriter {
   private reject!: (reason: unknown) => void
   private started = false
   private credentialHttpStarted = false
+  private tokenlessExchangeUnconfirmed = false
 
   constructor() {
     this.completion = new Promise<void>((resolve, reject) => {
@@ -46,6 +47,14 @@ export class CredentialWriter {
 
   get httpStarted(): boolean {
     return this.credentialHttpStarted
+  }
+
+  get hasUnconfirmedExchange(): boolean {
+    return this.tokenlessExchangeUnconfirmed
+  }
+
+  markExchangeUnconfirmed(): void {
+    this.tokenlessExchangeUnconfirmed = true
   }
 
   markHttpStarted(): void {
@@ -255,7 +264,7 @@ export class CredentialSession {
     const hasWriter = writer != null
     const operation: LogoutOperation = {
       refreshToken: this.knownRefreshToken,
-      writer: hasWriter ? writer.completion : null,
+      writer,
       credentialHttpStarted: hasWriter && writer.httpStarted,
       writerDisposal: hasWriter ? this.disposalFlight?.promise : undefined,
       lateDisposalUnconfirmed: false,
@@ -316,11 +325,11 @@ export class CredentialSession {
     const canStartServerImmediately = hasWriter && operation.credentialHttpStarted
     if (canStartServerImmediately) {
       serverLogout = hasKnownLogoutCredential ? this.dispose(refreshToken) : Promise.resolve(true)
-      await writer.catch(() => undefined)
+      await writer.completion.catch(() => undefined)
       localPrepared = await this.prepareLocalClear()
     } else {
       if (hasWriter) {
-        await writer.catch(() => undefined)
+        await writer.completion.catch(() => undefined)
       }
       localPrepared = await this.prepareLocalClear()
       serverLogout = hasKnownLogoutCredential ? this.dispose(refreshToken) : Promise.resolve(true)
@@ -329,8 +338,10 @@ export class CredentialSession {
     const writerDisposalResult = await operation.writerDisposal
     const hasWriterDisposalFailure = writerDisposalResult === false
     const localConfirmed = localPrepared && (await this.finishLocalClear())
+    const hasUnconfirmedExchange = hasWriter && writer.hasUnconfirmedExchange
     const isServerConfirmed =
       serverConfirmed &&
+      !hasUnconfirmedExchange &&
       !operation.lateDisposalUnconfirmed &&
       (hasKnownLogoutCredential || !hasWriterDisposalFailure)
     this.discard()

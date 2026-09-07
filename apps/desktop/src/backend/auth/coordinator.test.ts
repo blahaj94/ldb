@@ -1311,9 +1311,11 @@ describe('Desktop AuthCoordinator login', () => {
       const result = await loggingOut
 
       const isLocalClean = logoutClearOutcome === 'confirmed'
+      const isExplicitRejection = errorCode === 'exchange-invalid'
+      const serverNotice = isExplicitRejection ? null : 'LOGOUT_SERVER_UNCONFIRMED'
       expect(result.snapshot).toMatchObject({
         phase: isLocalClean ? 'signedOut' : 'storageBlocked',
-        notice: isLocalClean ? null : 'LOCAL_CLEAR_UNCONFIRMED'
+        notice: isLocalClean ? serverNotice : 'LOCAL_CLEAR_UNCONFIRMED'
       })
       expect(harness.store.transitionMarker).toBe(isLocalClean ? null : 'clear')
       expect(harness.http.logout).not.toHaveBeenCalled()
