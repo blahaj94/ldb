@@ -1,5 +1,7 @@
 /* global fetch */
 import assert from 'node:assert/strict'
+import { assertSearchConcurrency } from './character-search-concurrency.mjs'
+import { assertSearchCancellation } from './character-search-cancellation.mjs'
 import { searchFixture, withSearchApp, searchRequest, expectSearchError, snapshot } from './character-search-fixtures.mjs'
 
 async function authenticatedSearch(source) {
@@ -50,5 +52,7 @@ export async function assertCharacterSearchHttpIntegration(source, mark) {
     mark(name)
     await run()
   }
-  return cases.length
+  const concurrency = await assertSearchConcurrency(source, mark)
+  const cancellation = await assertSearchCancellation(source, mark)
+  return cases.length + concurrency + cancellation
 }

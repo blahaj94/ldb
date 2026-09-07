@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { URL } from 'node:url'
+import { setTimeout as delay } from 'node:timers/promises'
+import { createSearchQueryRunner } from '../dist/characters/search-query-runner.js'
 import { createLoginHttpApp, createSessionHttpService } from '../dist/auth/login/http.js'
 import { createNeopleCharacterSearchForTest } from '../dist/characters/neople-character-search.js'
 import { accountFixture, snapshot } from './account-http-fixtures.mjs'
@@ -15,7 +17,7 @@ const unusedLogin = Object.fromEntries(['create', 'authorize', 'callback', 'exch
 export async function withSearchApp(f, operation, overrides = {}) {
   const calls = []
   const sockets = new Set()
-  const upstream = { status: 200, body: { rows: [] }, respond: undefined }
+  const upstream = { status: 200, body: { rows: [] }, respond: undefined, start: undefined, failure: undefined }
   const server = createServer((request, response) => {
     const url = new URL(request.url, 'http://loopback.invalid')
     calls.push({
@@ -25,7 +27,10 @@ export async function withSearchApp(f, operation, overrides = {}) {
     })
     const hasCustomResponse = upstream.respond != null
     if (hasCustomResponse) {
-      upstream.respond(request, response)
+      void Promise.resolve(upstream.respond(request, response)).catch((error) => {
+        upstream.failure = error
+        response.destroy()
+      })
       return
     }
     response.writeHead(upstream.status, { 'content-type': 'application/json' })
@@ -37,9 +42,13 @@ export async function withSearchApp(f, operation, overrides = {}) {
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address()
-  const searchCharacters = createNeopleCharacterSearchForTest('synthetic-search-key', {
+  const adapter = createNeopleCharacterSearchForTest('synthetic-search-key', {
     fetch, origin: `http://127.0.0.1:${port}`,
   })
+  const searchCharacters = (input) => {
+    upstream.start?.()
+    return adapter(input)
+  }
   const deps = {
     dataSource: f.deps.dataSource, verifyAccessJwt: f.verifyJwt,
     apiKey: 'synthetic-search-key', searchCharacters, ...overrides,
@@ -47,7 +56,9 @@ export async function withSearchApp(f, operation, overrides = {}) {
   const app = await createLoginHttpApp(unusedLogin, createSessionHttpService(f.deps), undefined, deps)
   try {
     await app.listen(0, '127.0.0.1')
-    return await operation({ base: await app.getUrl(), calls, upstream, deps })
+    const result = await operation({ base: await app.getUrl(), calls, upstream, deps, app })
+    assert.equal(upstream.failure, undefined)
+    return result
   } finally {
     await app.close()
     for (const socket of sockets) socket.destroy()
@@ -74,4 +85,51 @@ export async function expectSearchError(response, status, code) {
   assert.deepEqual(Object.keys(body.error).sort(), ['code', 'message'])
   assert.equal(body.error.code, code)
   return body
+}
+
+export function observeSearchRunners(hooks = {}) {
+  return (source, signal) => {
+    const runner = createSearchQueryRunner(source, signal)
+    const query = runner.query.bind(runner)
+    const commit = runner.commitTransaction.bind(runner)
+    const release = runner.release.bind(runner)
+    runner.query = (sql, parameters, ...rest) => {
+      const run = () => query(sql, parameters, ...rest)
+      const hasHook = hooks.query != null
+      return hasHook ? hooks.query({ runner, sql, parameters, query, run }) : run()
+    }
+    runner.commitTransaction = () => {
+      const hasHook = hooks.commit != null
+      return hasHook ? hooks.commit(runner, commit) : commit()
+    }
+    runner.release = async () => {
+      await release()
+      hooks.released?.(runner)
+    }
+    hooks.created?.(runner, signal)
+    return runner
+  }
+}
+
+export function barrier() {
+  let resolve
+  const promise = new Promise((complete) => { resolve = complete })
+  return { promise, resolve }
+}
+
+export async function waitFor(check, message = 'search observation did not arrive') {
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const ready = await check()
+    if (ready) return
+    await delay(10)
+  }
+  assert.fail(message)
+}
+
+export async function assertBackendGone(source, pid) {
+  await waitFor(async () => {
+    const [row] = await source.query('SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1', [pid])
+    return row.count === 0
+  }, 'search backend remained after cancellation')
 }

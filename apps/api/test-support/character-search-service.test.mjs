@@ -114,7 +114,7 @@ test('search service locks only session, reads fresh time, commits before starti
     assert.deepEqual(f.events, ['connect', 'lock', 'clock', 'write', 'commit', 'release', 'upstream'])
     assert.equal(f.state.session.lastActiveAt.getTime(), 1_000_000)
   } finally {
-    search.onModuleDestroy()
+    await search.onModuleDestroy()
   }
 })
 
@@ -130,7 +130,7 @@ test('search post-lock JWT equality and active idle equality refuse with no writ
       assert.equal(f.state.writes, 0)
       assert.equal(f.state.calls, 0)
     } finally {
-      search.onModuleDestroy()
+      await search.onModuleDestroy()
     }
   }
 })
@@ -153,7 +153,7 @@ test('search missing or revoked session allows residual request with activity ze
       assert.equal(f.state.writes, 0)
       assert.equal(f.state.calls, 10)
     } finally {
-      search.onModuleDestroy()
+      await search.onModuleDestroy()
     }
   }
 })
@@ -182,7 +182,7 @@ test('search timeout cancels DB ownership, and a late lock result cannot write, 
     assert.equal(f.state.calls, 0)
     assert.equal(f.state.releases, 1)
   } finally {
-    search.onModuleDestroy()
+    await search.onModuleDestroy()
   }
 })
 
@@ -199,7 +199,7 @@ test('search commit acknowledgement failure keeps upstream and reservation zero 
     f.state.commit = undefined
     assert.deepEqual(await search.search(headers, originalUrl), { rows: [] })
   } finally {
-    search.onModuleDestroy()
+    await search.onModuleDestroy()
   }
 })
 
@@ -221,6 +221,6 @@ test('search service reservation window starts after commit and directly before 
     await search.search(headers, originalUrl)
     assert.equal(f.state.calls, 11)
   } finally {
-    search.onModuleDestroy()
+    await search.onModuleDestroy()
   }
 })
