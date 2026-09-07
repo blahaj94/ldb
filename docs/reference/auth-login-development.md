@@ -1,7 +1,7 @@
 ---
 type: reference
 scope: apps/api common login and Google provider implementation
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-08
 ---
 
 # 공통 로그인 구현과 연결
@@ -12,9 +12,9 @@ last-reviewed: 2026-09-06
 
 `createLoginService`에 초기화된 DataSource, 검증된 registry와 provider PKCE key, 실제 Access JWT issuer, 서버의 provider verifier를 주입한다. `createLoginHttpApp(service)`는 기존 login service를 실제 Nest HTTP route에 연결한다. 선택적 두 번째 인자에 `createSessionHttpService({dataSource,issueAccessJwt})` 결과를 넘기면 같은 parser/filter/factory에 refresh/logout route도 연결한다. 기존 한 인자 caller와 login/Google/exchange/HEAD 동작은 유지한다. Factory는 기본 body parser를 끄고 인증 pre-parser와 정제 오류 처리를 설치하며 DataSource는 composition 호출자가 소유하고 종료한다.
 
-`apps/api/src/app.ts`의 기본 `AppModule`과 `apps/api/src/main.ts`에는 자동 연결하지 않았다. Google adapter는 구현했지만 실제 registry·secret resolver·운영 composition의 제공과 검증이 남아 있다. 현재 `pnpm --filter @ldb/api start`는 기존 runtime-only app이며 배포된 `/auth/*`가 활성화되지 않는다. HTTP 검증은 별도 factory에 격리 test 설정을 주입해 수행한다. 제품용 test mode·환경변수 인증 우회·HTTP verified identity 입력은 없다.
+`apps/api/src/main.ts`는 검증된 배포 설정으로 기존 factory를 합성해 Google 로그인·refresh/logout·계정·검색을 함께 시작한다. 설정 입력·실행 순서와 기본 entry의 격리 검증은 [`api-start-development.md`](api-start-development.md)를 참고한다. 실제 provider 등록·credential·운영 환경은 별도 검증 대상이며 제품용 test mode·환경변수 인증 우회·HTTP verified identity 입력은 없다.
 
-실제 연결 전에 다음 값을 운영 담당이 제공·검증해야 한다. 이 구현은 실제 값을 정하거나 파일·환경변수·외부 계정에 등록하지 않는다.
+실제 배포 전에 다음 값을 운영 담당이 제공·검증해야 한다. 이 구현은 실제 값을 정하거나 파일·환경변수·외부 계정에 등록하지 않는다.
 
 - 초기화된 DB와 `logging:false`, `synchronize:false`, `migrationsRun:false`. 기존 `DatabaseModule.register`/DataSource 설정을 사용한다.
 - Exact registry와 provider 연결: API HTTPS origin, provider client ID·secret 설정 참조·HTTPS callback·authorization endpoint·configuration version, Google audience, 등록 protocol/host/path와 return target version. Google은 아래 factory와 서버가 신뢰하는 token/JWKS endpoint 및 historical secret resolver를 연결한다.
@@ -46,7 +46,7 @@ last-reviewed: 2026-09-06
 
 `createGoogleProviderVerifier(configuration)`의 반환 함수를 `verifyProvider`에 주입한다. `configuration.registrations`는 서버가 신뢰하는 allowlist이며 각 항목은 공통 `snapshot`, `tokenEndpoint`, `jwksUri`를 가진다. Factory는 공통 registry 검증·복제·불변 snapshot을 재사용하고 URL의 exact HTTPS·userinfo/query/fragment 부재를 검사한다. 이 syntactic 검사는 arbitrary HTTPS host를 Google 소유로 인증하지 않는다. 실제 Google endpoint 선택과 registry 배포는 trusted server composition의 책임이며 public request나 token header로 설정하지 않는다.
 
-`resolveSecret({version,reference,signal})`은 저장 snapshot의 version과 secret 참조만 해석한다. Factory는 resolver와 registration의 설정 형식을 listen 전에 검증하지만 실제 secret 저장소의 availability를 미리 확인하지 않는다. Callback에서 secret 해석이 실패하거나 historical version을 제공할 수 없으면 정제 provider 실패이며 active secret으로 대체하지 않는다. File·환경변수·외부 secret manager 중 무엇을 사용할지, 실제 값과 운영 availability 점검 절차는 이 구현이 정하지 않는다.
+`resolveSecret({version,reference,signal})`은 저장 snapshot의 version과 secret 참조만 해석한다. Adapter factory는 resolver와 registration을 검증하고, 기본 entry는 `AUTH_CONFIG_FILE`을 한 번 읽어 모든 등록 version의 secret 연결을 listen 전에 확인한다. Callback에서 historical version을 제공할 수 없으면 정제 provider 실패이며 active secret으로 대체하지 않는다. 정확한 파일 입력은 [`auth-runtime.md`](../rules/auth-runtime.md), 현재 loader와 교체 경계는 [`api-start-development.md`](api-start-development.md)를 따른다. 실제 credential·저장소 운영 availability 점검은 별도다.
 
 Adapter는 snapshot의 client/secret 참조·callback으로 token을 한 번 교환한다. 승인된 `jose 6.2.12`가 Google RS256 signature·issuer·필수 claim·exp를 검증하며 adapter가 scalar exact aud/azp, iat, ASCII·case-sensitive·최대 255자 sub, transaction nonce와 선택적 at_hash를 추가 확인한다. Nonce는 공통 `opaqueHash`의 canonical base64url decoded 32-byte SHA-256을 재사용하고 PKCE의 ASCII S256과 구분한다. Name/email/photo·예상치 않은 refresh token·원문 응답은 전달하지 않고 `{provider,subject}`만 반환한다. 자체 ES256 JWT의 key/issuer/audience와 공유하지 않는다.
 

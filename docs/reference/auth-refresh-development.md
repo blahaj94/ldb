@@ -1,12 +1,12 @@
 ---
 type: reference
 scope: apps/api refresh/logout HTTP and transaction core
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-08
 ---
 
 # Refresh HTTP와 현재 session logout 개발
 
-`apps/api/src/auth/refresh/index.ts`의 `rotateRefresh({ dataSource, issueAccessJwt }, rawToken)`은 이미 발급된 refresh로 rotation하는 내부 진입점이다. `rawToken`만 credential 입력으로 받고 user/session ID를 받지 않는다. 기존 `createAccessJwtIssuer`가 만든 issuer와 기존 DataSource를 주입한다. `apps/api/src/auth/login/http.ts`의 `createSessionHttpService`와 기존 `createLoginHttpApp`의 선택적 두 번째 인자가 이 core를 `POST /auth/refresh`와 `POST /auth/logout`에 연결한다. 기본 main 활성화는 구현하지 않았다.
+`apps/api/src/auth/refresh/index.ts`의 `rotateRefresh({ dataSource, issueAccessJwt }, rawToken)`은 이미 발급된 refresh로 rotation하는 내부 진입점이다. `rawToken`만 credential 입력으로 받고 user/session ID를 받지 않는다. 기존 `createAccessJwtIssuer`가 만든 issuer와 기존 DataSource를 주입한다. `apps/api/src/auth/login/http.ts`의 `createSessionHttpService`와 기존 `createLoginHttpApp`의 선택적 두 번째 인자가 이 core를 `POST /auth/refresh`와 `POST /auth/logout`에 연결한다. 기본 main도 이 factory를 사용하며 설정·실행과 후속 통합 검증은 [`api-start-development.md`](api-start-development.md)를 참고한다.
 
 Contract는 `docs/rules/auth-session.md`, `docs/rules/auth-database.md`, `docs/rules/auth-api.md`를 따른다. 기존 schema·Migration·dependency·JWT interface를 변경하지 않았다. 공통 `REFRESH_TOKEN`, `AUTH_ERRORS`, `LOGIN.idleSeconds`와 기존 요청 구조 오류 정의를 읽기 재사용한다.
 
@@ -56,6 +56,6 @@ pnpm --filter @ldb/api test:database
 git diff --check
 ```
 
-2026-09-06에 Docker server `29.7.2`, native `linux/arm64/v8`의 PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`에서 새 HTTP matrix와 기존 catalog·constraint·schema diff·Migration·identity/login/refresh/Google·teardown matrix가 함께 통과했다. 승인된 image index/arm64 child digest를 기존 harness가 확인했다. `linux/amd64`, 실제 provider/credential·계정, 기본 main composition, Desktop, 운영 배포·proxy/APM·clock·cleanup과 물리 network 단절은 미검증이다.
+2026-09-06에 Docker server `29.7.2`, native `linux/arm64/v8`의 PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`에서 새 HTTP matrix와 기존 catalog·constraint·schema diff·Migration·identity/login/refresh/Google·teardown matrix가 함께 통과했다. 승인된 image index/arm64 child digest를 기존 harness가 확인했다. `linux/amd64`, 실제 provider/credential·계정, Desktop, 운영 배포·proxy/APM·clock·cleanup과 물리 network 단절은 미검증이다.
 
 `rotateRefreshForTest`는 random 실패/충돌을 위한 test 전용 주입 경계이며 환경변수나 HTTP 입력으로 노출하지 않는다. Session HTTP factory도 환경변수 test mode를 두지 않으며 실제 DataSource/JWT issuer를 명시적으로 합성한다.

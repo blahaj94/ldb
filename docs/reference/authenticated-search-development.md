@@ -1,12 +1,12 @@
 ---
 type: reference
 scope: apps/api authenticated character search HTTP, activity, quota and cancellation
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 ---
 
 # 인증된 캐릭터 검색 개발
 
-`apps/api/src/auth/login/http.ts`의 `createLoginHttpApp`은 선택적 네 번째 인자 `searchDependencies`로 `GET /characters`를 연결한다. 필수 주입 값은 기존 `dataSource`, `verifyAccessJwt`, `apiKey`다. 기존 login·refresh/logout·account 연결을 유지하며 기본 `AppModule`과 `main.ts`의 운영 활성화는 하지 않는다.
+`apps/api/src/auth/login/http.ts`의 `createLoginHttpApp`은 선택적 네 번째 인자 `searchDependencies`로 `GET /characters`를 연결한다. 필수 주입 값은 기존 `dataSource`, `verifyAccessJwt`, `apiKey`다. 기존 login·refresh/logout·account 연결을 유지하며 기본 main도 이 factory를 사용한다. 설정·실행과 기본 entry의 후속 통합 검증은 [`api-start-development.md`](api-start-development.md)를 참고한다.
 
 Contract는 `docs/rules/character-search.md`, `docs/rules/auth-activity.md`, `docs/rules/auth-session.md`, `docs/rules/auth-database.md`, `docs/rules/auth-runtime.md`가 정의한다. Schema·Migration·JWT verifier·순수 Neople adapter는 기존 구현을 사용한다. 새 Development dependency `@types/pg 8.23.1`의 승인은 `docs/rules/auth-runtime.md`의 PR #118 evidence를 따른다.
 
@@ -67,4 +67,4 @@ pnpm --filter @ldb/api test:database
 git diff --check
 ```
 
-2026-09-07 Worker 검증에서 API aggregate의 267개 test와 전용 실제 DB 검색 34개 scenario를 포함한 Docker aggregate가 통과했다. 최종 통합 실행 evidence는 구현 PR에서 exact head와 연결한다. API aggregate의 test는 production build를 포함한다. 현재 검증 환경은 Node `v24.19.0`, pnpm `11.23.0`, Docker server `29.7.2`, native `linux/arm64/v8`, PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`다. 승인된 image index/arm64 child digest와 exact resource teardown을 기존 harness가 확인한다. `linux/amd64`, 실제 provider/credential, 기본 main 구성, Desktop, 운영 TLS·배포·ingress·proxy/APM·clock 동기화는 이 격리 검증의 완료 범위가 아니다.
+2026-09-07 Worker 검증에서 API aggregate의 267개 test와 전용 실제 DB 검색 34개 scenario를 포함한 Docker aggregate가 통과했다. 최종 통합 실행 evidence는 구현 PR에서 exact head와 연결한다. API aggregate의 test는 production build를 포함한다. 현재 검증 환경은 Node `v24.19.0`, pnpm `11.23.0`, Docker server `29.7.2`, native `linux/arm64/v8`, PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`다. 승인된 image index/arm64 child digest와 exact resource teardown을 기존 harness가 확인한다. `linux/amd64`, 실제 provider/credential, Desktop, 운영 TLS·배포·ingress·proxy/APM·clock 동기화는 이 격리 검증의 완료 범위가 아니다.
