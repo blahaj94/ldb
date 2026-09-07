@@ -3,6 +3,7 @@ import { LOGIN } from '../../constants/login.js'
 import { AuthSessionSchema } from '../../database/schemas/auth-sessions.js'
 import { UserSchema } from '../../database/schemas/users.js'
 import type { AccessJwtPrincipal, VerifyAccessJwt } from '../access-jwt/types.js'
+import { readBearerToken } from '../bearer.js'
 import { ACCOUNT_ERRORS, AccountFailure } from './errors.js'
 import { validateNickname } from './nickname.js'
 import type { AccountDependencies, AccountHttpService, AccountProfile } from './types.js'
@@ -11,20 +12,12 @@ async function authenticate(
   verify: VerifyAccessJwt,
   rawHeaders: readonly string[],
 ): Promise<AccessJwtPrincipal> {
-  const authorizations = rawHeaders.flatMap((value, index) => {
-    const isName = index % 2 === 0
-    const isAuthorization = isName && value.toLowerCase() === 'authorization'
-    return isAuthorization ? [rawHeaders[index + 1]] : []
-  })
-  const hasOneAuthorization = authorizations.length === 1
-  if (!hasOneAuthorization) throw new AccountFailure(ACCOUNT_ERRORS.AUTHENTICATION_REQUIRED)
-
-  const bearer = /^Bearer ([^\s,]+)$/.exec(authorizations[0])
-  const hasBearer = bearer != null
-  if (!hasBearer) throw new AccountFailure(ACCOUNT_ERRORS.AUTHENTICATION_REQUIRED)
+  const token = readBearerToken(rawHeaders)
+  const hasToken = token != null
+  if (!hasToken) throw new AccountFailure(ACCOUNT_ERRORS.AUTHENTICATION_REQUIRED)
 
   try {
-    return await verify(bearer[1], Math.floor(Date.now() / 1000))
+    return await verify(token, Math.floor(Date.now() / 1000))
   } catch {
     throw new AccountFailure(ACCOUNT_ERRORS.AUTHENTICATION_REQUIRED)
   }
