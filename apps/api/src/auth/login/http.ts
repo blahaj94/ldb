@@ -7,6 +7,10 @@ import { LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure, loginFailure } from '../../errors/login.js'
 import type { AuthProvider } from '../../types/auth.js'
 import type { LoginHttpService, SessionHttpService } from '../../types/login.js'
+import { AccountFailure } from '../account/errors.js'
+import { ACCOUNT_SERVICE, AccountController } from '../account/http.js'
+import { createAccountService } from '../account/index.js'
+import type { AccountDependencies } from '../account/types.js'
 import { LogoutFailure } from '../logout/errors.js'
 import { logoutSession } from '../logout/index.js'
 import { RefreshFailure } from '../refresh/errors.js'
@@ -53,9 +57,11 @@ function readOriginalQuery(request: Request): URLSearchParams {
   return new URL(request.originalUrl, 'https://request.invalid').searchParams
 }
 
-function authHttpFailure(error: unknown): LoginFailure | RefreshFailure | LogoutFailure {
+function authHttpFailure(error: unknown): LoginFailure | RefreshFailure | LogoutFailure | AccountFailure {
   const isSessionFailure = error instanceof RefreshFailure || error instanceof LogoutFailure
-  return isSessionFailure ? error : loginFailure(error)
+  const isAccountFailure = error instanceof AccountFailure
+  const isKnownAuthFailure = isSessionFailure || isAccountFailure
+  return isKnownAuthFailure ? error : loginFailure(error)
 }
 
 @Catch()
@@ -71,7 +77,11 @@ class LoginHttpFilter implements ExceptionFilter {
       return
     }
 
-    if (request.method === 'GET') {
+    const path = request.path.toLowerCase().replace(/\/+$/, '')
+    const isAccountPath = path === '/me' || path === '/me/nickname'
+    const isGet = request.method === 'GET'
+    const shouldRenderHtml = isGet && !isAccountPath
+    if (shouldRenderHtml) {
       response.status(failure.status).type('html').send(loginPage(failure.message))
     } else {
       jsonError(response, failure)
@@ -178,17 +188,22 @@ export function createSessionHttpService(deps: RefreshDependencies): SessionHttp
 export async function createLoginHttpApp(
   service: LoginHttpService,
   sessionService?: SessionHttpService,
+  accountDependencies?: AccountDependencies,
 ): Promise<INestApplication> {
   const hasSessionService = sessionService != null
-  const controllers = hasSessionService
-    ? [LoginController, SessionController]
-    : [LoginController]
-  const providers = hasSessionService
-    ? [
-        { provide: LOGIN_SERVICE, useValue: service },
-        { provide: SESSION_SERVICE, useValue: sessionService },
-      ]
-    : [{ provide: LOGIN_SERVICE, useValue: service }]
+  const hasAccountDependencies = accountDependencies != null
+  const controllers = [
+    LoginController,
+    ...(hasSessionService ? [SessionController] : []),
+    ...(hasAccountDependencies ? [AccountController] : []),
+  ]
+  const providers = [
+    { provide: LOGIN_SERVICE, useValue: service },
+    ...(hasSessionService ? [{ provide: SESSION_SERVICE, useValue: sessionService }] : []),
+    ...(hasAccountDependencies ? [{
+      provide: ACCOUNT_SERVICE, useValue: createAccountService(accountDependencies),
+    }] : []),
+  ]
 
   @Module({
     controllers,
