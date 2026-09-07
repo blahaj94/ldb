@@ -10,7 +10,8 @@ type BridgeState = {
 type AuthBridge = BridgeState & { onIntent: (intent: AuthIntent) => void }
 
 export function useAuthBridge(api: AuthApi): AuthBridge {
-  const [state, setState] = useState<BridgeState>({
+  const [state, setState] = useState<BridgeState & { source: AuthApi }>({
+    source: api,
     snapshot: null,
     commandPending: false,
     connectionFailed: false
@@ -45,7 +46,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       const isNewer = !hasCurrent || snapshot.revision > previous.revision
       if (!isNewer) return
       current = snapshot
-      setState({ snapshot, commandPending: pending, connectionFailed: false })
+      setState({ source: api, snapshot, commandPending: pending, connectionFailed: false })
     }
 
     async function query(expected: number, establish = false): Promise<void> {
@@ -63,7 +64,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
         const isActiveEpoch = isCurrent(expected)
         if (!isActiveEpoch) return
         current = null
-        setState({ snapshot: null, commandPending: pending, connectionFailed: true })
+        setState({ source: api, snapshot: null, commandPending: pending, connectionFailed: true })
       }
     }
 
@@ -76,7 +77,8 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       pending = false
       baselineReady = false
       queued = null
-      if (isReconnect) setState({ snapshot: null, commandPending: false, connectionFailed: false })
+      if (isReconnect)
+        setState({ source: api, snapshot: null, commandPending: false, connectionFailed: false })
       try {
         unsubscribe = api.onAuthStateChanged((snapshot) => {
           const isActiveEpoch = isCurrent(expected)
@@ -93,7 +95,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
         })
         void query(expected, true)
       } catch {
-        setState({ snapshot: null, commandPending: false, connectionFailed: true })
+        setState({ source: api, snapshot: null, commandPending: false, connectionFailed: true })
       }
     }
 
@@ -142,5 +144,14 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
   }, [api])
 
   const onIntent = useCallback((intent: AuthIntent): void => dispatch.current(intent), [])
-  return { ...state, onIntent }
+  const hasSameSource = state.source === api
+  const visible = hasSameSource
+    ? state
+    : { snapshot: null, commandPending: false, connectionFailed: false }
+  return {
+    snapshot: visible.snapshot,
+    commandPending: visible.commandPending,
+    connectionFailed: visible.connectionFailed,
+    onIntent
+  }
 }
