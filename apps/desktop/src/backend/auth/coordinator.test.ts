@@ -1845,6 +1845,68 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     expect(harness.store.commitCredential).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['commit-expired', 'finalize-discontinuous'] as const)(
+    '저장 후 authorization은 %s이면 확정 credential을 보존하고 unavailable을 공유한다',
+    async (boundary) => {
+      const harness = createAuthHarness()
+      const coordinator = createAuthCoordinator(harness.dependencies)
+      await restoreSignedIn(coordinator, harness)
+      const signedIn = coordinator.getSnapshot()
+      harness.clock.advance(16 * 60_000)
+      harness.http.refresh.mockClear()
+      harness.store.commitCredential.mockClear()
+      harness.store.removeTransition.mockClear()
+      harness.http.refresh.mockResolvedValueOnce(
+        tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+      )
+      const storage = deferred<'confirmed'>()
+      const expiresDuringCommit = boundary === 'commit-expired'
+      if (expiresDuringCommit) {
+        harness.store.commitWaits.push(storage.promise)
+      } else {
+        harness.store.removeWaits.push(storage.promise)
+      }
+
+      const first = coordinator.authorization()
+      const second = coordinator.authorization()
+      const blockedMutation = expiresDuringCommit
+        ? harness.store.commitCredential
+        : harness.store.removeTransition
+      await vi.waitFor(() => expect(blockedMutation).toHaveBeenCalledTimes(1))
+      expect(harness.http.refresh).toHaveBeenCalledTimes(1)
+      if (expiresDuringCommit) {
+        harness.clock.elapseWithoutTimers(15 * 60_000)
+      } else {
+        harness.clock.discontinuous = true
+      }
+      storage.resolve('confirmed')
+      const [firstResult, secondResult] = await Promise.all([first, second])
+
+      expect(firstResult).toBe(secondResult)
+      expect(firstResult).toEqual({ status: 'unavailable' })
+      expect(coordinator.getSnapshot()).toEqual(signedIn)
+      expect(harness.store.inspection).toEqual({ status: 'ready', refreshToken: REFRESH_2 })
+      expect(harness.store.clearCredential).not.toHaveBeenCalled()
+      expect(harness.http.logout).not.toHaveBeenCalled()
+      expect(harness.http.refresh).toHaveBeenCalledTimes(1)
+
+      const nextRefresh = Buffer.alloc(32, 14).toString('base64url')
+      const nextExpiry = new Date(harness.clock.wallMs + 15 * 60_000).toISOString()
+      harness.http.refresh.mockResolvedValueOnce(tokenResponse(nextRefresh, ACCESS_1, nextExpiry))
+      const nextAuthorization = coordinator.authorization()
+      harness.clock.discontinuous = false
+      const nextResult = await nextAuthorization
+
+      expect(nextResult).toMatchObject({ status: 'available', accessToken: ACCESS_1 })
+      expect(harness.http.refresh).toHaveBeenCalledTimes(2)
+      expect(harness.http.refresh).toHaveBeenLastCalledWith(REFRESH_2, expect.any(AbortSignal))
+      expect(harness.store.inspection).toEqual({ status: 'ready', refreshToken: nextRefresh })
+      expect(coordinator.getSnapshot()).toEqual(signedIn)
+      expect(harness.store.clearCredential).not.toHaveBeenCalled()
+      expect(harness.http.logout).not.toHaveBeenCalled()
+    }
+  )
+
   it('refresh 중 logout은 R1로 즉시 서버 logout하고 늦은 R2를 commit하거나 복구하지 않는다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
