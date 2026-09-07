@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict'
 import { assertSearchConcurrency } from './character-search-concurrency.mjs'
 import { assertSearchCancellation } from './character-search-cancellation.mjs'
+import { assertSearchSessionBoundaries } from './character-search-session-boundaries.mjs'
+import { assertSearchFailures } from './character-search-failures.mjs'
 import { searchFixture, withSearchApp, searchRequest, expectSearchError, snapshot } from './character-search-fixtures.mjs'
 
 async function authenticatedSearch(source) {
@@ -54,5 +56,7 @@ export async function assertCharacterSearchHttpIntegration(source, mark) {
   }
   const concurrency = await assertSearchConcurrency(source, mark)
   const cancellation = await assertSearchCancellation(source, mark)
-  return cases.length + concurrency + cancellation
+  const boundaries = await assertSearchSessionBoundaries(source, mark)
+  const failures = await assertSearchFailures(source, mark)
+  return cases.length + concurrency + cancellation + boundaries + failures
 }

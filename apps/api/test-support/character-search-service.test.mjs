@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { settled } from './login-test-control.mjs'
+import { bounded, settled } from './login-test-control.mjs'
+import { barrier } from './character-search-fixtures.mjs'
 
 function fixture() {
   const events = []
@@ -172,7 +173,7 @@ test('search timeout cancels DB ownership, and a late lock result cannot write, 
     const pending = settled(search.search(headers, originalUrl))
     await atLock
     f.advance(2000)
-    assert.equal((await pending).error.status, 500)
+    assert.equal((await bounded(pending)).error.status, 500)
     assert.equal(f.state.cancellations, 1)
     unlock()
     // Late callback의 continuation까지 실행한다. 실제 연결 종료는 별도 native test에서 검증한다.
@@ -223,4 +224,69 @@ test('search service reservation window starts after commit and directly before 
   } finally {
     await search.onModuleDestroy()
   }
+})
+
+test('search admission wait and DB lock share one two-second budget', async () => {
+  const f = fixture()
+  const firstLocked = barrier()
+  const firstUnlock = barrier()
+  const secondLocked = barrier()
+  const secondUnlock = barrier()
+  let locks = 0
+  f.state.lock = () => {
+    locks += 1
+    const isFirstLock = locks === 1
+    if (isFirstLock) {
+      firstLocked.resolve()
+      return firstUnlock.promise
+    }
+    secondLocked.resolve()
+    return secondUnlock.promise
+  }
+  const search = await service(f)
+  try {
+    const first = search.search(headers, originalUrl)
+    await bounded(firstLocked.promise)
+    f.advance(500)
+    const second = settled(search.search(headers, originalUrl))
+    // 두 번째 JWT 검증 continuation이 500ms에 admission을 시작하도록 한 번 진행한다.
+    await Promise.resolve()
+    f.advance(1500)
+    firstUnlock.resolve()
+    assert.deepEqual(await first, { rows: [] })
+    await bounded(secondLocked.promise)
+    assert.equal(f.state.connections, 2)
+    f.advance(2500)
+    assert.equal((await bounded(second)).error.status, 500)
+    assert.equal(f.state.cancellations, 1)
+    secondUnlock.resolve()
+  } finally {
+    firstUnlock.resolve()
+    secondUnlock.resolve()
+    await bounded(search.onModuleDestroy())
+  }
+  assert.equal(f.state.calls, 1)
+  assert.equal(f.state.commits, 1)
+  assert.equal(f.state.releases, 2)
+})
+
+test('search service shutdown aborts active DB ownership and waits for cleanup, with no late call', async () => {
+  const f = fixture()
+  const locked = barrier()
+  const unlock = barrier()
+  f.state.lock = () => {
+    locked.resolve()
+    return unlock.promise
+  }
+  const search = await service(f)
+  const pending = settled(search.search(headers, originalUrl))
+  await bounded(locked.promise)
+  const closing = search.onModuleDestroy()
+  assert.equal((await bounded(pending)).error.status, 500)
+  assert.equal(f.state.cancellations, 1)
+  unlock.resolve()
+  await bounded(closing)
+  assert.equal(f.state.calls, 0)
+  assert.equal(f.state.releases, 1)
+  await assert.rejects(search.search(headers, originalUrl), { status: 500 })
 })
