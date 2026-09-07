@@ -135,7 +135,8 @@ it.each(['restoring', 'signingOut'] as const)(
   async (phase) => {
     await render(snapshot(phase, { user: { nickname }, entry: 'home' }))
 
-    expect(container.textContent).toContain(phase === 'restoring' ? '복원 중' : '로그아웃 중')
+    const isRestoring = phase === 'restoring'
+    expect(container.textContent).toContain(isRestoring ? '복원 중' : '로그아웃 중')
     expect(container.textContent).not.toContain(nickname)
     expect(container.textContent).not.toContain('화면 캡처')
     const buttons = Array.from(container.querySelectorAll('button'))
