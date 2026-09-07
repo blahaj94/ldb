@@ -239,3 +239,50 @@ it('같은 mount에서 api 교체는 이전 계정과 구독을 버리고 새 qu
   await act(async () => previous.retired[0](snapshot(999)))
   expect(current.snapshot).toEqual(snapshot(1, 'run-two'))
 })
+
+it('A→B→A API 객체 재사용도 이전 연결 snapshot과 늦은 reply를 복원하지 않는다', async () => {
+  const apiA = fixture
+  apiA.api.getAuthState.mockResolvedValue({
+    ...snapshot(3),
+    phase: 'signedIn',
+    user: { nickname: '중립모험가' },
+    entry: 'home'
+  })
+  await mount()
+  const oldCommand = deferred<AuthCommandResult>()
+  apiA.api.logout.mockReturnValue(oldCommand.promise)
+  await act(async () => {
+    current.onIntent({ type: 'logout' })
+  })
+
+  fixture = createApi()
+  const apiB = fixture
+  const queryB = deferred<AuthSnapshot>()
+  apiB.api.getAuthState.mockReturnValue(queryB.promise)
+  await mount()
+  expect(current.snapshot).toBeNull()
+
+  fixture = apiA
+  const queryA = deferred<AuthSnapshot>()
+  apiA.api.getAuthState.mockReturnValue(queryA.promise)
+  await mount()
+
+  expect(current.snapshot).toBeNull()
+  expect(current.commandPending).toBe(false)
+  expect(apiB.listeners.size).toBe(0)
+  await act(async () => {
+    queryB.resolve({
+      ...snapshot(99, 'run-b'),
+      phase: 'signedIn',
+      user: { nickname: '중립모험가' },
+      entry: 'home'
+    })
+    oldCommand.resolve({ ok: true, snapshot: snapshot(1000) })
+    apiA.retired[0](snapshot(1001))
+    apiB.retired[0](snapshot(1002, 'run-b'))
+  })
+  expect(current.snapshot).toBeNull()
+  await act(async () => queryA.resolve(snapshot(4)))
+  expect(current.snapshot).toEqual(snapshot(4))
+  expect(apiA.listeners.size).toBe(1)
+})
