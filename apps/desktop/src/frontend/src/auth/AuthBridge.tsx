@@ -11,7 +11,7 @@ export function AuthBridge({ api, home }: { api: AuthApi; home?: ReactNode }): R
   if (hasSnapshot) {
     return (
       <AuthPresentation
-        key={presentationEpoch}
+        key={`${snapshot.runId}:${presentationEpoch}`}
         snapshot={snapshot}
         home={home}
         commandPending={commandPending}
