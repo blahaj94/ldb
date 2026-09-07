@@ -211,3 +211,31 @@ it('unmount은 listener를 해제하고 late query를 버리며 reload는 새 �
   expect(fixture.api.getAuthState).toHaveBeenCalledTimes(2)
   expect(fixture.listeners.size).toBe(1)
 })
+
+it('같은 mount에서 api 교체는 이전 계정과 구독을 버리고 새 query 기준을 기다린다', async () => {
+  fixture.api.getAuthState.mockResolvedValue({
+    ...snapshot(3),
+    phase: 'signedIn',
+    user: { nickname: '중립모험가' },
+    entry: 'home'
+  })
+  await mount()
+  expect(current.snapshot?.phase).toBe('signedIn')
+  const previous = fixture
+  fixture = createApi()
+  const nextQuery = deferred<AuthSnapshot>()
+  fixture.api.getAuthState.mockImplementation(() => {
+    fixture.order.push('query')
+    return nextQuery.promise
+  })
+
+  await mount()
+
+  expect(previous.listeners.size).toBe(0)
+  expect(current.snapshot).toBeNull()
+  expect(current.commandPending).toBe(false)
+  expect(fixture.order).toEqual(['subscribe', 'query'])
+  await act(async () => nextQuery.resolve(snapshot(1, 'run-two')))
+  await act(async () => previous.retired[0](snapshot(999)))
+  expect(current.snapshot).toEqual(snapshot(1, 'run-two'))
+})
