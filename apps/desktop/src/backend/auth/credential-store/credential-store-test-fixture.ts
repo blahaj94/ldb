@@ -126,7 +126,13 @@ export async function createStoreFixture(): Promise<StoreFixture> {
   }
 
   const createStore = (): CredentialStore =>
-    createMacOsCredentialStore({ userDataPath, context: CONTEXT, safeStorage, files })
+    createMacOsCredentialStore({
+      userDataPath,
+      context: CONTEXT,
+      safeStorage,
+      files,
+      platform: 'darwin'
+    })
   const store = createStore()
 
   async function seedReady(refreshToken = REFRESH_0): Promise<void> {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearCredential, finalizeCredentialTransition } from '../credential-operations'
 import { CONTEXT, REFRESH_0, REFRESH_1, createStoreFixture } from './credential-store-test-fixture'
 import type { StoreFixture } from './credential-store-test-fixture'
+import { createMacOsCredentialStore } from './macos-credential-store'
 
 describe('macOS CredentialStore의 파일 protocol', () => {
   let fixture: StoreFixture
@@ -18,6 +19,28 @@ describe('macOS CredentialStore의 파일 protocol', () => {
     await fixture.cleanup()
     expect(leakedHandles).toBe(0)
     await expect(fs.lstat(fixture.userDataPath)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('비-macOS host는 암호화·파일 작업 전에 거절한다', async () => {
+    const store = createMacOsCredentialStore({
+      userDataPath: fixture.userDataPath,
+      context: CONTEXT,
+      safeStorage: fixture.safeStorage,
+      files: fixture.files,
+      platform: 'linux'
+    })
+
+    expect(await store.inspect()).toEqual({ status: 'unavailable' })
+    expect(await store.establishTransition('exchange')).toBe('failed')
+    expect(await store.commitCredential(REFRESH_1)).toBe('failed')
+    expect(await store.clearCredential()).toBe('failed')
+    expect(await store.removeTransition()).toBe('failed')
+    expect(await store.reestablishTransition('clear')).toBe('failed')
+    expect(fixture.safeStorage.isEncryptionAvailable).not.toHaveBeenCalled()
+    expect(fixture.safeStorage.encryptString).not.toHaveBeenCalled()
+    expect(fixture.safeStorage.decryptString).not.toHaveBeenCalled()
+    expect(await fs.readdir(fixture.userDataPath)).toEqual([])
+    expect(fixture.events).toEqual([])
   })
 
   it('빈 저장소는 private directory를 만들고 empty로 검사한다', async () => {
@@ -286,6 +309,65 @@ describe('macOS CredentialStore의 파일 protocol', () => {
           ? { status: 'recovery-required' }
           : { status: 'ready', refreshToken: REFRESH_1 }
       )
+    }
+  )
+
+  it.each([true, false])(
+    'marker unlink 적용 뒤 reject에도 재확립 성공=%s를 정확히 전달한다',
+    async (canReestablish) => {
+      await fixture.seedReady()
+      await fixture.store.establishTransition('refresh')
+      await fixture.store.commitCredential(REFRESH_1)
+      fixture.failures.set('unlink:transition.v1', ['after'])
+      if (!canReestablish) fixture.failures.set('open:transition-temp', ['before'])
+
+      expect(await finalizeCredentialTransition(fixture.store, 'refresh')).toBe(
+        canReestablish ? 'save-failed' : 'clear-unconfirmed'
+      )
+      expect(await fixture.createStore().inspect()).toEqual(
+        canReestablish
+          ? { status: 'recovery-required' }
+          : { status: 'ready', refreshToken: REFRESH_1 }
+      )
+    }
+  )
+
+  it('credential unlink 적용 뒤 reject는 local clear 완료로 오인하지 않는다', async () => {
+    await fixture.seedReady()
+    fixture.failures.set('unlink:credential.v1', ['after'])
+
+    expect(await clearCredential(fixture.store)).toBe('unconfirmed')
+    expect(await fixture.createStore().inspect()).toEqual({ status: 'recovery-required' })
+    expect(fixture.events).not.toContain('unlink:transition.v1')
+  })
+
+  it.each(['malformed', 'unknown-schema', 'permission', 'symlink', 'directory'] as const)(
+    'transition.v1의 %s는 ready 복원·복호화를 허용하지 않는다',
+    async (kind) => {
+      await fixture.seedReady()
+      const path = join(fixture.directory, 'transition.v1')
+      const isSymlink = kind === 'symlink'
+      const isDirectory = kind === 'directory'
+      const hasPermissionError = kind === 'permission'
+      const isMalformed = kind === 'malformed'
+      const unrelated = join(fixture.userDataPath, 'marker-unrelated')
+      if (isSymlink) {
+        await fs.writeFile(unrelated, 'unrelated', { mode: 0o600 })
+        await fs.symlink(unrelated, path)
+      } else if (isDirectory) {
+        await fs.mkdir(path, { mode: 0o700 })
+      } else {
+        await fs.writeFile(path, isMalformed ? '{' : '{"version":999}', {
+          mode: hasPermissionError ? 0o644 : 0o600
+        })
+      }
+
+      const hasProtectionError = isSymlink || isDirectory || hasPermissionError
+      expect(await fixture.createStore().inspect()).toEqual({
+        status: hasProtectionError ? 'unavailable' : 'recovery-required'
+      })
+      expect(fixture.safeStorage.decryptString).not.toHaveBeenCalled()
+      if (isSymlink) expect(await fs.readFile(unrelated, 'utf8')).toBe('unrelated')
     }
   )
 
