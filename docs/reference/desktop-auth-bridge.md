@@ -46,7 +46,7 @@ pnpm --filter @ldb/desktop auth:fixture
 
 Build command는 전용 TypeScript 검사 후 Electron Vite build를 수행한다. 실행 entry는 `apps/desktop/out/auth-bridge-fixture/main/main.cjs`다. 고정 window title은 **LDB Auth Bridge fixture**다.
 
-수동 실행에서는 Google/Discord 버튼으로 로그인 대기에 들어가며 자동으로 완료하지 않는다. 현재 화면의 취소 버튼으로 취소하거나, macOS menu의 **Fixture → Complete login**으로 main 내부 synthetic return을 전달한다. Welcome의 시작하기로 home에 들어간 뒤 현재 기기 logout을 확인한다. 창 닫기 또는 **Fixture → Quit**은 앱을 종료하고 임시 profile을 삭제한다. 정상 종료 시 `Auth bridge fixture cleanup PASS`가 출력된다.
+수동 실행에서는 Google/Discord 버튼으로 로그인 대기에 들어가며 자동으로 완료하지 않는다. 현재 화면의 취소 버튼으로 취소하거나, macOS의 **앱 메뉴(Electron으로 표시될 수 있음) → Complete login**으로 main 내부 synthetic return을 전달한다. Welcome의 시작하기로 home에 들어간 뒤 현재 기기 logout을 확인한다. 창 닫기 또는 **앱 메뉴 → Quit LDB Auth Bridge fixture**은 앱을 종료하고 임시 profile을 삭제한다. 정상 종료 시 `Auth bridge fixture cleanup PASS`가 출력된다.
 
 자동 smoke는 empty-store start, begin/cancel, event payload의 raw event 제거·canary 비노출, unsubscribe, waiting 상태 reload, credential commit 보류 중 signedIn 비노출, exchange→welcome→home→logout과 fake effect 횟수를 검증한다. `Auth bridge fixture smoke PASS`와 `cleanup PASS`, process exit 0을 함께 확인한다. 실패 진단은 고정 stage와 PASS/FAIL만 출력하며 credential·URL·raw error를 출력하지 않는다. 강제 process 종료나 host crash의 profile 정리는 정상 종료 evidence에 포함하지 않는다.
 
