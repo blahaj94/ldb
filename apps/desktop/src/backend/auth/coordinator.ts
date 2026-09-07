@@ -5,6 +5,8 @@ import {
   prepareCredentialTransition
 } from './credential-operations'
 import { decideLocalCleanup } from './cleanup-result'
+import { CredentialSession } from './credential-session'
+import type { SessionCredential } from './credential-session'
 import { AuthHttpFailure } from './http'
 import { createPkce } from './pkce'
 import { PendingLogin } from './pending-login'
@@ -27,11 +29,6 @@ import type {
 
 const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 
-type SessionCredential = AuthTokens &
-  Readonly<{
-    accessTokenExpiresAtMs: number
-  }>
-
 type SnapshotState = Readonly<{
   phase: AuthPhase
   login: AuthSnapshot['login']
@@ -53,13 +50,6 @@ function isCanonicalUuid(value: unknown): value is string {
   const isUuid = isString && UUID_PATTERN.test(value)
 
   return isUuid
-}
-
-function sessionCredential(tokens: AuthTokens): SessionCredential {
-  return {
-    ...tokens,
-    accessTokenExpiresAtMs: Date.parse(tokens.accessTokenExpiresAt)
-  }
 }
 
 export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies): AuthCoordinator {
@@ -86,8 +76,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     notice: null
   }
   let pending: PendingLogin | null = null
-  let credential: SessionCredential | null = null
-  let knownRefreshToken: string | null = null
+  const session = new CredentialSession(dependencies.http)
   let blockedMode: 'inspect' | 'cleanup' | null = null
   let startPromise: Promise<AuthSnapshot> | null = null
   let activeWriter: Promise<void> | null = null
@@ -96,8 +85,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     null
   let logoutFlight: Promise<AuthCommandResult> | null = null
   let verificationController: AbortController | null = null
-  let disposalFlight: Readonly<{ refreshToken: string; promise: Promise<boolean> }> | null = null
-  let lateDisposalUnconfirmed = false
   const listeners = new Set<(snapshot: AuthSnapshot) => void>()
 
   function snapshot(): AuthSnapshot {
@@ -194,9 +181,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     mode: 'inspect' | 'cleanup'
   ): void {
     blockedMode = mode
-    credential = null
-    knownRefreshToken = null
-    disposalFlight = null
+    session.discard()
     if (pending != null) {
       clearPendingReference(pending)
     }
@@ -207,32 +192,6 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       entry: null,
       notice
     })
-  }
-
-  function disposeKnownRefresh(refreshToken: string): Promise<boolean> {
-    const existing = disposalFlight
-    const canJoin = existing != null && existing.refreshToken === refreshToken
-    if (canJoin) {
-      return existing.promise
-    }
-
-    const promise = (async () => {
-      try {
-        await dependencies.http.logout(refreshToken, new AbortController().signal)
-        return true
-      } catch {
-        const hasConcurrentLogout = logoutFlight != null
-        // Known current/consumed token이 있으면 logout이 그 서버 결과로 같은 session 폐기를 판단한다.
-        const hasKnownLogoutCredential = knownRefreshToken != null
-        const needsLateDisposalConfirmation = hasConcurrentLogout && !hasKnownLogoutCredential
-        if (needsLateDisposalConfirmation) {
-          lateDisposalUnconfirmed = true
-        }
-        return false
-      }
-    })()
-    disposalFlight = { refreshToken, promise }
-    return promise
   }
 
   async function clearLocal(): Promise<boolean> {
@@ -278,15 +237,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!cleanup.canContinue) {
       return
     }
-    credential = null
-    knownRefreshToken = null
-    disposalFlight = null
+    session.discard()
     publish({ phase: 'signedOut', login: null, user: null, entry: null, notice })
   }
 
   async function handleStaleTransition(refreshToken?: string): Promise<void> {
     if (refreshToken != null) {
-      await disposeKnownRefresh(refreshToken)
+      await session.dispose(refreshToken)
     }
     const isLogoutCleaning = logoutFlight != null
     if (isLogoutCleaning) {
@@ -303,7 +260,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
     }
     if (cleanup.canContinue) {
-      disposalFlight = null
+      session.completeStaleCleanup()
     }
   }
 
@@ -359,7 +316,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     const isCredentialCommitted = credentialCommit === 'confirmed'
     if (!isCredentialCommitted) {
-      await disposeKnownRefresh(tokens.refreshToken)
+      await session.dispose(tokens.refreshToken)
       const isCurrentAfterDisposal = generation === operationGeneration
       if (!isCurrentAfterDisposal) {
         await handleStaleTransition()
@@ -393,7 +350,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           storageBlocked('LOCAL_CLEAR_UNCONFIRMED', 'cleanup')
         }
         if (!logoutOwnsRefreshCleanup) {
-          await disposeKnownRefresh(tokens.refreshToken)
+          await session.dispose(tokens.refreshToken)
         }
         return false
       }
@@ -401,13 +358,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return false
     }
     if (finalized === 'committed') {
-      credential = sessionCredential(tokens)
-      knownRefreshToken = tokens.refreshToken
-      disposalFlight = null
+      session.acceptCommitted(tokens)
       return true
     }
 
-    await disposeKnownRefresh(tokens.refreshToken)
+    await session.dispose(tokens.refreshToken)
     const isCurrentAfterDisposal = generation === operationGeneration
     if (!isCurrentAfterDisposal) {
       await handleStaleTransition()
@@ -793,7 +748,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           return null
         }
         if (removed) {
-          knownRefreshToken = refreshToken
+          session.retainForRestore(refreshToken)
           publish({
             phase: 'restorePaused',
             login: null,
@@ -807,9 +762,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
       generation += 1
       const cleanupGeneration = generation
-      credential = null
+      session.blockAccess()
       publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
-      await disposeKnownRefresh(refreshToken)
+      await session.dispose(refreshToken)
       const canClear = generation === cleanupGeneration
       if (canClear) {
         await cleanupAfterInvalidation('REAUTH_REQUIRED', cleanupGeneration)
@@ -822,7 +777,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return null
     }
     const committed = await commitTokens(tokens, 'refresh', operationGeneration)
-    return committed ? credential : null
+    return committed ? session.current : null
   }
 
   function startWriter(operation: () => Promise<void>): Promise<void> {
@@ -840,7 +795,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   }
 
   async function verifyRestoredUser(operationGeneration: number): Promise<void> {
-    const currentCredential = credential
+    const currentCredential = session.current
     const isCurrent = generation === operationGeneration
     if (!isCurrent || currentCredential == null) {
       return
@@ -850,7 +805,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     verificationController = controller
     try {
       const response = await dependencies.http.me(currentCredential.accessToken, controller.signal)
-      const canPublish = generation === operationGeneration && credential === currentCredential
+      const canPublish = generation === operationGeneration && session.current === currentCredential
       if (!canPublish) {
         return
       }
@@ -873,7 +828,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         generation += 1
         const cleanupGeneration = generation
         await startWriter(async () => {
-          await disposeKnownRefresh(currentCredential.refreshToken)
+          await session.dispose(currentCredential.refreshToken)
           const canClear = generation === cleanupGeneration
           if (canClear) {
             await cleanupAfterInvalidation('REAUTH_REQUIRED', cleanupGeneration)
@@ -904,11 +859,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isCurrent) {
       return
     }
-    knownRefreshToken = refreshToken
+    session.retainForRestore(refreshToken)
     await startWriter(async () => {
       await rotateCredential(refreshToken, operationGeneration)
     })
-    const canVerify = generation === operationGeneration && credential != null
+    const canVerify = generation === operationGeneration && session.current != null
     if (canVerify) {
       await verifyRestoredUser(operationGeneration)
     }
@@ -973,7 +928,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   }
 
   function refreshAuthorization(): Promise<AuthAuthorization> {
-    const currentCredential = credential
+    const currentCredential = session.current
     if (currentCredential == null || state.phase !== 'signedIn') {
       return Promise.resolve({ status: 'unavailable' })
     }
@@ -988,7 +943,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       await startWriter(async () => {
         await rotateCredential(currentCredential.refreshToken, operationGeneration)
       })
-      const refreshedCredential = credential
+      const refreshedCredential = session.current
       const canAuthorize =
         generation === operationGeneration &&
         state.phase === 'signedIn' &&
@@ -1013,7 +968,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   }
 
   function authorization(): Promise<AuthAuthorization> {
-    const currentCredential = credential
+    const currentCredential = session.current
     const isSignedIn = state.phase === 'signedIn'
     if (!isSignedIn || currentCredential == null) {
       return Promise.resolve({ status: 'unavailable' })
@@ -1046,9 +1001,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
 
     const operationGeneration = generation
     if (isRestorePaused) {
-      const currentCredential = credential
+      const currentCredential = session.current
       if (currentCredential == null) {
-        const refreshToken = knownRefreshToken
+        const refreshToken = session.knownRefresh
         if (refreshToken == null) {
           return failure('AUTH_OPERATION_FAILED')
         }
@@ -1073,7 +1028,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
           await rotateCredential(currentCredential.refreshToken, operationGeneration)
         })
       }
-      if (generation === operationGeneration && credential != null) {
+      if (generation === operationGeneration && session.current != null) {
         await verifyRestoredUser(operationGeneration)
       }
       return success()
@@ -1140,17 +1095,16 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     verificationController?.abort()
     const writer = activeWriter
-    const writerDisposal = writer == null ? undefined : disposalFlight?.promise
+    const logoutCredentials = session.beginLogout(writer != null)
     const credentialHttpWasStarted = activeCredentialHttpStarted
-    const refreshToken = knownRefreshToken
+    const refreshToken = logoutCredentials.refreshToken
     publish({ phase: 'signingOut', login: null, user: null, entry: null, notice: null })
 
     let localPrepared = false
     let serverLogout: Promise<boolean>
     const canStartServerImmediately = writer != null && credentialHttpWasStarted
     if (canStartServerImmediately) {
-      serverLogout =
-        refreshToken == null ? Promise.resolve(true) : disposeKnownRefresh(refreshToken)
+      serverLogout = refreshToken == null ? Promise.resolve(true) : session.dispose(refreshToken)
       await writer.catch(() => undefined)
       localPrepared = await prepareLocalClear()
     } else {
@@ -1158,23 +1112,17 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         await writer.catch(() => undefined)
       }
       localPrepared = await prepareLocalClear()
-      serverLogout =
-        refreshToken == null ? Promise.resolve(true) : disposeKnownRefresh(refreshToken)
+      serverLogout = refreshToken == null ? Promise.resolve(true) : session.dispose(refreshToken)
     }
     const serverConfirmed = await serverLogout
-    const writerDisposalResult = await writerDisposal
-    const hasWriterDisposalFailure = writerDisposalResult === false
-    const hasKnownLogoutCredential = refreshToken != null
+    const writerDisposalResult = await logoutCredentials.writerDisposal
     const localConfirmed = localPrepared && (await finishLocalClear())
-    credential = null
-    knownRefreshToken = null
-    disposalFlight = null
+    const isServerConfirmed = session.completeLogout(
+      logoutCredentials,
+      serverConfirmed,
+      writerDisposalResult
+    )
     blockedMode = localConfirmed ? null : 'cleanup'
-    const isServerConfirmed =
-      serverConfirmed &&
-      !lateDisposalUnconfirmed &&
-      (hasKnownLogoutCredential || !hasWriterDisposalFailure)
-    lateDisposalUnconfirmed = false
     const isCurrentLogout = generation === logoutGeneration
     if (!isCurrentLogout) {
       return success()
