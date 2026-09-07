@@ -145,6 +145,10 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
 
   const onIntent = useCallback((intent: AuthIntent): void => dispatch.current(intent), [])
   const hasSameSource = state.source === api
+  if (!hasSameSource) {
+    // API 객체가 다시 사용되어도 이전 연결의 계정 state를 복구하지 않는다.
+    setState({ source: api, snapshot: null, commandPending: false, connectionFailed: false })
+  }
   const visible = hasSameSource
     ? state
     : { snapshot: null, commandPending: false, connectionFailed: false }
