@@ -1514,6 +1514,34 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
   })
 
+  it('이전 verification finally는 listener가 재개한 새 요청의 abort 소유권을 지우지 않는다', async () => {
+    const harness = createAuthHarness()
+    harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+    const verifying = deferred<Awaited<ReturnType<typeof harness.http.value.me>>>()
+    harness.http.me
+      .mockRejectedValueOnce(new AuthHttpFailure('network'))
+      .mockImplementationOnce(() => verifying.promise)
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    const retries: ReturnType<typeof coordinator.retryAuth>[] = []
+    const unsubscribe = coordinator.subscribe((snapshot) => {
+      const isPaused = snapshot.phase === 'restorePaused'
+      if (isPaused) {
+        unsubscribe()
+        retries.push(coordinator.retryAuth())
+      }
+    })
+    await coordinator.start()
+    expect(harness.http.me).toHaveBeenCalledTimes(2)
+    const signal = harness.http.me.mock.calls[1][1]
+
+    const logout = coordinator.logout()
+
+    expect(signal.aborted).toBe(true)
+    verifying.resolve({ user: { id: USER_ID, nickname: '모험가000001' } })
+    await Promise.all([...retries, logout])
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut', user: null })
+  })
+
   it('retry의 access 단계는 restoring 알림 뒤 clock으로 선택한다', async () => {
     const harness = createAuthHarness()
     harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
