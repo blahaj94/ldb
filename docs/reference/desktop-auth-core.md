@@ -13,7 +13,8 @@ Desktop main 인증의 현재 독립 core는 `apps/desktop/src/backend/auth`에 
 
 | Path                                                     | 현재 책임                                                                                                  |
 | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `apps/desktop/src/backend/auth/coordinator.ts`           | 단일 auth state, current attempt·generation, credential writer, restore·refresh·logout과 공개 snapshot 전이 |
+| `apps/desktop/src/backend/auth/coordinator.ts`           | command 허용, current attempt·generation, 공개 snapshot과 restore·refresh·logout 결과 적용 |
+| `apps/desktop/src/backend/auth/credential-session.ts`    | private credential·known refresh, writer·HTTP 진행, refresh 공유 Promise, logout reservation·disposal 결과와 저장 effect |
 | `apps/desktop/src/backend/auth/pending-login.ts`         | private attempt 상태, request TTL·timer, synchronous exchange claim·중복 판정과 폐기 |
 | `apps/desktop/src/backend/auth/cleanup-result.ts`        | local clear 결과·현재 작업 여부·logout 소유권을 받아 후속 진행 또는 storage 차단 판단 |
 | `apps/desktop/src/backend/auth/types.ts`                 | main 내부 effect와 snapshot·명령 결과 type                                                                 |
@@ -24,6 +25,30 @@ Desktop main 인증의 현재 독립 core는 `apps/desktop/src/backend/auth`에 
 | `apps/desktop/src/backend/auth/credential-operations.ts` | durable transition 확립, credential commit, marker 제거·재확립, local clear 결과 합성                      |
 
 Coordinator 생성 시 enabled provider, API origin, 등록 return target과 Browser·HTTP·clock·entropy·credential store effect를 주입한다. Runtime dependency는 `ky@2.1.0`, `zod@4.5.4`로 고정했다. Source에는 운영 origin, owned scheme, app identity가 없다. Composition은 같은 trusted runtime config로 고정 HTTP client와 coordinator를 만들고 실제 platform adapter를 연결해야 한다.
+
+## Credential 실행 소유권
+
+`CredentialSession`은 credential 채택·사용 차단·참조 해제, known refresh와 disposal evidence의 수명을 함께 소유한다. 같은 module의 `CredentialWriter`가 작업별 completion Promise와 credential HTTP 시작 여부를 소유하며, writer 종료 callback은 같은 reservation일 때만 현재 writer를 해제한다. `runWriter`와 `shareRefresh`는 해당 처리 함수 하나를 실행·공유하고 coordinator의 phase·generation·snapshot setter를 받지 않는다.
+
+Exchange는 PendingLogin의 동기 claim → `exchanging` 알림 → current 재확인 → credential writer 예약 → effect 순서다. 아직 실행하지 않은 claim을 취소한 listener는 같은 stack에서 다음 login을 시작할 수 있다. Refresh 실행 Promise는 작업을 시작하기 전에 등록한다. 공개 logout의 `AuthCommandResult` Promise는 coordinator가 알림 전에 한 번 만들고 같은 flight의 모든 호출에 반환한다.
+
+`prepare`, `writeCredential`, `finalize`, `reestablish`, `releaseUnsentTransition`은 원래 저장 Promise를 그대로 반환한다. 저장 완료를 기다리는 위치와 예외 분류·current generation 확인은 coordinator에 남는다. 추가 Promise 변환 계층으로 인증 실패의 즉시 사용 차단을 늦추지 않으며, 성공과 실패 모두 결과 적용 직전의 generation·logout 소유권을 따른다.
+
+`beginLogout`은 known current/consumed refresh, 기존 writer completion과 HTTP 시작 여부, 이미 settle됐을 수 있는 disposal Promise를 한 reservation에 고정한다. `finishLogout`은 결과 Promise를 먼저 등록한 뒤 writer 대기·서버 폐기·local clear를 실행해 local/server 확인을 각각 반환한다. Late disposal 실패는 해당 reservation 안에서 합성되며 완료 뒤 다음 session으로 넘기지 않는다. 최종 phase·notice와 generation 확인은 coordinator가 적용한다.
+
+```mermaid
+flowchart TD
+    Coordinator[AuthCoordinator] -->|attempt 수명과 claim| Pending[PendingLogin]
+    Coordinator -->|writer와 refresh 실행| Session[CredentialSession]
+    Session --> Writer[CredentialWriter]
+    Session -->|prepare, finalize, clear| Operations[credential-operations]
+    Operations --> Store[CredentialStore]
+    Session -->|record와 marker mutation| Store
+    Coordinator -->|inspection| Store
+    Session -->|exchange, refresh, logout| Http[AuthHttp]
+    Coordinator -->|login request, me| Http
+    Coordinator -->|local 결과 적용 판단| Cleanup[cleanup-result]
+```
 
 ## Credential store effect 계약
 
