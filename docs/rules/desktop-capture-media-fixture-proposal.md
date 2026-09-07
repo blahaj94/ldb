@@ -30,7 +30,7 @@ Custom request/check handler가 없으면 media 요청과 검사가 기본 허�
 
 ## 권장안의 필수 조건
 
-다음 조건을 모두 만족하는 별도 fixture에서만 예외를 적용한다.
+적용 범위는 `apps/desktop/scripts/auth-capture-fixture/**`와 그 전용 config·실행 command다. 기존 제품 module을 소비할 수 있지만 예외를 production entry/session으로 이전하지 않는다. 다음 조건을 모두 만족하는 이 전용 fixture에서만 적용한다.
 
 - 전용 실행 entry와 격리된 임시 profile/session을 사용한다. 고정된 local document와 통제된 정적 asset만 읽으며 외부 content·network·navigation·popup을 차단한다. 전체 화면이나 다른 앱 대신 검증용 synthetic window만 정상 capture source로 선택한다.
 - 실제 제품 auth core·IPC·bridge·feature preload·AuthPresentation·capture module을 연결한다. Auth effects는 빈 store에서 시작하는 memory-only synthetic 구현으로 한정한다. 실제 credential·Keychain·provider·API를 사용하지 않는다.
@@ -38,8 +38,8 @@ Custom request/check handler가 없으면 media 요청과 검사가 기본 허�
 - Permission request는 등록된 `webContents`의 정확한 main frame·document와 main의 현재 `signedIn` 권한을 확인한다. `media` 중 **존재하는 빈 `mediaTypes` 배열**만 예외 후보이며, 배열 누락·잘못된 type·비어 있지 않은 배열과 camera/microphone 요청은 거절한다. 다른 permission을 포괄 허용하지 않는다.
 - Permission check는 명시적으로 media 거절을 유지한다. Request의 `mediaTypes`와 check의 `mediaType`을 같은 정보로 취급하지 않는다. 정상 display 관측이 check 허용까지 요구한다면 이번 예외로 확대하지 않고 실패로 남겨 추가 결정을 요청한다.
 - 기존 display handler의 sender·main frame·exact document·선택 source·Start gesture 검사와 시작/비동기 완료 직전의 main `signedIn`·auth 수명 검사를 보존한다. 인증 이탈과 재로그인 뒤에는 source 선택과 Start를 다시 요구한다.
-- 인증 이탈·창 종료·오류 때 stream track·OCR worker·loop·인식값과 main source 선택을 정리한다. 이전 비동기 결과가 새 auth/capture 수명을 복구하거나 늦은 OCR IPC를 보내지 못하게 한다.
-- Synthetic 영상·닉네임만 사용한다. 진단 evidence는 비민감 counter·상태·일치 여부로 남기며 raw nickname·화면 이미지·source title/ID·credential·개인정보를 log나 PR에 넣지 않는다. 임시 profile과 검증 process는 종료 후 정리한다.
+- 인증 이탈·창 종료·fixture 실패 종료 때 stream track·OCR worker·loop·인식값과 main source 선택을 정리한다. 이전 비동기 결과가 새 auth/capture 수명을 복구하거나 늦은 OCR IPC를 보내지 못하게 한다. 이 조건은 기존 제품의 Stop·오류 후 재시도 동작을 재정의하지 않는다.
+- Synthetic 영상·닉네임만 사용한다. 진단 evidence는 비민감 counter·상태·일치 여부로 남긴다. 실행 중 수집한 raw nickname·화면 이미지·source title/ID 원문을 진단 log나 PR에 노출하지 않는다. 검증용 window를 찾기 위해 사전에 고정한 synthetic 식별자를 code·Reference에 명시하는 것은 허용한다. Credential·개인정보는 기록하지 않는다. 임시 profile과 검증 process는 종료 후 정리한다.
 
 이 조건은 fixture가 정상 API만 호출하도록 통제하는 운영 범위다. 동일 renderer에서 legacy desktop `getUserMedia`를 호출할 수 없다는 privileged 보안 경계가 아니다. JavaScript monkeypatch나 fixture의 API 호출 규약을 그러한 경계로 인정하지 않는다. 인증 미구성 기본 제품 main의 media request/check 명시 거절은 유지하고 이 예외를 production session으로 옮기지 않는다.
 
