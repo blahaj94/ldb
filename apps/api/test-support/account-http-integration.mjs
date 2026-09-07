@@ -69,11 +69,16 @@ async function inaccessible(source, kind, method) {
   const f = await accountFixture(source)
   const userId = f.initial.user.id
   const sessionId = f.initial.session.id
-  if (kind === 'user') await source.query('DELETE FROM users WHERE id=$1', [userId])
-  if (kind === 'session') await source.query('DELETE FROM auth_sessions WHERE id=$1', [sessionId])
-  if (kind === 'revoked') await source.query("UPDATE auth_sessions SET revoked_at=$2,revoked_reason='logout' WHERE id=$1", [sessionId, f.now])
-  if (kind === 'idle') await setDeadline(source, sessionId, f.now)
-  if (kind === 'owner') {
+  const shouldDeleteUser = kind === 'user'
+  if (shouldDeleteUser) await source.query('DELETE FROM users WHERE id=$1', [userId])
+  const shouldDeleteSession = kind === 'session'
+  if (shouldDeleteSession) await source.query('DELETE FROM auth_sessions WHERE id=$1', [sessionId])
+  const shouldRevokeSession = kind === 'revoked'
+  if (shouldRevokeSession) await source.query("UPDATE auth_sessions SET revoked_at=$2,revoked_reason='logout' WHERE id=$1", [sessionId, f.now])
+  const shouldExpireSession = kind === 'idle'
+  if (shouldExpireSession) await setDeadline(source, sessionId, f.now)
+  const shouldChangeOwner = kind === 'owner'
+  if (shouldChangeOwner) {
     const other = await accountFixture(source)
     await source.query('UPDATE auth_sessions SET user_id=$2 WHERE id=$1', [sessionId, other.initial.user.id])
   }
@@ -92,7 +97,8 @@ async function boundary(source, phase, boundaryKind, method) {
   const checkedAt = isIdleBoundary
     ? new Date(f.now.getTime() + (isAdmissionPhase ? 0 : 2_592_000_000))
     : new Date(f.token.expiresAt * 1000)
-  if (isIdleBoundary && isAdmissionPhase) await setDeadline(source, f.initial.session.id, checkedAt)
+  const shouldSetInitialDeadline = isIdleBoundary && isAdmissionPhase
+  if (shouldSetInitialDeadline) await setDeadline(source, f.initial.session.id, checkedAt)
   const admittedBefore = await snapshot(source, f)
   let clocks = 0
   const restore = instrument(source, {
@@ -102,7 +108,8 @@ async function boundary(source, phase, boundaryKind, method) {
       if (!isClock) return result
       clocks++
       const atAdmission = phase === 'admission'
-      const isTarget = atAdmission || clocks === 2
+      const isFunctionClock = !atAdmission && clocks === 2
+      const isTarget = atAdmission || isFunctionClock
       const time = isTarget ? checkedAt : f.now
       return [{ now: time }]
     },
@@ -156,7 +163,8 @@ async function realLockExpiry(source, table, method, kind) {
       } finally {
         restore()
         if (runner.isTransactionActive) await unlock()
-        if (pending != null) await pending
+        const hasPendingRequest = pending != null
+        if (hasPendingRequest) await pending
       }
     })
   })
@@ -255,7 +263,8 @@ async function betweenPhases(source, kind, method) {
         await bounded(admissionApplied.promise)
         const admitted = await snapshot(source, f)
         assert(admitted.session.last_active_at > before.session.last_active_at)
-        if (kind === 'logout') {
+        const shouldLogout = kind === 'logout'
+        if (shouldLogout) {
           const response = await fetch(`${base}/auth/logout`, {
             method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ refreshToken: f.initial.refreshToken }),
@@ -275,7 +284,8 @@ async function betweenPhases(source, kind, method) {
         } else assert.deepEqual(after, { user: undefined, session: undefined, tokens: [] })
       } finally {
         continueFunction.resolve()
-        if (pending != null) await pending
+        const hasPendingRequest = pending != null
+        if (hasPendingRequest) await pending
       }
     })
   } finally {
@@ -303,18 +313,25 @@ async function databaseFailure(source, phase, applied, method) {
   const restore = instrument(source, {
     query: async ({ sql, run }) => {
       const isNicknameWrite = sql.startsWith('UPDATE "users"')
-      const failWrite = phase === 'write' && isNicknameWrite
+      const isWriteFailurePhase = phase === 'write'
+      const failWrite = isWriteFailurePhase && isNicknameWrite
       const isUserRead = sql.includes('FROM "users"')
-      const isInitialReadFailure = phase === 'read' && isUserRead
-      const isFunctionReadFailure = phase === 'function-read' && commits === 1 && isUserRead
+      const isInitialReadPhase = phase === 'read'
+      const isInitialReadFailure = isInitialReadPhase && isUserRead
+      const isFunctionReadPhase = phase === 'function-read'
+      const hasCommittedAdmission = isFunctionReadPhase && commits === 1
+      const isFunctionReadFailure = hasCommittedAdmission && isUserRead
       const failRead = isInitialReadFailure || isFunctionReadFailure
-      if (failWrite || failRead) throw new Error('private SQL nickname identity credential canary')
+      const shouldFailQuery = failWrite || failRead
+      if (shouldFailQuery) throw new Error('private SQL nickname identity credential canary')
       return run()
     },
     commit: async (runner, commit) => {
       commits++
-      const target = phase === 'admission' ? 1 : 2
-      const failCommit = ['admission', 'function'].includes(phase) && commits === target
+      const isAdmissionFailure = phase === 'admission'
+      const target = isAdmissionFailure ? 1 : 2
+      const isCommitFailurePhase = ['admission', 'function'].includes(phase)
+      const failCommit = isCommitFailurePhase && commits === target
       if (!failCommit) return commit()
       if (applied) await commit()
       else await runner.rollbackTransaction()
@@ -336,10 +353,15 @@ async function databaseFailure(source, phase, applied, method) {
     assert.equal(stderr.includes(value), false)
   }
   const after = await snapshot(source, f)
-  const noActivity = phase === 'read' || (phase === 'admission' && !applied)
+  const isInitialReadFailure = phase === 'read'
+  const isAdmissionFailure = !isInitialReadFailure && phase === 'admission'
+  const hasUncommittedAdmission = isAdmissionFailure && !applied
+  const noActivity = isInitialReadFailure || hasUncommittedAdmission
   if (noActivity) assert.deepEqual(after, before)
   else assert(after.session.last_active_at > before.session.last_active_at)
-  const nicknameApplied = phase === 'function' && applied && method === 'PATCH'
+  const isFunctionCommit = phase === 'function'
+  const isAppliedFunctionCommit = isFunctionCommit && applied
+  const nicknameApplied = isAppliedFunctionCommit && method === 'PATCH'
   assert.equal(after.user.nickname, nicknameApplied ? '변경 이름' : before.user.nickname)
 }
 
