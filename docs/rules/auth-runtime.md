@@ -102,6 +102,66 @@ PostgreSQL current minor/security release와 major 지원 상태, base OS의 ful
 
 Migration의 문서 근거는 #39가 읽은 [TypeORM Migration setup](https://typeorm.io/docs/migrations/setup/)이며 선택 version의 실제 CLI·ESM 검증이 남아 있다. 이번 사용자 지시에 따라 Migration file/command/package script를 추가하거나 실행하지 않는다. 위 proposal이 승인되더라도 별도 구현 착수 지시를 뜻하지 않는다.
 
+## 기본 API의 배포 설정 입력 — 제안
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 기본 API 실행에 필요한 기존 factory 설정의 직렬화 입력과 historical secret 참조 해석을 확정한다.
+evidence: "Issue #125 작업 전 확인: https://github.com/blahaj94/ldb/issues/125#issuecomment-5571836470"
+exceptions: 실제 credential·등록값·secret 저장소 제품·배포 topology와 Discord PKCE gate는 이 제안으로 확정하지 않는다.
+review-after: 기본 entry의 설정 실패·전체 HTTP 흐름·자원 정리 검증 완료 또는 첫 설정 교체 검토 시
+```
+
+이 절만 **승인 전 제안**이며 위의 active 계약을 변경하거나 구현을 허용하지 않는다. [`change-control.md`](change-control.md#approval-evidence)에 따라 Draft PR의 명시적인 `승인` 후 적용하며, 실행 범위는 [Issue #125](https://github.com/blahaj94/ldb/issues/125)를 따른다. 선택은 배포가 준비한 **단일 secret JSON 파일**을 시작 때 한 번 읽는 방식이다. 이미 승인된 factory의 설정 전달 경계를 연결하며 새 dependency·API·DB schema를 추가하지 않는다.
+
+### 환경변수와 파일 경계
+
+- 기존 `PORT`, `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`, `NEOPLE_API_KEY` 입력과 검증 의미를 유지한다. 로그인·계정·검색을 합성한 기본 start에서는 모두 필수다. DB 값은 기존 DB reader로 읽고 이 JSON에 중복 저장하지 않는다.
+- 새 필수 환경변수 `AUTH_CONFIG_FILE`은 배포가 준비한 파일의 **절대 filesystem path**다. 누락·빈 값·상대 경로·파일 읽기 실패는 시작 실패다. API는 경로를 trim하거나 환경변수·`~`·URL로 확장하지 않는다. 기본 경로, inline JSON 환경변수와 다른 설정 원천으로의 fallback은 없다.
+- 파일은 UTF-8 JSON object이며 아래 필드를 가진다. JSON 문법 오류, 필수 필드 누락·잘못된 type·정의하지 않은 필드는 거절한다. 문자열·숫자 coercion과 값 보정은 하지 않는다. PEM의 줄바꿈은 JSON 문자열 escape로 전달한다.
+- 파일 전체를 secret으로 취급한다. 배포 담당이 API 실행 주체와 필요한 배포 관리자만 읽도록 준비하며 source·DB·image layer·log에 넣지 않는다. API가 파일 생성·권한 변경·secret manager 호출을 맡지 않는다. 실제 저장소 제품, mount·소유자·OS 권한 설정과 운영 교체 절차는 별도 배포 gate다.
+- 시작마다 파일을 한 번 읽어 검증된 설정 사본을 해당 process 수명 동안 사용한다. 요청 중 파일을 다시 읽거나 자동 reload하지 않는다. 교체는 일관된 새 파일을 준비한 뒤 process를 재시작하는 경계이며, 실행 중인 process가 파일 교체를 즉시 반영한다고 주장하지 않는다.
+
+### JSON 필드와 기존 factory의 대응
+
+아래 object의 필드는 별도 표시가 없으면 모두 필수다. `[]`는 배열 원소의 형태를 나타내며 실제 field 이름이 아니다. 등록·key의 값과 URL은 배포 담당이 준비하고 예제 credential을 기본값으로 사용하지 않는다.
+
+| 경로 | 정확한 구조와 해석 |
+| --- | --- |
+| 최상위 | `accessJwt`, `providerPkce`, `registry`, `google` object 네 개. |
+| `accessJwt` | `issuer: string`, `audience: string`, `signingKey: {kid: string, privateKeyPem: string}`, `verificationKeys: [{kid: string, publicKeyPem: string}]`. 기존 `AccessJwtIssuerConfiguration` 그대로이며 issuer와 verifier에 같은 issuer/audience/verification key 집합을 제공한다. |
+| `providerPkce` | `activeKeyId: string`, `keys: [{id: string, key: string}]`. `key`만 canonical unpadded base64url 43자에서 정확한 32-byte Buffer로 decode/re-encode 확인 후 기존 `ProviderPkceConfiguration`에 전달한다. JWT signing key와 별도 key다. |
+| `registry` | `apiOrigin: string`, `activeVersions: {google: string}`, `registrations: [ProviderRegistration]`. 기본 entry는 Google 로그인만 연결한다. Discord 활성화나 등록을 이 입력으로 허용하지 않으며 기존 Discord gate를 유지한다. |
+| `registry.registrations[]` | `provider: "google"`, `version: string`, `providerClientId: string`, `providerSecretRef: string`, `callbackUrl: string`, `authorizationEndpoint: string`, `expectedAudience: string`, `returnTarget: {id: string, url: string}`. 기존 `LoginRegistryConfiguration`·`ProviderRegistration`의 Google 구조이며 active와 필요한 과거 version을 함께 담는다. |
+| `google` | `registrations` 배열과 `secrets` 배열. Transport 함수나 `fetch` override는 파일 입력에 없다. |
+| `google.registrations[]` | `version: string`, `tokenEndpoint: string`, `jwksUri: string`. 같은 version의 Google registry 항목 전체를 `snapshot`으로 찾아 기존 `GoogleProviderRegistration`에 전달한다. Snapshot을 이 배열에 다시 복제하거나 필드별로 덮어쓰지 않는다. |
+| `google.secrets[]` | `version: string`, `reference: string`, `value: string`. `reference`는 같은 version의 `providerSecretRef`와 exact match하는 불투명한 식별자다. `value`는 비어 있거나 공백뿐인 문자열을 거절하고 통과한 문자열을 그대로 사용한다. 참조를 환경변수명·파일 path·URL로 실행하거나 해석하지 않는다. |
+
+JWT·PKCE·registry의 의미 검증은 기존 `createAccessJwtIssuer`, `createAccessJwtVerifier`, `ProviderPkceKeys`, `LoginRegistry`를 재사용한다. JSON 경계는 위 구조를 확인하며 key import·일치·등록 URL·audience 검증을 별도 crypto나 느슨한 validator로 대체하지 않는다. Type 정의 위치는 `apps/api/src/auth/access-jwt/types.ts`, `apps/api/src/types/login.ts`, `apps/api/src/auth/google/types.ts`다.
+
+### 등록 snapshot과 secret의 결합
+
+- 각 `registry.registrations` version에 Google endpoint 항목 하나와 해당 `(version, providerSecretRef)` secret 항목 하나가 있어야 한다. 중복 Google endpoint version·중복 secret `(version, reference)`·누락·연결할 registry가 없는 항목은 listen 전에 실패한다. 문자열 exact match를 사용하고 구분자 결합으로 서로 다른 tuple이 충돌하게 만들지 않는다.
+- Google authorization/token/JWKS URL은 배포 담당이 검토한 trusted registry/discovery allowlist 값이다. 기존 factory의 HTTPS·exact URL 검증을 유지한다. 파일은 신뢰된 서버 설정이며 요청·provider token의 URL이나 `jku`/`x5u`에서 값을 채우지 않는다. URL 형태 검증만으로 Google의 실제 등록·신뢰 근거 확인이 완료됐다고 표시하지 않는다.
+- `resolveSecret({version, reference, signal})`은 시작 때 확정한 정확한 tuple만 조회한다. 취소된 signal 또는 일치 항목 부재는 실패이며 active version·같은 reference의 다른 version·첫 항목으로 fallback하지 않는다. Callback은 저장 snapshot과 동일한 provider client ID·callback·audience·secret 결합을 사용한다.
+- 과거 snapshot을 지원하려면 registry, 해당 endpoint와 secret, 복호화 key를 함께 준비한다. 제공하지 않은 과거 snapshot이나 key의 pending request는 기존 실패 경로를 따르며 새 active 설정으로 재해석하지 않는다. 같은 version의 tuple 또는 secret 의미를 교체해 과거 request를 다른 설정에 연결하지 않는다.
+- 정상 signing key의 90일 주기·public key 선배포·마지막 발급 뒤 최소 900초와 token 만료 확인 후 제거, 침해·복원 예외는 [`auth-session.md`](auth-session.md#signing-key-lifecycle)를 따른다. PKCE 이전 key의 pending 최대 10분 보존 또는 해당 request 명시 실패는 [`auth-database.md`](auth-database.md#provider-pkce-암호화)를 따른다. 시작마다 key를 생성하거나 이 파일 방식으로 기존 교체·보관 의미를 바꾸지 않는다.
+
+### 시작 실패와 종료
+
+1. 환경변수·파일 구조·key·registry·Google endpoint/secret 연결을 모두 검증한 뒤 DB와 앱을 초기화하고 마지막에 listen한다. 시작 검증을 위해 실제 provider 인증이나 자동 Migration을 실행하지 않는다.
+2. 누락·잘못된 설정과 초기화·listen 실패는 nonzero exit로 끝낸다. 설정 실패에서는 port를 열지 않는다. 오류 원문·cause·stack·파일 경로·설정값·credential을 출력하지 않고 비민감 고정 실패 메시지만 남긴다. Framework와 library의 기본 오류 출력도 같은 경계로 처리한다.
+3. 정상 종료·처리 가능한 `SIGINT`/`SIGTERM`·부분 초기화 실패·listen 실패 모두 이번 실행이 소유한 자원을 정리한다. 앱이 존재하면 앱 종료와 검색 취소 정리를 먼저 시도하고 그 뒤 DB 연결을 정리한다. 앱 종료 실패도 DB 정리를 건너뛰게 하지 않으며 초기화 완료 표시 이전에 확보된 연결도 정리 대상이다. 강제 종료·host 장애의 즉시 정리는 보장하지 않는다.
+
+HTTP 합성은 기존 login/session/account/search factory를 사용한다. [`auth-activity.md`](auth-activity.md)의 단일 2초 DB deadline·취소·residual 검색과 [`character-search.md`](character-search.md#deadline과-adapter)의 5초 upstream deadline은 그대로 유지한다. 기본 entry에 인증 우회·test mode·실제 credential을 상속하는 test 설정은 추가하지 않는다.
+
+### 비교한 대안과 선택 이유
+
+대안은 registry·metadata JSON과 개별 secret 파일을 분리하고 metadata에서 secret 파일을 참조하는 방식이다. Secret별 읽기 권한과 교체 단위를 분리할 수 있지만 참조 path의 기준·허용 범위, 여러 파일의 읽기 실패·교체 중 일관성, 과거 version과 secret 파일의 수명까지 추가로 정하고 검증해야 한다.
+
+단일 파일은 기존 typed factory 입력을 작은 loader로 변환하고 한 번 읽은 설정의 결합을 유지하기 쉽다. 반면 metadata만 바꿀 때도 secret을 포함한 파일을 다시 배포하며 파일을 읽을 수 있는 주체는 그 안의 모든 secret을 읽을 수 있다. 현재 기본 API 연결 범위에는 이 비용을 수용하는 안을 제안한다. 서로 다른 권한·교체 주체가 실제로 필요해지면 분리안이나 secret manager adapter를 새 Rule 변경으로 검토한다.
+
 ## 승인과 미결정 gate
 
 API/security/schema/보관·key 주기·활동 분류·admission/DB 장애·body/deadline 정책과 위 exact dependency 역할·version은 승인됐다. PostgreSQL server·image·local validation 선택의 상태와 evidence는 위 canonical 구간만 따른다. 선택 승인 여부와 별개로 다음 미정이 필요한 구현은 별도 결정/검증을 완료해야 한다.
