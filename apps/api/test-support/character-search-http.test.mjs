@@ -19,11 +19,10 @@ async function withSearchBoundary(operation, { validJwt = true, apiKey = 'synthe
   const calls = { verification: 0, database: 0, upstream: 0 }
   const deps = {
     apiKey,
-    dataSource: {
-      createQueryRunner() {
-        calls.database += 1
-        throw new Error('unexpected database call')
-      },
+    dataSource: {},
+    createQueryRunner() {
+      calls.database += 1
+      throw new Error('unexpected database call')
     },
     async verifyAccessJwt() {
       calls.verification += 1
