@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import test from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import {
   assertStartupFailure, collectRuntimeExit, runtimeEnvironment, startRuntime, stopRuntime,
   unusedRuntimePort, waitForRuntime, withRuntimeConfiguration,
@@ -166,5 +167,33 @@ test('occupied port fails without exposing configuration and closes the initiali
     })
   } finally {
     await new Promise((resolve) => server.close(resolve))
+  }
+})
+
+test('signals during initialization and pending listen cannot leave a late running app', async (t) => {
+  for (const [fault, observed] of [['initialize-signal', 'db.initializing'], ['listen-signal', 'app.listen-pending']]) {
+    await t.test(fault, () => withRuntimeConfiguration(async ({ path }) => {
+      const port = await unusedRuntimePort()
+      const runtime = startRuntime(runtimeEnvironment(path, port), { fault })
+      try {
+        let hasReachedStage = false
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          hasReachedStage = eventsOf(runtime).includes(observed)
+          if (hasReachedStage) break
+          assert.equal(runtime.child.exitCode, null)
+          await delay(10)
+        }
+        assert(hasReachedStage, 'runtime did not reach the delayed startup stage')
+        runtime.child.kill('SIGTERM')
+        const result = await collectRuntimeExit(runtime)
+        assert.deepEqual(result, { code: 0, signal: null, stdout: '', stderr: '' })
+        const events = eventsOf(runtime)
+        assert.deepEqual(events.slice(-4), ['app.close', 'app.closed', 'db.destroy', 'db.disconnected'])
+        const wasInitializing = fault === 'initialize-signal'
+        if (wasInitializing) assert.equal(events.includes('app.listen'), false)
+      } finally {
+        await stopRuntime(runtime)
+      }
+    }))
   }
 })

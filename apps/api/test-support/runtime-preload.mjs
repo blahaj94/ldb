@@ -1,6 +1,8 @@
 /* global fetch, URL */
 import assert from 'node:assert/strict'
 import process from 'node:process'
+import { once } from 'node:events'
+import { clearTimeout, setTimeout } from 'node:timers'
 import { DataSource } from 'typeorm'
 import { NestFactory } from '@nestjs/core'
 import { Module } from '@nestjs/common'
@@ -40,6 +42,18 @@ DataSource.prototype.initialize = async function () {
   }
   this.driver.disconnect = async () => { observe('db.disconnected') }
   if (shouldFailPartially) throw new Error('fixture-sensitive-partial-connect')
+  const shouldWaitForSignal = fault === 'initialize-signal'
+  if (shouldWaitForSignal) {
+    // 실제 connecting socket을 대신하는 ref를 유지해야 Node가 await 중 종료하지 않는다.
+    const connectionHandle = setTimeout(() => {}, 5000)
+    const signalled = once(process, 'SIGTERM')
+    observe('db.initializing')
+    try {
+      await signalled
+    } finally {
+      clearTimeout(connectionHandle)
+    }
+  }
   this.isInitialized = true
   return this
 }
@@ -79,7 +93,14 @@ NestFactory.create = async (...args) => {
     observe('app.listen')
     const shouldStopBeforeListening = fault === 'stop-before-listen'
     if (shouldStopBeforeListening) throw new Error('fixture-sensitive-unexpected-listen')
-    return listen(...listenArgs)
+    const result = await listen(...listenArgs)
+    const shouldWaitForSignal = fault === 'listen-signal'
+    if (shouldWaitForSignal) {
+      const signalled = once(process, 'SIGTERM')
+      observe('app.listen-pending')
+      await signalled
+    }
+    return result
   }
   // Nest의 내부 proxy는 set을 무시하므로 바깥 get proxy로 관측한다.
   return new Proxy(app, {
