@@ -75,8 +75,8 @@ export function validateReturnTarget(returnTarget: string): string {
   const isPrivateScheme = !INCOMPATIBLE_APP_PROTOCOLS.has(url.protocol)
   const hasNoCredentials = url.username.length === 0 && url.password.length === 0
   const hasNoPort = url.port.length === 0
-  const hasNoQuery = url.search.length === 0
-  const hasNoFragment = url.hash.length === 0
+  const hasNoQuery = !returnTarget.includes('?')
+  const hasNoFragment = !returnTarget.includes('#')
   const isCanonicalTarget = url.toString() === returnTarget
   const isValidTarget =
     isPrivateScheme &&

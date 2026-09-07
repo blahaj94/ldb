@@ -183,10 +183,7 @@ describe('Desktop AuthCoordinator login', () => {
     }
     const reversed = { ...advanced, [axis]: startedAt[axis] + 150 }
     const readClock = vi.spyOn(harness.clock, 'read')
-    readClock
-      .mockReturnValue(advanced)
-      .mockReturnValueOnce(startedAt)
-      .mockReturnValueOnce(advanced)
+    readClock.mockReturnValue(advanced).mockReturnValueOnce(startedAt).mockReturnValueOnce(advanced)
     const isResponse = boundary === 'response'
     const isReschedule = boundary === 'reschedule'
     const isCallback = boundary === 'callback'

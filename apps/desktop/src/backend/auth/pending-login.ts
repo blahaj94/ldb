@@ -39,6 +39,7 @@ export class PendingLogin {
   readonly generation: number
   private readonly verifier: string
   private readonly startedAt: ClockReading
+  private lastAcceptedAt: ClockReading
   private requestId: string | null = null
   private expiresAt: string | null = null
   private expiresAtMs: number | null = null
@@ -60,6 +61,7 @@ export class PendingLogin {
     this.generation = input.generation
     this.verifier = input.verifier
     this.startedAt = input.startedAt
+    this.lastAcceptedAt = input.startedAt
   }
 
   get signal(): AbortSignal {
@@ -89,8 +91,8 @@ export class PendingLogin {
   }
 
   isExpired(checkedAt: ClockReading): boolean {
-    const isWallClockReversed = checkedAt.wallMs < this.startedAt.wallMs
-    const isMonotonicReversed = checkedAt.monotonicMs < this.startedAt.monotonicMs
+    const isWallClockReversed = checkedAt.wallMs < this.lastAcceptedAt.wallMs
+    const isMonotonicReversed = checkedAt.monotonicMs < this.lastAcceptedAt.monotonicMs
     const hasReachedMonotonicLimit =
       checkedAt.monotonicMs - this.startedAt.monotonicMs >= LOGIN_REQUEST_MAX_AGE_MS
     const expiresAtMs = this.expiresAtMs
@@ -104,6 +106,9 @@ export class PendingLogin {
       hasReachedMonotonicLimit ||
       hasReachedServerExpiry
 
+    if (!isExpired) {
+      this.lastAcceptedAt = checkedAt
+    }
     return isExpired
   }
 
