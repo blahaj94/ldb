@@ -1,3 +1,4 @@
+import type { RecoveryPurpose, StorageRecoveryPurpose } from './recovery-plan'
 import type {
   AuthCommandError,
   AuthCommandResult,
@@ -21,6 +22,7 @@ type StorageNotice = 'SECURE_STORAGE_UNAVAILABLE' | 'LOCAL_CLEAR_UNCONFIRMED' | 
 
 export class AuthState {
   private revision = 0
+  private recovery: RecoveryPurpose | null = null
   private current: SnapshotState = {
     phase: 'restoring',
     login: null,
@@ -34,6 +36,10 @@ export class AuthState {
     private readonly runId: string,
     private readonly providers: readonly AuthProvider[]
   ) {}
+
+  get recoveryPurpose(): RecoveryPurpose | null {
+    return this.recovery
+  }
 
   get phase(): AuthPhase {
     return this.current.phase
@@ -87,6 +93,7 @@ export class AuthState {
   }
 
   signedIn(nickname: string, entry: 'welcome' | 'home'): AuthSnapshot {
+    this.recovery = null
     return this.publish({
       phase: 'signedIn',
       login: null,
@@ -97,6 +104,7 @@ export class AuthState {
   }
 
   signedOut(notice: AuthNotice | null = null): AuthSnapshot {
+    this.recovery = null
     return this.publishInactive('signedOut', notice)
   }
 
@@ -105,14 +113,17 @@ export class AuthState {
   }
 
   restorePaused(notice: 'NETWORK_UNAVAILABLE' | 'AUTH_SERVICE_UNAVAILABLE'): AuthSnapshot {
+    this.recovery = 'resume-credential'
     return this.publishInactive('restorePaused', notice)
   }
 
   signingOut(): AuthSnapshot {
+    this.recovery = null
     return this.publishInactive('signingOut', null)
   }
 
-  storageBlocked(notice: StorageNotice): AuthSnapshot {
+  storageBlocked(notice: StorageNotice, purpose: StorageRecoveryPurpose): AuthSnapshot {
+    this.recovery = purpose
     return this.publishInactive('storageBlocked', notice)
   }
 
@@ -121,6 +132,7 @@ export class AuthState {
     login: NonNullable<AuthSnapshot['login']>,
     notice: AuthNotice | null
   ): AuthSnapshot {
+    this.recovery = null
     return this.publish({ phase, login, user: null, entry: null, notice })
   }
 
