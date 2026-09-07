@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.web.json",
+  "compilerOptions": {
+    "types": ["node", "electron-vite/node"]
+  },
+  "include": [
+    "./*.ts",
+    "../auth-bridge-fixture.config.ts",
+    "../../src/frontend/auth-bridge-fixture/**/*.tsx"
+  ]
+}
