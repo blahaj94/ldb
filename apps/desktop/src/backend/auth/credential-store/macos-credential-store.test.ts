@@ -308,6 +308,16 @@ describe('macOS CredentialStore의 파일 protocol', () => {
     expect(await fs.readdir(fixture.directory)).toEqual(['credential.v1'])
   })
 
+  it('재확립한 marker 뒤 이전 temp 정리가 실패하면 writer 준비 성공을 반환하지 않는다', async () => {
+    await fixture.seedReady()
+    fixture.failures.set('rename:transition.v1', ['before'])
+    fixture.failures.set('unlink:transition-temp', ['before'])
+
+    expect(await prepareCredentialTransition(fixture.store, 'refresh')).toBe('unconfirmed')
+    expect(await fixture.store.commitCredential(REFRESH_1)).toBe('failed')
+    expect(await fixture.createStore().inspect()).toEqual({ status: 'recovery-required' })
+  })
+
   it.each([true, false])(
     'marker unlink 뒤 sync 실패와 재확립 성공=%s를 구분한다',
     async (canReestablish) => {

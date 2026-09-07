@@ -124,11 +124,26 @@ export class MacOsCredentialFiles {
       replacementAttempted = true
       await this.files.rename(temporary, join(this.directory, name))
       await this.syncDirectory()
+      const isMarker = name === 'transition.v1'
+      if (isMarker) await this.discardMarkerTemporaries()
       return 'confirmed'
     } catch {
       // rename 호출 이후 오류는 destination이 실제 교체됐는지 추측하지 않는다.
       return replacementAttempted ? 'unknown' : 'failed'
     }
+  }
+
+  private async discardMarkerTemporaries(): Promise<void> {
+    const names = (await this.ownedTemporaries()).filter((name) => {
+      const isMarkerTemporary = name.startsWith('.transition.v1.')
+      return isMarkerTemporary
+    })
+    const hasTemporaries = names.length > 0
+    if (!hasTemporaries) return
+    // 새 marker의 directory sync 이후에만 이전 시도의 temp를 지운다.
+    for (const name of names) await this.present(name)
+    for (const name of names) await this.files.unlink(join(this.directory, name))
+    await this.syncDirectory()
   }
 
   async clear(): Promise<StoreMutationOutcome> {
