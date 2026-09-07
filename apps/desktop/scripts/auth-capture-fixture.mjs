@@ -83,6 +83,7 @@ export async function runCaptureFixture(args = []) {
   let profile
   let child
   let interrupted = false
+  let finalizing = false
   let exitCode = 1
   let deadline
   let forcedKill
@@ -91,18 +92,23 @@ export async function runCaptureFixture(args = []) {
   function interrupt() {
     if (interrupted) return
     interrupted = true
+    if (finalizing) return
     const hasPid = child?.pid != null
     if (!hasPid) return
     signalGroup(child.pid, 'SIGTERM')
     forcedKill = setTimeout(() => signalGroup(child.pid, 'SIGKILL'), 2_000)
   }
+  process.on('SIGINT', interrupt)
+  process.on('SIGTERM', interrupt)
   try {
     profile = await mkdtemp(join(tmpdir(), 'ldb-auth-capture-fixture-'))
+    if (interrupted) return 1
     await writeFile(
       join(profile, 'owner.json'),
       JSON.stringify({ kind: 'auth-capture-fixture', launcherPid: process.pid }),
       { mode: 0o600 }
     )
+    if (interrupted) return 1
     const environment = {
       ...process.env,
       LDB_AUTH_CAPTURE_PROFILE: profile,
@@ -114,8 +120,6 @@ export async function runCaptureFixture(args = []) {
       detached: true,
       stdio: ['ignore', 'inherit', 'inherit']
     })
-    process.once('SIGINT', interrupt)
-    process.once('SIGTERM', interrupt)
     if (!isInteractive) deadline = setTimeout(interrupt, 120_000)
     const code = await new Promise((accept, reject) => {
       child.once('error', () => reject(new Error('Capture fixture child could not start')))
@@ -126,10 +130,9 @@ export async function runCaptureFixture(args = []) {
   } catch {
     console.error('Capture fixture launcher execution FAIL')
   } finally {
+    finalizing = true
     clearTimeout(deadline)
     clearTimeout(forcedKill)
-    process.removeListener('SIGINT', interrupt)
-    process.removeListener('SIGTERM', interrupt)
     const hasPid = child?.pid != null
     const groupStopped = !hasPid || (await finishGroup(child.pid))
     const hasProfile = profile != null
@@ -140,8 +143,10 @@ export async function runCaptureFixture(args = []) {
       console.error('Capture fixture cleanup FAIL')
       exitCode = 1
     }
+    process.removeListener('SIGINT', interrupt)
+    process.removeListener('SIGTERM', interrupt)
   }
-  return exitCode
+  return interrupted ? 1 : exitCode
 }
 
 const invokedPath = process.argv[1]
