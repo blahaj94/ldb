@@ -273,12 +273,18 @@ importers:
       '@tesseract.js-data/kor':
         specifier: ^1.0.0
         version: 1.0.0
+      ky:
+        specifier: 2.1.0
+        version: 2.1.0
       tesseract.js:
         specifier: ^7.0.0
         version: 7.0.0
       tesseract.js-core:
         specifier: ^7.0.0
         version: 7.0.0
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
     devDependencies:
       '@electron-toolkit/eslint-config-prettier':
         specifier: ^3.0.0
@@ -3503,6 +3509,10 @@ packages:
 
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
+
+  ky@2.1.0:
+    resolution: {integrity: sha512-nIKwelw+7qVqKOlX4Eht6GXfEXlDHcdIjyLWV3s119kYt5s+70ayTnYS+0fRNmtgGRRAfqdeWQbh8YizqkS0ng==}
+    engines: {node: '>=22'}
 
   lazy-val@1.0.5:
     resolution: {integrity: sha512-0/BnGCCfyUMkBpeDgWihanIAF9JmZhHBgUhEqzvf+adhNGLoP6TaiI5oF8oyb3I45P+PcnrqihSf01M0l0G5+Q==}
@@ -8284,6 +8294,8 @@ snapshots:
   keyv@4.5.4:
     dependencies:
       json-buffer: 3.0.1
+
+  ky@2.1.0: {}
 
   lazy-val@1.0.5: {}
 
