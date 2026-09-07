@@ -1287,6 +1287,229 @@ describe('Desktop AuthCoordinator login', () => {
     expect(harness.http.exchange).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['success', 'cancel-recover'] as const)(
+    '거절 clear 완료의 동기 listener에서 다른 callback으로 writer를 인계한다: %s',
+    async (outcome) => {
+      const harness = createAuthHarness()
+      const effects: string[] = []
+      function observeEffect<Args extends unknown[], Result>(
+        name: string,
+        operation: (...args: Args) => Promise<Result>
+      ): (...args: Args) => Promise<Result> {
+        let calls = 0
+        return (...args) => {
+          const label = `${name}:${++calls}`
+          effects.push(`${label}:start`)
+          const promise = operation(...args)
+          void promise.then(
+            () => effects.push(`${label}:complete`),
+            () => effects.push(`${label}:reject`)
+          )
+          // 관측 callback만 붙이고 제품이 기다리는 원래 Promise는 그대로 반환한다.
+          return promise
+        }
+      }
+      const coordinator = createAuthCoordinator({
+        ...harness.dependencies,
+        store: {
+          inspect: harness.store.inspect,
+          establishTransition: observeEffect('marker', harness.store.establishTransition),
+          commitCredential: observeEffect('commit', harness.store.commitCredential),
+          clearCredential: observeEffect('clear', harness.store.clearCredential),
+          removeTransition: observeEffect('remove', harness.store.removeTransition),
+          reestablishTransition: harness.store.reestablishTransition
+        },
+        http: {
+          ...harness.http.value,
+          exchange: observeEffect('exchange', harness.http.exchange),
+          logout: observeEffect('logout', harness.http.logout)
+        }
+      })
+      await coordinator.start()
+      await beginWaitingLogin(coordinator)
+      const rejectedClear = deferred<'confirmed'>()
+      const nextExchange = deferred<Awaited<ReturnType<typeof harness.http.value.exchange>>>()
+      harness.store.clearWaits.push(rejectedClear.promise)
+      harness.http.exchange
+        .mockRejectedValueOnce(new AuthHttpFailure('exchange-invalid'))
+        .mockImplementationOnce(() => nextExchange.promise)
+      let firstSettled = false
+      let nextReturning: Promise<void> | undefined
+      const publishedPhases: string[] = []
+      const handoff = vi.fn((snapshot: ReturnType<typeof coordinator.getSnapshot>) => {
+        expect(firstSettled).toBe(false)
+        expect(harness.store.inspection).toEqual({ status: 'empty' })
+        effects.push('listener:enter')
+        nextReturning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${OTHER_CODE}`)
+        expect(coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${OTHER_CODE}`)).toBe(
+          nextReturning
+        )
+        expect(coordinator.getSnapshot()).toMatchObject({ phase: 'exchanging', notice: null })
+        expect(snapshot).toMatchObject({
+          phase: 'waitingBrowser',
+          notice: 'LOGIN_RETURN_INVALID',
+          login: { attemptId: ATTEMPT_ID }
+        })
+        expect(coordinator.getSnapshot().revision).toBe(snapshot.revision + 1)
+        effects.push('listener:exit')
+      })
+      const unsubscribe = coordinator.subscribe((snapshot) => {
+        publishedPhases.push(snapshot.phase)
+        const isSignedIn = snapshot.phase === 'signedIn'
+        if (isSignedIn) {
+          effects.push('publish:signedIn')
+        }
+        const isWaiting = snapshot.phase === 'waitingBrowser'
+        const isRejected = snapshot.notice === 'LOGIN_RETURN_INVALID'
+        const shouldHandoff = isWaiting && isRejected
+        if (shouldHandoff) {
+          handoff(snapshot)
+        }
+      })
+
+      const first = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+      expect(coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)).toBe(first)
+      void first.then(() => {
+        firstSettled = true
+        effects.push('first:settled')
+      })
+      await vi.waitFor(() => expect(harness.store.clearCredential).toHaveBeenCalledTimes(1))
+      expect(handoff).not.toHaveBeenCalled()
+      expect(firstSettled).toBe(false)
+      expect(effects).toEqual([
+        'marker:1:start',
+        'marker:1:complete',
+        'exchange:1:start',
+        'exchange:1:reject',
+        'marker:2:start',
+        'marker:2:complete',
+        'clear:1:start'
+      ])
+      rejectedClear.resolve('confirmed')
+      await first
+      await vi.waitFor(() => expect(harness.http.exchange).toHaveBeenCalledTimes(2))
+
+      expect(handoff).toHaveBeenCalledTimes(1)
+      expect(firstSettled).toBe(true)
+      expect(effects.slice(7, 13)).toEqual([
+        'clear:1:complete',
+        'remove:1:start',
+        'remove:1:complete',
+        'listener:enter',
+        'marker:3:start',
+        'listener:exit'
+      ])
+      expect(effects).toContain('marker:3:complete')
+      expect(effects).toContain('exchange:2:start')
+      expect(effects.indexOf('marker:3:complete')).toBeLessThan(effects.indexOf('exchange:2:start'))
+      expect(effects).not.toContain('exchange:2:complete')
+      expect(harness.store.establishTransition.mock.calls.map(([kind]) => kind)).toEqual([
+        'exchange',
+        'clear',
+        'exchange'
+      ])
+      expect(harness.http.exchange.mock.calls.map(([input]) => input.code)).toEqual([
+        CODE,
+        OTHER_CODE
+      ])
+      expect(harness.store.commitCredential).not.toHaveBeenCalled()
+      effects.length = 0
+
+      const isCancelled = outcome === 'cancel-recover'
+      const disposal = deferred<void>()
+      const lateClear = deferred<'confirmed'>()
+      const commit = deferred<'confirmed'>()
+      if (isCancelled) {
+        await coordinator.cancelLogin(ATTEMPT_ID)
+        // 첫 completion이 새 writer를 해제했다면 signedOut의 새 login이 잘못 허용된다.
+        await expect(coordinator.beginLogin('discord')).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'AUTH_BUSY' }
+        })
+        harness.http.logout.mockImplementationOnce(() => disposal.promise)
+        harness.store.clearWaits.push(lateClear.promise)
+      } else {
+        harness.store.commitWaits.push(commit.promise)
+      }
+      nextExchange.resolve({
+        ...tokenResponse(),
+        user: { id: USER_ID, nickname: '모험가000001' },
+        isNewUser: true
+      })
+      if (isCancelled) {
+        await vi.waitFor(() => expect(harness.http.logout).toHaveBeenCalledTimes(1))
+        expect(effects).toEqual(['exchange:2:complete', 'logout:1:start'])
+        expect(harness.store.clearCredential).toHaveBeenCalledTimes(1)
+        disposal.resolve()
+        await vi.waitFor(() => expect(harness.store.clearCredential).toHaveBeenCalledTimes(2))
+        await expect(coordinator.beginLogin('discord')).resolves.toMatchObject({
+          ok: false,
+          error: { code: 'AUTH_BUSY' }
+        })
+        expect(publishedPhases).not.toContain('signedIn')
+        expect(harness.store.commitCredential).not.toHaveBeenCalled()
+        lateClear.resolve('confirmed')
+      } else {
+        await vi.waitFor(() => expect(harness.store.commitCredential).toHaveBeenCalledTimes(1))
+        expect(effects).toEqual(['exchange:2:complete', 'commit:1:start'])
+        expect(publishedPhases).not.toContain('signedIn')
+        expect(harness.store.removeTransition).toHaveBeenCalledTimes(1)
+        commit.resolve('confirmed')
+      }
+      expect(nextReturning).toBeDefined()
+      await nextReturning
+      unsubscribe()
+
+      if (isCancelled) {
+        expect(effects).toEqual([
+          'exchange:2:complete',
+          'logout:1:start',
+          'logout:1:complete',
+          'marker:4:start',
+          'marker:4:complete',
+          'clear:2:start',
+          'clear:2:complete',
+          'remove:2:start',
+          'remove:2:complete'
+        ])
+        expect(harness.http.logout).toHaveBeenCalledWith(REFRESH_1, expect.any(AbortSignal))
+        expect(harness.store.commitCredential).not.toHaveBeenCalled()
+        expect(publishedPhases).not.toContain('signedIn')
+        expect(harness.store.inspection).toEqual({ status: 'empty' })
+        expect(coordinator.getSnapshot()).toMatchObject({
+          phase: 'signedOut',
+          notice: 'LOGIN_CANCELLED'
+        })
+        await expect(coordinator.beginLogin('discord')).resolves.toMatchObject({
+          ok: true,
+          snapshot: { phase: 'startingLogin', login: { attemptId: NEXT_ATTEMPT_ID } }
+        })
+        await waitForPhase(coordinator, 'waitingBrowser')
+        await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+        expect(coordinator.getSnapshot().phase).toBe('signedIn')
+      } else {
+        expect(effects).toEqual([
+          'exchange:2:complete',
+          'commit:1:start',
+          'commit:1:complete',
+          'remove:2:start',
+          'remove:2:complete',
+          'publish:signedIn'
+        ])
+        expect(harness.store.commitCredential).toHaveBeenCalledExactlyOnceWith(REFRESH_1)
+        expect(harness.http.logout).not.toHaveBeenCalled()
+        expect(
+          publishedPhases.filter((phase) => {
+            const isSignedIn = phase === 'signedIn'
+            return isSignedIn
+          })
+        ).toHaveLength(1)
+        expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'welcome' })
+      }
+      expect(harness.store.inspection).toEqual({ status: 'ready', refreshToken: REFRESH_1 })
+    }
+  )
+
   it.each([
     ['cancel', 'confirmed', 'confirmed', 'exchange-invalid'],
     ['expiry', 'confirmed', 'confirmed', 'exchange-invalid'],
