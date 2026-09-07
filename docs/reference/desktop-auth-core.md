@@ -13,7 +13,10 @@ Desktop main 인증의 현재 독립 core는 `apps/desktop/src/backend/auth`에 
 
 | Path                                                     | 현재 책임                                                                                                  |
 | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `apps/desktop/src/backend/auth/coordinator.ts`           | command 허용, current attempt·generation, 공개 snapshot과 restore·refresh·logout 결과 적용 |
+| `apps/desktop/src/backend/auth/coordinator.ts`           | command 허용, generation·pending·공개 Promise, resource 무효화와 비동기 결과 적용 |
+| `apps/desktop/src/backend/auth/auth-state.ts`            | 의미 있는 phase 전이, allowlist snapshot·revision·동기 listener와 recovery 목적 |
+| `apps/desktop/src/backend/auth/recovery-plan.ts`         | 저장 상태와 실행 시점 access 사실에서 다음 recovery 단계를 선택하는 pure 판단 |
+| `apps/desktop/src/backend/auth/user-verification.ts`     | `/me` controller 예약·abort·동일 작업 해제와 정제 실패 notice 분류 |
 | `apps/desktop/src/backend/auth/credential-session.ts`    | private credential·known refresh, writer·HTTP 진행, refresh 공유 Promise, logout reservation·disposal 결과와 저장 effect |
 | `apps/desktop/src/backend/auth/pending-login.ts`         | private attempt 상태, request TTL·timer, synchronous exchange claim·중복 판정과 폐기 |
 | `apps/desktop/src/backend/auth/cleanup-result.ts`        | local clear 결과·현재 작업 여부·logout 소유권을 받아 후속 진행 또는 storage 차단 판단 |
@@ -28,7 +31,7 @@ Coordinator 생성 시 enabled provider, API origin, 등록 return target과 Bro
 
 ## Credential 실행 소유권
 
-`CredentialSession`은 credential 채택·사용 차단·참조 해제, known refresh와 disposal evidence의 수명을 함께 소유한다. 같은 module의 `CredentialWriter`가 작업별 completion Promise와 credential HTTP 시작 여부를 소유하며, writer 종료 callback은 같은 reservation일 때만 현재 writer를 해제한다. `runWriter`와 `shareRefresh`는 해당 처리 함수 하나를 실행·공유하고 coordinator의 phase·generation·snapshot setter를 받지 않는다.
+`CredentialSession`은 credential 채택·사용 차단·참조 해제, known refresh와 disposal evidence의 수명을 함께 소유한다. 같은 module의 `CredentialWriter`가 작업별 completion Promise와 credential HTTP 시작 여부를 소유하며, writer 종료 callback은 같은 reservation일 때만 현재 writer를 해제한다. `runWriter`와 `shareRefresh`는 해당 처리 함수 하나를 실행·공유하고 공개 상태·generation·snapshot setter를 받지 않는다.
 
 Exchange는 PendingLogin의 동기 claim → `exchanging` 알림 → current 재확인 → credential writer 예약 → effect 순서다. 아직 실행하지 않은 claim을 취소한 listener는 같은 stack에서 다음 login을 시작할 수 있다. Refresh 실행 Promise는 작업을 시작하기 전에 등록한다. 공개 logout의 `AuthCommandResult` Promise는 coordinator가 알림 전에 한 번 만들고 같은 flight의 모든 호출에 반환한다.
 
@@ -38,7 +41,9 @@ Exchange는 PendingLogin의 동기 claim → `exchanging` 알림 → current 재
 
 ```mermaid
 flowchart TD
-    Coordinator[AuthCoordinator] -->|attempt 수명과 claim| Pending[PendingLogin]
+    Coordinator[AuthCoordinator] -->|의미 있는 전이| State[AuthState]
+    Coordinator -->|다음 recovery 단계| Plan[recovery-plan]
+    Coordinator -->|attempt 수명과 claim| Pending[PendingLogin]
     Coordinator -->|writer와 refresh 실행| Session[CredentialSession]
     Session --> Writer[CredentialWriter]
     Session -->|prepare, finalize, clear| Operations[credential-operations]
@@ -46,7 +51,9 @@ flowchart TD
     Session -->|record와 marker mutation| Store
     Coordinator -->|inspection| Store
     Session -->|exchange, refresh, logout| Http[AuthHttp]
-    Coordinator -->|login request, me| Http
+    Coordinator -->|login request| Http
+    Coordinator --> Verification[UserVerification]
+    Verification -->|me| Http
     Coordinator -->|local 결과 적용 판단| Cleanup[cleanup-result]
 ```
 
@@ -62,6 +69,16 @@ Store adapter는 `inspect`, `establishTransition`, `commitCredential`, `clearCre
 - Local clear는 clear transition, credential 삭제, marker 제거가 모두 확인돼야 clean이다. 서버 logout 결과와 독립적으로 판단한다. 로그인 준비·exchange 실패·stale token 정리·restore/retry의 clear 완료 뒤에는 `decideLocalCleanup`이 logout 소유권을 먼저 판단하고, local 결과 불명은 storage 차단, clean 결과는 현재 작업에만 후속 진행을 허용한다. 취소·만료된 attempt의 clean 결과는 기존 상태를 유지한다. 이 pure 함수는 generation이나 snapshot을 변경하지 않으며 coordinator가 `storageBlocked/LOCAL_CLEAR_UNCONFIRMED`와 memory 해제를 적용한다. Transition 준비의 failed/unconfirmed와 token commit/finalize의 저장 실패는 각 저장 단계의 별도 결과를 유지한다.
 
 실제 adapter는 platform Rule의 safeStorage, atomic replacement, file/directory durability, ownership·symlink·permission 검사를 별도 구현해야 한다. 현재 mock의 `confirmed`는 native durability evidence가 아니다.
+
+## 공개 상태와 recovery 정책
+
+`AuthState`는 login 진행·signedIn/signedOut·복원·저장 차단 등 의미 있는 전이에서 허용된 snapshot을 만든다. State 교체와 revision 증가 뒤 listener를 동기적으로 호출하며 같은 값의 전이도 알림을 생략하지 않는다. `getSnapshot`은 revision을 바꾸지 않고 provider/login/user를 복사한다. `getSnapshot`과 `subscribe`는 분리된 함수로 호출해도 같은 owner를 사용한다. 전이의 반환값은 listener 재진입 이후의 최신 상태가 아니라 그 전이가 발행한 snapshot이므로 기존 command 결과 시점을 유지한다.
+
+Generation은 coordinator 한 곳에서 증감한다. Coordinator는 generation 확인·pending 폐기·credential 사용 차단 등 resource 처리를 수행한 뒤 AuthState 전이를 호출하며, public start/logout Promise도 계속 소유한다. AuthState는 credential·pending·HTTP 작업을 직접 실행하지 않는다.
+
+Recovery 목적은 `inspect-store`, `clear-store`, `resume-credential`로 명시하며 token·verifier·Promise를 담지 않는다. AuthState가 전이와 함께 목적을 보존하고 `recovery-plan`은 저장 상태 또는 이미 조회한 clock/access 만료 사실로 다음 단계만 선택한다. Cleanup 목적으로 재시도한 ready record는 restore하지 않고 clear한다. Retry 자격과 generation은 coordinator가 따로 검사하며, access 단계는 기존처럼 `restoring` 알림과 current 확인 뒤 clock을 읽어 결정한다.
+
+`UserVerification`은 요청별 controller를 예약하고 원래 `/me` Promise를 그대로 반환한다. Coordinator의 await/catch/finally 위치와 generation·credential identity 확인은 유지한다. Logout은 현재 verification을 abort하며, 이전 요청의 finally는 같은 reservation일 때만 current controller를 해제하므로 listener가 시작한 다음 요청의 abort 소유권을 지우지 않는다. 실패 분류는 기존 인증 상실·network·service notice만 반환한다.
 
 ## Pending attempt 소유권
 
