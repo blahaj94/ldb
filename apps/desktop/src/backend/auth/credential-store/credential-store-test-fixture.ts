@@ -15,7 +15,11 @@ export const CONTEXT = {
 export const REFRESH_0 = Buffer.alloc(32, 31).toString('base64url')
 export const REFRESH_1 = Buffer.alloc(32, 32).toString('base64url')
 
-type OpenObservation = Readonly<{ path: string; flags: string | number; mode: Mode | undefined }>
+type OpenObservation = Readonly<{
+  path: string
+  flags: string | number | undefined
+  mode: Mode | undefined
+}>
 export type StoreFixture = Readonly<{
   userDataPath: string
   directory: string

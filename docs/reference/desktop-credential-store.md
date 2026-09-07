@@ -43,7 +43,7 @@ pnpm --filter @ldb/desktop run --sequential '/^(test|lint|build)$/'
 
 전용 Vitest는 소유한 `mkdtemp` 아래 실제 Node IO에 실패·지연만 주입하고 safeStorage는 합성 double을 사용한다. 파일/handle 정리, marker·교체·삭제 실패, marker 재확립 실패와 정상 재시작, 저장 중 취소·늦은 응답·새 writer 차단을 관찰한다. 초기 Red는 module 부재로 collection에 실패했으며 실제 assertion 통과는 Green evidence다. Marker 재확립 회귀는 별도 assertion 실패를 재현한 뒤 수정했다.
 
-Native runner의 `--prepare-only`는 bundle 생성·정리만 하며 Electron/Keychain을 호출하지 않는다. 실제 mode는 고유 시험 app name·profile을 만들고 exact Keychain service/account가 search list와 default Keychain에 없음을 먼저 확인한다. 첫 await 이전 `app.setName`으로 시험 identity를 고정하며 ready 이후에만 safeStorage를 호출한다. 서로 다른 네 process에서 합성 R0 저장, 재시작·R1 교체, marker 생성, 복호화 없는 재시작 정리를 검증한다. 현재 default가 바뀌거나 예상 밖 prompt/실패가 발생하면 진행을 중단한다.
+Native runner의 `--prepare-only`는 bundle 생성·정리만 하며 Electron/Keychain을 호출하지 않는다. 실제 mode는 고유 시험 app name·profile을 만들고 exact Keychain service/account가 search list와 default Keychain에 없음을 먼저 확인한다. 첫 await 이전 `app.setName`으로 시험 identity를 고정하며 ready 이후에만 safeStorage를 호출한다. 서로 다른 네 process에서 합성 R0 저장, 재시작·R1 교체, marker 생성, 복호화 없는 재시작 정리를 검증한다. 현재 default가 바뀌면 진행을 중단한다. 실패 또는 30초 제한에 도달하면 child process group을 종료하며 OS prompt를 자동 승인하지 않는다.
 
 `--fail-after-write`는 별도 고유 identity에서 저장 직후 의도적으로 실패한다. 기대 결과는 exit 1, `injectedFailure:true`, `cleanupConfirmed:true`이며 정상 검증의 실패로 숨기지 않고 실패 후 정리 evidence로 구분한다.
 
