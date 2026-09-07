@@ -1,4 +1,5 @@
 import { AuthState } from './auth-state'
+import { UserVerification, verificationFailureNotice } from './user-verification'
 import { selectCredentialRecoveryStep, selectStoreRecoveryStep } from './recovery-plan'
 import type { StorageRecoveryPurpose } from './recovery-plan'
 import { decideLocalCleanup } from './cleanup-result'
@@ -59,7 +60,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   const session = new CredentialSession(dependencies.http, dependencies.store)
   let startPromise: Promise<AuthSnapshot> | null = null
   let logoutFlight: Promise<AuthCommandResult> | null = null
-  let verificationController: AbortController | null = null
+  const verification = new UserVerification(dependencies.http)
 
   function isCurrentPending(value: PendingLogin): boolean {
     const hasSamePending = pending === value
@@ -620,10 +621,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return
     }
 
-    const controller = new AbortController()
-    verificationController = controller
+    const operation = verification.reserve()
     try {
-      const response = await dependencies.http.me(currentCredential.accessToken, controller.signal)
+      const response = await verification.send(operation, currentCredential.accessToken)
       const canPublish = generation === operationGeneration && session.current === currentCredential
       if (!canPublish) {
         return
@@ -635,8 +635,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       if (!isStillCurrent) {
         return
       }
-      const needsAuthentication =
-        error instanceof AuthHttpFailure && error.code === 'authentication-required'
+      const notice = verificationFailureNotice(error)
+      const needsAuthentication = notice === 'REAUTH_REQUIRED'
       if (needsAuthentication) {
         generation += 1
         const cleanupGeneration = generation
@@ -649,12 +649,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         })
         return
       }
-      const isNetwork = error instanceof AuthHttpFailure && error.code === 'network'
-      state.restorePaused(isNetwork ? 'NETWORK_UNAVAILABLE' : 'AUTH_SERVICE_UNAVAILABLE')
+      state.restorePaused(notice)
     } finally {
-      if (verificationController === controller) {
-        verificationController = null
-      }
+      verification.complete(operation)
     }
   }
 
@@ -885,7 +882,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (value != null) {
       clearPendingReference(value)
     }
-    verificationController?.abort()
+    verification.abort()
     const reservation = session.beginLogout()
     state.signingOut()
 
