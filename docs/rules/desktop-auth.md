@@ -14,6 +14,8 @@ review-after: 최초 Desktop 인증 구현 및 packaged platform validation 시
 
 이 문서와 [lifecycle](desktop-auth-lifecycle.md), [platform·저장·검증](desktop-auth-platform.md)은 [PR #60의 명시적 사용자 승인](https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475)을 받은 Desktop contract다. PR #60은 2026-09-05T18:13:24Z에 사용자 squash merge됐으며 merge commit은 `97b9903`다. 설계 승인은 실제 OS/배포 검증 성공이나 후속 구현 착수 지시를 대체하지 않는다. [Architecture](../architecture/overview.md)의 실제 지원 환경·등록값·native 검증 gate는 유지한다.
 
+아래 [OCR 검색 연결 제안](#ocr-검색-연결-제안)은 기존 승인에 포함되지 않는 `proposed` 절이다. 문서의 active metadata를 이 제안의 승인으로 사용하지 않는다.
+
 서버의 [API](auth-api.md), [OAuth](auth-oauth.md), [session](auth-session.md), [활동](auth-activity.md), [runtime gate](auth-runtime.md)를 전제로 한다. Endpoint, TTL, JWT/refresh/session 정책, provider 설정과 DB를 변경하지 않는다. `clientId:"desktop"`은 public 등록 선택값이다. 실제 운영 URL·app identity·protocol 값은 platform 문서의 미확인 gate다.
 
 ## Process 책임과 권한
@@ -112,3 +114,82 @@ Capture component는 signedIn home에서 mount한다. 로그인 이탈 시 unmou
 권장안은 main 단독 소유 + feature IPC + memory-only pending/access + 암호화 refresh 보관 + 등록 private protocol + 최소 welcome/home이다. Renderer token 보관은 bridge 노출면을 늘리고, provider embedded login은 승인된 외부 browser 경계와 다르므로 채택하지 않는다. 저장/protocol의 실질 대안 비교는 platform 문서에 둔다.
 
 이 flow에 필수인 서버 정책 변경은 없다. Browser 취소를 앱에 즉시 push하는 기능, 서버 pending 취소/status endpoint, code/refresh 응답 유실의 idempotent 재전달, onboarding 완료 저장, 계정 연결은 현 API에 없다. 필요해지면 별도 서버 Rule 결정으로 제시한다. 이 로그인 설계는 polling·error URL parameter·refresh grace를 추가하지 않는다. [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 withdrawal 전용 status/resume·main-owned receipt·재시작 1회/사용자 gesture 조회는 별도로 승인된 확장이다. 기존 login pending의 memory-only/재시작 복구 없음과 혼합하지 않으며 구체적 feature IPC·UI/OS 구현과 검증은 후속 범위다.
+
+## OCR 검색 연결 제안
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 같은 slot의 늦은 검색과 이전 로그인·capture의 완료가 현재 후보를 덮지 않게 한다.
+evidence: "https://github.com/blahaj94/ldb/issues/129"
+exceptions: 기존 인증·서버 검색·capture 계약의 승인과 구현 범위를 확대하지 않는다.
+review-after: 최초 Desktop 검색 구현의 수명·401·429 검증과 실제 Electron 화면 확인 후
+```
+
+이 절은 검색 연결에 추가할 계약의 추천안이다. [승인 절차](change-control.md#approval-evidence)에 따른 Draft PR의 사용자 `승인` 전에는 구현 권한이 없다. 기존 인증 계약과 restore 종료 정책, platform gate를 유지한다. 상세 선택 비교·상황별 기대 결과·후속 검증 계획은 해당 Issue/PR에 둔다.
+
+### 입력과 권한의 소유
+
+- Renderer는 기존 OCR 안정화 결과와 그 결과의 무효화만 전달한다. 검색 계정·token·권한·HTTP와 응답 검증은 main이 소유한다. 고정 `GET /characters`에 안정화 nickname을 `characterName`으로 보내고 선택 query는 생략한다. 입력 길이·정규화·응답 field·후보 순서·오류·quota는 [서버 검색](character-search.md)을 그대로 소비하며 Desktop에서 재정의하지 않는다.
+- Main은 capture 허용 여부를 현재 signedIn/auth generation으로 먼저 검사하고, HTTP 직전에는 [인증 수명](desktop-auth-lifecycle.md#재시작과-refresh)에 따라 access를 얻는다. 두 검사를 대신하거나 합치지 않는다. Renderer가 보내는 식별자는 상관관계 확인용이며 권한 증거가 아니다.
+- Main은 Start마다 새 `captureId`를 만들고 현재 auth generation·등록 renderer document·선택 source generation에 결합한다. Media 허용과 OCR 시작·완료도 이 수명에 속해야 한다. Source 변경, media 실패·종료, Stop, capture unmount, renderer reload/navigation/destruction, 인증 이탈은 이 수명을 끝낸다. 재시작·재로그인은 source 선택과 Start를 다시 요구한다.
+- Renderer는 capture instance와 slot별 `observationRevision`을 소유한다. 현재 안정화 nickname이 사라지는 전이에는 `clear`를 한 번 보내고 새 안정화 결과에는 기존 notify를 보내며, 두 전이 모두 revision을 증가시킨다. 빈 slot·빈 OCR·다른 문자열의 안정화 대기로 기존 stable 값이 null이 되는 경우를 포함한다. 매 frame 전송, OCR 보정·안정화 조건·호출 주기 변경은 요구하지 않는다.
+- Main은 slot별 최신 observation revision과 검색별 새 `requestId`를 소유한다. 낮거나 같은 observation revision의 중복·역순 입력은 작업을 만들지 않는다. Clear 없이 같은 nickname의 더 큰 revision을 받으면 현재 작업·결과를 그 revision에 대응시키고 새 검색이나 실패 재시도는 만들지 않는다. 다른 slot은 서로의 결과를 지우거나 요청 순서를 기다리지 않는다.
+
+### 최소 feature IPC
+
+검색 연결에서 아래 이름과 shape를 사용한다. 기존 `notifyStableNicknameDetected`를 확장하고, 검색 제어 invoke 하나와 event 하나를 추가하는 제안이다. 기존 source 열거·선택·display-media와 auth IPC의 권한 검사는 유지한다.
+
+| Channel / preload API | 정확한 입력 | 의미 |
+| --- | --- | --- |
+| `notifyStableNicknameDetected` | object 1개 `{captureId,slot,observationRevision,nickname}` | 현재 capture의 안정화 입력. 기존 `{slot,nickname}`/`Promise<void>` 확장은 후속 검색 구현에만 적용 |
+| `controlCharacterSearch` | object 1개 `{action:"read"}` | main의 현재 `SearchSnapshot` 조회. HTTP·활동·capture 시작 없음 |
+| 같은 invoke | `{action:"begin",authRunId,authRevision}` | Start 의도. 현재 signedIn `AuthSnapshot`의 runId/revision과 일치하며 선택 source가 있을 때 새 capture 수명 생성. 이미 살아 있는 capture가 있으면 거절 |
+| 같은 invoke | `{action:"end",captureId}` | 해당 수명만 무효화. 이미 끝난 ID는 no-op이며 새 capture에 영향 없음 |
+| 같은 invoke | `{action:"clear",captureId,slot,observationRevision}` | 해당 slot의 안정화 입력·검색·결과 무효화 |
+| 같은 invoke | `{action:"retry",captureId,slot,requestId}` | 해당 slot의 현재 실패에 대한 사용자 재시도. Main이 보관한 nickname으로 새 requestId 생성 |
+| `characterSearchChanged` / `onCharacterSearchChanged(listener)` | main→등록 renderer `SearchSnapshot`; preload 입력은 callback 하나 | unsubscribe 반환. Electron event·sender·raw 오류를 전달하지 않음 |
+
+두 invoke 결과는 `SearchCommandResult = {ok:true,snapshot:SearchSnapshot} | {ok:false,error:{code:SearchCommandError},snapshot:SearchSnapshot}`다. 명령 처리를 확인할 뿐 HTTP 성공을 뜻하지 않는다. `SearchCommandError`는 `INVALID_SEARCH_COMMAND`, `SEARCH_NOT_ALLOWED`, `STALE_SEARCH`, `SEARCH_BUSY`, `SEARCH_RETRY_NOT_READY`만 허용한다. 허용되지 않은 sender에는 snapshot 없이 정제된 `SEARCH_NOT_ALLOWED` rejection만 반환한다.
+
+위 [Main trust boundary](#main-trust-boundary)를 모든 호출에 적용한다. Action별 exact own keys·인자 수·값을 검사한다. `captureId`·`requestId`는 main이 만든 canonical UUID, `slot`은 현재 party slot의 정수 0~3, `observationRevision`은 양의 safe integer다. `authRunId`·`authRevision`은 기존 AuthSnapshot 규격과 현재 값을 검사한다. `nickname`은 string이어야 하며 서버 검색 입력 계약을 적용한다. 새 관측 문자열이 검색 조건을 어기면 새 requestId의 `failure/INVALID_SEARCH_QUERY`, HTTP 0회로 끝내고 고쳐 보내지 않는다. 내부 auth/access/source generation을 IPC로 노출하지 않는다.
+
+`begin`은 수명을 만든 즉시 snapshot을 반환한다. Renderer는 자신의 Start와 capture instance가 아직 살아 있을 때만 이 ID를 사용하고, 취소된 Start의 늦은 성공은 그 ID로 `end`한다. Media 실패와 renderer cleanup은 `end`를 보내며 main은 source 변경·auth 이탈·document 종료를 직접 관찰해 renderer 통지 없이도 무효화한다. 잘못된 sender를 제외한 cleanup용 `end`는 signedIn 이탈 뒤에도 허용한다.
+
+| `SearchSnapshot` field | 정확한 값·노출 조건 |
+| --- | --- |
+| `runId`, `revision` | main 실행의 비민감 ID, 검색 상태 전이마다 증가하는 nonnegative safe integer. 인증 snapshot의 revision과 별개 |
+| `captureId` | 현재 수명의 UUID 또는 null |
+| `slots` | slot 0~3 각각 한 번씩 오름차순으로 담은 고정 4개 DTO. 각 DTO의 exact fields는 아래와 같음 |
+
+Slot DTO는 `{slot,observationRevision,requestId,nickname,state,rows,error}`만 가진다. 수명 시작/종료의 observationRevision은 0, requestId·nickname·error는 null, rows는 빈 array, state는 `idle`이다. Clear는 수신한 최신 observationRevision을 기록하며 나머지는 같은 idle 형태로 만든다. 상태별 조건은 다음 표를 따른다.
+
+| `state` | DTO와 화면의 의미 |
+| --- | --- |
+| `idle` | 인식 대기. 이전 nickname·후보·오류를 표시하지 않음 |
+| `pending` | 현재 nickname·requestId와 “검색 중”. rows는 비우고 error는 null. 이전 성공 후보·0건·실패를 제거 |
+| `success` | 현재 nickname·requestId와 검증된 비어 있지 않은 rows만 표시, error는 null |
+| `empty` | 현재 nickname·requestId, 빈 rows와 “검색 결과가 없습니다.”, error는 null |
+| `failure` | 현재 nickname·requestId, 빈 rows와 정제된 error. 실패를 0건으로 표시하지 않음 |
+
+Rows는 서버 응답의 승인된 다섯 field만 갖는 DTO로 projection하며 값과 순서를 유지한다. Main은 전체 body와 모든 후보를 검증한 뒤 발행한다. 한 후보라도 부적합하면 전체 실패이며 부분 후보·raw body·server message·stack은 IPC로 보내지 않는다. Renderer/preload도 exact DTO와 상태별 조합을 검사하고 값은 text로 출력한다. UI의 Component·상태·접근성 표현은 [디자인 계약](design-system.md)을 따른다.
+
+`error`는 `{code,retryAfterSeconds}` 또는 null이다. Code는 [서버의 정제 오류 code](character-search.md#정제된-오류)와 Desktop의 `SEARCH_TIMEOUT`, `SEARCH_NETWORK_ERROR`, `SEARCH_RESPONSE_INVALID`, `SEARCH_AUTH_RETRY_REQUIRED`만 허용한다. HTTP status와 서버 code가 맞는지 검증하며 raw message는 사용하지 않는다. `retryAfterSeconds`는 아래 429에서만 nonnegative safe integer이고 그 밖은 null이다. 문구는 code에 대응하는 고정 한국어 안내다. 400은 검색 조건 안내·새 OCR 대기이며 같은 입력 재시도 버튼은 제공하지 않는다.
+
+Renderer는 event를 먼저 구독한 뒤 `read`하고 같은 runId에서 더 큰 revision만 적용한다. 현재 capture instance·captureId와 일치하며 slot의 observationRevision이 현재 관측보다 오래되지 않은 상태만 보여준다. `captureId:null`은 현재 표시를 지운다. Invoke 응답 유실은 `read`로 확인하고 명령을 자동 재전송하지 않는다. Reload는 이전 capture를 재개하지 않는다. Main runId가 바뀌면 기존 구독·표시를 버리고 auth 재동기화와 새 조회부터 시작한다. Auth가 signedIn home을 벗어나거나 local source/Stop/cleanup이 발생하면 event를 기다리지 않고 화면을 지운다. Local 새 관측·clear도 해당 slot의 이전 표시를 즉시 지운다.
+
+### 취소와 완료의 최종 판정
+
+- 새 안정화 입력·clear·사용자 재시도는 해당 slot의 이전 요청을 무효화하고 가능한 transport를 abort한다. Source 변경·Stop·capture 종료·인증 이탈은 모든 slot에 적용한다. 취소 자체를 failure로 표시하지 않는다.
+- HTTP 전송·완료 처리·event 발행 직전에 현재 signedIn/auth generation·captureId·source generation·renderer document와 slot의 requestId/observationRevision을 재확인한다. 하나라도 다르면 결과·오류를 버린다. 먼저 보낸 요청이 나중에 끝나도 새 slot 상태를 바꿀 수 없다.
+- Auth 이탈은 main이 먼저 보호 요청을 차단하고 search 수명·선택 source를 무효화한다. Renderer는 기존 cleanup으로 stream·worker·loop를 정리한다. Logout 후 재로그인해도 과거 requestId/captureId는 다시 유효해지지 않는다. Abort나 화면 제거는 이미 서버가 인정한 활동·quota의 취소·환불을 뜻하지 않는다.
+
+### 전체 검색 예산과 인증·제한 응답
+
+- 각 검색은 main이 유효한 최신 입력 또는 사용자 retry를 접수한 순간부터 monotonic **15,000ms 하나**를 사용한다. Authorization·기존 shared refresh 대기·HTTP 전송·headers·전체 body 수신·파싱·검증을 모두 포함하고 완료 시각이 deadline 이상이면 `SEARCH_TIMEOUT`이다. IPC 왕복·렌더링 완료를 15초 안에 보장한다는 뜻은 아니다.
+- 검색 예산에 [각 auth 호출의 15초](desktop-auth-lifecycle.md#main-http-계약)를 더하지 않는다. Refresh 대기만으로 검색 예산이 끝나면 `GET /characters` 0회로 끝날 수 있다. 취소·timeout은 해당 검색 waiter만 분리하며 다른 caller·credential writer가 공유하는 refresh를 중단하거나 실패로 만들지 않는다. 그 refresh의 늦은 성공도 종료된 검색을 다시 보내지 않는다.
+- 서버의 [총 2초 admission](auth-activity.md#내부-deadline과-resource)과 [5초 upstream](character-search.md#deadline과-adapter)은 각각 서버 내부 단계의 예산이며 Desktop 전체 예산과 독립적이다. 네트워크·인증 대기까지 합친 7초 보장을 뜻하지 않고 Desktop 취소가 서버 완료·rollback을 보장하지 않는다. Deadline 이전 transport 실패는 `SEARCH_NETWORK_ERROR`, 부적합 응답은 `SEARCH_RESPONSE_INVALID`로 구분한다.
+- **검색의 401 자동 재전송은 0회**다. Main은 401을 받은 요청의 access generation을 확인한다. 이미 교체된 access면 추가 refresh 없이, 현재 access면 기존 shared refresh 한 번에 합류/시작한다. 검색 예산 안에 인증 사용 준비가 끝나면 `failure/SEARCH_AUTH_RETRY_REQUIRED`로 끝내고 사용자 재시도를 제공한다. 예산이 먼저 끝나면 timeout이며 refresh 이후 자동 GET은 없다. Refresh 실패·최종 인증 상실은 기존 lifecycle대로 모든 보호 상태를 정리한다.
+- 사용자 재시도는 여전히 같은 auth/capture/slot의 현재 실패일 때만 새 requestId·새 전체 예산으로 수행한다. 이전 요청의 재전송 허가가 아니며 최신 access를 사용한다. 401 회복 뒤 해당 실패를 재시도한 요청이 현재 최신 access에서도 401이면 추가 refresh 없이 기존 lifecycle의 최종 401로 처리한다. Network/5xx/timeout에 자동 refresh·logout·retry하지 않는다. 401 회복을 반복 시도하는 background loop도 만들지 않는다.
+- 429는 실패로 표시하며 `Retry-After`의 유효한 양의 십진 정수 초를 정제해 안내한다. Main은 수신 시각부터 monotonic 대기를 지키고 그동안 해당 slot의 retry를 거절한다. 만료 시 같은 failure의 `retryAfterSeconds:0` 전이를 발행해 버튼만 활성화한다. 누락·형식 오류·safe integer 범위 초과는 null과 일반 제한 안내로 처리하며 임의 대기시간을 만들지 않는다. Countdown은 안내이며 main의 검사와 서버의 다음 판정을 대신하지 않는다.
+- 429 뒤 새 안정화 입력은 독립된 새 검색으로 처리하되 이전 429를 자동 재전송하거나 quota가 풀리기를 기다리는 queue는 만들지 않는다. 수동 재시도도 서버 제한을 다시 적용받는다. 이전 계정·slot의 대기 timer와 오류는 수명 무효화 때 폐기한다.
