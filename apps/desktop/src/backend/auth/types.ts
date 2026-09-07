@@ -164,6 +164,7 @@ export interface AuthCoordinator {
   cancelLogin(attemptId: unknown): Promise<AuthCommandResult>
   handleReturnUrl(raw: unknown): Promise<void>
   retryAuth(): Promise<AuthCommandResult>
+  captureGeneration(): number | null
   authorization(): Promise<AuthAuthorization>
   logout(): Promise<AuthCommandResult>
 }

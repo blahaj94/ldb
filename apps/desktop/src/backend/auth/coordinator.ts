@@ -949,6 +949,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return operation
   }
 
+  function captureGeneration(): number | null {
+    const isSignedIn = state.phase === 'signedIn'
+    return isSignedIn ? generation : null
+  }
+
   return {
     getSnapshot: state.getSnapshot,
     subscribe: state.subscribe,
@@ -957,6 +962,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     cancelLogin,
     handleReturnUrl,
     retryAuth: retry,
+    captureGeneration,
     authorization,
     logout
   }

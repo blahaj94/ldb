@@ -1,30 +1,6 @@
 import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
-import {
-  listCaptureSources,
-  selectCaptureSource,
-  notifyStableNicknameDetected
-} from './api/capture'
+import * as capture from './api/capture'
+import * as auth from './api/auth'
 
-const api = {
-  listCaptureSources,
-  selectCaptureSource,
-  notifyStableNicknameDetected
-}
-
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
-}
+contextBridge.exposeInMainWorld('api', capture)
+contextBridge.exposeInMainWorld('auth', auth)

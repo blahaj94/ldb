@@ -5,7 +5,11 @@ import { normalizeNickname, type SlotStability, updateSlotStability } from './re
 
 export function usePartyRecognition(): {
   stableNicknames: (string | null)[]
-  recognizePartyNicknames: (video: HTMLVideoElement, worker: Worker) => Promise<void>
+  recognizePartyNicknames: (
+    video: HTMLVideoElement,
+    worker: Worker,
+    signal: AbortSignal
+  ) => Promise<void>
   resetRecognition: () => void
 } {
   const slotStabilityRef = useRef<(SlotStability | null)[]>(emptyStabilitySlots())
@@ -20,11 +24,17 @@ export function usePartyRecognition(): {
     setStableNicknames(emptySlots())
   }
 
-  async function recognizePartyNicknames(video: HTMLVideoElement, worker: Worker): Promise<void> {
+  async function recognizePartyNicknames(
+    video: HTMLVideoElement,
+    worker: Worker,
+    signal: AbortSignal
+  ): Promise<void> {
+    if (signal.aborted) return
     const crops = capturePartyNicknameCrops(video)
     const nextStableNicknames = stableNicknamesRef.current.slice()
     for (const [slot, crop] of crops.entries()) {
       const nickname = crop ? normalizeNickname((await worker.recognize(crop)).data.text) : null
+      if (signal.aborted) return
       const stability = updateSlotStability(slotStabilityRef.current[slot], nickname || null)
       slotStabilityRef.current[slot] = stability
       if (!stability.stableNickname) {
@@ -34,7 +44,9 @@ export function usePartyRecognition(): {
       }
       nextStableNicknames[slot] = stability.stableNickname
       if (reportedNicknamesRef.current[slot] !== stability.stableNickname) {
-        window.api.notifyStableNicknameDetected({ nickname: stability.stableNickname, slot })
+        void window.api
+          .notifyStableNicknameDetected({ nickname: stability.stableNickname, slot })
+          .catch(() => undefined)
         reportedNicknamesRef.current[slot] = stability.stableNickname
       }
     }

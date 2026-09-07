@@ -1,14 +1,20 @@
+import type { ReactNode } from 'react'
 import { ContentStack, ExampleSection, LayoutBlock, SupportingText } from '@ldb/ui'
 import type { AuthApi } from '../../../preload/common/types/auth'
 import { AuthPresentation } from './AuthPresentation'
 import { useAuthBridge } from './useAuthBridge'
 
-export function AuthBridge({ api }: { api: AuthApi }): React.JSX.Element {
+export function AuthBridge({ api, home }: { api: AuthApi; home?: ReactNode }): React.JSX.Element {
   const { snapshot, commandPending, connectionFailed, onIntent } = useAuthBridge(api)
   const hasSnapshot = snapshot != null
   if (hasSnapshot) {
     return (
-      <AuthPresentation snapshot={snapshot} commandPending={commandPending} onIntent={onIntent} />
+      <AuthPresentation
+        snapshot={snapshot}
+        home={home}
+        commandPending={commandPending}
+        onIntent={onIntent}
+      />
     )
   }
   return (

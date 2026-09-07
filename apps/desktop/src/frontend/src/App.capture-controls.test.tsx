@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import App from './App'
+import PartyCapture from './capture/PartyCapture'
 
 const capture = vi.hoisted(() => ({
   sources: [{ id: 'example-window', name: 'Example window' }],
@@ -31,7 +31,7 @@ beforeEach(async () => {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => root.render(<App />))
+  await act(async () => root.render(<PartyCapture />))
 })
 
 afterEach(async () => {
@@ -68,7 +68,7 @@ it('blocks unregistered Start and preserves registered Start and Stop callbacks'
   expect(capture.startCapture).not.toHaveBeenCalled()
 
   capture.sourceRegistered = true
-  await act(async () => root.render(<App />))
+  await act(async () => root.render(<PartyCapture />))
   await act(async () => {
     button('Start').click()
     button('Stop').click()
