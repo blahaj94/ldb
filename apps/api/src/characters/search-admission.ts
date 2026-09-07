@@ -87,7 +87,8 @@ export class SearchAdmission {
 
   private grantNext(entry: AccountEntry): void {
     const hasOwner = entry.owner != null
-    if (hasOwner || this.closed) return
+    const cannotGrant = hasOwner || this.closed
+    if (cannotGrant) return
     const next = entry.waiting.values().next().value as Waiter | undefined
     const hasNext = next != null
     if (!hasNext) return
