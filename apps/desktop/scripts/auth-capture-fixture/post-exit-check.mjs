@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url'
 // 일반 Vitest와 분리한 실제 deny-all 실패 종료 검증이다.
 const appDirectory = fileURLToPath(new URL('../..', import.meta.url))
 const testRoot = await mkdtemp(join(tmpdir(), 'ldb-capture-exit-check-'))
+const isOcr = process.argv.includes('--ocr')
+const command = isOcr ? 'capture:fixture:ocr' : 'capture:fixture:smoke'
 let child
 let groupStopped = false
 
@@ -40,7 +42,7 @@ async function waitForExit() {
 }
 
 try {
-  child = spawn('pnpm', ['capture:fixture:smoke'], {
+  child = spawn('pnpm', [command], {
     cwd: appDirectory,
     env: { ...process.env, TMPDIR: testRoot },
     detached: true,
@@ -69,8 +71,12 @@ try {
   groupStopped = await waitForExit()
   console.log(`Capture fixture child exit: ${code}; group stopped: ${groupStopped}`)
   assert.equal(groupStopped, true, 'Test child group remains active')
-  assert.equal(code, 1, 'Deny-all media smoke must fail')
-  assert.equal(output.includes('Capture fixture media BLOCKED / smoke FAIL'), true)
+  const expectedCode = isOcr ? 0 : 1
+  const expectedMessage = isOcr
+    ? 'Capture fixture standalone OCR PASS'
+    : 'Capture fixture media BLOCKED / smoke FAIL'
+  assert.equal(code, expectedCode, 'Child result did not match the requested check')
+  assert.equal(output.includes(expectedMessage), true)
   const remaining = (await readdir(testRoot)).filter((name) => {
     const isCaptureProfile = name.startsWith('ldb-auth-capture-fixture-')
     return isCaptureProfile

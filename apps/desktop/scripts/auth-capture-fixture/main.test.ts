@@ -1,80 +1,58 @@
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-const fixture = vi.hoisted(() => ({
-  on: vi.fn<(event: string, listener: () => void) => void>(),
-  exit: vi.fn<(code: number) => void>(),
-  remove: vi.fn(),
-  exists: vi.fn()
-}))
-vi.mock('node:fs', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs')>()),
-  mkdtempSync: () => '/synthetic/capture-fixture-profile',
-  rmSync: fixture.remove,
-  existsSync: fixture.exists
-}))
+const fixture = vi.hoisted(() => ({ setPath: vi.fn(), ready: vi.fn(), exit: vi.fn() }))
 vi.mock('electron', () => ({
   app: {
-    setPath: vi.fn(),
+    setPath: fixture.setPath,
     setName: vi.fn(),
-    on: fixture.on,
-    whenReady: () => new Promise<void>(() => undefined),
+    on: vi.fn(),
+    whenReady: fixture.ready,
     exit: fixture.exit
   }
 }))
-
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
-  fixture.remove.mockReset()
-  fixture.exists.mockReset()
-  fixture.exists.mockReturnValue(false)
-  vi.spyOn(console, 'log').mockImplementation(() => undefined)
+  fixture.ready.mockReturnValue(new Promise<void>(() => undefined))
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  vi.stubEnv('LDB_AUTH_CAPTURE_PROFILE', undefined)
+  vi.stubEnv('LDB_AUTH_CAPTURE_LAUNCHER_PID', undefined)
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+})
 
-async function quitHandler(): Promise<() => void> {
-  await import('./main')
-  const registration = fixture.on.mock.calls.find(([event]) => {
-    const isQuit = event === 'quit'
-    return isQuit
-  })
-  const hasRegistration = registration != null
-  if (!hasRegistration) throw new Error('Fixture quit handler missing')
-  return registration[1]
-}
-
-it.each(['remove throws', 'profile remains', 'inspection throws'])(
-  '%s이면 정제 cleanup FAIL과 nonzero 종료를 보장한다',
-  async (failure) => {
-    const quit = await quitHandler()
-    const isRemoveFailure = failure === 'remove throws'
-    const isInspectionFailure = failure === 'inspection throws'
-    if (isRemoveFailure)
-      fixture.remove.mockImplementation(() => {
-        throw new Error('SYNTHETIC_FILE_FAILURE')
-      })
-    else if (isInspectionFailure)
-      fixture.exists.mockImplementation(() => {
-        throw new Error('SYNTHETIC_FILE_FAILURE')
-      })
-    else fixture.exists.mockReturnValue(true)
-    fixture.exit.mockImplementation(() => quit())
-
-    expect(quit).not.toThrow()
-    expect(console.error).toHaveBeenCalledExactlyOnceWith('Capture fixture cleanup FAIL')
+it.each(['missing owner', 'wrong parent', 'outside temp directory'])(
+  '%s인 직접 Electron child는 profile 사용 전에 거절한다',
+  async (mode) => {
+    const hasWrongParent = mode === 'wrong parent'
+    const hasWrongDirectory = mode === 'outside temp directory'
+    if (hasWrongParent) {
+      vi.stubEnv('LDB_AUTH_CAPTURE_PROFILE', join(tmpdir(), 'ldb-auth-capture-fixture-unit01'))
+      vi.stubEnv('LDB_AUTH_CAPTURE_LAUNCHER_PID', '0')
+    }
+    if (hasWrongDirectory) {
+      vi.stubEnv('LDB_AUTH_CAPTURE_PROFILE', '/synthetic/outside-profile')
+      vi.stubEnv('LDB_AUTH_CAPTURE_LAUNCHER_PID', String(process.ppid))
+    }
+    await import('./main')
     expect(fixture.exit).toHaveBeenCalledExactlyOnceWith(1)
-    expect(fixture.remove).toHaveBeenCalledOnce()
-    expect(console.log).not.toHaveBeenCalled()
+    expect(console.error).toHaveBeenCalledExactlyOnceWith(
+      'Capture fixture requires the Node launcher'
+    )
+    expect(fixture.setPath).not.toHaveBeenCalled()
+    expect(fixture.ready).not.toHaveBeenCalled()
   }
 )
-
-it('정상 삭제와 재진입은 cleanup을 한 번만 실행하고 실패 exit를 만들지 않는다', async () => {
-  const quit = await quitHandler()
-  quit()
-  quit()
-  expect(fixture.remove).toHaveBeenCalledOnce()
-  expect(console.log).toHaveBeenCalledExactlyOnceWith('Capture fixture cleanup PASS')
-  expect(console.error).not.toHaveBeenCalled()
+it('launcher가 지정한 profile만 사용하고 종료 후 삭제는 launcher에 맡긴다', async () => {
+  const profile = join(tmpdir(), 'ldb-auth-capture-fixture-unit01')
+  vi.stubEnv('LDB_AUTH_CAPTURE_PROFILE', profile)
+  vi.stubEnv('LDB_AUTH_CAPTURE_LAUNCHER_PID', String(process.ppid))
+  await import('./main')
+  expect(fixture.setPath).toHaveBeenCalledExactlyOnceWith('userData', profile)
+  expect(fixture.ready).toHaveBeenCalledOnce()
   expect(fixture.exit).not.toHaveBeenCalled()
 })
