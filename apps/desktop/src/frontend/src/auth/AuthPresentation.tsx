@@ -23,7 +23,11 @@ const notices: Record<AuthNotice, string> = {
 
 const providerLabels = { google: 'Google로 계속하기', discord: 'Discord로 계속하기' }
 
-function SignedIn({ snapshot, commandPending = false, onIntent }: AuthPresentationProps) {
+function SignedIn({
+  snapshot,
+  commandPending = false,
+  onIntent
+}: AuthPresentationProps): React.JSX.Element {
   const [welcomeDismissed, setWelcomeDismissed] = useState(false)
   const isWelcomeEntry = snapshot.entry === 'welcome'
   const shouldShowWelcome = isWelcomeEntry && !welcomeDismissed
@@ -60,7 +64,11 @@ function SignedIn({ snapshot, commandPending = false, onIntent }: AuthPresentati
   )
 }
 
-function PhaseContent({ snapshot, commandPending = false, onIntent }: AuthPresentationProps) {
+function PhaseContent({
+  snapshot,
+  commandPending = false,
+  onIntent
+}: AuthPresentationProps): React.JSX.Element {
   const { phase, login } = snapshot
   const isSignedIn = phase === 'signedIn'
   const hasUser = snapshot.user != null
@@ -99,15 +107,18 @@ function PhaseContent({ snapshot, commandPending = false, onIntent }: AuthPresen
   const canCancelLogin = isLoginPending && hasLogin
   if (canCancelLogin) {
     const isReturnInvalid = snapshot.notice === 'LOGIN_RETURN_INVALID'
-    const hasExpiry = login.expiresAt != null
+    const expiresAt = login.expiresAt
+    const hasExpiry = expiresAt != null
     return (
       <ExampleSection title={isExchanging ? '로그인 처리 중' : '브라우저에서 로그인'}>
         <SupportingText>
-          브라우저에서 로그인을 계속해 주세요. 완료되면 앱으로 돌아옵니다.
+          {isExchanging
+            ? '브라우저에서 돌아온 로그인 정보를 확인하고 있습니다. 잠시 기다려 주세요.'
+            : '브라우저에서 로그인을 계속해 주세요. 완료되면 앱으로 돌아옵니다.'}
         </SupportingText>
         {hasExpiry && (
           <SupportingText>
-            로그인 대기 만료: <time dateTime={login.expiresAt}>{login.expiresAt}</time>
+            로그인 대기 만료: <time dateTime={expiresAt}>{expiresAt}</time>
           </SupportingText>
         )}
         <SupportingText>

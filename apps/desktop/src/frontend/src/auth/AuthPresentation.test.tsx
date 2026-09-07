@@ -45,7 +45,7 @@ afterEach(async () => {
   container.remove()
 })
 
-async function render(input: AuthPresentationInput, commandPending = false) {
+async function render(input: AuthPresentationInput, commandPending = false): Promise<void> {
   await act(async () =>
     root.render(
       <AuthPresentation snapshot={input} commandPending={commandPending} onIntent={onIntent} />
@@ -57,7 +57,7 @@ function labels(): string[] {
   return Array.from(container.querySelectorAll('button'), (button) => button.textContent ?? '')
 }
 
-async function click(label: string) {
+async function click(label: string): Promise<void> {
   const button = Array.from(container.querySelectorAll('button')).find((candidate) => {
     const hasLabel = candidate.textContent === label
     return hasLabel
