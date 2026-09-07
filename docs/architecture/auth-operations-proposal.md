@@ -127,6 +127,20 @@ Inventory 확인은 등록 table 조회로 끝내지 않는다. 허용된 모든
 | Compaction의 물리 잔여 | B의 옛 segment·재작성 임시물·WAL·disk snapshot·복제본과 교체 매체를 함께 처리한다. SQL DELETE/VACUUM·파일 unlink만으로 매체 잔여 삭제를 증명하지 않는다. 선택 저장 매체의 폐기/암호키 파괴 절차와 모든 key 사본 제거를 검증해야 하며 불가능하면 D4 예외다. |
 | 최소 evidence | Inventory는 원 snapshot+15일, 실패 dump/scratch evidence는 종료+8일, 운영 log는 7일 정책을 적용한다. C/B의 현재 checkpoint는 한 값, 직전은 최대 8일만 유지하며 무한 checkpoint history나 UUID 포함 옛 segment 사본을 만들지 않는다. |
 
+### Backup 매체의 교체와 독립 폐기
+
+공유 `age` recipient나 volume key는 파일별 폐기 경계가 아니다. Backup에는 **현 매체와 별도로 전체 sanitize할 수 있는 암호화 후보 매체를 번갈아 사용하는 방식**을 제안한다. 파일을 unlink하고 같은 매체를 계속 쓰는 것으로 만료본을 폐기했다고 표시하지 않는다. 새 dump·이관 임시물은 후보 매체에만 쓰므로 실패해도 현 매체의 유효 성공본을 함께 지울 필요가 없다. 독립 폐기가 가능한 매체 최소 2개, 전체 유효본을 복사할 용량·시간과 검증 가능한 sanitize가 추가 비용이다. 공유 recipient key를 파괴해 아직 유효한 성공본까지 읽을 수 없게 만드는 방법은 쓰지 않는다.
+
+1. Backup 조정 담당이 다른 backup/이관 writer를 멈추고, 원 age가 유효한 성공본 중 보존할 집합과 폐기할 집합을 정한다. 새 dump가 있으면 최종 성공본 집합이 최대 7개가 되도록 정하며 이관 중 만료될 가능성도 확인한다. 새 dump가 없어도 만료본을 제거하는 교체를 수행한다.
+2. B/C protocol로 원 매체·후보 매체·각 물리 copy·partial file의 생성/이관 중 상태를 먼저 durable 등록한다. 보존할 사본만 후보 매체로 복사하고 snapshot ID·원 snapshot 시각·부모 lineage·digest를 유지한다. 새 dump도 후보 매체에서 암호화하며 평문 임시물을 공유 매체에 쓰지 않는다.
+3. 후보의 보존본 전부와 새 dump의 복구 가능성·digest·age를 격리 검증한다. **기존 성공본 수와 inventory의 물리 사본 수를 따로 관측**한다. 이관 중 source와 candidate copy를 모두 등록하고 각각 7일 age cap을 적용한다. 후보는 임시 이관물이며 원 매체 폐기와 inventory 확정 전에는 성공본 승격·공개 복원에 사용하지 않는다. 복사로 새 성공본을 추가하거나 기존 성공본의 상태만 바꿔 최대 7개 제한을 우회하지 않는다.
+4. 전체 후보 검증 뒤 원 매체를 접근 차단하고 전체 sanitize해 만료본·이전 파일/WAL·partial 등 실제 잔여 제거를 확인한다. 그 증거 이후에만 B/C에서 원 매체/사본의 폐기와 후보의 현 매체 승격을 확정한다. 선택하지 않은 옛 성공본을 폐기한 증거 전 새 8번째 성공본을 승격하지 않는다. 원 age는 승격 후에도 유지한다.
+5. 새 dump·복사·검증이 실패하면 즉시 후보 매체 전체의 폐기를 실행하고 유효한 원 성공본을 유지한다. 만료된 원본은 이 실패로 연장하지 않고 보존본만 옮기는 폐기 작업을 우선한다. 원 매체 폐기 뒤 crash라면 후보와 실제 매체 상태를 대조해 pending inventory를 종결하기 전 복원 공개를 막는다. 어느 단계든 폐기가 불가능하거나 결과가 불명이면 D4로 격리하고 완료를 추정하지 않는다.
+
+복원용 scratch DB·복호화 임시물도 다른 성공본과 **독립적으로 전체 폐기 가능한 매체**를 job별로 등록해 사용한다. 실패 또는 검증 종료 때 승격되지 않은 scratch 매체 전부를 즉시 폐기하며, 일부 파일 삭제 성공으로 끝내지 않는다. 검증된 DB의 primary 승격은 별도 inventory 전환으로 기록한다. 필요한 scratch 매체를 확보하지 못했으면 공유 backup 매체에 임시로 쓰지 않고 해당 작업을 시작하지 않는다.
+
+### Control 매체의 compaction
+
 물리 compaction의 구현 후보는 B writer를 정지·fence한 뒤 **살아야 할 journal과 inventory만 새 암호화 control 매체/cluster로 재작성**하고, C의 compaction reservation과 새 상태를 대조해 승격하는 것이다. 옛 B 매체는 재작성 임시물·옛 WAL을 포함해 전체 폐기한다. 현 매체와 재작성 매체를 독립적으로 지울 수 있는 spare media 및 제조사가 지원하는 검증 가능한 sanitize, 또는 모든 복구키 사본을 포함한 검증된 암호키 파괴가 필요하다. 이 계획된 전환도 임의 B restore가 아니며 양쪽 writer 장벽과 C head 연속성을 확인해야 한다. B의 계속 늘어나는 WAL이나 원본 cluster backup을 남겨 UUID를 보존하는 방법은 쓰지 않는다.
 
 WAL의 crash 복구와 disk 재사용만으로 물리 삭제를 보장하지 않는다. 이 방식은 추가 매체와 정리 중 중단 비용이 있고, 더 작은 저장소/암호키 단위의 폐기를 쓰려면 별도 검증이 필요하다. 보관 기한에 맞는 재작성·매체/키 폐기가 검증되지 않은 storage는 운영 gate가 남는다. 삭제 성공의 증거를 잃으면 조사용 임의 hold를 추가하지 않고 [승인된 D4 장애 예외](../rules/auth-withdrawal-proposal.md#보관과-삭제)의 최소 격리·24시간 대응·복구 후 우선 삭제를 따른다.

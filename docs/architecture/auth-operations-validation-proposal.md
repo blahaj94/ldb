@@ -69,6 +69,9 @@ review-after: 구성 승인 또는 최초 장애/복원 시험과 저장소 변�
 | 완료+8일 journal과 폐기 미확인 old backup·UUID segment 잔여 | 시간만으로 compaction하지 않음. Snapshot 제외/폐기와 WAL·임시/복제/매체/key 사본 제거 증거를 함께 요구. | 안전한 삭제·복원 증명 전 불가. |
 | Compaction reservation/DB commit/파일 폐기/C 완료 사이 crash | 살아야 할 pending UUID는 유지, 제거 대상 UUID는 최종 보존물에서 제거. 이전 segment 사본을 무기한 rollback용으로 남기지 않음. | 물리 잔여/새 head 검증 전 불가. |
 | 실패 dump·취소된 restore·미등록 OS snapshot/replica·키 사본 | 생성 전 등록과 전체 열거 대조. 실패/종료 때 폐기; exact 소유/대상이 불명하면 광역 삭제 대신 격리. | Inventory completeness·폐기 전 불가. |
+| 유효 성공본+만료본이 같은 backup 매체/recipient를 공유, 최대 7개 상태에서 새 dump | 보존본만 독립 후보 매체로 복사하고 원 age/lineage·복구 가능성 유지. Source와 임시 candidate의 물리 사본을 모두 등록·age 검사. 원 매체 sanitize 증거→B/C inventory 확정 순서, 최종 성공본 최대 7개이며 새 8번째 승격 전 옛 성공본 폐기 확인. | 유효 성공본 보존·실제 폐기·최신 inventory 확인 후만 가능. |
+| Backup 후보의 partial dump·복사/검증 실패, restore scratch 실패/종료 | 후보/scratch 매체 전체를 즉시 폐기하고 유효 source 성공본은 유지. 공유 key 파괴로 유효본을 함께 잃거나 unlink만으로 폐기 성공 표시 0. 실패가 원본 age cap을 연장하지 않음. | 실패 매체 폐기와 유효본 확인 전 작업 완료 아님. 폐기 불가는 D4 격리. |
+| Copy 등록 전후·후보 검증·원 매체 sanitize 전후·B/C inventory 완료 사이 crash | 미등록 쓰기 0. 재시작 시 source/candidate/실제 매체를 대조하고 pending 종결 전 공개 복원 0. Sanitize를 시도했다는 기록만으로 원본 폐기 확정 없음; 이미 폐기한 source 자동 복귀 없음. | 유효 후보·실제 폐기·B/C 정합을 모두 증명한 경우만 가능. 후보까지 유실됐으면 불가. |
 | DELETE rollback/응답 유실·일부 FK 누락·scratch 폐기 실패 | 같은 old UUID 멱등 재개, 실제 commit 확인 전 완료 없음. FK 누락은 검증 실패. 실패 residue는 D4 격리/24시간 대응. | 안전 evidence가 모두 있어야 가능. |
 | 옛 JWT/refresh/code/receipt·일부 key 미전환·600초 중 신규 login | 전원 logout, 옛 credential 거절, admission 0. 새 intent가 있으면 마지막 대조 시각 갱신과 600초 재시작. | 전 verifier 검증과 새 대조 이후만 가능. |
 | 정상 key rotation·일반 logout/탈퇴 residual 검색 | 정상 90일 rotation·900초 overlap과 exp까지의 residual 정책 유지. 복원 전용 옛 key 제거 예외를 일반 logout에 확대하지 않음. | 기존 정책과 복원 예외 각각 확인. |
