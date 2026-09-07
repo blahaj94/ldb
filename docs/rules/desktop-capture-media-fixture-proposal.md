@@ -41,7 +41,7 @@ Custom request/check handler가 없으면 media 요청과 검사가 기본 허�
 - 인증 이탈·창 종료·fixture 실패 종료 때 stream track·OCR worker·loop·인식값과 main source 선택을 정리한다. 이전 비동기 결과가 새 auth/capture 수명을 복구하거나 늦은 OCR IPC를 보내지 못하게 한다. 이 조건은 기존 제품의 Stop·오류 후 재시도 동작을 재정의하지 않는다.
 - Synthetic 영상·닉네임만 사용한다. 진단 evidence는 비민감 counter·상태·일치 여부로 남긴다. 실행 중 수집한 raw nickname·화면 이미지·source title/ID 원문을 진단 log나 PR에 노출하지 않는다. 검증용 window를 찾기 위해 사전에 고정한 synthetic 식별자를 code·Reference에 명시하는 것은 허용한다. Credential·개인정보는 기록하지 않는다. 임시 profile과 검증 process는 종료 후 정리한다.
 
-이 조건은 fixture가 정상 API만 호출하도록 통제하는 운영 범위다. 동일 renderer에서 legacy desktop `getUserMedia`를 호출할 수 없다는 privileged 보안 경계가 아니다. JavaScript monkeypatch나 fixture의 API 호출 규약을 그러한 경계로 인정하지 않는다. 인증 미구성 기본 제품 main의 media request/check 명시 거절은 유지하고 이 예외를 production session으로 옮기지 않는다.
+이 조건은 fixture가 정상 API만 호출하도록 통제하는 운영 범위다. 동일 renderer에서 legacy desktop `getUserMedia`를 호출할 수 없다는 privileged 보안 경계가 아니다. 통제된 fixture가 legacy API를 호출하면 선택하지 않은 화면/window 또는 해당 platform이 지원하는 system audio로 범위가 넓어질 수 있으며, camera/microphone 거절은 이 경로의 차단 증거가 아니다. JavaScript monkeypatch나 fixture의 API 호출 규약을 그러한 경계로 인정하지 않는다. 인증 미구성 기본 제품 main의 media request/check 명시 거절은 유지하고 이 예외를 production session으로 옮기지 않는다.
 
 ## 검증과 evidence
 
