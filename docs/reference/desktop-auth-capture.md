@@ -69,7 +69,7 @@ Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercont
 
 공식 `capture:fixture`, `capture:fixture:smoke`, `capture:fixture:ocr`는 `apps/desktop/scripts/auth-capture-fixture.mjs`의 Node launcher를 사용한다. Launcher는 새 임시 profile과 로컬 `owner.json`을 만들고 Electron child에 profile·parent PID를 전달한다. Child는 이 시작 조건이 없으면 profile 사용 전에 거절하며, `out/auth-capture-fixture/main/main.cjs`의 직접 실행은 공식 실행 방법이 아니다. 최종 삭제 책임을 child의 quit event에 두지 않는다.
 
-Launcher는 child 완료 후 자신이 만든 POSIX process group의 종료를 확인하고 profile을 삭제한 뒤 `lstat`의 부재 결과를 검사한다. Timeout·중단에도 소유 group만 종료하며 group 종료가 미확인이면 profile 삭제와 성공 판정을 하지 않는다. 삭제·부재 확인 오류는 정제된 실패와 nonzero 종료다. 이 launcher의 실제 검증 환경은 macOS이며 Windows process-group 실행은 허용하지 않는다. 다른 platform 성공을 주장하지 않는다.
+Launcher는 child 완료 후 자신이 만든 POSIX process group의 종료를 확인하고 profile을 삭제한 뒤 `lstat`의 부재 결과를 검사한다. Timeout·중단에도 소유 group만 종료하며 group 종료가 미확인이면 profile 삭제와 성공 판정을 하지 않는다. SIGINT/SIGTERM handler는 profile 생성 전부터 최종 삭제·부재 확인까지 유지한다. 준비 중 신호는 child 생성을 막고, cleanup 중 반복 신호는 정리를 계속하면서 최종 결과만 nonzero로 바꾼다. 정리 중 신호 때문에 이미 종료된 group에 추가 signal을 보내지 않는다. 삭제·부재 확인 오류는 정제된 실패와 nonzero 종료다. 이 launcher의 실제 검증 환경은 macOS이며 Windows process-group 실행은 허용하지 않는다. 다른 platform 성공을 주장하지 않는다.
 
 `c36159a`의 실제 격리 검증에서 deny-all smoke는 child exit 1·group 종료 확인·종료 뒤 profile 0개였고, 정상 OCR은 child exit 0·group 종료 확인·종료 뒤 profile 0개였다. 검증용 TMPDIR도 해당 child/group 종료 뒤 정리했다. 별도로 생성 시각·예상 directory 내용·열린 file 부재로 식별한 초기 실패 profile 두 개만 삭제하고 부재를 확인했다. 다른 Electron/profile·credential-store 자원은 정리 대상으로 사용하지 않았다.
 
