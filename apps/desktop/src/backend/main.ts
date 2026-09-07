@@ -3,6 +3,7 @@ import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { validateDevRendererUrl } from './renderer-document'
 import { registerCaptureIpc, registerCaptureWindow } from './capture/ipc-handler'
 
 let mainWindow: BrowserWindow | null = null
@@ -11,7 +12,7 @@ function createWindow(): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   const hasDevUrl = is.dev && devUrl != null
   const entry = join(__dirname, '../frontend/index.html')
-  const rendererDocumentUrl = hasDevUrl ? new URL(devUrl).href : pathToFileURL(entry).href
+  const rendererDocumentUrl = hasDevUrl ? validateDevRendererUrl(devUrl) : pathToFileURL(entry).href
   const window = new BrowserWindow({
     width: 900,
     height: 670,
