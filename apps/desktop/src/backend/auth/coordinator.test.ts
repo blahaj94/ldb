@@ -74,6 +74,64 @@ describe('Desktop AuthCoordinator login', () => {
     )
   })
 
+  it('분리 호출한 snapshot/subscribe도 복사와 동일 상태의 revision 알림을 보존한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    const { getSnapshot, subscribe } = coordinator
+    const listener = vi.fn()
+    const unsubscribe = subscribe(listener)
+    const revision = getSnapshot().revision
+    expect(listener).not.toHaveBeenCalled()
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+
+    expect(listener).toHaveBeenCalledTimes(2)
+    expect(listener.mock.calls.map(([snapshot]) => snapshot.revision)).toEqual([
+      revision + 1,
+      revision + 2
+    ])
+    const copy = getSnapshot()
+    Reflect.set(copy, 'phase', 'signedIn')
+    Reflect.set(copy.providers, '0', 'discord')
+    expect(getSnapshot()).toMatchObject({
+      revision: revision + 2,
+      phase: 'signedOut',
+      providers: ['google', 'discord']
+    })
+    unsubscribe()
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
+    expect(listener).toHaveBeenCalledTimes(2)
+    expect(getSnapshot().revision).toBe(revision + 3)
+  })
+
+  it('startingLogin listener의 취소 뒤에도 명령은 발행 당시 snapshot을 반환한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+    const revision = coordinator.getSnapshot().revision
+    const unsubscribe = coordinator.subscribe((snapshot) => {
+      const isStarting = snapshot.phase === 'startingLogin'
+      if (isStarting) {
+        void coordinator.cancelLogin(ATTEMPT_ID)
+      }
+    })
+
+    const result = await coordinator.beginLogin('google')
+
+    expect(result).toMatchObject({
+      ok: true,
+      snapshot: { phase: 'startingLogin', revision: revision + 1 }
+    })
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      notice: 'LOGIN_CANCELLED',
+      revision: revision + 2
+    })
+    unsubscribe()
+  })
+
   it.each(['discontinuous', 'expired', 'reversed'] as const)(
     'beginLogin의 동기 expiry 검사에서 %s이면 만료 상태를 보존하고 다시 시작할 수 있다',
     async (reason) => {
