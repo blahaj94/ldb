@@ -247,6 +247,7 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
       deliverMediaResult(callback, null)
       return
     }
+    const captureId = binding.captureId
     void getWindowSources()
       .then((sources) => {
         const isCurrent = isCurrentCapture(generation, startedWindowGeneration)
@@ -256,9 +257,13 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
         const canAllow = isCurrent && isStillTrusted && hasSameSelection && hasSameCapture
         const source = canAllow ? findSelectedSource(sources, sourceId) : null
         const hasSource = source != null
+        if (!hasSource) search?.end(captureId)
         deliverMediaResult(callback, hasSource ? { video: source } : null)
       })
-      .catch(() => deliverMediaResult(callback, null))
+      .catch(() => {
+        search?.end(captureId)
+        deliverMediaResult(callback, null)
+      })
   })
 }
 
