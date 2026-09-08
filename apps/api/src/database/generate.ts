@@ -2,6 +2,51 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { DataSource } from 'typeorm'
 
+type MigrationQuery = { query: string; parameters?: unknown[] }
+
+function renderQueryStatements(queries: MigrationQuery[]): string {
+  const queryStatements = queries
+    .map(({ query, parameters }) => {
+      const serializedQuery = JSON.stringify(query)
+      const hasParameters = parameters !== undefined
+      const parameterArgument = hasParameters ? `, ${JSON.stringify(parameters)}` : ''
+      const queryStatement = `    await queryRunner.query(${serializedQuery}${parameterArgument})`
+      return queryStatement
+    })
+    .join('\n')
+  return queryStatements
+}
+
+function renderMigrationSource({
+  className,
+  upQueries,
+  downQueries
+}: {
+  className: string
+  upQueries: MigrationQuery[]
+  downQueries: MigrationQuery[]
+}): string {
+  const upStatements = renderQueryStatements(upQueries)
+  const downStatements = renderQueryStatements([...downQueries].reverse())
+  const migrationSource = `import type { MigrationInterface, QueryRunner } from 'typeorm'
+
+export class ${className} implements MigrationInterface {
+  readonly name = '${className}'
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    if (!queryRunner.isTransactionActive) throw new Error('Auth schema Migration requires an active transaction')
+${upStatements}
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    if (!queryRunner.isTransactionActive) throw new Error('Auth schema Migration requires an active transaction')
+${downStatements}
+  }
+}
+`
+  return migrationSource
+}
+
 // TypeORM의 schema diff를 사용하되, TS type import와 정제된 오류 출력은 기존 ESM 계약에 맞춘다.
 export async function generateMigration(
   name: string,
@@ -10,48 +55,31 @@ export async function generateMigration(
 ): Promise<string> {
   let dataSource: DataSource | undefined
   try {
-    if (!/^[A-Z][A-Za-z0-9]{0,79}$/.test(name)) {
+    const isMigrationNameValid = /^[A-Z][A-Za-z0-9]{0,79}$/.test(name)
+    if (!isMigrationNameValid) {
       throw new Error('Invalid migration name')
     }
     dataSource = createDataSource()
     await dataSource.initialize()
     const { upQueries, downQueries } = await dataSource.driver.createSchemaBuilder().log()
     await dataSource.destroy()
-    if (upQueries.length === 0) {
+    const hasNoSchemaChanges = upQueries.length === 0
+    if (hasNoSchemaChanges) {
       return 'Database schema is current'
     }
     const timestamp = Date.now()
     const className = `${name}${timestamp}`
-    const statements = (queries: typeof upQueries) =>
-      queries
-        .map(
-          ({ query, parameters }) =>
-            `    await queryRunner.query(${JSON.stringify(query)}${parameters === undefined ? '' : `, ${JSON.stringify(parameters)}`})`
-        )
-        .join('\n')
-    const content = `import type { MigrationInterface, QueryRunner } from 'typeorm'
-
-export class ${className} implements MigrationInterface {
-  readonly name = '${className}'
-
-  async up(queryRunner: QueryRunner): Promise<void> {
-    if (!queryRunner.isTransactionActive) throw new Error('Auth schema Migration requires an active transaction')
-${statements(upQueries)}
-  }
-
-  async down(queryRunner: QueryRunner): Promise<void> {
-    if (!queryRunner.isTransactionActive) throw new Error('Auth schema Migration requires an active transaction')
-${statements([...downQueries].reverse())}
-  }
-}
-`
+    const content = renderMigrationSource({ className, upQueries, downQueries })
     const filename = `${timestamp}-${name}.ts`
     await writeFile(join(directory, filename), content, { flag: 'wx' })
     return `Database migration generated: ${filename}`
   } catch {
-    if (dataSource?.isInitialized) {
+    const dataSourceToClose = dataSource
+    const hasDataSource = dataSourceToClose != null
+    const isDataSourceInitialized = hasDataSource && dataSourceToClose.isInitialized
+    if (isDataSourceInitialized) {
       try {
-        await dataSource.destroy()
+        await dataSourceToClose.destroy()
       } catch {
         /* 정제된 동일 오류로 처리한다. */
       }

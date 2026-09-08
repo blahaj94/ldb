@@ -4,10 +4,11 @@ export class InitialAuthSchema1788600000000 implements MigrationInterface {
   readonly name = 'InitialAuthSchema1788600000000'
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    if (!queryRunner.isTransactionActive) {
+    const isTransactionActive = queryRunner.isTransactionActive
+    if (!isTransactionActive) {
       throw new Error('Auth schema Migration requires an active transaction')
     }
-    await queryRunner.query(`
+    const createAuthSchemaSql = `
       CREATE TABLE "users" (
         "id" uuid NOT NULL,
         "provider" text NOT NULL,
@@ -168,18 +169,21 @@ export class InitialAuthSchema1788600000000 implements MigrationInterface {
         )
       );
       CREATE INDEX "idx_auth_login_requests_expires_at" ON "auth_login_requests" ("expires_at");
-    `)
+    `
+    await queryRunner.query(createAuthSchemaSql)
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    if (!queryRunner.isTransactionActive) {
+    const isTransactionActive = queryRunner.isTransactionActive
+    if (!isTransactionActive) {
       throw new Error('Auth schema Migration requires an active transaction')
     }
-    await queryRunner.query(`
+    const dropAuthSchemaSql = `
       DROP TABLE "auth_login_requests";
       DROP TABLE "auth_refresh_tokens";
       DROP TABLE "auth_sessions";
       DROP TABLE "users";
-    `)
+    `
+    await queryRunner.query(dropAuthSchemaSql)
   }
 }

@@ -73,26 +73,32 @@ export async function runMigrationCommand(
   try {
     dataSource = createDataSource()
     await dataSource.initialize()
-    if (command === 'up') {
+    const isUpCommand = command === 'up'
+    const isDownCommand = !isUpCommand && command === 'down'
+    if (isUpCommand) {
       const applied = await dataSource.runMigrations({ transaction: 'all' })
       result = `Database migration applied: ${applied.length}`
-    } else if (command === 'down') {
+    } else if (isDownCommand) {
       await dataSource.undoLastMigration({ transaction: 'all' })
       result = 'Database migration reverted'
     } else {
       const relation = (await dataSource.query(
         "SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"
       )) as Array<{ exists: boolean }>
-      if (!relation[0]?.exists) {
+      const migrationHistoryExists = relation[0]?.exists
+      const hasMigrationHistoryFlag = migrationHistoryExists != null
+      const isMigrationHistoryPresent = hasMigrationHistoryFlag && migrationHistoryExists
+      if (!isMigrationHistoryPresent) {
         result = 'Database migrations pending'
       } else {
         const history = (await dataSource.query('SELECT name FROM "typeorm_migrations"')) as Array<{
           name: string
         }>
         const applied = new Set(history.map(({ name }) => name))
-        result = dataSource.migrations.every((migration) =>
+        const areAllMigrationsApplied = dataSource.migrations.every((migration) =>
           applied.has(migration.name ?? migration.constructor.name)
         )
+        result = areAllMigrationsApplied
           ? 'Database migrations current'
           : 'Database migrations pending'
       }
@@ -100,15 +106,21 @@ export async function runMigrationCommand(
   } catch {
     failed = true
   }
-  if (dataSource?.isInitialized) {
+  const dataSourceToClose = dataSource
+  const hasDataSource = dataSourceToClose != null
+  const isDataSourceInitialized = hasDataSource && dataSourceToClose.isInitialized
+  if (isDataSourceInitialized) {
     try {
-      await dataSource.destroy()
+      await dataSourceToClose.destroy()
     } catch {
       failed = true
     }
   }
-  if (failed || result === undefined) {
+  const migrationResult = result
+  const isResultMissing = migrationResult === undefined
+  const hasMigrationFailed = failed || isResultMissing
+  if (hasMigrationFailed) {
     throw sanitizeMigrationError()
   }
-  return result
+  return migrationResult
 }
