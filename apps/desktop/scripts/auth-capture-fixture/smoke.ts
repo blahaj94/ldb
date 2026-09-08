@@ -142,3 +142,5 @@ export async function smokeStandaloneOcr(window: BrowserWindow): Promise<void> {
   assert.equal(observation.streams, 0)
   assert.equal(observation.requests, 0)
 }
+
+export { smokeCharacterSearch } from './search-smoke'

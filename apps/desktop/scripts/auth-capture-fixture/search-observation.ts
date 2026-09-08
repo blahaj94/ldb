@@ -44,11 +44,16 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
       regionMask |= 1 << slot.slot
     }
     const rows = region?.querySelectorAll('ol > li') ?? []
-    const rowText = rows[0]?.textContent ?? ''
-    const hasOneCandidate = rows.length === 1
-    const hasExpectedFields = ['ALICE', 'synthetic-character', '카인', 'cain', '12345'].every(
-      (field) => rowText.includes(field)
+    const rowFields = Array.from(rows[0]?.querySelectorAll('p') ?? []).map((field) =>
+      field.textContent?.trim()
     )
+    const hasOneCandidate = rows.length === 1
+    const hasExpectedFields = [
+      'ALICE',
+      '캐릭터 ID: synthetic-character',
+      '서버: 카인 (cain)',
+      '명성: 12345'
+    ].every((field) => rowFields.includes(field))
     const isSuccess = slot.state === 'success'
     const hasCandidate = isSuccess && hasOneCandidate && hasExpectedFields
     if (hasCandidate) {
