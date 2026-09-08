@@ -188,9 +188,20 @@ test("snapshot comments enforce GitHub's rendered comment length", () => {
 })
 
 test('renderReport shows Korean scope, role totals, counters, and partial status', () => {
-  const body = renderReport(snapshot({ complete: false, warnings: ['scope_incomplete'] }))
+  const value = snapshot({
+    complete: false,
+    warnings: ['scope_incomplete'],
+    period: {
+      startedAt: '2026-09-08T14:59:59.999Z',
+      capturedAt: '2026-09-08T15:35:00Z'
+    }
+  })
+
+  const body = renderReport(value)
+
   assert.match(body, /PR #35/)
-  assert.match(body, /집계 범위/)
+  assert.match(body, /집계 범위: 2026년 9월 8일 23시 59분 ~ 2026년 9월 9일 00시 35분/)
+  assert.deepEqual(parseSnapshotComment(snapshotComment(value)), value)
   assert.match(body, /부분 관측/)
   assert.match(body, /본 에이전트/)
   assert.match(body, /서브 에이전트/)
