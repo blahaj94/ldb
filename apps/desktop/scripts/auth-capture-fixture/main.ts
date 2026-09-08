@@ -8,6 +8,7 @@ import { registerObservedCapture } from './capture-observation'
 import { canaries, createFixtureEffects, syntheticCode } from '../auth-bridge-fixture/effects'
 import { smoke, smokeStandaloneOcr } from './smoke'
 import { registerFixtureMediaPermissions } from './permissions'
+import { createFixtureSearch, searchScenarios, type SearchScenario } from './search-effects'
 
 const profile = process.env.LDB_AUTH_CAPTURE_PROFILE
 const launcherPid = process.env.LDB_AUTH_CAPTURE_LAUNCHER_PID
@@ -30,6 +31,7 @@ if (canStart) {
     .then(async () => {
       const effects = createFixtureEffects()
       const coordinator = createAuthCoordinator(effects.dependencies)
+      const search = createFixtureSearch(effects.dependencies)
       await coordinator.start()
       const window = new BrowserWindow({
         title: 'LDB Auth Capture fixture',
@@ -77,7 +79,12 @@ if (canStart) {
         getWindow: () => currentWindow,
         documentUrl
       })
-      const captureObservation = registerObservedCapture(coordinator, window, documentUrl)
+      const captureObservation = registerObservedCapture(
+        coordinator,
+        window,
+        documentUrl,
+        search.runtime
+      )
       window.on('closed', () => {
         currentWindow = null
         disposeAuth()
@@ -109,6 +116,10 @@ if (canStart) {
                   void completeLogin()
                 }
               },
+              ...Object.entries(searchScenarios).map(([scenario, label]) => ({
+                label,
+                click: () => search.selectScenario(scenario as SearchScenario)
+              })),
               { label: 'Show capture app', click: () => window.show() },
               { label: 'Show synthetic source', click: () => source.show() },
               { label: 'Quit LDB Auth Capture fixture', click: () => app.quit() }

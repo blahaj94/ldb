@@ -1,6 +1,8 @@
 import { ipcMain, type BrowserWindow } from 'electron'
-import type { AuthCoordinator } from '../../src/backend/auth/types'
+import type { AuthClock, AuthCoordinator } from '../../src/backend/auth/types'
 import { registerCaptureIpc, registerCaptureWindow } from '../../src/backend/capture/ipc-handler'
+import { parseSearchObservation } from '../../src/backend/search/commands'
+import { parseSearchResult } from '../../src/preload/common/search/snapshot'
 
 export type CaptureObservation = {
   displayRequests: number
@@ -8,6 +10,26 @@ export type CaptureObservation = {
   nicknameInvokes: number
   nicknameAccepted: number
   nicknameMatchedSlots: number
+}
+
+function isAcceptedObservation(value: unknown, response: unknown): boolean {
+  const observation = parseSearchObservation([value])
+  const result = parseSearchResult(response)
+  const hasObservation = observation != null
+  const isSuccessful = result?.ok === true
+  const canCompare = hasObservation && isSuccessful
+  if (!canCompare) {
+    return false
+  }
+  const slot = result.snapshot.slots[observation.slot]
+  const hasSameCapture = result.snapshot.captureId === observation.captureId
+  const hasSameSlot = slot.slot === observation.slot
+  const hasSameRevision = slot.observationRevision === observation.observationRevision
+  const hasSameNickname = slot.nickname === observation.nickname
+  const hasRequest = slot.requestId != null && slot.state !== 'idle'
+  const isAccepted =
+    hasSameCapture && hasSameSlot && hasSameRevision && hasSameNickname && hasRequest
+  return isAccepted
 }
 
 function syntheticSlotMask(value: unknown): number {
@@ -24,7 +46,8 @@ function syntheticSlotMask(value: unknown): number {
 export function registerObservedCapture(
   coordinator: AuthCoordinator,
   window: BrowserWindow,
-  documentUrl: string
+  documentUrl: string,
+  runtime?: { apiOrigin: string; fetch: typeof fetch; clock: AuthClock }
 ): { counts: CaptureObservation; dispose: () => void } {
   const counts = {
     displayRequests: 0,
@@ -66,13 +89,18 @@ export function registerObservedCapture(
     originalHandle.call(ipcMain, channel, (event, ...args) => {
       counts.nicknameInvokes += 1
       const result = listener(event, ...args)
-      counts.nicknameAccepted += 1
-      counts.nicknameMatchedSlots |= syntheticSlotMask(args[0])
-      return result
+      return Promise.resolve(result).then((response: unknown) => {
+        const isAccepted = isAcceptedObservation(args[0], response)
+        if (isAccepted) {
+          counts.nicknameAccepted += 1
+          counts.nicknameMatchedSlots |= syntheticSlotMask(args[0])
+        }
+        return response
+      })
     })
   }
   try {
-    const dispose = registerCaptureIpc(coordinator)
+    const dispose = registerCaptureIpc(coordinator, runtime)
     registerCaptureWindow(window, documentUrl)
     return { counts, dispose }
   } finally {
