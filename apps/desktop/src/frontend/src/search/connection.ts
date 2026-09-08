@@ -52,9 +52,11 @@ export class SearchConnection {
           queued = snapshot
         }
       })
-      void this.read(expected).then(() => {
+      void this.read(expected).then((synchronized) => {
         const isCurrent = this.isCurrent(expected)
-        if (!isCurrent) {
+        const canEstablish = isCurrent && synchronized
+        if (!canEstablish) {
+          queued = null
           return
         }
         ready = true
@@ -106,7 +108,7 @@ export class SearchConnection {
     return isCurrent
   }
 
-  private async read(expected: number): Promise<void> {
+  private async read(expected: number): Promise<boolean> {
     try {
       const result = parseSearchResult(
         await this.options.api.controlCharacterSearch({ action: 'read' })
@@ -116,6 +118,7 @@ export class SearchConnection {
         throw new Error('Invalid search bridge response')
       }
       this.accept(result.snapshot, expected)
+      return true
     } catch {
       const isCurrent = this.isCurrent(expected)
       if (isCurrent) {
@@ -123,6 +126,7 @@ export class SearchConnection {
         this.options.onSnapshot(null)
         this.options.onFailure()
       }
+      return false
     }
   }
 

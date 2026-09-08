@@ -90,8 +90,20 @@ export class CaptureSearch {
     const captureId = result?.ok === true ? result.snapshot.captureId : null
     const hasCaptureId = captureId != null
     const isCurrentTicket = this.capture === ticket && ticket.active
-    const isCancelled = signal.aborted || !isCurrentTicket
+    const latest = this.snapshot
+    const completed = result?.snapshot
+    const canCompareSnapshot = latest != null && completed != null
+    const hasChangedRun = canCompareSnapshot && latest.runId !== completed.runId
+    const hasNewerSnapshot = canCompareSnapshot && latest.revision > completed.revision
+    const hasDifferentCapture = latest != null && latest.captureId !== captureId
+    const isSuperseded = hasChangedRun || (hasNewerSnapshot && hasDifferentCapture)
+    const isCancelled = signal.aborted || !isCurrentTicket || isSuperseded
     if (isCancelled) {
+      if (isCurrentTicket) {
+        ticket.active = false
+        this.capture = null
+        this.publish()
+      }
       // begin 자체의 성공 응답만 이 Start의 소유 ID를 증명한다. read의 ID는 사용하지 않는다.
       if (hasCaptureId) {
         void this.connection.command({ action: 'end', captureId })
