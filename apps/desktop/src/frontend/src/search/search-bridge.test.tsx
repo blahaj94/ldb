@@ -247,3 +247,15 @@ it('begin 응답 유실은 read로 확인하고 같은 Start 명령을 자동 �
     })
   ).toHaveLength(1)
 })
+
+it('초기 read 실패 뒤 먼저 보류한 event만으로 연결 실패를 지우지 않는다', async () => {
+  const fixture = createRendererFixture()
+  const read = Promise.withResolvers<SearchCommandResult>()
+  fixture.search.controlCharacterSearch.mockReturnValueOnce(read.promise)
+  await fixture.mount()
+  await fixture.emit(searchSnapshot({ captureId: null, revision: 1 }))
+  read.reject(new Error('Synthetic initial read loss'))
+  await act(async () => undefined)
+  expect(fixture.container.textContent).toContain('검색 연결을 확인할 수 없습니다')
+  expect(fixture.search.controlCharacterSearch).toHaveBeenCalledExactlyOnceWith({ action: 'read' })
+})
