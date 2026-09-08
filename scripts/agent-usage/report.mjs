@@ -96,11 +96,14 @@ function tokenCount(value) {
 }
 
 function utcTimestamp(value) {
-  if (typeof value !== 'string') {
+  const isString = typeof value === 'string'
+  if (!isString) {
     return false
   }
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?Z$/.exec(value)
-  if (!match || !Number.isFinite(Date.parse(value))) {
+  const hasTimestampMatch = match != null
+  const isParseableTimestamp = hasTimestampMatch && Number.isFinite(Date.parse(value))
+  if (!isParseableTimestamp) {
     return false
   }
   const date = new Date(value)
@@ -112,7 +115,11 @@ function utcTimestamp(value) {
     date.getUTCMinutes(),
     date.getUTCSeconds()
   ]
-  return fields.every((field, index) => field === Number(match[index + 1]))
+  const hasMatchingCalendarFields = fields.every((field, index) => {
+    const isMatchingField = field === Number(match[index + 1])
+    return isMatchingField
+  })
+  return hasMatchingCalendarFields
 }
 
 function safeIdentifier(value, maximum, pattern) {
@@ -125,88 +132,146 @@ function safeIdentifier(value, maximum, pattern) {
 
 export function validateSnapshot(value) {
   try {
-    if (!isObject(value) || !hasKeys(value, SNAPSHOT_KEYS) || value.schemaVersion !== 1) {
+    const isSnapshotObject = isObject(value)
+    const hasSnapshotKeys = isSnapshotObject && hasKeys(value, SNAPSHOT_KEYS)
+    const hasSupportedSchema = hasSnapshotKeys && value.schemaVersion === 1
+    if (!hasSupportedSchema) {
       fail()
     }
-    if (!safeIdentifier(value.repository, 200, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)) {
+    const isSafeRepository = safeIdentifier(
+      value.repository,
+      200,
+      /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
+    )
+    if (!isSafeRepository) {
       fail()
     }
-    if (!positiveInteger(value.issue) || !positiveInteger(value.pullRequest)) {
+    const isIssueNumberValid = positiveInteger(value.issue)
+    const areRequestNumbersValid = isIssueNumberValid && positiveInteger(value.pullRequest)
+    if (!areRequestNumbersValid) {
       fail()
     }
-    if (typeof value.headSha !== 'string' || !/^[a-fA-F0-9]{40}$/.test(value.headSha)) {
+    const isHeadShaString = typeof value.headSha === 'string'
+    const isHeadShaValid = isHeadShaString && /^[a-fA-F0-9]{40}$/.test(value.headSha)
+    if (!isHeadShaValid) {
       fail()
     }
-    if (!isObject(value.period) || !hasKeys(value.period, PERIOD_KEYS)) {
+    const isPeriodObject = isObject(value.period)
+    const hasPeriodKeys = isPeriodObject && hasKeys(value.period, PERIOD_KEYS)
+    if (!hasPeriodKeys) {
       fail()
     }
-    if (!utcTimestamp(value.period.startedAt) || !utcTimestamp(value.period.capturedAt)) {
+    const isStartTimestampValid = utcTimestamp(value.period.startedAt)
+    const arePeriodTimestampsValid = isStartTimestampValid && utcTimestamp(value.period.capturedAt)
+    if (!arePeriodTimestampsValid) {
       fail()
     }
-    if (Date.parse(value.period.startedAt) > Date.parse(value.period.capturedAt)) {
+    const isPeriodReversed =
+      Date.parse(value.period.startedAt) > Date.parse(value.period.capturedAt)
+    if (isPeriodReversed) {
       fail()
     }
-    if (typeof value.complete !== 'boolean' || !Array.isArray(value.warnings)) {
+    const isCompleteBoolean = typeof value.complete === 'boolean'
+    const hasWarningArray = isCompleteBoolean && Array.isArray(value.warnings)
+    if (!hasWarningArray) {
       fail()
     }
-    if (
-      value.warnings.length > WARNINGS.size ||
-      new Set(value.warnings).size !== value.warnings.length
-    ) {
+    const hasExcessiveWarnings = value.warnings.length > WARNINGS.size
+    const hasDuplicateWarnings =
+      !hasExcessiveWarnings && new Set(value.warnings).size !== value.warnings.length
+    const hasInvalidWarningList = hasExcessiveWarnings || hasDuplicateWarnings
+    if (hasInvalidWarningList) {
       fail()
     }
-    if (!value.warnings.every((warning) => WARNINGS.has(warning))) {
+    const hasKnownWarnings = value.warnings.every((warning) => {
+      const isKnownWarning = WARNINGS.has(warning)
+      return isKnownWarning
+    })
+    if (!hasKnownWarnings) {
       fail()
     }
-    if (value.complete !== (value.warnings.length === 0)) {
+    const complete = value.complete
+    const hasNoWarnings = value.warnings.length === 0
+    const isCompleteConsistent = complete === hasNoWarnings
+    if (!isCompleteConsistent) {
       fail()
     }
-    if (!Array.isArray(value.agents) || value.agents.length > 256) {
+    const isAgentArray = Array.isArray(value.agents)
+    const hasExcessiveAgents = isAgentArray && value.agents.length > 256
+    const isAgentListInvalid = !isAgentArray || hasExcessiveAgents
+    if (isAgentListInvalid) {
       fail()
     }
 
     const tuples = new Set()
     const agents = value.agents.map((agent) => {
-      if (!isObject(agent) || !hasKeys(agent, AGENT_KEYS) || !ROLES.has(agent.role)) {
+      const isAgentObject = isObject(agent)
+      const hasAgentKeys = isAgentObject && hasKeys(agent, AGENT_KEYS)
+      const hasKnownRole = hasAgentKeys && ROLES.has(agent.role)
+      if (!hasKnownRole) {
         fail()
       }
-      if (!safeIdentifier(agent.agent, 64, /^[A-Za-z0-9][A-Za-z0-9_-]*$/)) {
+      const isAgentIdentifierSafe = safeIdentifier(agent.agent, 64, /^[A-Za-z0-9][A-Za-z0-9_-]*$/)
+      if (!isAgentIdentifierSafe) {
         fail()
       }
-      if (agent.model !== 'unknown' && !safeIdentifier(agent.model, 80, /^[A-Za-z0-9._:-]+$/)) {
+      const isModelReported = agent.model !== 'unknown'
+      const isModelUnsafe =
+        isModelReported && !safeIdentifier(agent.model, 80, /^[A-Za-z0-9._:-]+$/)
+      if (isModelUnsafe) {
         fail()
       }
-      if (!EFFORTS.has(agent.effort)) {
+      const hasKnownEffort = EFFORTS.has(agent.effort)
+      if (!hasKnownEffort) {
         fail()
       }
-      if (!AGENT_KEYS.slice(4).every((key) => tokenCount(agent[key]))) {
+      const hasValidTokenCounts = AGENT_KEYS.slice(4).every((key) => {
+        const isTokenCountValid = tokenCount(agent[key])
+        return isTokenCountValid
+      })
+      if (!hasValidTokenCounts) {
         fail()
       }
-      if (agent.cachedInputTokens > agent.inputTokens) {
+      const hasExcessiveCachedTokens = agent.cachedInputTokens > agent.inputTokens
+      if (hasExcessiveCachedTokens) {
         fail()
       }
-      if (agent.reasoningOutputTokens > agent.outputTokens) {
+      const hasExcessiveReasoningTokens = agent.reasoningOutputTokens > agent.outputTokens
+      if (hasExcessiveReasoningTokens) {
         fail()
       }
-      if (agent.totalTokens !== agent.inputTokens + agent.outputTokens) {
+      const hasInconsistentTotal = agent.totalTokens !== agent.inputTokens + agent.outputTokens
+      if (hasInconsistentTotal) {
         fail()
       }
-      if (value.complete && (agent.model === 'unknown' || agent.effort === 'unknown')) {
+      // 앞서 읽은 값을 재사용하지 않고 기존 검증 단계에서 getter를 다시 읽는다.
+      const requiresKnownContext = value.complete
+      const isModelUnknown = requiresKnownContext && agent.model === 'unknown'
+      const isEffortUnknown = requiresKnownContext && !isModelUnknown && agent.effort === 'unknown'
+      const isRequiredContextMissing = isModelUnknown || isEffortUnknown
+      if (isRequiredContextMissing) {
         fail()
       }
       const tuple = `${agent.role}\0${agent.agent}\0${agent.model}\0${agent.effort}`
-      if (tuples.has(tuple)) {
+      const isDuplicateAgent = tuples.has(tuple)
+      if (isDuplicateAgent) {
         fail()
       }
       tuples.add(tuple)
       return Object.fromEntries(AGENT_KEYS.map((key) => [key, agent[key]]))
     })
     for (const key of AGENT_KEYS.slice(4)) {
-      if (!Number.isSafeInteger(agents.reduce((sum, agent) => sum + agent[key], 0))) {
+      const isAggregateSafe = Number.isSafeInteger(
+        agents.reduce((sum, agent) => sum + agent[key], 0)
+      )
+      if (!isAggregateSafe) {
         fail()
       }
     }
-    if (value.complete && !agents.some(({ role }) => role === 'main')) {
+    const isMainAgentRequired = value.complete
+    const isRequiredMainAgentMissing =
+      isMainAgentRequired && !agents.some(({ role }) => role === 'main')
+    if (isRequiredMainAgentMissing) {
       fail()
     }
 
@@ -247,7 +312,9 @@ function row(label, usage) {
 }
 
 function roleRow(label, agents, complete) {
-  if (!complete && agents.length === 0) {
+  const isIncomplete = !complete
+  const isRoleUnobserved = isIncomplete && agents.length === 0
+  if (isRoleUnobserved) {
     return `| ${label} | 미관측 | 미관측 | 미관측 | 미관측 | 미관측 | 미관측 |`
   }
   return row(label, totals(agents))
@@ -260,7 +327,8 @@ export function renderReport(value) {
   const status = snapshot.complete ? '완전' : `부분 관측 (${snapshot.warnings.join(', ')})`
   const main = snapshot.agents.filter(({ role }) => role === 'main')
   const subagents = snapshot.agents.filter(({ role }) => role === 'subagent')
-  const usage = snapshot.agents.length
+  const hasObservedAgents = snapshot.agents.length > 0
+  const usage = hasObservedAgents
     ? [
         'Reasoning output은 output의 부분집합이며 total에 별도로 더하지 않았습니다.',
         '',
@@ -278,7 +346,7 @@ export function renderReport(value) {
       ]
     : ['관측된 usage record가 없습니다. Token 수치를 추정하지 않았습니다.']
 
-  return [
+  const reportBody = [
     '## Agent 사용량 보고',
     '',
     `- PR #${snapshot.pullRequest}`,
@@ -288,33 +356,36 @@ export function renderReport(value) {
     '',
     ...usage
   ].join('\n')
+  return reportBody
 }
 
 export function snapshotComment(value) {
   const snapshot = validateSnapshot(value)
-  return enforceCommentLimit(
-    [
-      SNAPSHOT_MARKER,
-      renderReport(snapshot),
-      '',
-      '<details><summary>검증용 snapshot JSON</summary>',
-      '',
-      '```json',
-      JSON.stringify(snapshot, null, 2),
-      '```',
-      '</details>'
-    ].join('\n')
-  )
+  const commentBody = [
+    SNAPSHOT_MARKER,
+    renderReport(snapshot),
+    '',
+    '<details><summary>검증용 snapshot JSON</summary>',
+    '',
+    '```json',
+    JSON.stringify(snapshot, null, 2),
+    '```',
+    '</details>'
+  ].join('\n')
+  return enforceCommentLimit(commentBody)
 }
 
 export function parseSnapshotComment(body) {
   enforceCommentLimit(body)
   try {
-    if (typeof body !== 'string' || !body.includes(SNAPSHOT_MARKER)) {
+    const isBodyString = typeof body === 'string'
+    const hasSnapshotMarker = isBodyString && body.includes(SNAPSHOT_MARKER)
+    if (!hasSnapshotMarker) {
       fail()
     }
     const match = body.match(/```json\s*\n([\s\S]*?)\n```/)
-    if (!match) {
+    const hasSnapshotJson = match != null
+    if (!hasSnapshotJson) {
       fail()
     }
     return validateSnapshot(JSON.parse(match[1]))
