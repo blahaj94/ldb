@@ -255,3 +255,30 @@ it('빈 OCR 문자열은 기존 stable 값을 clear 한 번으로 무효화하�
   ])
   expect(fixture.capture.notifyStableNicknameDetected).toHaveBeenCalledOnce()
 })
+
+it.each(['ended', 'other capture'] as const)(
+  'begin 응답보다 새로운 %s snapshot이 먼저 오면 늦은 ID로 media를 시작하지 않는다',
+  async (transition) => {
+    const fixture = createRendererFixture()
+    await fixture.mount()
+    const begin = Promise.withResolvers<SearchCommandResult>()
+    fixture.search.controlCharacterSearch.mockReturnValueOnce(begin.promise)
+    await fixture.start()
+    const otherId = '00000000-0000-4000-8000-000000000099'
+    const isEnded = transition === 'ended'
+    await fixture.emit(searchSnapshot({ captureId: isEnded ? null : otherId, revision: 2 }))
+    begin.resolve({ ok: true, snapshot: searchSnapshot({ captureId: CAPTURE_ID, revision: 1 }) })
+    await act(async () => undefined)
+
+    expect(fixture.getDisplayMedia).not.toHaveBeenCalled()
+    expect(media.worker).not.toHaveBeenCalled()
+    expect(fixture.search.controlCharacterSearch).toHaveBeenCalledWith({
+      action: 'end',
+      captureId: CAPTURE_ID
+    })
+    expect(fixture.search.controlCharacterSearch).not.toHaveBeenCalledWith({
+      action: 'end',
+      captureId: otherId
+    })
+  }
+)
