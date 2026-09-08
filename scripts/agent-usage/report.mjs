@@ -1,3 +1,5 @@
+import { formatDate } from '../format-date.mjs'
+
 export const SNAPSHOT_MARKER = '<!-- ldb-agent-usage-snapshot:v1 -->'
 const COMMENT_LIMIT = 65_536
 
@@ -234,6 +236,8 @@ function roleRow(label, agents, complete) {
 
 export function renderReport(value) {
   const snapshot = validateSnapshot(value)
+  const startedAt = formatDate(snapshot.period.startedAt)
+  const capturedAt = formatDate(snapshot.period.capturedAt)
   const status = snapshot.complete ? '완전' : `부분 관측 (${snapshot.warnings.join(', ')})`
   const main = snapshot.agents.filter(({ role }) => role === 'main')
   const subagents = snapshot.agents.filter(({ role }) => role === 'subagent')
@@ -259,7 +263,7 @@ export function renderReport(value) {
     '## Agent 사용량 보고',
     '',
     `- PR #${snapshot.pullRequest}`,
-    `- 집계 범위: ${snapshot.period.startedAt} ~ ${snapshot.period.capturedAt}`,
+    `- 집계 범위: ${startedAt} ~ ${capturedAt}`,
     `- 상태: ${status}`,
     `- 기준 head: \`${snapshot.headSha}\``,
     '',
