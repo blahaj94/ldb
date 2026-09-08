@@ -1,7 +1,7 @@
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { afterEach, expect, vi } from 'vitest'
 import { createAuthCoordinator } from '../auth/coordinator'
-import type { AuthClock, AuthCoordinator } from '../auth/types'
+import type { AuthCoordinator } from '../auth/types'
 import { API_ORIGIN, REFRESH_0, createAuthHarness } from '../auth/auth-test-fixtures'
 import { registerCaptureIpc, registerCaptureWindow } from '../capture/ipc-handler'
 import type { SearchSnapshot } from '../../preload/common/types/search'
@@ -17,7 +17,6 @@ vi.mock('electron', () => ({
 }))
 
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
-type SearchConfiguration = { apiOrigin: string; fetch: typeof fetch; clock: AuthClock }
 const disposeFixtures: Array<() => void> = []
 const source = { id: 'window:search-fixture', name: 'Synthetic search window' }
 const rendererUrl = 'file:///search-fixture/index.html'
@@ -80,10 +79,8 @@ export async function createSearchFixture(): Promise<{
     session: { setDisplayMediaRequestHandler: vi.fn() }
   }
   const window = { webContents: contents, isDestroyed: () => false, on: vi.fn() }
-  // 기존 공개 등록 함수에 추가할 main 전용 설정이다. 실제 core와 capture handler를 사용한다.
-  const register: (auth: AuthCoordinator, configuration: SearchConfiguration) => () => void =
-    registerCaptureIpc
-  const dispose = register(auth, {
+  // Main 설정과 외부 fetch만 제어하며 실제 core와 capture handler를 사용한다.
+  const dispose = registerCaptureIpc(auth, {
     apiOrigin: API_ORIGIN,
     fetch: fetchSearch,
     clock: harness.clock

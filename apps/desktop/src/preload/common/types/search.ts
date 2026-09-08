@@ -2,6 +2,8 @@ export type SearchControl =
   | Readonly<{ action: 'read' }>
   | Readonly<{ action: 'begin'; authRunId: string; authRevision: number }>
   | Readonly<{ action: 'end'; captureId: string }>
+  | Readonly<{ action: 'clear'; captureId: string; slot: number; observationRevision: number }>
+  | Readonly<{ action: 'retry'; captureId: string; slot: number; requestId: string }>
 
 export type SearchObservation = Readonly<{
   captureId: string

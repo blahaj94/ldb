@@ -6,9 +6,10 @@ import {
   type WebFrameMain
 } from 'electron'
 import { addHandler } from '../ipc'
-import type { AuthCoordinator } from '../auth/types'
-import { CaptureSearchLifetime } from '../search/capture-lifetime'
-import { parseSearchControl } from '../search/commands'
+import type { AuthClock, AuthCoordinator } from '../auth/types'
+import { CaptureSearchLifetime, type CaptureBinding } from '../search/capture-lifetime'
+import { parseSearchControl, parseSearchObservation } from '../search/commands'
+import { createSearchHttp } from '../search/http'
 import { findSelectedSource, isCaptureRequestAllowed } from './capture-policy'
 
 let captureWindow: BrowserWindow | null = null
@@ -67,13 +68,45 @@ function isCurrentCapture(generation: number, startedWindowGeneration: number): 
   return isCurrent
 }
 
-function registerCaptureIpc(coordinator?: AuthCoordinator): () => void {
+function currentMainFrame(): WebFrameMain | null {
+  const window = captureWindow
+  const isAlive = window != null && !window.isDestroyed() && !window.webContents.isDestroyed()
+  if (!isAlive) {
+    return null
+  }
+  return window.webContents.mainFrame
+}
+
+function isCurrentSearch(binding: CaptureBinding): boolean {
+  const hasSameAuth = binding.authGeneration === auth?.captureGeneration()
+  const hasSameWindow = binding.windowGeneration === windowGeneration
+  const hasSameSource = binding.sourceGeneration === sourceSelectionGeneration
+  const hasSource = selectedSourceId != null && !selectingSource
+  const isTrusted = isTrustedFrame(captureWindow, currentMainFrame())
+  const isCurrent = hasSameAuth && hasSameWindow && hasSameSource && hasSource && isTrusted
+  return isCurrent
+}
+
+function registerCaptureIpc(
+  coordinator?: AuthCoordinator,
+  configuration?: { apiOrigin: string; fetch?: typeof fetch; clock: AuthClock }
+): () => void {
   unsubscribe?.()
   auth = coordinator
-  const lifetime = new CaptureSearchLifetime((snapshot) => {
-    const window = captureWindow
-    const canPublish = isTrustedFrame(window, window?.webContents.mainFrame ?? null)
-    if (canPublish) window!.webContents.send('characterSearchChanged', snapshot)
+  const hasRuntime = coordinator != null && configuration != null
+  const runtime = hasRuntime
+    ? { auth: coordinator, http: createSearchHttp(configuration) }
+    : undefined
+  const lifetime = new CaptureSearchLifetime({
+    runtime,
+    isCurrent: isCurrentSearch,
+    publish: (snapshot) => {
+      const window = captureWindow
+      const canPublish = isTrustedFrame(window, currentMainFrame())
+      if (canPublish) {
+        window!.webContents.send('characterSearchChanged', snapshot)
+      }
+    }
   })
   search = lifetime
   clearSource()
@@ -142,6 +175,14 @@ function registerCaptureIpc(coordinator?: AuthCoordinator): () => void {
     const generation = auth?.captureGeneration()
     const hasPermission = generation != null
     if (!hasPermission) return lifetime.result('SEARCH_NOT_ALLOWED')
+    const isClear = control.action === 'clear'
+    if (isClear) {
+      return lifetime.clear(control)
+    }
+    const isRetry = control.action === 'retry'
+    if (isRetry) {
+      return lifetime.retry(control)
+    }
     const snapshot = auth!.getSnapshot()
     const hasSameRun = control.authRunId === snapshot.runId
     const hasSameRevision = control.authRevision === snapshot.revision
@@ -159,10 +200,15 @@ function registerCaptureIpc(coordinator?: AuthCoordinator): () => void {
     })
   })
 
-  addHandler('notifyStableNicknameDetected', (event) => {
+  addHandler('notifyStableNicknameDetected', (event, ...args) => {
     requireSender(event)
     requireCaptureGeneration()
-    return lifetime.result('INVALID_SEARCH_COMMAND')
+    const observation = parseSearchObservation(args)
+    const hasValidObservation = observation != null
+    if (!hasValidObservation) {
+      return lifetime.result('INVALID_SEARCH_COMMAND')
+    }
+    return lifetime.observe(observation)
   })
 
   return () => {
