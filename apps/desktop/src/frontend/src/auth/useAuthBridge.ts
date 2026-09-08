@@ -8,7 +8,10 @@ type BridgeState = {
   commandPending: boolean
   connectionFailed: boolean
 }
-type AuthBridge = BridgeState & { onIntent: (intent: AuthIntent) => void }
+type AuthBridge = BridgeState & {
+  onIntent: (intent: AuthIntent) => void
+  resynchronize: () => void
+}
 
 export function useAuthBridge(api: AuthApi): AuthBridge {
   const presentationEpochRef = useRef(0)
@@ -19,6 +22,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
     commandPending: false,
     connectionFailed: false
   })
+  const reconnect = useRef<() => void>(() => {})
   const dispatch = useRef<(intent: AuthIntent) => void>(() => {})
 
   useEffect(() => {
@@ -167,14 +171,17 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
     dispatch.current = (intent) => {
       void command(intent)
     }
+    reconnect.current = connect
     connect()
     return () => {
+      reconnect.current = () => {}
       active = false
       epoch += 1
       unsubscribe()
     }
   }, [api])
 
+  const resynchronize = useCallback((): void => reconnect.current(), [])
   const onIntent = useCallback((intent: AuthIntent): void => dispatch.current(intent), [])
   const hasSameSource = state.source === api
   if (!hasSameSource) {
@@ -200,6 +207,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
     snapshot: visible.snapshot,
     commandPending: visible.commandPending,
     connectionFailed: visible.connectionFailed,
-    onIntent
+    onIntent,
+    resynchronize
   }
 }

@@ -2,21 +2,24 @@ import type { ReactNode } from 'react'
 import { ContentStack, ExampleSection, LayoutBlock, SupportingText } from '@ldb/ui'
 import type { AuthApi } from '../../../preload/common/types/auth'
 import { AuthPresentation } from './AuthPresentation'
+import { AuthCaptureContext } from './capture-context'
 import { useAuthBridge } from './useAuthBridge'
 
 export function AuthBridge({ api, home }: { api: AuthApi; home?: ReactNode }): React.JSX.Element {
-  const { snapshot, presentationEpoch, commandPending, connectionFailed, onIntent } =
+  const { snapshot, presentationEpoch, commandPending, connectionFailed, onIntent, resynchronize } =
     useAuthBridge(api)
   const hasSnapshot = snapshot != null
   if (hasSnapshot) {
     return (
-      <AuthPresentation
-        key={`${snapshot.runId}:${presentationEpoch}`}
-        snapshot={snapshot}
-        home={home}
-        commandPending={commandPending}
-        onIntent={onIntent}
-      />
+      <AuthCaptureContext.Provider value={{ snapshot, resynchronize }}>
+        <AuthPresentation
+          key={`${snapshot.runId}:${presentationEpoch}`}
+          snapshot={snapshot}
+          home={home}
+          commandPending={commandPending}
+          onIntent={onIntent}
+        />
+      </AuthCaptureContext.Provider>
     )
   }
   return (

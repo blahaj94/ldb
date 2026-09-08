@@ -3,7 +3,9 @@ import type { Worker } from 'tesseract.js'
 import { capturePartyNicknameCrops, PARTY_SLOTS } from './party'
 import { normalizeNickname, type SlotStability, updateSlotStability } from './recognition'
 
-export function usePartyRecognition(): {
+export function usePartyRecognition(
+  observe: (input: { slot: number; nickname: string | null }) => void
+): {
   stableNicknames: (string | null)[]
   recognizePartyNicknames: (
     video: HTMLVideoElement,
@@ -37,16 +39,19 @@ export function usePartyRecognition(): {
       if (signal.aborted) return
       const stability = updateSlotStability(slotStabilityRef.current[slot], nickname || null)
       slotStabilityRef.current[slot] = stability
-      if (!stability.stableNickname) {
+      const hasStableNickname = stability.stableNickname != null
+      if (!hasStableNickname) {
+        const hadReportedNickname = reportedNicknamesRef.current[slot] != null
+        if (hadReportedNickname) {
+          observe({ slot, nickname: null })
+        }
         reportedNicknamesRef.current[slot] = null
         nextStableNicknames[slot] = null
         continue
       }
       nextStableNicknames[slot] = stability.stableNickname
       if (reportedNicknamesRef.current[slot] !== stability.stableNickname) {
-        void window.api
-          .notifyStableNicknameDetected({ nickname: stability.stableNickname, slot })
-          .catch(() => undefined)
+        observe({ nickname: stability.stableNickname, slot })
         reportedNicknamesRef.current[slot] = stability.stableNickname
       }
     }

@@ -3,6 +3,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AuthCaptureContext } from '../auth/capture-context'
+import { CAPTURE_ID, SEARCH_RUN, searchSnapshot } from '../../../preload/api/search-test-fixture'
+import type { SearchControl } from '../../../preload/common/types/search'
 import { usePartyCapture } from './usePartyCapture'
 
 const moduleMocks = vi.hoisted(() => ({
@@ -40,6 +43,8 @@ const api = {
   selectCaptureSource: vi.fn()
 }
 
+const search = { controlCharacterSearch: vi.fn(), onCharacterSearchChanged: vi.fn() }
+let currentSearch = searchSnapshot({ captureId: null, revision: 0 })
 const getDisplayMedia = vi.fn()
 
 function HookHarness({ onRender }: { onRender: (value: HookValue) => void }): null {
@@ -56,7 +61,25 @@ async function renderPartyCaptureHook(): Promise<{
   let current: HookValue | undefined
 
   await act(async () => {
-    root.render(<HookHarness onRender={(value) => (current = value)} />)
+    root.render(
+      <AuthCaptureContext.Provider
+        value={{
+          snapshot: {
+            runId: SEARCH_RUN,
+            revision: 1,
+            phase: 'signedIn',
+            providers: [],
+            login: null,
+            user: { nickname: '합성 계정' },
+            entry: 'home',
+            notice: null
+          },
+          resynchronize: () => {}
+        }}
+      >
+        <HookHarness onRender={(value) => (current = value)} />
+      </AuthCaptureContext.Provider>
+    )
   })
 
   return {
@@ -107,13 +130,30 @@ beforeEach(() => {
     value: true
   })
   Object.defineProperty(window, 'api', { configurable: true, value: api })
+  Object.defineProperty(window, 'search', { configurable: true, value: search })
+  currentSearch = searchSnapshot({ captureId: null, revision: 0 })
+  search.onCharacterSearchChanged.mockReturnValue(() => {})
+  search.controlCharacterSearch.mockImplementation(async (control: SearchControl) => {
+    const isBegin = control.action === 'begin'
+    const isEnd = control.action === 'end'
+    if (isBegin || isEnd) {
+      currentSearch = searchSnapshot({
+        captureId: isBegin ? CAPTURE_ID : null,
+        revision: currentSearch.revision + 1
+      })
+    }
+    return { ok: true, snapshot: currentSearch }
+  })
   Object.defineProperty(navigator, 'mediaDevices', {
     configurable: true,
     value: { getDisplayMedia }
   })
 
   api.listCaptureSources.mockResolvedValue([])
-  api.notifyStableNicknameDetected.mockResolvedValue(undefined)
+  api.notifyStableNicknameDetected.mockImplementation(async () => ({
+    ok: true,
+    snapshot: currentSearch
+  }))
   api.selectCaptureSource.mockResolvedValue(null)
   moduleMocks.capturePartyNicknameCrops.mockReturnValue([null, null, null, null])
   moduleMocks.runSerialLoop.mockImplementation(() => new Promise<void>(() => undefined))
@@ -206,7 +246,12 @@ describe('usePartyCapture', () => {
     expect(worker.recognize).toHaveBeenCalledWith(nicknameCrop)
     expect(hook.getCurrent().stableNicknames[0]).toBe('Alice')
     expect(api.notifyStableNicknameDetected).toHaveBeenCalledTimes(1)
-    expect(api.notifyStableNicknameDetected).toHaveBeenCalledWith({ nickname: 'Alice', slot: 0 })
+    expect(api.notifyStableNicknameDetected).toHaveBeenCalledWith({
+      captureId: CAPTURE_ID,
+      observationRevision: 1,
+      nickname: 'Alice',
+      slot: 0
+    })
 
     act(() => hook.getCurrent().stopCapture())
 
@@ -274,8 +319,9 @@ describe('usePartyCapture', () => {
     let startCapture!: Promise<void>
     act(() => {
       startCapture = hook.getCurrent().startCapture()
-      hook.getCurrent().stopCapture('Capture cancelled.')
     })
+    await flushPromises()
+    act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
     pendingStream.resolve(stream)
     await act(async () => startCapture)
 
@@ -409,6 +455,7 @@ describe('usePartyCapture', () => {
     act(() => {
       firstStart = hook.getCurrent().startCapture()
     })
+    await flushPromises()
     await act(async () => hook.getCurrent().startCapture())
     pendingStream.resolve(previous.stream)
     await act(async () => firstStart)
