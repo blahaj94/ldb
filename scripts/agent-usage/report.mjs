@@ -55,7 +55,9 @@ function fail() {
 }
 
 function enforceCommentLimit(body) {
-  if (typeof body === 'string' && body.length > COMMENT_LIMIT) {
+  const isString = typeof body === 'string'
+  const exceedsCommentLimit = isString && body.length > COMMENT_LIMIT
+  if (exceedsCommentLimit) {
     const error = new Error("Usage snapshot comment exceeds GitHub's 65536 character limit")
     error.code = 'COMMENT_TOO_LONG'
     throw error
@@ -64,20 +66,29 @@ function enforceCommentLimit(body) {
 }
 
 function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  const isNonNull = value !== null
+  const isObjectType = typeof value === 'object'
+  const isNotArray = !Array.isArray(value)
+  return isNonNull && isObjectType && isNotArray
 }
 
 function hasKeys(value, expected) {
   const keys = Object.keys(value)
-  return keys.length === expected.length && expected.every((key) => keys.includes(key))
+  const hasExpectedKeyCount = keys.length === expected.length
+  const hasAllExpectedKeys = expected.every((key) => keys.includes(key))
+  return hasExpectedKeyCount && hasAllExpectedKeys
 }
 
 function positiveInteger(value) {
-  return Number.isSafeInteger(value) && value > 0
+  const isSafeInteger = Number.isSafeInteger(value)
+  const isPositive = value > 0
+  return isSafeInteger && isPositive
 }
 
 function tokenCount(value) {
-  return Number.isSafeInteger(value) && value >= 0
+  const isSafeInteger = Number.isSafeInteger(value)
+  const isNonNegative = value >= 0
+  return isSafeInteger && isNonNegative
 }
 
 function utcTimestamp(value) {
@@ -101,7 +112,10 @@ function utcTimestamp(value) {
 }
 
 function safeIdentifier(value, maximum, pattern) {
-  return typeof value === 'string' && value.length <= maximum && pattern.test(value)
+  const isString = typeof value === 'string'
+  const isWithinMaximum = isString && value.length <= maximum
+  const matchesPattern = isWithinMaximum && pattern.test(value)
+  return isString && isWithinMaximum && matchesPattern
 }
 
 export function validateSnapshot(value) {

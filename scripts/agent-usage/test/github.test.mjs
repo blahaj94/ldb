@@ -46,7 +46,7 @@ function snapshot(overrides = {}) {
   }
 }
 
-function manyAgents(count) {
+function createAgents(count) {
   return Array.from({ length: count }, (_, index) => ({
     role: index === 0 ? 'main' : 'subagent',
     agent: `agent-${index}-${'x'.repeat(50)}`,
@@ -122,7 +122,7 @@ test('saveSnapshot requires current same-repository PR head and linked manifest 
 test('saveSnapshot rejects oversized rendered comments before GitHub calls', () => {
   const mock = apiMock()
   assert.throws(
-    () => saveSnapshot(snapshot({ agents: manyAgents(100) }), mock.call),
+    () => saveSnapshot(snapshot({ agents: createAgents(100) }), mock.call),
     /65536 character limit/
   )
   assert.deepEqual(mock.calls, [])
@@ -145,8 +145,10 @@ test('saveSnapshot creates a comment instead of overwriting another author', () 
   })
   const result = saveSnapshot(snapshot(), mock.call)
   assert.equal(result.status, 'created')
-  assert.ok(mock.calls.some(({ args }) => args.includes('POST')))
-  assert.ok(!mock.calls.some(({ args }) => args.includes('PATCH')))
+  const hasPostCall = mock.calls.some(({ args }) => args.includes('POST'))
+  const hasPatchCall = mock.calls.some(({ args }) => args.includes('PATCH'))
+  assert.ok(hasPostCall)
+  assert.ok(!hasPatchCall)
 })
 
 test('saveSnapshot recognizes the default workflow token actor', () => {
@@ -156,8 +158,10 @@ test('saveSnapshot recognizes the default workflow token actor', () => {
       prComments: [{ id: 3, body: SNAPSHOT_MARKER, user: { login: 'github-actions[bot]' } }]
     })
     assert.equal(saveSnapshot(snapshot(), mock.call).status, 'updated')
-    assert.ok(mock.calls.some(({ args }) => args.includes('PATCH')))
-    assert.ok(!mock.calls.some(({ args }) => args.join(' ') === 'api user'))
+    const hasPatchCall = mock.calls.some(({ args }) => args.includes('PATCH'))
+    const hasUserLookup = mock.calls.some(({ args }) => args.join(' ') === 'api user')
+    assert.ok(hasPatchCall)
+    assert.ok(!hasUserLookup)
   } finally {
     process.env.GITHUB_ACTIONS = 'false'
   }
@@ -170,7 +174,10 @@ test('publishReport skips unmerged and fork PRs without writing', () => {
   ]) {
     const mock = apiMock({ pr })
     assert.deepEqual(publishReport(REPOSITORY, 35, mock.call), { status: 'skipped', issues: [] })
-    assert.ok(!mock.calls.some(({ args }) => args.includes('POST') || args.includes('PATCH')))
+    const hasWriteCall = mock.calls.some(
+      ({ args }) => args.includes('POST') || args.includes('PATCH')
+    )
+    assert.ok(!hasWriteCall)
   }
 })
 
@@ -294,7 +301,8 @@ test('publishReport updates only its own per-PR marker on repeat', () => {
   assert.equal(publishReport(REPOSITORY, 35, mock.call).status, 'published')
   const patch = mock.calls.find(({ args }) => args.includes('PATCH'))
   assert.match(patch.args.join(' '), /issues\/comments\/9/)
-  assert.ok(!mock.calls.some(({ args }) => args.includes('POST')))
+  const hasPostCall = mock.calls.some(({ args }) => args.includes('POST'))
+  assert.ok(!hasPostCall)
 })
 
 test('publishReport targets every linked same-repository issue only', () => {
