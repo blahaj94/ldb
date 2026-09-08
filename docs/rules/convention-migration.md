@@ -14,6 +14,8 @@ review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재�
 
 이 Rule은 기존 코드에 최신 [`convention.md`](../../convention.md)를 적용하는 후속 작업의 이행 기준이다. 문서 자체는 제품 code, test, script, 설정, dependency를 바꾸지 않는다. Rule 승인과 사용자 merge 전에는 제품 code 이행을 시작하지 않는다.
 
+기계적 formatter·lint 적용과 사람의 의미 판단을 나누는 제안은 [`convention-tooling.md`](convention-tooling.md)를 따른다. 이 proposed Rule이 승인되기 전에는 기존 active Rule과 현재 설정을 우선하며, 승인 후에도 확인된 config·version·glob·ignore 범위만 사용한다.
+
 ## 동작 보존 범위
 
 표기와 구조를 읽기 쉽게 바꾸되 반환값, 오류와 예외의 종류·우선순위, 평가 순서, 단락 평가, getter와 시계 조회 시점, 외부 호출 횟수와 순서, 상태 변경·rollback·cleanup, Promise와 async 순서를 유지한다. 원래 조건이 반복·재시도·상태 변경 뒤 평가됐다면 결과를 미리 고정하지 않는다. 값을 한 번 더 읽거나 호출을 한 번 더 하는 정리도 동작 변경으로 본다.
@@ -26,7 +28,7 @@ review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재�
 
 이런 변경은 임의로 진행하지 않고 해당 Rule과 change-control의 승인·testing 절차를 따른다. 기존 Rule과 현재 code가 충돌하면 어느 쪽도 추측으로 고치지 않고 판단을 남긴다.
 
-[`convention-exceptions-proposal.md`](convention-exceptions-proposal.md)의 두 예외는 별도 proposed Rule이며, Draft PR의 사용자 `승인`과 merge 전에는 이 엄격한 보존 기준을 완화하지 않는다. 승인 후에도 해당 문서의 pure check·collection predicate 조건을 충족하는 범위에만 적용한다.
+[`convention-exceptions-proposal.md`](convention-exceptions-proposal.md)의 두 예외는 PR #161의 사용자 `승인`과 merge로 active가 되었으며, 해당 문서의 pure check·collection predicate 조건을 충족하는 범위에만 적용한다. 그 승인 전에는 이 엄격한 보존 기준을 완화하지 않는다.
 
 ## 작업 단위와 순서
 
