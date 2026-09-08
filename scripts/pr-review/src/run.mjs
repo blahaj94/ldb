@@ -11,14 +11,18 @@ import {
 
 function requiredEnvironment(name) {
   const value = process.env[name]
-  if (!value) {
+  const hasEnvironmentValue = value != null
+  const isEnvironmentValueEmpty = hasEnvironmentValue && value.length === 0
+  const isEnvironmentValueMissingOrEmpty = !hasEnvironmentValue || isEnvironmentValueEmpty
+  if (isEnvironmentValueMissingOrEmpty) {
     throw new Error(`Missing required environment variable: ${name}`)
   }
   return value
 }
 
 async function writeStepSummary(content) {
-  if (process.env.GITHUB_STEP_SUMMARY) {
+  const hasSummaryPath = Boolean(process.env.GITHUB_STEP_SUMMARY)
+  if (hasSummaryPath) {
     await appendFile(process.env.GITHUB_STEP_SUMMARY, `${content}\n`)
   }
 }
@@ -77,7 +81,8 @@ async function main() {
     checks: report.checks
   })
   const previousSummary = findCommentByMarker(automationComments, POLICY_MARKER)
-  if (previousSummary) {
+  const hasPreviousSummary = previousSummary != null
+  if (hasPreviousSummary) {
     await client.updateComment(previousSummary.id, summary)
   } else {
     await client.createComment(pullRequest.number, summary)

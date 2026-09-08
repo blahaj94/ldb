@@ -22,16 +22,19 @@ export class GitHubClient {
       const detail = await response.text()
       throw new Error(`GitHub API ${response.status}: ${detail}`)
     }
-    return response.status === 204 ? null : response.json()
+    const isNoContentResponse = response.status === 204
+    return isNoContentResponse ? null : response.json()
   }
 
   async paginate(path) {
     const results = []
     for (let page = 1; ; page += 1) {
-      const separator = path.includes('?') ? '&' : '?'
-      const items = await this.request(`${path}${separator}per_page=100&page=${page}`)
+      const hasQuery = path.includes('?')
+      const querySeparator = hasQuery ? '&' : '?'
+      const items = await this.request(`${path}${querySeparator}per_page=100&page=${page}`)
       results.push(...items)
-      if (items.length < 100) {
+      const isFinalPage = items.length < 100
+      if (isFinalPage) {
         return results
       }
     }
@@ -59,9 +62,10 @@ export class GitHubClient {
       const commit = await this.request(
         `/repos/${this.repository}/commits/${sha}?per_page=100&page=${page}`
       )
-      const pageFiles = commit.files ?? []
-      files.push(...pageFiles)
-      if (pageFiles.length < 100) {
+      const commitFiles = commit.files ?? []
+      files.push(...commitFiles)
+      const isFinalPage = commitFiles.length < 100
+      if (isFinalPage) {
         return files
       }
     }

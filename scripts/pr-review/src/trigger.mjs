@@ -13,7 +13,10 @@ const PROVIDERS = new Map([[codexProvider.id, codexProvider]])
 
 function requiredEnvironment(name) {
   const value = process.env[name]
-  if (!value) {
+  const hasEnvironmentValue = value != null
+  const isEnvironmentValueEmpty = hasEnvironmentValue && value.length === 0
+  const isEnvironmentValueMissingOrEmpty = !hasEnvironmentValue || isEnvironmentValueEmpty
+  if (isEnvironmentValueMissingOrEmpty) {
     throw new Error(`Missing required environment variable: ${name}`)
   }
   return value
@@ -50,7 +53,8 @@ async function main() {
   const comments = await client.listComments(pullRequest.number)
   const actorComments = comments.filter((comment) => comment.user?.login === expectedActor)
   const marker = provider.marker(pullRequest.head.sha)
-  if (findCommentByMarker(actorComments, marker)) {
+  const hasProviderRequest = findCommentByMarker(actorComments, marker) != null
+  if (hasProviderRequest) {
     console.log(`Provider review already requested for ${pullRequest.head.sha}`)
     return
   }
