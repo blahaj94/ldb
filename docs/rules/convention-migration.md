@@ -38,20 +38,20 @@ review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재�
 
 작업 packet에는 대상 모듈, 변경 종류, 제외 범위, 기준 revision, 동작 보존 근거와 검증 command를 함께 둔다. 한 구현 PR이 끝나기 전에는 다음 구현을 병렬로 시작하지 않는다. 검토에서 의미 충돌이나 누락이 발견되면 해당 범위를 멈추고 같은 scope의 후속 판단을 기록한다.
 
-## 병렬 실행 제안 (승인 전 제안)
+## 병렬 실행
 
-다음 제안은 Issue #178에서 검토할 수 있는 좁은 lifecycle 변경안이다. 이 subsection은 Draft PR의 명시적인 사용자 `승인` comment와 사용자 merge 전까지 실행 authority가 없다. 그 전에는 위의 기존 순차 문장과 이 문서의 모든 active 원칙을 그대로 적용한다.
+Issue #178과 PR #181에서 승인·merge된 좁은 병렬 실행 기준이다. 사용자 `승인` comment는 [PR #181](https://github.com/blahaj94/ldb/pull/181#issuecomment-5588297098)에 기록되어 있으며, 이 subsection은 해당 승인과 merge를 반영해 active로 적용한다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 서로 독립적인 convention migration PR의 대기 시간을 줄이되 충돌·오래된 기준·검토 누락을 제한한다.
-evidence: "Issue #178, 사용자 병렬 실행 요청"
+evidence: "https://github.com/blahaj94/ldb/pull/181#issuecomment-5588297098"
 exceptions: 의존성·evidence가 불명확하거나 scope가 겹치면 해당 작업은 순차로 진행하며 기존 active Rule을 적용한다.
 review-after: 동시에 진행한 첫 3개 PR이 사용자 merge된 뒤 실제 충돌·재작업·검토 부담과 동시 한도를 재검토한다.
 ```
 
-승인되어 merge된 subsection은 위 `작업 단위와 순서`의 다음 세 문장의 적용 범위만 대체한다. “구현 PR은 한 번에 하나씩 순서대로 진행한다”, “사용자가 앞선 PR을 merge한 뒤 다음 PR을 시작한다”, “한 구현 PR이 끝나기 전에는 다음 구현을 병렬로 시작하지 않는다”가 그 대상이다. 작업 단위·독립 검토·소유권·기준 revision·의존성 판단·검증·사용자 merge를 포함한 나머지 Rule은 바꾸지 않는다.
+이 subsection은 위 `작업 단위와 순서`의 다음 세 문장의 적용 범위만 대체한다. “구현 PR은 한 번에 하나씩 순서대로 진행한다”, “사용자가 앞선 PR을 merge한 뒤 다음 PR을 시작한다”, “한 구현 PR이 끝나기 전에는 다음 구현을 병렬로 시작하지 않는다”가 그 대상이다. 작업 단위·독립 검토·소유권·기준 revision·의존성 판단·검증·사용자 merge를 포함한 나머지 Rule은 바꾸지 않는다.
 
 동시에 열어 둘 구현 PR은 최대 3개로 한다. 각 PR은 별도 Issue, integration branch, 전용 worktree, 단일 owner를 갖고 같은 고정 base에서 시작한다. PR 간 변경 file과 public type·API·generated fixture·producer/consumer·shared mutable runtime·test를 서로 충돌하게 변경하지 않도록 packet에 기록한다. 같은 것을 읽거나 같은 검증 command를 사용하는 것만으로 독립성을 부정하지 않는다. 기존 `agent-execution.md`의 의미대로 같은 file·public contract·generated source·artifact·test fixture·snapshot·shared state를 상충하게 변경하거나 검증 환경을 격리할 수 없는 경우 병렬로 dispatch하지 않는다. Issue별 실행·사용량 수집 범위도 서로 독립적으로 구분할 수 있어야 한다. 현재 수집 도구로 분리할 수 없으면 먼저 분리된 실행 단위를 준비하거나 병렬 착수를 보류한다. 보고 의무 완화, 추정 분배, 새 collector 구현은 이 제안의 범위가 아니다.
 
@@ -84,4 +84,4 @@ main이 전진하면 아직 merge되지 않은 모든 관련 PR을 다시 대조
 
 ## 승인 경계
 
-이 문서는 `change-control.md`의 approval evidence와 `testing.md`의 변경별 validation을 따른다. 승인 전에는 제안 상태이며 실행 authority가 없다. Rule 승인과 사용자 merge 권한은 기존 change-control 경계를 유지한다.
+이 문서는 `change-control.md`의 approval evidence와 `testing.md`의 변경별 validation을 따른다. 병렬 실행 subsection은 PR #181의 사용자 승인·merge를 반영하지만, Rule 승인과 사용자 merge 권한은 기존 change-control 경계를 유지한다.

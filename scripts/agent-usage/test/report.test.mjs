@@ -51,17 +51,20 @@ function snapshot(overrides = {}) {
 }
 
 function manyAgents(count) {
-  return Array.from({ length: count }, (_, index) => ({
-    role: index === 0 ? 'main' : 'subagent',
-    agent: `agent-${index}-${'x'.repeat(50)}`,
-    model: 'm'.repeat(80),
-    effort: 'ultra',
-    inputTokens: 900_719_925,
-    cachedInputTokens: 123_456_789,
-    outputTokens: 123_456_789,
-    reasoningOutputTokens: 12_345_678,
-    totalTokens: 1_024_176_714
-  }))
+  return Array.from({ length: count }, (_, index) => {
+    const isMainAgent = index === 0
+    return {
+      role: isMainAgent ? 'main' : 'subagent',
+      agent: `agent-${index}-${'x'.repeat(50)}`,
+      model: 'm'.repeat(80),
+      effort: 'ultra',
+      inputTokens: 900_719_925,
+      cachedInputTokens: 123_456_789,
+      outputTokens: 123_456_789,
+      reasoningOutputTokens: 12_345_678,
+      totalTokens: 1_024_176_714
+    }
+  })
 }
 
 test('validateSnapshot returns a fresh allowlisted snapshot', () => {
@@ -144,6 +147,31 @@ test('validateSnapshot enforces token math and complete state', () => {
   )
 })
 
+test('validateSnapshot does not coerce unsafe numeric values', () => {
+  let coercionCalls = 0
+  const unsafeNumber = {
+    valueOf() {
+      coercionCalls += 1
+      return 1
+    }
+  }
+
+  assert.throws(() => validateSnapshot(snapshot({ issue: unsafeNumber })), /Invalid usage snapshot/)
+  assert.equal(coercionCalls, 0)
+
+  coercionCalls = 0
+  assert.throws(
+    () =>
+      validateSnapshot(
+        snapshot({
+          agents: [{ ...snapshot().agents[0], inputTokens: unsafeNumber }]
+        })
+      ),
+    /Invalid usage snapshot/
+  )
+  assert.equal(coercionCalls, 0)
+})
+
 test('validateSnapshot rejects aggregate counters that exceed safe integers', () => {
   const row = {
     ...snapshot().agents[0],
@@ -174,7 +202,8 @@ test('snapshot comments round-trip only marked, validated JSON', () => {
 test("snapshot comments enforce GitHub's rendered comment length", () => {
   const withinLimit = snapshot({ agents: manyAgents(80) })
   const body = snapshotComment(withinLimit)
-  assert.ok(body.length <= 65_536)
+  const isWithinCommentLimit = body.length <= 65_536
+  assert.ok(isWithinCommentLimit)
   assert.deepEqual(parseSnapshotComment(body), withinLimit)
 
   assert.throws(

@@ -55,7 +55,9 @@ function fail() {
 }
 
 function enforceCommentLimit(body) {
-  if (typeof body === 'string' && body.length > COMMENT_LIMIT) {
+  const isString = typeof body === 'string'
+  const exceedsCommentLimit = isString && body.length > COMMENT_LIMIT
+  if (exceedsCommentLimit) {
     const error = new Error("Usage snapshot comment exceeds GitHub's 65536 character limit")
     error.code = 'COMMENT_TOO_LONG'
     throw error
@@ -64,20 +66,33 @@ function enforceCommentLimit(body) {
 }
 
 function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  const isNonNull = value !== null
+  const isObjectType = typeof value === 'object'
+  const isNotArray = !Array.isArray(value)
+  const isNonArrayObject = isNonNull && isObjectType && isNotArray
+  return isNonArrayObject
 }
 
 function hasKeys(value, expected) {
   const keys = Object.keys(value)
-  return keys.length === expected.length && expected.every((key) => keys.includes(key))
+  const hasExpectedKeyCount = keys.length === expected.length
+  const hasAllExpectedKeys = hasExpectedKeyCount && expected.every((key) => keys.includes(key))
+  const hasExpectedKeys = hasExpectedKeyCount && hasAllExpectedKeys
+  return hasExpectedKeys
 }
 
 function positiveInteger(value) {
-  return Number.isSafeInteger(value) && value > 0
+  const isSafeInteger = Number.isSafeInteger(value)
+  const isPositive = isSafeInteger && value > 0
+  const isPositiveInteger = isSafeInteger && isPositive
+  return isPositiveInteger
 }
 
 function tokenCount(value) {
-  return Number.isSafeInteger(value) && value >= 0
+  const isSafeInteger = Number.isSafeInteger(value)
+  const isNonNegative = isSafeInteger && value >= 0
+  const isValidTokenCount = isSafeInteger && isNonNegative
+  return isValidTokenCount
 }
 
 function utcTimestamp(value) {
@@ -101,7 +116,11 @@ function utcTimestamp(value) {
 }
 
 function safeIdentifier(value, maximum, pattern) {
-  return typeof value === 'string' && value.length <= maximum && pattern.test(value)
+  const isString = typeof value === 'string'
+  const isWithinMaximum = isString && value.length <= maximum
+  const matchesPattern = isWithinMaximum && pattern.test(value)
+  const isSafeIdentifier = isString && isWithinMaximum && matchesPattern
+  return isSafeIdentifier
 }
 
 export function validateSnapshot(value) {
