@@ -9,7 +9,8 @@ const HEAD = 'a'.repeat(40)
 const originalGitHubActions = process.env.GITHUB_ACTIONS
 process.env.GITHUB_ACTIONS = 'false'
 after(() => {
-  if (originalGitHubActions === undefined) {
+  const wasGitHubActionsUnset = originalGitHubActions === undefined
+  if (wasGitHubActionsUnset) {
     delete process.env.GITHUB_ACTIONS
   } else {
     process.env.GITHUB_ACTIONS = originalGitHubActions
@@ -87,20 +88,26 @@ function apiMock({ pr = pullRequest(), prComments = [], issueComments = [] } = {
   const calls = []
   const call = (args, body) => {
     calls.push({ args, body })
-    if (args[0] === 'pr') {
+    const isPullRequestCommand = args[0] === 'pr'
+    if (isPullRequestCommand) {
       return pr
     }
-    if (args.join(' ') === 'api user') {
+    const isCurrentUserRequest = args.join(' ') === 'api user'
+    if (isCurrentUserRequest) {
       return { login: 'author' }
     }
     const endpoint = args.find((part) => part.startsWith('repos/'))
-    if (args.includes('--paginate')) {
-      return endpoint.endsWith('issues/35/comments') ? [prComments] : [issueComments]
+    const isPaginatedRequest = args.includes('--paginate')
+    if (isPaginatedRequest) {
+      const isPullRequestCommentsEndpoint = endpoint.endsWith('issues/35/comments')
+      return isPullRequestCommentsEndpoint ? [prComments] : [issueComments]
     }
-    if (args.includes('PATCH')) {
+    const isPatchRequest = args.includes('PATCH')
+    if (isPatchRequest) {
       return { html_url: 'https://github.com/comment/updated' }
     }
-    if (args.includes('POST')) {
+    const isPostRequest = args.includes('POST')
+    if (isPostRequest) {
       return { html_url: 'https://github.com/comment/created' }
     }
     throw new Error(`Unexpected mock call ${args.join(' ')}`)
