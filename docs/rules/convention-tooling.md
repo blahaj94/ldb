@@ -5,7 +5,7 @@ enforcement: approval-required
 scope: repository handwritten source, tests, scripts and tooling
 last-reviewed: 2026-09-08
 rationale: 기계적으로 확인·정렬할 수 있는 convention 작업은 승인된 도구에 맡기고, 의미·책임·동작 보존은 사람의 판단으로 분리한다.
-evidence: "https://github.com/blahaj94/ldb/issues/160#issuecomment-5582657684; https://github.com/blahaj94/ldb/pull/161#issuecomment-5582698349"
+evidence: "https://github.com/blahaj94/ldb/issues/160#issuecomment-5582657684; https://github.com/blahaj94/ldb/pull/163#issuecomment-5582992995; https://github.com/blahaj94/ldb/issues/164#issuecomment-5583691176"
 exceptions: 승인 전에는 기존 active Rule과 설정을 우선 적용한다. 이 문서는 새 formatter·lint 설정이나 실행 권한을 만들지 않는다.
 review-after: 사용자 승인·merge 후 서로 다른 app 또는 tooling의 적용 PR 3개에서 출력 수렴, 재작업, 검토 부담을 확인한다.
 ---
@@ -38,6 +38,35 @@ ESLint·Oxlint는 현재 설정된 rule과 검증된 fixer의 범위만 사용�
 - 오류 종류·우선순위, cleanup·rollback, 반환값·객체 identity, 문자열 내부 값과 개행
 
 이 판단이 필요한 변경은 [`convention.md`](../../convention.md)와 [`code-expression.md`](code-expression.md)의 기존 기준 및 변경 절차를 따른다.
+
+## 공통 설정 도입 제안
+
+다음 공통화는 Issue #164의 Rule-only Draft에서 구체화한 제안이다. 이 문서가 active가 되기 전에는 실제 설정·dependency·CI를 바꾸지 않는다. 승인 후 구현에서는 root가 공통 소유자가 되는 flat ESLint config, Prettier config와 ignore를 두고 root와 `apps/api`, `apps/desktop`, `apps/web`, `packages/ui`, 그리고 workspace에 등록하지 않은 `scripts` 실행 범위를 같은 명령 계약으로 연결한다. `scripts/package.json`의 workspace 등록 여부는 바꾸지 않는다.
+
+공통 명령의 역할은 다음과 같다.
+
+- `lint`: 비수정 ESLint 검사. 모든 프로젝트의 기본 lint 명령으로 사용한다.
+- `lint:fix`: 승인된 ESLint fixer만 실행한다. formatter를 ESLint plugin 안에서 중복 실행하지 않는다.
+- `format`: 승인된 범위의 Prettier 출력으로 정렬한다.
+- `format:check`: 파일을 수정하지 않고 같은 설정의 Prettier 결과를 확인한다.
+
+root와 각 프로젝트 command는 실행 cwd와 무관하게 동일한 config 탐색·glob·ignore 결과를 사용해야 한다. `apps/desktop`의 기존 `singleQuote: true`, `semi: false`, `printWidth: 100`, `trailingComma: none`을 공통 Prettier 기준으로 제안하고, `embeddedLanguageFormatting: off`로 문자열 내부 source나 template 내용을 formatter가 다시 작성하지 않게 한다. Prettier의 출력과 기존 수동 예시가 충돌하면 승인된 formatter 결과를 기준으로 맞추되 문자열 값·개행·공백과 의미 판단은 별도로 보존한다.
+
+ESLint는 JavaScript와 TypeScript의 recommended 검사, Node·browser·React 환경을 분리해 구성한다. `curly: ["error", "all"]`을 명시하고 `eslint-config-prettier`를 마지막에 배치해 formatter와 충돌하는 stylistic rule을 끈다. 후보 개발 도구 역할과 현재 lockfile 조합은 다음과 같다. 정확한 pin과 설치 위치는 구현 전 preflight에서 다시 확인하며, 이 표는 설치나 성공 검증을 의미하지 않는다.
+
+| 역할 | 후보 | 근거·경계 |
+| --- | --- | --- |
+| ESLint core | `eslint@9.39.5`, `@eslint/js@9.39.5` | 현재 API·Desktop이 사용하며 flat config의 공통 기반으로 제안 |
+| TypeScript parser/rules | `typescript-eslint@8.69.0` | ESLint 9와 TypeScript 5.9·6.0 계열 peer 범위 확인. 각 app compiler/runtime은 유지 |
+| Formatter | `prettier@3.9.6`, `eslint-config-prettier@10.1.8` | Desktop의 기존 formatter와 충돌 정리 역할 |
+| Environment | `globals@16.5.0` | Node·browser global 구분 |
+| React rules | `eslint-plugin-react@7.37.5`, `eslint-plugin-react-hooks@7.1.1`, `eslint-plugin-react-refresh@0.4.26` | Desktop의 기존 유효 rule을 보존하고 Web/UI 적용 전 결과를 비교 |
+
+Desktop의 Electron preset은 동일 rule이 실제로 유지되는지 비교한 뒤 유지하거나 공통 flat config로 옮긴다. Web·UI의 기본 lint는 ESLint로 제안하지만, 기존 Oxlint의 명시 rule과 기본 검사 중 ESLint에 대응하지 않는 것은 보조 command와 CI에서 유지한다. 새 공통 설정이 같은 결과를 보장한다고 선언하지 않으며, 검증 없이 Oxlint dependency·rule·plugin을 삭제하지 않는다.
+
+공통 ignore는 `node_modules`, 각 build output, OCR asset, generated/vendor artifact, lockfile, license와 고정 provenance 산출물을 책임에 맞게 제외한다. 이름에 `build`가 들어간다는 이유만으로 `packages/ui/build/notices.ts` 같은 직접 관리 generator source를 제외하지 않는다. SEED 원본과 provenance, OCR source, license/notice는 소유 source와 산출물을 구분해 처리한다.
+
+구현은 승인된 config·dependency·glob·ignore와 기준 revision을 확인한 뒤 non-fix baseline, 설정 loading, 대표 파일 범위, `lint:fix`와 `format`의 첫 diff, 재실행 수렴, non-fix lint·`format:check`, 기존 test/typecheck/build 순서로 검증한다. 기존 lint/format 부채는 현재 `unknown`으로 기록하고 실패를 disable·ignore·assertion 약화로 숨기지 않는다. #149 Desktop source와 format diff가 겹치면 소유권을 확인해 순차화한다.
 
 ## 적용 순서
 
