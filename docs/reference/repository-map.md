@@ -111,6 +111,7 @@ Root의 `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`와 직접 dev
 - `pnpm create-app`: root에서 생성 script 실행
 - `scripts/start-task.mjs`: project·Issue 번호·description을 검증하고 OPEN Issue 확인 후 최신 main 기반 `{project}-{issue-number}-{description}` branch와 worktree 생성
 - `pnpm start-task <project> <Issue 번호> <description> <새 worktree 경로>`: root에서 작업 준비; GitHub CLI 인증 필요
+- `node scripts/format-date.mjs '2026-09-08T15:35:00Z'`: UTC ISO 시각을 `2026년 9월 9일 00시 35분`으로 표시; 인자 생략 시 현재 한국 시간. 사용법과 검증은 [`scripts/README.md`](../../scripts/README.md#format-date)
 - 작업 준비와 workspace별 native validation 예제: [`scripts/README.md`](../../scripts/README.md)
 - Root `test` script는 현재 placeholder이며 성공하는 validation command가 아니다.
 
@@ -118,7 +119,7 @@ Root의 `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`와 직접 dev
 
 - Local command: `scripts/agent-usage.mjs`의 `begin`, `turns`, `snapshot`, `publish`
 - 범위 집계: `scripts/agent-usage/collect.mjs`
-- Snapshot 검증과 Markdown 보고: `scripts/agent-usage/report.mjs`
+- Snapshot 검증과 Markdown 보고: `scripts/agent-usage/report.mjs`; 집계 범위 표시는 `scripts/format-date.mjs`를 재사용하며 snapshot JSON의 UTC 시각은 유지
 - PR snapshot과 Issue comment 갱신: `scripts/agent-usage/github.mjs`
 - Merge event와 수동 재시도: `.github/workflows/agent-usage-report.yml`
 - Test: `node --test scripts/agent-usage/test/*.test.mjs`
