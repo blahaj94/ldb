@@ -5,13 +5,16 @@ export function pullRequestNumber(event) {
 }
 
 export function evaluateWorkflowRunSource(event) {
-  if (event.workflow_run?.conclusion !== "success") {
+  const isSuccessfulWorkflow = event.workflow_run?.conclusion === "success";
+  if (!isSuccessfulWorkflow) {
     return { eligible: false, reason: "source_workflow_failed" };
   }
-  if (event.workflow_run.event !== "pull_request") {
+  const isPullRequestEvent = event.workflow_run.event === "pull_request";
+  if (!isPullRequestEvent) {
     return { eligible: false, reason: "unsupported_source_event" };
   }
-  if (pullRequestNumber(event) === null) {
+  const hasPullRequest = pullRequestNumber(event) !== null;
+  if (!hasPullRequest) {
     return { eligible: false, reason: "pull_request_missing" };
   }
   return { eligible: true, reason: "eligible" };
@@ -26,7 +29,9 @@ export function evaluateTrustedReviewRequest(
   if (!source.eligible) {
     return source;
   }
-  if (pullRequest.number !== pullRequestNumber(event)) {
+  const hasMatchingPullRequestNumber =
+    pullRequest.number === pullRequestNumber(event);
+  if (!hasMatchingPullRequestNumber) {
     return { eligible: false, reason: "pull_request_mismatch" };
   }
 
@@ -41,7 +46,9 @@ export function evaluateTrustedReviewRequest(
   if (!eligibility.eligible) {
     return eligibility;
   }
-  if (pullRequest.head.sha !== event.workflow_run.head_sha) {
+  const hasMatchingHeadSha =
+    pullRequest.head.sha === event.workflow_run.head_sha;
+  if (!hasMatchingHeadSha) {
     return { eligible: false, reason: "stale_head" };
   }
   return { eligible: true, reason: "eligible" };
