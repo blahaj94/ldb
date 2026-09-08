@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import type {
+  SearchApi,
   SearchCommandResult,
   SearchSlot,
   SearchSnapshot
@@ -14,7 +15,8 @@ import {
   withSearchSlot,
   invalidSearchSnapshots
 } from '../../../preload/api/search-test-fixture'
-import { createRendererFixture, media } from './search-renderer-test-fixture'
+import { CaptureSearch } from './capture-search'
+import { authSnapshot, createRendererFixture, media } from './search-renderer-test-fixture'
 
 type Fixture = ReturnType<typeof createRendererFixture>
 function state(fixture: Fixture, slot: SearchSlot, revision?: number): SearchSnapshot {
@@ -259,3 +261,74 @@ it('초기 read 실패 뒤 먼저 보류한 event만으로 연결 실패를 지�
   expect(fixture.container.textContent).toContain('검색 연결을 확인할 수 없습니다')
   expect(fixture.search.controlCharacterSearch).toHaveBeenCalledExactlyOnceWith({ action: 'read' })
 })
+
+it.each(['buffered', 'late'] as const)(
+  '초기 read 실패 후 %s event가 와도 source 선택과 Start로 검색·media·OCR를 시작하지 않는다',
+  async (eventTiming) => {
+    const fixture = createRendererFixture()
+    const read = Promise.withResolvers<SearchCommandResult>()
+    fixture.search.controlCharacterSearch.mockReturnValueOnce(read.promise)
+    await fixture.mount()
+    const isBuffered = eventTiming === 'buffered'
+    if (isBuffered) {
+      await fixture.emit(searchSnapshot({ captureId: null, revision: 1 }))
+    }
+    read.reject(new Error('Synthetic initial read failure'))
+    await act(async () => undefined)
+    if (!isBuffered) {
+      await fixture.emit(searchSnapshot({ captureId: null, revision: 1 }))
+    }
+    expect(fixture.container.textContent).toContain('검색 연결을 확인할 수 없습니다')
+
+    await fixture.select()
+    await fixture.click('Start')
+    await fixture.emit(searchSnapshot({ captureId: null, revision: 2 }))
+
+    expect(fixture.search.controlCharacterSearch).toHaveBeenCalledExactlyOnceWith({
+      action: 'read'
+    })
+    expect(fixture.getDisplayMedia).not.toHaveBeenCalled()
+    expect(media.worker).not.toHaveBeenCalled()
+    expect(media.loop).not.toHaveBeenCalled()
+    expect(fixture.container.textContent).toContain('검색 연결을 확인할 수 없습니다')
+  }
+)
+
+it.each(['pending', 'failed'] as const)(
+  '상태 동기화가 %s이면 CaptureSearch.begin 직접 호출도 main begin을 보내지 않는다',
+  async (readState) => {
+    const read = Promise.withResolvers<SearchCommandResult>()
+    const control = vi
+      .fn<SearchApi['controlCharacterSearch']>()
+      .mockImplementation(async (command) => {
+        const isRead = command.action === 'read'
+        if (isRead) {
+          return read.promise
+        }
+        return { ok: true, snapshot: searchSnapshot() }
+      })
+    const bridge = new CaptureSearch({
+      api: { controlCharacterSearch: control, onCharacterSearchChanged: () => () => {} },
+      notify: vi.fn(),
+      onChange: vi.fn(),
+      onInvalidated: vi.fn(),
+      resynchronizeAuth: vi.fn()
+    })
+    bridge.connect()
+    const isFailed = readState === 'failed'
+    if (isFailed) {
+      read.reject(new Error('Synthetic initial read failure'))
+      await act(async () => undefined)
+    }
+    try {
+      const captureId = await bridge.begin({
+        auth: authSnapshot(),
+        signal: new AbortController().signal
+      })
+      expect(control).toHaveBeenCalledExactlyOnceWith({ action: 'read' })
+      expect(captureId).toBeNull()
+    } finally {
+      bridge.dispose()
+    }
+  }
+)
