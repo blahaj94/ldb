@@ -19,11 +19,13 @@ const fixture = vi.hoisted(() => ({
   ready: undefined as Promise<void> | undefined
 }))
 vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn() },
   app: {
     setPath: vi.fn(),
     setName: vi.fn(),
     on: vi.fn(),
     exit: vi.fn(),
+    quit: vi.fn(),
     whenReady: (): { then: (callback: () => Promise<void>) => Promise<void> } => ({
       then: (callback: () => Promise<void>) => {
         fixture.ready = Promise.resolve().then(callback)
@@ -63,6 +65,7 @@ vi.mock('electron', () => ({
   Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
   systemPreferences: { getMediaAccessStatus: () => 'granted' }
 }))
+vi.mock('./smoke', () => ({ smoke: vi.fn(), smokeStandaloneOcr: vi.fn() }))
 vi.mock('../../src/backend/auth/coordinator', () => ({
   createAuthCoordinator: () => ({
     start: async () => undefined,

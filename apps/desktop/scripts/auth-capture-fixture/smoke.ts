@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import type { BrowserWindow } from 'electron'
 import type { AuthCoordinator } from '../../src/backend/auth/types'
 import { installObservation } from './observe'
+import type { CaptureObservation } from './capture-observation'
 
 type Observation = {
   requests: number
@@ -12,6 +13,12 @@ type Observation = {
   terminated: number
   clearedVideos: number
   ended: boolean
+  width: number
+  height: number
+  frameWidth: number
+  frameHeight: number
+  allSlotsPresent: boolean
+  recognitionRequests: number
 }
 
 async function until(condition: () => Promise<boolean>, deadlineMs = 10_000): Promise<void> {
@@ -27,7 +34,8 @@ async function until(condition: () => Promise<boolean>, deadlineMs = 10_000): Pr
 export async function smoke(
   window: BrowserWindow,
   coordinator: AuthCoordinator,
-  completeLogin: () => Promise<void>
+  completeLogin: () => Promise<void>,
+  mainObservation: CaptureObservation
 ): Promise<void> {
   const evaluate = (source: string, userGesture = false): Promise<unknown> =>
     window.webContents.executeJavaScript(source, userGesture)
@@ -113,6 +121,18 @@ export async function smoke(
   console.log('Capture fixture actual OCR worker ready')
   await until(() => hasText('Slot 1: ALICE'), 30_000)
   const active = await observe()
+  assert.equal(mainObservation.displayRequests, 1)
+  assert.equal(mainObservation.displayAllowed, 1)
+  assert.ok(Number.isSafeInteger(active.width) && active.width > 0)
+  assert.ok(Number.isSafeInteger(active.height) && active.height > 0)
+  // 제품이 지원하는 기존 video frame geometry를 확인한다. Native track 크기는 별도 관측값이다.
+  assert.equal(active.frameWidth, 1920)
+  assert.equal(active.frameHeight, 1080)
+  assert.equal(active.allSlotsPresent, true)
+  await until(async () => mainObservation.nicknameAccepted > 0)
+  console.log(
+    `Capture fixture geometry: ${JSON.stringify({ trackWidth: active.width, trackHeight: active.height, frameWidth: active.frameWidth, frameHeight: active.frameHeight, allSlotsPresent: active.allSlotsPresent })}`
+  )
   assert.equal(active.workers, 1)
   assert.equal(active.terminated, 0)
   assert.equal(active.ended, false)
@@ -130,6 +150,13 @@ export async function smoke(
   assert.equal((await observe()).clearedVideos, 1)
   assert.equal(await hasText('Slot 1:'), false)
   assert.equal(await evaluate('document.querySelector("select") === null'), true)
+
+  const stopped = await observe()
+  const stoppedInvokes = mainObservation.nicknameInvokes
+  await delay(3_200)
+  assert.equal((await observe()).recognitionRequests, stopped.recognitionRequests)
+  assert.equal(mainObservation.nicknameInvokes, stoppedInvokes)
+  console.log('Capture fixture stopped OCR/IPC quiet interval PASS')
 
   console.log('Capture fixture step: relogin-requires-selection-and-start')
   await enterHome()
@@ -152,6 +179,8 @@ export async function smoke(
     true
   )
   assert.equal((await observe()).streams, 1)
+  assert.equal(mainObservation.displayRequests, 2)
+  assert.equal(mainObservation.displayAllowed, 1)
   await click('이 기기 로그아웃')
   await until(() => hasText('Google로 계속하기'))
 }

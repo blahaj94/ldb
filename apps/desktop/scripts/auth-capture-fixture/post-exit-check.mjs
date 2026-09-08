@@ -6,11 +6,16 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
-// 일반 Vitest와 분리한 실제 deny-all 실패 종료 검증이다.
+// 일반 Vitest와 분리한 실제 child 종료 뒤 정리 검증이다. 기본 모드는 명시적 media 거절이다.
 const appDirectory = fileURLToPath(new URL('../..', import.meta.url))
 const testRoot = await mkdtemp(join(tmpdir(), 'ldb-capture-exit-check-'))
 const isOcr = process.argv.includes('--ocr')
-const command = isOcr ? 'capture:fixture:ocr' : 'capture:fixture:smoke'
+const isMedia = process.argv.includes('--media')
+const command = isOcr
+  ? 'capture:fixture:ocr'
+  : isMedia
+    ? 'capture:fixture:smoke'
+    : 'capture:fixture:deny'
 let child
 let groupStopped = false
 
@@ -71,7 +76,8 @@ try {
   groupStopped = await waitForExit()
   console.log(`Capture fixture child exit: ${code}; group stopped: ${groupStopped}`)
   assert.equal(groupStopped, true, 'Test child group remains active')
-  const expectedCode = isOcr ? 0 : 1
+  const expectsSuccess = isOcr || isMedia
+  const expectedCode = expectsSuccess ? 0 : 1
   const expectedMessage = isOcr
     ? 'Capture fixture standalone OCR PASS'
     : 'Capture fixture media BLOCKED / smoke FAIL'

@@ -74,7 +74,8 @@ export async function runCaptureFixture(args = []) {
   const hasOneMode = args.length === 1
   const isSmoke = hasOneMode && args[0] === '--smoke'
   const isOcr = hasOneMode && args[0] === '--ocr'
-  const hasValidMode = isInteractive || isSmoke || isOcr
+  const isDenyMedia = hasOneMode && args[0] === '--deny-media'
+  const hasValidMode = isInteractive || isSmoke || isOcr || isDenyMedia
   const hasPosixGroups = process.platform !== 'win32'
   if (!hasValidMode || !hasPosixGroups) {
     console.error('Capture fixture launcher configuration FAIL')

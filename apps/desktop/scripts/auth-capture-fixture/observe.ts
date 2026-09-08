@@ -1,7 +1,7 @@
 // 실제 native 호출을 전달하며 수명 counter만 관측한다. Media/OCR 결과를 대체하지 않는다.
 export const installObservation = `(() => {
   const tracks = [];
-  const counts = { requests: 0, streams: 0, stops: 0, workers: 0, terminated: 0, clearedVideos: 0, width: 0, height: 0, mediaFailure: null };
+  const counts = { requests: 0, streams: 0, stops: 0, workers: 0, terminated: 0, clearedVideos: 0, width: 0, height: 0, mediaFailure: null, frameWidth: 0, frameHeight: 0, allSlotsPresent: false, recognitionRequests: 0 };
   const getDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getDisplayMedia = async (...args) => {
     counts.requests += 1;
@@ -27,6 +27,20 @@ export const installObservation = `(() => {
   window.Worker = class extends NativeWorker {
     constructor(...args) { super(...args); counts.workers += 1; }
     terminate() { counts.terminated += 1; return super.terminate(); }
+    postMessage(...args) {
+      const isRecognition = args[0] != null && args[0].action === 'recognize';
+      if (isRecognition) counts.recognitionRequests += 1;
+      return super.postMessage(...args);
+    }
+  };
+  const play = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = async function(...args) {
+    await play.apply(this, args);
+    const isVideo = this instanceof HTMLVideoElement;
+    if (isVideo) {
+      try { Object.assign(counts, window.inspectFixtureFrame(this)); }
+      catch { counts.allSlotsPresent = false; }
+    }
   };
   const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject');
   Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
