@@ -144,6 +144,31 @@ test('validateSnapshot enforces token math and complete state', () => {
   )
 })
 
+test('validateSnapshot does not coerce unsafe numeric values', () => {
+  let coercionCalls = 0
+  const unsafeNumber = {
+    valueOf() {
+      coercionCalls += 1
+      return 1
+    }
+  }
+
+  assert.throws(() => validateSnapshot(snapshot({ issue: unsafeNumber })), /Invalid usage snapshot/)
+  assert.equal(coercionCalls, 0)
+
+  coercionCalls = 0
+  assert.throws(
+    () =>
+      validateSnapshot(
+        snapshot({
+          agents: [{ ...snapshot().agents[0], inputTokens: unsafeNumber }]
+        })
+      ),
+    /Invalid usage snapshot/
+  )
+  assert.equal(coercionCalls, 0)
+})
+
 test('validateSnapshot rejects aggregate counters that exceed safe integers', () => {
   const row = {
     ...snapshot().agents[0],
