@@ -79,17 +79,19 @@ test('field-count rejection does not inspect fields after the count mismatch', (
       provider: 'google',
       clientId: 'desktop',
       codeChallenge: 'extra',
-      codeChallengeMethod: 'S256'
+      codeChallengeMethod: 'S256',
+      extra: true
     },
     {
       getOwnPropertyDescriptor(target, property) {
         descriptorReads++
-        if (descriptorReads > 5) {
+        const isAfterObjectKeys = descriptorReads > 5
+        if (isAfterObjectKeys) {
           throw new Error('field inspection should not run')
         }
         return Object.getOwnPropertyDescriptor(target, property)
       },
-      ownKeys: (target) => [...Reflect.ownKeys(target), 'extra']
+      ownKeys: (target) => Reflect.ownKeys(target)
     }
   )
   assert.throws(() => parseCreation(body), { code: 'INVALID_AUTH_REQUEST' })
@@ -98,7 +100,8 @@ test('field-count rejection does not inspect fields after the count mismatch', (
 test('creation validation keeps provider and client guards short-circuiting later reads', () => {
   const providerRejected = new Proxy(creation(opaque()), {
     get(target, property) {
-      if (property === 'clientId' || property === 'codeChallengeMethod') {
+      const isLaterCreationField = property === 'clientId' || property === 'codeChallengeMethod'
+      if (isLaterCreationField) {
         throw new Error('later creation field should not be read')
       }
       return Reflect.get(target, property)
@@ -109,7 +112,8 @@ test('creation validation keeps provider and client guards short-circuiting late
 
   const clientRejected = new Proxy(creation(opaque()), {
     get(target, property) {
-      if (property === 'codeChallengeMethod') {
+      const isCodeChallengeMethod = property === 'codeChallengeMethod'
+      if (isCodeChallengeMethod) {
         throw new Error('method should not be read')
       }
       return Reflect.get(target, property)
@@ -138,7 +142,8 @@ test('exchange validation preserves requestId reads and guard short-circuiting',
     { requestId: 'not-uuid', clientId: 'desktop', code: opaque(), codeVerifier: verifier },
     {
       get(target, property) {
-        if (property === 'clientId') {
+        const isClientId = property === 'clientId'
+        if (isClientId) {
           throw new Error('clientId should not be read')
         }
         return Reflect.get(target, property)
