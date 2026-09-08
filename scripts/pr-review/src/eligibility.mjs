@@ -12,17 +12,25 @@ export function evaluateReviewRequest(event, { label = "@ldb-review" } = {}) {
   }
 
   const isLabeledEvent = event.action === "labeled";
+  const isEventLabelMatch =
+    isLabeledEvent && event.label?.name === label;
   const isLabeledEventWithWrongLabel =
-    isLabeledEvent && event.label?.name !== label;
+    isLabeledEvent && !isEventLabelMatch;
   if (isLabeledEventWithWrongLabel) {
     return { eligible: false, reason: "label_event_mismatch" };
   }
 
   const pullRequest = event.pull_request;
   const hasRequiredLabel = pullRequest?.labels?.some(
-    (item) => item.name === label,
+    (item) => {
+      const isMatchingLabel = item.name === label;
+      return isMatchingLabel;
+    },
   );
-  if (!hasRequiredLabel) {
+  const isRequiredLabelResultMissing = hasRequiredLabel == null;
+  const isRequiredLabelMissing =
+    isRequiredLabelResultMissing || !hasRequiredLabel;
+  if (isRequiredLabelMissing) {
     return { eligible: false, reason: "label_missing" };
   }
 

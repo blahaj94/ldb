@@ -30,7 +30,10 @@ export function buildProviderTriggerComment({ provider, headSha }) {
 
 export function findCommentByMarker(comments, marker) {
   const matchingComment = comments.find(
-    (comment) => comment.body?.includes(marker),
+    (comment) => {
+      const hasMarker = comment.body?.includes(marker);
+      return hasMarker;
+    },
   );
   return matchingComment;
 }
