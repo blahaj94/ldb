@@ -24,10 +24,8 @@ for (const file of javaScriptFiles) {
   assert.ok(hasModificationNotice, `Distributed modification notice: ${file}`)
 }
 const changes = await readFile(resolve(output, 'notices/LDB-MODIFICATIONS.txt'), 'utf8')
-const mentionsDialogTrigger = changes.includes('DialogTrigger')
-assert.ok(mentionsDialogTrigger)
-const mentionsLayoutSlots = changes.includes('header/footer/children')
-assert.ok(mentionsLayoutSlots)
+assert.ok(changes.includes('DialogTrigger'))
+assert.ok(changes.includes('header/footer/children'))
 const cssFiles = files.filter((file) => {
   const isStylesheet = file.endsWith('.css')
   return isStylesheet
@@ -55,8 +53,7 @@ for (const source of provenance.files) {
   const bytes = await readFile(resolve(uiRoot, source.local))
   const isModifiedSource = source.localChanges.length > 0
   if (isModifiedSource) {
-    const hasSourceModificationNotice = bytes.toString().includes('/*! LDB 수정:')
-    assert.ok(hasSourceModificationNotice)
+    assert.ok(bytes.toString().includes('/*! LDB 수정:'))
   }
   const hash = createHash('sha256').update(bytes).digest('hex')
   assert.equal(hash, source.localSha256 ?? source.sha256, source.local)
