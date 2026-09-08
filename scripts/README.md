@@ -27,6 +27,19 @@ node --test scripts/test/start-task.test.mjs
 node --check scripts/start-task.mjs
 ```
 
+## `format-date`
+
+UTC ISO 시각을 한국 시간(`Asia/Seoul`)의 `2026년 9월 9일 00시 35분` 형식으로 출력합니다. 인자를 생략하면 현재 시각을 사용합니다.
+
+```bash
+node scripts/format-date.mjs '2026-09-08T15:35:00Z'
+node scripts/format-date.mjs
+```
+
+입력은 `YYYY-MM-DDTHH:mm:ssZ`이며 소수 초 1–3자리를 허용합니다. 잘못된 날짜나 시간대 없는 값은 오류로 거절합니다. `formatDate(timestamp)`를 import해 재사용할 수 있으며, 사용량 보고의 Markdown 집계 범위에도 적용합니다. 분 단위 표시는 원본 UTC 시각과 검증용 snapshot JSON의 정밀도를 바꾸지 않습니다.
+
+검증: `node --test scripts/test/format-date.test.mjs`, `node --check scripts/format-date.mjs`.
+
 ## `agent-usage`
 
 Codex local usage record를 Issue 작업 범위로 집계하고, PR이 merge되면 연결된 Issue에 사용량과 실제 agent model/effort를 게시합니다. Node.js 22 이상, Git와 인증된 GitHub CLI를 사용하며 dependency install이나 model 호출은 없습니다.
