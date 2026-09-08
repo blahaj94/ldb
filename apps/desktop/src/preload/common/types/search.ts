@@ -86,3 +86,8 @@ export type SearchCommandError =
 export type SearchCommandResult =
   | Readonly<{ ok: true; snapshot: SearchSnapshot }>
   | Readonly<{ ok: false; error: { code: SearchCommandError }; snapshot: SearchSnapshot }>
+
+export type SearchApi = {
+  controlCharacterSearch: (control: SearchControl) => Promise<SearchCommandResult>
+  onCharacterSearchChanged: (listener: (snapshot: SearchSnapshot) => void) => () => void
+}
