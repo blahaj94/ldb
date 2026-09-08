@@ -70,7 +70,8 @@ last-reviewed: 2026-09-08
 - Stack: Electron, React, TypeScript, electron-vite
 - Process boundary: `main`, `preload`, `renderer`
 - Main entry: `src/backend/main.ts` → `out/backend/main.js`
-- Auth core: `src/backend/auth/coordinator.ts`의 단일 main coordinator가 pending·generation·credential writer와 restore·refresh·logout을 소유한다. Bootstrap·native store·IPC/UI에는 아직 연결되지 않았으며 module과 mock 검증 범위는 [`desktop-auth-core.md`](desktop-auth-core.md)를 참고한다.
+- Auth core: `src/backend/auth/coordinator.ts`의 단일 main coordinator가 pending·generation·credential writer와 restore·refresh·logout을 소유한다. 기본 제품의 bootstrap·native store는 아직 미구성이며 core 검증 범위는 [`desktop-auth-core.md`](desktop-auth-core.md)를 참고한다.
+- 캐릭터 검색: main 검색 수명·HTTP와 preload/renderer·격리 fixture의 위치 및 검증은 [`desktop-character-search.md`](desktop-character-search.md)를 참고한다. 실제 서버 소비 검증은 별도 `apps/desktop/scripts/search-server-integration/README.md`를 따른다.
 - Renderer source root: `src/frontend` → `out/frontend`
 - Command:
   - `pnpm --filter @ldb/desktop dev`
