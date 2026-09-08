@@ -54,6 +54,15 @@ function requireSender(event: IpcMainInvokeEvent, expected = captureWindow): voi
   if (!isAllowed) throw new Error('Capture source access denied')
 }
 
+function requireSearchSender(event: IpcMainInvokeEvent): void {
+  const isTrusted = isTrustedFrame(captureWindow, event.senderFrame)
+  const isSender = event.sender === captureWindow?.webContents
+  const isAllowed = isTrusted && isSender
+  if (!isAllowed) {
+    throw new Error('SEARCH_NOT_ALLOWED')
+  }
+}
+
 function requireCaptureGeneration(): number {
   const generation = auth?.captureGeneration()
   const hasPermission = generation != null
@@ -160,10 +169,7 @@ function registerCaptureIpc(
   })
 
   addHandler('controlCharacterSearch', (event, ...args) => {
-    const isTrusted = isTrustedFrame(captureWindow, event.senderFrame)
-    const isSender = event.sender === captureWindow?.webContents
-    const canRead = isTrusted && isSender
-    if (!canRead) throw new Error('SEARCH_NOT_ALLOWED')
+    requireSearchSender(event)
     const control = parseSearchControl(args)
     const hasValidControl = control != null
     if (!hasValidControl) return lifetime.result('INVALID_SEARCH_COMMAND')
@@ -201,12 +207,15 @@ function registerCaptureIpc(
   })
 
   addHandler('notifyStableNicknameDetected', (event, ...args) => {
-    requireSender(event)
-    requireCaptureGeneration()
+    requireSearchSender(event)
     const observation = parseSearchObservation(args)
     const hasValidObservation = observation != null
     if (!hasValidObservation) {
       return lifetime.result('INVALID_SEARCH_COMMAND')
+    }
+    const hasPermission = auth?.captureGeneration() != null
+    if (!hasPermission) {
+      return lifetime.result('SEARCH_NOT_ALLOWED')
     }
     return lifetime.observe(observation)
   })
