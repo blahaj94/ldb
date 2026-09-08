@@ -114,6 +114,14 @@ test('Desktop HTTP client consumes default API, exchange JWT, activity and accou
       assert.deepEqual(await search(searchInput), [])
     }
     const [beforeQuota] = await source.query('SELECT last_active_at FROM auth_sessions')
+    // 429가 활동을 잘못 갱신해도 같은 정수 초 값에 가려지지 않게 한다.
+    await delay(1100)
+    const [quotaClock] = await source.query(
+      "SELECT date_trunc('second', clock_timestamp()) AS current_second"
+    )
+    const hasLaterDbSecond =
+      quotaClock.current_second.getTime() > beforeQuota.last_active_at.getTime()
+    assert(hasLaterDbSecond, 'quota rejection must run in a later database second')
     await assert.rejects(search(searchInput), (error: unknown) => {
       assert(error instanceof SearchHttpFailure)
       assert.equal(error.code, 'SEARCH_RATE_LIMITED')
