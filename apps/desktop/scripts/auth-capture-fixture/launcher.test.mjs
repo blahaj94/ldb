@@ -188,3 +188,10 @@ it.each(['profile removal', 'absence inspection'])(
     expect(signals.count()).toBe(0)
   }
 )
+
+it('명시적 deny-media 실패 모드도 owned launcher에서 실행한다', async () => {
+  await runCaptureFixture(['--deny-media'])
+  expect(fixture.spawn).toHaveBeenCalledOnce()
+  expect(fixture.spawn.mock.calls[0][1]).toContain('--deny-media')
+  expect(fixture.remove).toHaveBeenCalledOnce()
+})

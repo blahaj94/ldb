@@ -183,3 +183,18 @@ it('permission check는 모든 mediaType에서 계속 거절한다', () => {
     ).toBe(false)
   }
 })
+
+it('명시적 deny-media 모드는 승인된 정상 요청도 거절한다', async () => {
+  const originalArgv = process.argv
+  try {
+    process.argv = [...originalArgv, '--deny-media']
+    vi.resetModules()
+    fixture.windows = []
+    fixture.request.mockClear()
+    await import('./main')
+    await fixture.ready
+    expect(request()).toBe(false)
+  } finally {
+    process.argv = originalArgv
+  }
+})
