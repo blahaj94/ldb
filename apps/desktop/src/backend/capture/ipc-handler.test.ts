@@ -85,6 +85,17 @@ async function setup(signedIn = true): Promise<{
   return { auth, harness, invoke, event, mainFrame, dispatchMedia, requestMedia }
 }
 
+async function beginCapture(fixture: Awaited<ReturnType<typeof setup>>): Promise<void> {
+  const snapshot = fixture.auth.getSnapshot()
+  const result = await fixture.invoke('controlCharacterSearch', {
+    action: 'begin',
+    authRunId: snapshot.runId,
+    authRevision: snapshot.revision
+  })
+
+  expect(result).toMatchObject({ ok: true, snapshot: { captureId: expect.any(String) } })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   electron.getSources.mockResolvedValue(sources)
@@ -350,12 +361,14 @@ describe('capture main auth boundary', () => {
   ])('기존 media 조건 위반 %j는 계속 거절한다', async (changes) => {
     const fixture = await setup()
     await fixture.invoke('selectCaptureSource', sources[0].id)
+    await beginCapture(fixture)
     expect(await fixture.requestMedia(changes)).toBeNull()
   })
 
   it('선택 뒤 logout은 main source를 지우고 media를 거절한다', async () => {
     const fixture = await setup()
     await fixture.invoke('selectCaptureSource', sources[0].id)
+    await beginCapture(fixture)
     await fixture.auth.logout()
     expect(await fixture.requestMedia()).toBeNull()
   })
@@ -365,9 +378,12 @@ describe('capture main auth boundary', () => {
     async (kind) => {
       const fixture = await setup()
       await fixture.invoke('selectCaptureSource', sources[0].id)
+      await beginCapture(fixture)
       const pending = deferred<typeof sources>()
       electron.getSources.mockReturnValue(pending.promise)
+      const callsBeforeMedia = electron.getSources.mock.calls.length
       const media = fixture.requestMedia()
+      expect(electron.getSources).toHaveBeenCalledTimes(callsBeforeMedia + 1)
       const isLogout = kind === 'logout'
       const isClear = kind === 'clear'
       if (isLogout) await fixture.auth.logout()
@@ -391,6 +407,7 @@ describe('capture main auth boundary', () => {
   it.each(['missing', 'failure'])('media source %s는 native null로 거절한다', async (kind) => {
     const fixture = await setup()
     await fixture.invoke('selectCaptureSource', sources[0].id)
+    await beginCapture(fixture)
     const isFailure = kind === 'failure'
     if (isFailure) electron.getSources.mockRejectedValue(new Error('Synthetic enumeration failure'))
     else electron.getSources.mockResolvedValue([])
@@ -403,13 +420,16 @@ describe('capture main auth boundary', () => {
     async (kind) => {
       const fixture = await setup()
       await fixture.invoke('selectCaptureSource', sources[0].id)
+      await beginCapture(fixture)
       const isDenied = kind === 'denied'
       if (isDenied) electron.getSources.mockResolvedValue([])
       const callback = vi.fn().mockImplementationOnce(() => {
         throw new Error('Synthetic callback already consumed')
       })
+      const callsBeforeMedia = electron.getSources.mock.calls.length
 
       fixture.dispatchMedia(callback)
+      expect(electron.getSources).toHaveBeenCalledTimes(callsBeforeMedia + 1)
       await new Promise((resolve) => setTimeout(resolve, 0))
 
       expect(callback).toHaveBeenCalledTimes(1)
@@ -437,6 +457,7 @@ describe('capture main auth boundary', () => {
     const log = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     await fixture.invoke('listCaptureSources')
     await fixture.invoke('selectCaptureSource', sources[0].id)
+    await beginCapture(fixture)
     expect(await fixture.requestMedia()).toEqual({ video: sources[0] })
     await fixture.invoke('notifyStableNicknameDetected', { slot: 0, nickname: 'SYNTHETIC_CANARY' })
     expect(fixture.harness.http.refresh).not.toHaveBeenCalled()
