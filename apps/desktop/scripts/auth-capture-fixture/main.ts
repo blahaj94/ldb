@@ -7,6 +7,7 @@ import { registerAuthIpc } from '../../src/backend/auth/ipc-handler'
 import { registerCaptureIpc, registerCaptureWindow } from '../../src/backend/capture/ipc-handler'
 import { canaries, createFixtureEffects, syntheticCode } from '../auth-bridge-fixture/effects'
 import { smoke, smokeStandaloneOcr } from './smoke'
+import { registerFixtureMediaPermissions } from './permissions'
 
 const profile = process.env.LDB_AUTH_CAPTURE_PROFILE
 const launcherPid = process.env.LDB_AUTH_CAPTURE_LAUNCHER_PID
@@ -57,12 +58,7 @@ if (canStart) {
       })
       const entry = resolve(__dirname, '../renderer/index.html')
       const documentUrl = pathToFileURL(entry).href
-      session.defaultSession.setPermissionCheckHandler(() => false)
-      // Pinned Electron은 display와 legacy desktop을 mediaTypes:[]로 함께 전달한다.
-      // 구별 수단이 승인되기 전에는 어느 경로에도 native media를 허용하지 않는다.
-      session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
-        callback(false)
-      )
+      registerFixtureMediaPermissions(window, documentUrl, coordinator)
       session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
         const isLocal = details.url.startsWith('file:')
         callback({ cancel: !isLocal })
@@ -117,7 +113,7 @@ if (canStart) {
       await window.loadFile(entry)
       window.show()
       console.log(
-        'Capture fixture ready: synthetic source; memory-only auth; native media/credentials/network disabled'
+        'Capture fixture ready: synthetic source; memory-only auth; approved synthetic media only; native credentials/network disabled'
       )
       console.log(
         `Capture fixture screen permission: ${systemPreferences.getMediaAccessStatus('screen')}`

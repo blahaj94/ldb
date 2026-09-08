@@ -35,6 +35,10 @@ vi.mock('electron', () => ({
     webContents = {
       mainFrame: { url: '', detached: false, isDestroyed: () => false },
       isDestroyed: () => false,
+      session: {
+        setPermissionCheckHandler: fixture.check,
+        setPermissionRequestHandler: fixture.request
+      },
       on: vi.fn(),
       setWindowOpenHandler: vi.fn()
     }
