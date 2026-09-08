@@ -97,6 +97,57 @@ Issue의 현재 실행 contract와 PR의 실제 변경·evidence는 [`Execution 
 - 다른 Issue의 PR이 먼저 merge되면 Issue 통합 branch를 최신 main으로 rebase하고 영향을 받은 Worker result와 최종 head의 전체 validation을 다시 실행한다.
 - 최종 PR은 Issue 통합 branch의 검증된 exact head에서 만든다. Worker branch의 개별 성공이나 conflict-free 반영만으로 통합 validation을 대신하지 않는다. 검증 재사용은 [`testing.md`](testing.md#검증-evidence-재사용)를 따르며 이 최종 gate와 main rebase·semantic conflict 후 전체 validation을 대체하지 않는다.
 
+## 브랜치 명명 규칙 제안
+
+이 절은 [Issue #179](https://github.com/blahaj94/ldb/issues/179)의 제안이다. Draft PR의 명시적인 사용자 `승인` comment 전에는 active Rule이 아니며, 기존 생성 스크립트의 동작을 바꾸는 근거로 사용하지 않는다. 승인 후 같은 PR에서 상태·승인 근거를 갱신하고 스크립트·test·Reference를 순서대로 반영한다.
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 작업 대상 workspace와 Issue를 브랜치 이름에서 일관되게 식별한다.
+evidence: "Issue #179 — 사용자가 workspace·Issue·작업 설명 형식과 cross/repo 구분에 합의했다."
+exceptions: 기존 브랜치는 이름을 유지하며 main은 작업 브랜치 명명 대상에서 제외한다.
+review-after: 적용 후 서로 다른 Issue 5개에서 접두어 선택과 이름 충돌 사례를 확인한다.
+```
+
+### 형식과 작업 범위
+
+작업 브랜치는 `{project}-{issue-number}-{description}`을 사용한다. project는 저장소 이름이나 agent 이름이 아니라 해당 브랜치가 책임지는 작업 범위다.
+
+| project | 선택 기준 |
+| --- | --- |
+| `api` | `apps/api`가 주 작업 대상 |
+| `desktop` | `apps/desktop`이 주 작업 대상 |
+| `web` | `apps/web`이 주 작업 대상 |
+| `ui` | `packages/ui`가 주 작업 대상 |
+| `cross` | 둘 이상의 workspace에 걸친 변경이 Issue의 목적 |
+| `repo` | 루트 설정·공통 scripts·CI·저장소 운영 규칙이 Issue의 목적 |
+
+- 작업 범위는 변경 파일 수가 아니라 Issue의 목적과 맡은 책임으로 판단한다. 단일 workspace 작업에 따라 lockfile이나 설명 문서를 함께 갱신해도 `cross`로 바꾸지 않는다.
+- issue-number는 현재 저장소의 실제 Issue 번호이며 0이나 선행 0을 사용하지 않는다. 새 작업 착수 시 OPEN Issue 확인은 유지한다.
+- description은 작업을 나타내는 짧은 영어 소문자 설명이며 변경 동사부터 시작한다. 단어는 하이픈 하나로 연결하고 문자와 숫자만 사용한다. 예: `fix-character-search`, `add-login-window`, `update-search-page`.
+- `codex/`, `feat/`, `fix/` 같은 별도 접두어, 작성자·모델 이름, 날짜를 앞에 추가하지 않는다.
+- 이름은 생성 시 정하고, Issue 제목이나 보조 변경 파일이 달라져도 생성한 브랜치를 자동으로 바꾸지 않는다. 별도 목적이 생기면 기존 Issue 범위 규칙을 따른다.
+
+```text
+api-173-fix-character-search
+desktop-174-add-login-window
+web-175-update-search-page
+ui-176-add-button-variant
+cross-173-connect-character-search
+repo-179-standardize-branch-names
+```
+
+예시의 번호는 형식을 설명하며 실제 생성에서는 담당 Issue 번호를 사용한다.
+
+### 통합·Worker 브랜치와 적용
+
+- Issue별 통합 브랜치 하나와 별도 worktree 원칙은 유지한다. 통합 브랜치의 project·description은 Issue 전체 목적을 나타낸다.
+- 별도 Worker 브랜치도 같은 형식과 같은 Issue 번호를 사용하며, project·description은 배정된 작업 범위를 나타낸다. 예를 들어 통합이 `cross-173-connect-character-search`이면 Worker는 `api-173-add-search-endpoint`, `desktop-173-connect-search-api`처럼 구분한다.
+- 같은 workspace에서 분담할 때는 description에 맡은 작업을 구분해 통합·다른 Worker 브랜치와 충돌하지 않게 한다. 이름과 책임은 기존 Issue roster에 기록하고, 충돌을 피하려고 임의 번호·agent 이름을 붙여 새 브랜치를 계속 만들지 않는다.
+- 기존 로컬·원격 브랜치와 worktree는 일괄 변경하거나 삭제하지 않는다. 승인된 생성 동작을 반영한 뒤 새로 만드는 작업 브랜치부터 적용한다.
+- 생성 스크립트는 project·Issue 번호·description을 명시적으로 받아 검증한다. 잘못된 입력과 기존 branch/path의 충돌은 새 branch/worktree 생성 전에 거절한다. 기존 OPEN Issue·최신 main 확인과 덮어쓰기 금지는 유지한다. 실행 인자와 예시는 구현 후 `scripts/README.md`에서 관리한다.
+
 ## Commit and PR order
 
 같은 PR 안에서 필요한 만큼 commit을 나누되 다음 의미 순서를 지킨다.
