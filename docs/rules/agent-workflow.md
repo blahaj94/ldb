@@ -129,6 +129,12 @@ Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전�
 - Planner와 Worker는 착수 전에 실제 model과 effort가 선택되었는지 확인한다. 선택한 설정을 사용할 수 없거나 확인할 수 없으면 조용히 다른 model이나 effort로 바꾸지 않고 가용성 문제를 알리며, 확인하지 못한 설정을 적용했다고 보고하지 않는다.
 - 이 mapping은 Issue의 capability tier metadata를 대체하지 않으며 Issue마다 provider/model 이름을 반복해 고정하지 않는다. Model 선택과 관계없이 [`../../convention.md`](../../convention.md), [`testing.md`](testing.md), 이 문서의 review·escalation 기준을 모두 적용한다.
 
+#### Convention migration proposal
+
+`docs/rules/convention-migration.md`의 동작 보존 이행에 한해, 결과·범위·검증이 확정되고 uncertainty·risk가 `low`인 standard capability tier 코드 작성 작업을 `gpt-5.6-luna`, reasoning effort `low`로 실행하는 좁은 예외를 제안한다. 이는 capability tier를 low로 바꾸는 것이 아니라 standard tier 작업의 실제 model 비용을 낮추는 mapping이다. 따라서 low tier 전체의 코드 작성 금지와 충돌하지 않는다.
+
+이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 기존 Astra/Spark 일반 규칙에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. Rule·security의 최종 review는 사람 경로를 따른다.
+
 ## 실행 효율 계약의 재검토
 
 ```yaml
