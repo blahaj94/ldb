@@ -71,3 +71,28 @@ it('pending 시나리오는 다른 선택으로 자동 완료되지 않고 요�
   await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   expect((await search.runtime.fetch(request())).status).toBe(200)
 })
+
+it('합성 응답 묶음과 비민감 counter는 HTTP 호출 순서만 기록하고 slot 의미를 만들지 않는다', async () => {
+  const search = fixture()
+  const observed = search as typeof search & {
+    counts: { requests: number; pendingAborts: number }
+    queueScenarios: (scenarios: readonly SearchScenario[]) => void
+  }
+  expect(observed.queueScenarios).toBeTypeOf('function')
+  observed.queueScenarios(['failure', 'failure', 'pending', 'rate-limit'])
+  expect(observed.counts).toEqual({ requests: 0, pendingAborts: 0 })
+  const first = await search.runtime.fetch(request())
+  const second = await search.runtime.fetch(request())
+  const controller = new AbortController()
+  const pending = search.runtime.fetch(request(controller.signal))
+  const limited = await search.runtime.fetch(request())
+  expect([first.status, second.status, limited.status]).toEqual([500, 500, 429])
+  expect(observed.counts).toEqual({ requests: 4, pendingAborts: 0 })
+  search.selectScenario('success')
+  expect(observed.counts.requests).toBe(4)
+  controller.abort()
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  expect(observed.counts).toEqual({ requests: 4, pendingAborts: 1 })
+  expect((await search.runtime.fetch(request())).status).toBe(200)
+  expect(observed.counts).toEqual({ requests: 5, pendingAborts: 1 })
+})

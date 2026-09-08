@@ -195,3 +195,11 @@ it('명시적 deny-media 실패 모드도 owned launcher에서 실행한다', as
   expect(fixture.spawn.mock.calls[0][1]).toContain('--deny-media')
   expect(fixture.remove).toHaveBeenCalledOnce()
 })
+
+it('검색 UI smoke 전용 모드도 같은 owned launcher와 종료 정리를 사용한다', async () => {
+  expect(await runCaptureFixture(['--search-smoke'])).toBe(0)
+  expect(fixture.spawn).toHaveBeenCalledOnce()
+  expect(fixture.spawn.mock.calls[0][1]).toContain('--search-smoke')
+  expect(fixture.remove).toHaveBeenCalledOnce()
+  expect(console.log).toHaveBeenCalledExactlyOnceWith('Capture fixture cleanup PASS')
+})

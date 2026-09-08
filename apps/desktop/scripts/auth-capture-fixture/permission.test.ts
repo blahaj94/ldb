@@ -15,6 +15,7 @@ const fixture = vi.hoisted(() => ({
   generation: null as number | null,
   documentUrl: '',
   capture: vi.fn(() => vi.fn()),
+  searchSmoke: vi.fn(),
   check: vi.fn(),
   request: vi.fn(),
   ready: undefined as Promise<void> | undefined
@@ -66,7 +67,11 @@ vi.mock('electron', () => ({
   Menu: { buildFromTemplate: vi.fn(), setApplicationMenu: vi.fn() },
   systemPreferences: { getMediaAccessStatus: () => 'granted' }
 }))
-vi.mock('./smoke', () => ({ smoke: vi.fn(), smokeStandaloneOcr: vi.fn() }))
+vi.mock('./smoke', () => ({
+  smoke: vi.fn(),
+  smokeStandaloneOcr: vi.fn(),
+  smokeCharacterSearch: fixture.searchSmoke
+}))
 vi.mock('../../src/backend/auth/coordinator', () => ({
   createAuthCoordinator: () => ({
     start: async () => undefined,
@@ -224,4 +229,30 @@ it('main fixture는 동일 coordinator와 clock 및 외부 네트워크 없는 �
   expect(response.status).toBe(200)
   expect(await response.json()).toMatchObject({ rows: expect.any(Array) })
   await expect(runtime.fetch(new Request('https://outside.example.test/'))).rejects.toThrow()
+})
+
+it('search-smoke 모드는 실제 main composition과 고정 합성 검색 제어를 전용 smoke에 전달한다', async () => {
+  const previousArgv = process.argv
+  try {
+    process.argv = [...previousArgv, '--search-smoke']
+    vi.resetModules()
+    fixture.windows = []
+    await import('./main')
+    await fixture.ready
+    expect(fixture.searchSmoke).toHaveBeenCalledOnce()
+    expect(fixture.searchSmoke).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Object),
+      expect.any(Function),
+      expect.objectContaining({ displayRequests: 0, nicknameMatchedSlots: 0 }),
+      expect.objectContaining({
+        selectScenario: expect.any(Function),
+        queueScenarios: expect.any(Function),
+        counts: { requests: 0, pendingAborts: 0 }
+      })
+    )
+    expect(console.log).toHaveBeenCalledWith('Capture fixture search smoke PASS')
+  } finally {
+    process.argv = previousArgv
+  }
 })
