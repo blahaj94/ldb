@@ -26,6 +26,8 @@ review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재�
 
 이런 변경은 임의로 진행하지 않고 해당 Rule과 change-control의 승인·testing 절차를 따른다. 기존 Rule과 현재 code가 충돌하면 어느 쪽도 추측으로 고치지 않고 판단을 남긴다.
 
+[`convention-exceptions-proposal.md`](convention-exceptions-proposal.md)의 두 예외는 별도 proposed Rule이며, Draft PR의 사용자 `승인`과 merge 전에는 이 엄격한 보존 기준을 완화하지 않는다. 승인 후에도 해당 문서의 pure check·collection predicate 조건을 충족하는 범위에만 적용한다.
+
 ## 작업 단위와 순서
 
 한 모듈에서는 한 종류의 변경만 다룬다. 초기 제품 code 작업은 3~5개 파일, 약 200 변경줄을 목표 상한으로 삼는 soft 기준이다. test·mock·fixture·snapshot·생성물도 review 부담에 포함하며, `code-quality.md`의 약 300 logic 줄 기준과 별개로 보고한다. 기준을 넘으면 기계적으로 줄이지 말고 독립 PR로 나눌 이유와 되돌리기 단위를 기록한다.

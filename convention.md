@@ -28,6 +28,8 @@ Generated/vendor 코드는 산출물을 직접 고치지 않고 소유한 생성
 
 처리 단계·문자열·분기·체인·함수 입력의 세부 기준은 [`코드 표현과 함수 입력 가독성`](docs/rules/code-expression.md)을 함께 따른다. [PR #146의 사용자 승인](https://github.com/blahaj94/ldb/pull/146#issuecomment-5579597615)과 merge를 반영한 active Rule이다.
 
+두 좁은 예외의 proposed 조건과 승인 lifecycle은 [`convention-exceptions-proposal.md`](docs/rules/convention-exceptions-proposal.md)를 따른다. 승인 전에는 이 문서의 §2·§3과 동작 보존 기준이 우선한다.
+
 ## 1. 처리 순서와 결과가 보이는 주 흐름
 
 - 진입 함수에서 입력 확인, 주요 처리 단계, 외부 호출, 상태 변경과 결과 반환을 찾을 수 있어야 한다. 작업에 없는 단계를 형식적으로 추가하지 않는다.
