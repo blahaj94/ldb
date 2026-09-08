@@ -8,13 +8,13 @@ last-reviewed: 2026-09-08
 
 # Testing
 
-신규 test 판단과 아래 Red-Green·evidence·기대값 수정의 명확화는 [Issue #166](https://github.com/blahaj94/ldb/issues/166)의 제안이다. Draft PR의 명시적인 `승인` 전에는 기존 승인된 Rule을 적용하며, 이 변경안을 실행 근거로 사용하지 않는다.
+신규 test 판단과 아래 Red-Green·evidence·기대값 수정 기준은 [PR #167의 사용자 승인](https://github.com/blahaj94/ldb/pull/167#pullrequestreview-5140985917)을 반영한 active Rule이다. 기존 필수 검증과 최종 integration gate는 유지한다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: blocking
 rationale: 필수 검증을 유지하면서 신규 테스트의 필요성을 먼저 판단한다.
-evidence: "Issue #166; PR #159, #142, #138, #140 및 신규 테스트 없는 PR #143"
+evidence: "https://github.com/blahaj94/ldb/pull/167#pullrequestreview-5140985917; Issue #166; PR #159, #142, #138, #140 및 신규 테스트 없는 PR #143"
 exceptions: 동작 보존 검증과 test 변경 없는 Red는 아래의 구분을 따른다.
 review-after: 적용 후 서로 다른 변경 유형의 PR 3건에서 판단 근거와 검증 누락 여부를 확인한다.
 ```
