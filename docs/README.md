@@ -64,7 +64,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 | 작업                             | Required document                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
 | Code 작성·수정·review       | 위 역할별 시작점과 [`convention.md`](../convention.md#읽기-안내)에 따라 `change-control.md`, `testing.md`, `code-quality.md`의 적용 본문 확인 |
-| 코드 단계·문자열·분기·체인·함수 입력 기준 제안 검토 | [`rules/code-expression.md`](rules/code-expression.md). `proposed` 초안이며 승인 전 구현 기준으로 적용하지 않음 |
+| 코드 단계·문자열·분기·체인·함수 입력 작성·검토 | [`rules/code-expression.md`](rules/code-expression.md). PR #146의 승인·merge를 반영한 active Rule |
 | Web·Desktop UI의 SEED 기준·공용 자산·Example·시각 검증 | [`rules/design-system.md`](rules/design-system.md); package·peer·CSS 책임은 [`Shared UI boundary`](architecture/overview.md#shared-ui-boundary) |
 | 큰 작업 분해와 역할·Issue contract | `docs/rules/agent-workflow.md`                                                       |
 | Worker 배정·상태·handoff·통합   | `docs/rules/agent-execution.md`                                                       |
@@ -89,7 +89,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 ### Rule
 
 - [`convention.md`](../convention.md): 프로젝트 전체 코드의 의미별 검사·boolean 합성·오류 책임과 가독성 기준
-- [`rules/code-expression.md`](rules/code-expression.md): 처리 단계·문자열 생성·분기·메서드 체인·함수 입력의 가독성 제안. `proposed`, 승인 전 구현 권한 없음
+- [`rules/code-expression.md`](rules/code-expression.md): 처리 단계·문자열 생성·분기·메서드 체인·함수 입력의 가독성 기준. [PR #146 사용자 승인](https://github.com/blahaj94/ldb/pull/146#issuecomment-5579597615)과 merge를 반영한 active Rule
 - [`rules/change-control.md`](rules/change-control.md): approval, Issue, branch, commit, PR, parallel 작업
 - [`rules/testing.md`](rules/testing.md): Red-Green workflow와 validation 기준
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준

@@ -26,7 +26,7 @@ Generated/vendor 코드는 산출물을 직접 고치지 않고 소유한 생성
 
 역할별 시작점은 [`docs/README.md`](docs/README.md#역할별-시작점)를 따른다. Code 작성·수정에서는 적용 범위와 권한 및 1–6의 규칙 본문을 확인해 적용 여부를 판단한다. Code 예시와 근거는 의미가 불명확하거나 해당 pattern을 다룰 때 읽는다. Read-only review는 아래 checklist에서 해당 규칙 본문으로 확장한다. Code 없는 문서 작업에는 전문을 요구하지 않지만 code 예시를 수정하면 해당 기준을 확인한다. 읽기 순서가 기준의 적용 범위나 기존 approval·testing 의무를 줄이지 않는다.
 
-여섯 세부 기준의 승인 전 초안은 [`코드 표현과 함수 입력 가독성 제안`](docs/rules/code-expression.md)에 있다. `proposed` 상태이며 이 문서의 기존 active 규칙과 구분한다. 승인 전에는 구현 기준으로 적용하지 않는다.
+처리 단계·문자열·분기·체인·함수 입력의 세부 기준은 [`코드 표현과 함수 입력 가독성`](docs/rules/code-expression.md)을 함께 따른다. [PR #146의 사용자 승인](https://github.com/blahaj94/ldb/pull/146#issuecomment-5579597615)과 merge를 반영한 active Rule이다.
 
 ## 1. 처리 순서와 결과가 보이는 주 흐름
 
@@ -237,7 +237,7 @@ throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
 
 기준을 충족하지 못하면 위치·이유·더 작은 개선안을 review에 남긴다. 문법·library 계약에 따른 제한은 구체적인 근거로 기록한다. 별도의 승인 단계를 추가하지 않으며 변경 절차와 logic/context budget은 기존 Rule을 따른다.
 
-승인 전 세부 기준의 의미와 예외는 별도 문서의 [제안 검토 항목](docs/rules/code-expression.md#제안-검토-항목)으로 검토한다. 기존 코드 review의 새 의무로 적용하지 않는다.
+세부 기준의 의미와 예외는 [`코드 표현과 함수 입력 가독성`의 검토 항목](docs/rules/code-expression.md#검토-항목)을 함께 확인한다.
 
 ## 근거와 관련 Rule
 
