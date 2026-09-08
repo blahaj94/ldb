@@ -1,22 +1,22 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: warning
 scope: repository handwritten source, tests, scripts and tooling
 last-reviewed: 2026-09-08
 rationale: 처리 단계와 문자열 생성, 분기, 호출 입력의 역할을 사람이 한 번에 읽을 수 있도록 공통 컨벤션의 경계를 구체화한다.
-evidence: "https://github.com/blahaj94/ldb/issues/145 — apps/api/src/database/generate.ts의 generateMigration 가독성 논의"
+evidence: "Issue #145: https://github.com/blahaj94/ldb/issues/145 — apps/api/src/database/generate.ts의 generateMigration 가독성 논의; PR #146 사용자 승인·merge: https://github.com/blahaj94/ldb/pull/146#issuecomment-5579597615"
 exceptions: 단순 문자열 삽입·호출과 명확한 단일 인자를 허용하며 외부 API signature, 평가 시점, 오류·cleanup과 민감 값 수명은 기존 계약을 유지한다.
 review-after: 승인 후 서로 다른 app 또는 tooling의 코드 PR 3개에서 단계·입력의 역할을 읽기 쉬워졌는지와 불필요한 변수·함수 분리가 늘었는지 검토한다.
 ---
 
-# 코드 표현과 함수 입력 가독성 제안
+# 코드 표현과 함수 입력 가독성
 
 ## 상태와 적용 범위
 
-이 문서는 [Issue #145](https://github.com/blahaj94/ldb/issues/145)에서 합의한 여섯 기준의 승인 전 초안이다. Draft PR의 명시적인 `승인` comment 전에는 구현의 근거로 적용하지 않는다. 초안 작성 완료와 Rule 적용 완료를 구분하며 승인·반영은 [Change Control](change-control.md#approval-evidence)을 따른다.
+이 문서는 [Issue #145](https://github.com/blahaj94/ldb/issues/145)의 여섯 기준에 대한 [PR #146의 사용자 승인](https://github.com/blahaj94/ldb/pull/146#issuecomment-5579597615)과 merge를 반영한 active Rule이다. 이후 변경은 [Change Control](change-control.md#approval-evidence)을 따른다.
 
-기존 active Rule인 [`convention.md`](../../convention.md#적용-범위와-권한)의 적용 범위와 권한을 유지한다. 아래 기준은 처리 순서와 이름·표현·함수 경계를 구체화하는 제안이며, 기존 규칙을 대체하거나 기존 코드를 일괄 정리하라는 지시가 아니다.
+기존 active Rule인 [`convention.md`](../../convention.md#적용-범위와-권한)의 적용 범위와 권한을 유지한다. 아래 기준은 처리 순서와 이름·표현·함수 경계를 구체화하며, 기존 규칙을 대체하거나 기존 코드를 일괄 정리하라는 지시가 아니다.
 
 예시는 표현을 설명한다. 실제 migration 형식이나 제품 오류 정책을 정하지 않는다. 평가의 실행 조건·순서·횟수와 오류 우선순위, cleanup 및 민감 값 수명은 [`convention.md`의 평가 시점](../../convention.md#3-검사-의존성과-평가-시점을-보존)과 [동작 보존](../../convention.md#6-주석과-동작-보존)을 따른다. 변수를 앞으로 옮겨 원래 실행되지 않던 호출까지 실행하지 않는다.
 
@@ -144,7 +144,7 @@ validateNickname(nickname)
 
 `validateNickname(nickname)`처럼 함수 이름과 단일 인자만으로 역할이 명확하면 그대로 허용한다. 모든 함수를 객체 인자로 바꾸는 기준이 아니다. 외부 API·library가 정한 signature와 callback 인자 순서는 유지한다.
 
-## 제안 검토 항목
+## 검토 항목
 
 - 같은 작업을 묶고 다음 처리 단계에서 빈 줄로 구분했는가?
 - 두 줄 이상의 문자열에 이름을 붙이고 여는 백틱과 첫 내용을 `=` 다음 줄의 첫 칸에서 시작하며 문자열 내부를 보존했는가? 독립적인 템플릿 생성 책임을 함수로 드러냈는가?
@@ -153,4 +153,4 @@ validateNickname(nickname)
 - 두 번 이상 이어지는 메서드 호출을 줄로 구분하고 속성 접근은 붙여 두었는가?
 - 여러 입력의 역할을 객체 field로 드러내면서 명확한 단일 인자와 외부 signature를 유지했는가?
 
-승인 전에는 위 항목으로 초안의 의미와 예외를 검토한다. 제품 코드의 준수 여부를 새 의무로 판단하지 않는다.
+위 항목은 [`convention.md`의 검토 기준](../../convention.md#review에서-확인할-것)과 함께 적용하며 각 기준의 예외와 동작 보존 조건을 유지한다.
