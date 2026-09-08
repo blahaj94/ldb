@@ -24,11 +24,11 @@ type AuthHttpClientConfiguration = Readonly<{
 export function createAuthHttpClient(configuration: AuthHttpClientConfiguration): AuthHttp {
   const apiOrigin = validateApiOrigin(configuration.apiOrigin)
   const fetchAuth = configuration.fetch ?? globalThis.fetch
-  const canFetch = typeof fetchAuth === 'function'
-  if (!canFetch) {
+  const isFetchAvailable = typeof fetchAuth === 'function'
+  if (!isFetchAvailable) {
     throw new AuthHttpFailure('invalid-response')
   }
-  const client = ky.create({
+  const authHttpClient = ky.create({
     fetch: fetchAuth,
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -67,7 +67,8 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
     try {
       return await Promise.race([operation(controller.signal), aborted])
     } catch (error) {
-      if (error instanceof AuthHttpFailure) {
+      const isAuthHttpFailure = error instanceof AuthHttpFailure
+      if (isAuthHttpFailure) {
         throw error
       }
       throw new AuthHttpFailure('network')
@@ -84,39 +85,49 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
     expectedStatus: number
   ): Promise<unknown> {
     return withDeadline(callerSignal, async (signal) => {
-      const response = await client(`${apiOrigin}${path}`, { ...request, signal })
+      const response = await authHttpClient(`${apiOrigin}${path}`, { ...request, signal })
       return requireSuccessJson(response, expectedStatus, signal)
     })
   }
 
   return {
     async createLoginRequest(input, signal) {
-      const value = await requestJson('/auth/login-requests', { json: input }, signal, 201)
-      return parseLoginRequest(value, apiOrigin)
+      const loginRequestResponse = await requestJson(
+        '/auth/login-requests',
+        { json: input },
+        signal,
+        201
+      )
+      return parseLoginRequest(loginRequestResponse, apiOrigin)
     },
 
     async exchange(input, signal) {
-      const value = await requestJson('/auth/exchange', { json: input }, signal, 200)
-      return parseExchange(value)
+      const exchangeResponse = await requestJson('/auth/exchange', { json: input }, signal, 200)
+      return parseExchange(exchangeResponse)
     },
 
     async refresh(refreshToken, signal) {
-      const value = await requestJson('/auth/refresh', { json: { refreshToken } }, signal, 200)
-      return parseTokens(value)
+      const refreshResponse = await requestJson(
+        '/auth/refresh',
+        { json: { refreshToken } },
+        signal,
+        200
+      )
+      return parseTokens(refreshResponse)
     },
 
     async logout(refreshToken, callerSignal) {
       await withDeadline(callerSignal, async (signal) => {
-        const response = await client(`${apiOrigin}/auth/logout`, {
+        const logoutResponse = await authHttpClient(`${apiOrigin}/auth/logout`, {
           json: { refreshToken },
           signal
         })
-        await requireLogoutResponse(response, signal)
+        await requireLogoutResponse(logoutResponse, signal)
       })
     },
 
     async me(accessToken, signal) {
-      const value = await requestJson(
+      const meResponse = await requestJson(
         '/me',
         {
           method: 'GET',
@@ -125,7 +136,7 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
         signal,
         200
       )
-      return parseMe(value)
+      return parseMe(meResponse)
     }
   }
 }

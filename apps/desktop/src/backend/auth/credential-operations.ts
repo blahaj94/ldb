@@ -8,16 +8,16 @@ export async function prepareCredentialTransition(
   store: CredentialStore,
   kind: CredentialTransitionKind
 ): Promise<TransitionPreparation> {
-  const established = await store.establishTransition(kind)
-  if (established === 'confirmed') {
+  const establishmentResult = await store.establishTransition(kind)
+  if (establishmentResult === 'confirmed') {
     return 'established'
   }
-  if (established === 'failed') {
+  if (establishmentResult === 'failed') {
     return 'failed'
   }
 
-  const reestablished = await store.reestablishTransition(kind)
-  const isReestablished = reestablished === 'confirmed'
+  const reestablishmentResult = await store.reestablishTransition(kind)
+  const isReestablished = reestablishmentResult === 'confirmed'
   return isReestablished ? 'established' : 'unconfirmed'
 }
 
@@ -25,16 +25,16 @@ export async function finalizeCredentialTransition(
   store: CredentialStore,
   kind: CredentialTransitionKind
 ): Promise<CredentialCommit> {
-  const removed = await store.removeTransition()
-  if (removed === 'confirmed') {
+  const removalResult = await store.removeTransition()
+  if (removalResult === 'confirmed') {
     return 'committed'
   }
-  if (removed === 'failed') {
+  if (removalResult === 'failed') {
     return 'save-failed'
   }
 
-  const reestablished = await store.reestablishTransition(kind)
-  const isAutomaticRestoreBlocked = reestablished === 'confirmed'
+  const reestablishmentResult = await store.reestablishTransition(kind)
+  const isAutomaticRestoreBlocked = reestablishmentResult === 'confirmed'
   return isAutomaticRestoreBlocked ? 'save-failed' : 'clear-unconfirmed'
 }
 
@@ -49,19 +49,19 @@ export async function clearCredential(store: CredentialStore): Promise<Credentia
 }
 
 export async function finishCredentialClear(store: CredentialStore): Promise<CredentialClear> {
-  const cleared = await store.clearCredential()
-  const isCredentialCleared = cleared === 'confirmed'
+  const clearResult = await store.clearCredential()
+  const isCredentialCleared = clearResult === 'confirmed'
   if (!isCredentialCleared) {
     return 'unconfirmed'
   }
 
-  const removed = await store.removeTransition()
-  const isClean = removed === 'confirmed'
+  const removalResult = await store.removeTransition()
+  const isClean = removalResult === 'confirmed'
   if (isClean) {
     return 'cleared'
   }
 
-  if (removed === 'unknown') {
+  if (removalResult === 'unknown') {
     await store.reestablishTransition('clear')
   }
   return 'unconfirmed'

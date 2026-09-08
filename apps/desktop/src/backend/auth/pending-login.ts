@@ -117,24 +117,28 @@ export class PendingLogin {
     if (this.disposed) {
       return
     }
-    const checkedAt = this.clock.read()
-    if (this.isExpired(checkedAt)) {
+    const expiryCheckTime = this.clock.read()
+    const isExpiredAtCheckTime = this.isExpired(expiryCheckTime)
+    if (isExpiredAtCheckTime) {
       this.onExpired(this)
       return
     }
 
     const monotonicRemaining =
-      this.startedAt.monotonicMs + LOGIN_REQUEST_MAX_AGE_MS - checkedAt.monotonicMs
+      this.startedAt.monotonicMs + LOGIN_REQUEST_MAX_AGE_MS - expiryCheckTime.monotonicMs
     const expiresAtMs = this.expiresAtMs
     const hasServerExpiry = expiresAtMs != null
-    const wallRemaining = hasServerExpiry ? expiresAtMs - checkedAt.wallMs : monotonicRemaining
+    const wallRemaining = hasServerExpiry
+      ? expiresAtMs - expiryCheckTime.wallMs
+      : monotonicRemaining
     const delayMs = Math.max(0, Math.min(monotonicRemaining, wallRemaining))
     const cancel = this.clock.schedule(delayMs, () => {
       if (this.disposed) {
         return
       }
-      const firedAt = this.clock.read()
-      if (this.isExpired(firedAt)) {
+      const expiryCheckTime = this.clock.read()
+      const isExpiredAtCheckTime = this.isExpired(expiryCheckTime)
+      if (isExpiredAtCheckTime) {
         this.onExpired(this)
       } else {
         this.scheduleExpiry()
