@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { afterEach, expect, vi } from 'vitest'
 import { createAuthCoordinator } from '../auth/coordinator'
@@ -57,6 +58,8 @@ export async function createSearchFixture(): Promise<{
   }) => Promise<unknown>
   read: () => Promise<SearchSnapshot>
   published: ReturnType<typeof vi.fn>
+  documentEvents: EventEmitter
+  replaceDocument: () => void
 }> {
   electron.handle.mockClear()
   electron.getSources.mockResolvedValue([source])
@@ -71,10 +74,11 @@ export async function createSearchFixture(): Promise<{
     .mockImplementation(async () => jsonResponse({ body: { rows: [] } }))
   const frame = { url: rendererUrl, isDestroyed: () => false }
   const published = vi.fn()
+  const documentEvents = new EventEmitter()
   const contents = {
     mainFrame: frame,
     isDestroyed: () => false,
-    on: vi.fn(),
+    on: documentEvents.on.bind(documentEvents),
     send: published,
     session: { setDisplayMediaRequestHandler: vi.fn() }
   }
@@ -123,7 +127,21 @@ export async function createSearchFixture(): Promise<{
     nickname: string
   }): Promise<unknown> => invoke('notifyStableNicknameDetected', { captureId, ...input })
 
-  return { auth, harness, fetchSearch, captureId, invoke, observe, read, published }
+  const replaceDocument = (): void => {
+    registerCaptureWindow(window as unknown as BrowserWindow, rendererUrl)
+  }
+  return {
+    auth,
+    harness,
+    fetchSearch,
+    captureId,
+    invoke,
+    observe,
+    read,
+    published,
+    documentEvents,
+    replaceDocument
+  }
 }
 
 afterEach(() => {
