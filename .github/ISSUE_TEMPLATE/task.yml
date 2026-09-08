@@ -1,11 +1,11 @@
 name: Development task
 description: AI agent가 구현할 하나의 bounded task를 정의합니다.
-title: '[Task] '
+title: '[feat] '
 body:
   - type: markdown
     attributes:
       value: |
-        이 Issue body는 현재 실행 contract와 Worker roster를 관리합니다. 결정·조건이 바뀌면 body를 갱신하고 과거 근거는 comment pointer로 연결합니다. PR은 실제 변경과 AC별 evidence를 기록합니다. 기록 기준은 docs/rules/agent-workflow.md의 Execution Issue를 따릅니다.
+        제목은 `[type] 한국어 제목` 형식으로 작성하며, 기본값은 `feat`입니다. 주된 완료 결과에 맞춰 `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `design`, `research` 중 하나를 선택하세요. 각 type의 canonical 기준은 docs/rules/agent-workflow.md의 Issue 제목을 따릅니다. 이 Issue body는 현재 실행 contract와 Worker roster를 관리합니다. 결정·조건이 바뀌면 body를 갱신하고 과거 근거는 comment pointer로 연결합니다. PR은 실제 변경과 AC별 evidence를 기록합니다. 기록 기준은 docs/rules/agent-workflow.md의 Execution Issue를 따릅니다.
 
   - type: textarea
     id: goal
