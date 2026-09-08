@@ -18,7 +18,7 @@ review-after: 최초 Desktop 인증 구현 및 packaged platform validation 시
 
 [저장 확정 뒤 복원 안내 제안](#저장-확정-뒤-복원-안내-제안)은 별도의 `proposed` 변경이다. 기존 notice allowlist의 승인이나 제품 구현 완료로 간주하지 않는다.
 
-[인증 준비 미완료 검색 종료 제안](#인증-준비-미완료-검색-종료-제안)은 현재 인증을 유지한 검색 실패의 별도 `proposed` 변경이다.
+[인증 준비 미완료 검색 종료 제안](#인증-준비-미완료-검색-종료-제안)은 현재 인증을 유지한 검색 실패의 계약이며 PR #149에서 승인된 `active` Rule이다.
 
 서버의 [API](auth-api.md), [OAuth](auth-oauth.md), [session](auth-session.md), [활동](auth-activity.md), [runtime gate](auth-runtime.md)를 전제로 한다. Endpoint, TTL, JWT/refresh/session 정책, provider 설정과 DB를 변경하지 않는다. `clientId:"desktop"`은 public 등록 선택값이다. 실제 운영 URL·app identity·protocol 값은 platform 문서의 미확인 gate다.
 
@@ -220,10 +220,10 @@ Renderer는 event를 먼저 구독한 뒤 `read`하고 같은 runId에서 더 �
 ## 인증 준비 미완료 검색 종료 제안
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 현재 인증을 유지한 authorization unavailable을 검색 실패로 종료하고 완료된 401 회복의 재시도 이력과 구분한다.
-evidence: "https://github.com/blahaj94/ldb/issues/144#issuecomment-5579779382"
+evidence: "https://github.com/blahaj94/ldb/issues/144#issuecomment-5579779382 ; PR #149 사용자 승인: https://github.com/blahaj94/ldb/pull/149#issuecomment-5579941130"
 exceptions: 기존 인증·credential 수명, 검색 취소·15초·401·429 정책과 초기 restore·restorePaused의 별도 계약은 유지한다.
 review-after: 승인 후 전송 전·401 회복 중 unavailable과 수동 재시도의 최초 검색 검증 시
 ```
@@ -238,4 +238,4 @@ Authorization 또는 검색 401 회복 작업이 끝났지만 사용 가능한 a
 - 전송 전 authorization과 검색 401 회복 도중의 `unavailable` 모두 이 code를 사용한다. 이 실패는 완료된 401 회복 뒤의 최종 401 재시도 이력을 갖거나 승계하지 않는다. 따라서 이 실패를 수동 재시도한 요청의 첫 401은 기존 일반 회복을 따른다. 인증 사용 준비가 완료돼 `SEARCH_AUTH_RETRY_REQUIRED`로 끝난 실패의 재시도가 현재 최신 access에서 다시 401을 받았을 때만 기존 최종 401 처리를 적용한다.
 - 새 안정화 입력은 기존 독립 검색 정책을 따르며 이 실패나 이전 401 회복의 이력을 승계하지 않는다. 같은 nickname의 revision 승격은 기존대로 새 검색·자동 재시도를 만들지 않는다.
 
-이 절은 [PR #131에서 이미 승인된 검색 계약](https://github.com/blahaj94/ldb/pull/131#issuecomment-5572388337)에 없는 위 경우만 보완한다. 기존 승인 정책을 다시 승인 대상으로 만들지 않으며, 이 새 mapping은 [Draft PR의 명시적 승인](change-control.md#approval-evidence) 전에는 제품 구현 권한이 없다. 대안·상황별 기대 결과는 Issue/PR에 둔다.
+이 절은 [PR #131에서 이미 승인된 검색 계약](https://github.com/blahaj94/ldb/pull/131#issuecomment-5572388337)에 없는 위 경우만 보완한다. 기존 승인 정책을 다시 승인 대상으로 만들지 않으며, 이 새 mapping은 [PR #149의 명시적 승인](https://github.com/blahaj94/ldb/pull/149#issuecomment-5579941130)을 반영한 active Rule이다. 대안·상황별 기대 결과는 Issue/PR에 둔다.
