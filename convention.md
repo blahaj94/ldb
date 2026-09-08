@@ -28,7 +28,7 @@ Generated/vendor 코드는 산출물을 직접 고치지 않고 소유한 생성
 
 처리 단계·문자열·분기·체인·함수 입력의 세부 기준은 [`코드 표현과 함수 입력 가독성`](docs/rules/code-expression.md)을 함께 따른다. [PR #146의 사용자 승인](https://github.com/blahaj94/ldb/pull/146#issuecomment-5579597615)과 merge를 반영한 active Rule이다.
 
-두 좁은 예외의 proposed 조건과 승인 lifecycle은 [`convention-exceptions-proposal.md`](docs/rules/convention-exceptions-proposal.md)를 따른다. 승인 전에는 이 문서의 §2·§3과 동작 보존 기준이 우선한다.
+두 좁은 예외의 active 조건과 승인 lifecycle은 [`convention-exceptions-proposal.md`](docs/rules/convention-exceptions-proposal.md)를 따른다. PR #161의 사용자 승인·merge 이후에는 해당 문서의 조건을 충족하는 범위에 적용하며, 그 전에는 이 문서의 §2·§3과 동작 보존 기준이 우선한다.
 
 기계적 표기·정적 검사를 기존 설정 범위의 도구에 맡기는 proposed 기준과 사람의 의미 판단 경계는 [`convention-tooling.md`](docs/rules/convention-tooling.md)를 따른다. 이 문서는 formatter·lint 설정이나 실행 권한을 만들지 않으며, 승인 전에는 기존 active Rule이 우선한다.
 

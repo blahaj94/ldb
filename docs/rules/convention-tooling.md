@@ -14,6 +14,8 @@ review-after: 사용자 승인·merge 후 서로 다른 app 또는 tooling의 �
 
 이 문서는 기존 convention을 ESLint·Oxlint·Prettier로 보조하는 이행 기준을 제안한다. 도구가 충분히 판단할 수 있는 표기와 정적 검사는 native command로 처리하고, 의미·이름·처리 단계·함수 책임·평가와 오류 보존은 편집 담당과 Reviewer가 판단한다. 이 문서는 제품 code, 설정, dependency, CI를 변경하거나 새 도구 실행을 승인하지 않는다.
 
+도구로 충분한 수정만을 위해 별도 AI 작성자나 조사자를 배정하지 않는다. 기존 편집 담당이 native CLI를 실행하되, 필요한 의미 판단·독립 review·기존 checkout 소유권·validation 책임은 생략하지 않는다.
+
 ## 승인 상태와 우선순위
 
 이 문서는 `proposed`다. Draft PR에서 사용자가 명시적으로 `승인`하고 merge하기 전에는 기존 active Rule과 현재 app 설정이 우선한다. 승인 전에는 Prettier 출력 우선이나 fixer 적용 범위를 제품 code에 확장하지 않는다.
@@ -26,7 +28,7 @@ review-after: 사용자 승인·merge 후 서로 다른 app 또는 tooling의 �
 
 Prettier는 설정된 파일 범위의 순수한 layout을 정리한다. 줄바꿈, 들여쓰기, 따옴표, 세미콜론, trailing comma와 같은 formatter 출력이 대상이다. Prettier는 짧은 `if`에 중괄호를 추가하지 않고, 의미별 빈 줄·boolean 이름·함수 책임·객체 인자의 역할을 판단하지 않는다. `--write`는 승인된 설정과 glob 범위에서만 사용한다.
 
-ESLint·Oxlint는 현재 설정된 rule과 검증된 fixer의 범위만 사용한다. ESLint의 `curly`처럼 실제 설정에 명시되고 대상 파일에서 fixer 결과가 검증된 rule은 허용된 자동수정으로 기록할 수 있다. 현재 설정에 없는 `curly`, naming rule, custom rule, 새 plugin은 이 문서만으로 도입하지 않는다. Oxlint를 ESLint나 Prettier의 임의 대체로 사용하지 않는다.
+ESLint·Oxlint는 현재 설정된 rule과 검증된 fixer의 범위만 사용한다. ESLint의 `curly`처럼 실제 설정에 명시되고 대상 파일에서 fixer 결과가 검증된 rule은 허용된 자동수정으로 기록할 수 있다. 현재 설정에 없는 `curly`, naming rule, custom rule, 새 plugin은 이 문서만으로 도입하지 않는다. 기존 Oxlint를 이 요청만으로 ESLint로 교체하지 않으며, Oxlint를 ESLint나 Prettier의 임의 대체로 사용하지 않는다.
 
 다음은 도구에 맡기지 않는다.
 
@@ -49,7 +51,7 @@ ESLint·Oxlint는 현재 설정된 rule과 검증된 fixer의 범위만 사용�
 4. formatter를 다시 설계하지 않고 비수정 lint와 Prettier check를 실행한다.
 5. 필요한 기존 test, typecheck, build 또는 app validation을 같은 입력과 범위로 실행한다.
 
-최초 설정이나 충돌 조정에서는 같은 입력을 한 번 더 확인해 결과가 수렴하는지 확인할 수 있다. 매 실행마다 반복하거나 formatter 출력 일부를 수동으로 되돌리는 절차는 만들지 않는다. 검사 실패를 disable하거나 ignore에 추가해 통과시키지 않는다.
+최초 설정이나 충돌 조정에서는 같은 입력을 한 번 더 확인해 결과가 수렴하는지 확인한다. 매 실행마다 반복하거나 formatter 출력 일부를 수동으로 되돌리는 절차는 만들지 않는다. 검사 실패를 disable하거나 ignore에 추가해 통과시키지 않는다.
 
 생성물·vendor·lockfile은 직접 `--write`하거나 수정하지 않는다. 생성 source나 template의 소유 규칙을 따르고, broad `--write .`로 승인되지 않은 범위를 포함하지 않는다. 도구가 처리할 수 없는 설정 공백은 계획 필요로 남긴다.
 
@@ -66,16 +68,5 @@ ESLint·Oxlint는 현재 설정된 rule과 검증된 fixer의 범위만 사용�
 - 비수정 lint·Prettier check와 필요한 기존 validation이 같은 revision과 범위에서 통과했는가?
 
 도구 적용이 끝났다는 표시는 대상 설정 범위에만 해당한다. 설정되지 않은 app·root·scripts와 의미 판단은 `판단 필요`로 남기며, 저장소 전체 convention 완료로 확대하지 않는다.
-
-## Lifecycle
-
-```yaml
-status: proposed
-enforcement: approval-required
-rationale: 기계적 표기·정적 검사는 도구로 반복 가능하게 하고 의미 판단 비용을 사람에게 남긴다.
-evidence: "Issue #160 조사와 사용자 선택, PR #161 승인·merge"
-exceptions: 기존 active Rule, 승인된 config/version/glob/ignore, 기존 예외 A/B의 안전성 경계를 유지한다.
-review-after: 승인·merge 후 서로 다른 app 또는 tooling PR 3개에서 수렴·재작업·검토 부담을 확인한다.
-```
 
 승인 전에는 기존 Rule이 적용되며, 승인 후에도 이 문서가 명시한 설정 범위와 도구 책임을 넘는 변경은 별도 approval과 testing을 따른다.

@@ -155,4 +155,4 @@ validateNickname(nickname)
 
 위 항목은 [`convention.md`의 검토 기준](../../convention.md#review에서-확인할-것)과 함께 적용하며 각 기준의 예외와 동작 보존 조건을 유지한다.
 
-formatter 적용 범위에서 순수한 줄 배치가 이 문서의 수동 예시와 충돌하면 proposed [`convention-tooling.md`](convention-tooling.md)의 승인된 Prettier 출력 우선 기준을 따른다. 이는 §2의 문자열 위치와 §5의 method chain 배치를 formatter 출력에 맞추는 기준이며, 의미별 빈 줄·문자열 내용·생성 책임·평가 시점과 함수 입력 의미를 바꾸는 권한이 아니다.
+formatter 적용 범위에서 순수한 줄 배치가 이 문서의 수동 예시와 충돌하면, [`convention-tooling.md`](convention-tooling.md)가 사용자 승인·merge 전에는 기존 active 기준을, 승인·merge 후에는 확인된 formatter 범위의 Prettier 출력 우선 기준을 따른다. 이는 §2의 여는 백틱 위치와 §5의 method chain 행 배치를 formatter 출력에 맞추는 기준이며, checklist도 같은 순서로 해석한다. 문자열 값·개행·공백, 이름, 생성 책임, 평가 시점과 함수 입력 의미를 바꾸는 권한은 아니다.
