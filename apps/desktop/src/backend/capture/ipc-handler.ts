@@ -104,7 +104,7 @@ function registerCaptureIpc(
   auth = coordinator
   const hasRuntime = coordinator != null && configuration != null
   const runtime = hasRuntime
-    ? { auth: coordinator, http: createSearchHttp(configuration) }
+    ? { auth: coordinator, http: createSearchHttp(configuration), clock: configuration.clock }
     : undefined
   const lifetime = new CaptureSearchLifetime({
     runtime,

@@ -39,6 +39,58 @@ async function flushSearch(): Promise<void> {
 }
 
 describe('main의 429 Retry-After와 사용자 재시도', () => {
+  it('body 검증에 걸린 시간을 더하지 않고 headers 수신 시각부터 Retry-After를 지킨다', async () => {
+    const fixture = await createSearchFixture()
+    const pull = vi.fn()
+    let finish!: () => void
+    let bodyFinished = false
+    const body = new ReadableStream<Uint8Array>(
+      {
+        start(controller) {
+          finish = () => {
+            if (bodyFinished) {
+              return
+            }
+            bodyFinished = true
+            const text = JSON.stringify({ error: { code: 'SEARCH_RATE_LIMITED' } })
+            controller.enqueue(new TextEncoder().encode(text))
+            controller.close()
+          }
+        },
+        pull
+      },
+      { highWaterMark: 0 }
+    )
+    fixture.fetchSearch.mockResolvedValueOnce(
+      new Response(body, { status: 429, headers: { 'Retry-After': '2' } })
+    )
+    await fixture.observe({ slot: 0, observationRevision: 1, nickname: '가나' })
+
+    try {
+      await vi.waitFor(() => expect(pull).toHaveBeenCalled())
+      fixture.harness.clock.advance(1_000)
+      finish()
+      await vi.waitFor(async () => expect((await fixture.read()).slots[0].state).toBe('failure'))
+      const failed = (await fixture.read()).slots[0]
+      expect(failed.error).toEqual({ code: 'SEARCH_RATE_LIMITED', retryAfterSeconds: 2 })
+      fixture.harness.clock.advance(999)
+      expect(await retry(fixture, failed)).toMatchObject({
+        ok: false,
+        error: { code: 'SEARCH_RETRY_NOT_READY' }
+      })
+      fixture.harness.clock.advance(1)
+      await flushSearch()
+
+      expect((await fixture.read()).slots[0]).toEqual({
+        ...failed,
+        error: { code: 'SEARCH_RATE_LIMITED', retryAfterSeconds: 0 }
+      })
+      expect(fixture.fetchSearch).toHaveBeenCalledTimes(1)
+    } finally {
+      finish()
+    }
+  })
+
   it.each(['2', '0002'])(
     '유효한 %s초는 만료 전 retry를 거절하고 같은 실패의 버튼만 활성화한다',
     async (header) => {
