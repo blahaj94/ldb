@@ -5,14 +5,22 @@ import type { LoginCallbackInput, LoginCreation, LoginExchange } from '../../typ
 import { decodeOpaque } from './crypto.js'
 
 function requireExactFields(value: unknown, fields: readonly string[]): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  const isValueTruthy = Boolean(value)
+  const isValueObject = isValueTruthy && typeof value === 'object'
+  const isValueArray = isValueObject && Array.isArray(value)
+  const isValueInvalid = !isValueTruthy || !isValueObject || isValueArray
+
+  if (isValueInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
-  if (
-    Object.keys(value).length !== fields.length ||
-    !fields.every((field) => Object.hasOwn(value, field))
-  ) {
+  const objectValue = value as Record<string, unknown>
+  const hasExpectedFieldCount = Object.keys(objectValue).length === fields.length
+  const hasExpectedFields =
+    hasExpectedFieldCount && fields.every((field) => Object.hasOwn(objectValue, field))
+  const hasExactFields = hasExpectedFieldCount && hasExpectedFields
+
+  if (!hasExactFields) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -27,11 +35,20 @@ export function parseCreation(value: unknown): LoginCreation {
     'codeChallengeMethod'
   ])
 
-  if (
-    (body.provider !== 'google' && body.provider !== 'discord') ||
-    body.clientId !== 'desktop' ||
-    body.codeChallengeMethod !== 'S256'
-  ) {
+  const isSupportedProvider = body.provider === 'google' || body.provider === 'discord'
+  if (!isSupportedProvider) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
+  const isDesktopClient = body.clientId === 'desktop'
+  if (!isDesktopClient) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
+  const isS256CodeChallenge = body.codeChallengeMethod === 'S256'
+  const isCreationRequestInvalid = !isS256CodeChallenge
+
+  if (isCreationRequestInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -43,11 +60,20 @@ export function parseExchange(value: unknown): LoginExchange {
   const body = requireExactFields(value, ['requestId', 'clientId', 'code', 'codeVerifier'])
 
   // Client의 string 형식만 확인한다. 실제 client binding은 exchange transaction에서 확인한다.
-  if (
-    typeof body.requestId !== 'string' ||
-    !UUID_PATTERN.test(body.requestId) ||
-    typeof body.clientId !== 'string'
-  ) {
+  const isRequestIdString = typeof body.requestId === 'string'
+  if (!isRequestIdString) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
+  const isRequestIdValid = UUID_PATTERN.test(body.requestId as string)
+  if (!isRequestIdValid) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
+  const isClientIdString = typeof body.clientId === 'string'
+  const isExchangeRequestInvalid = !isClientIdString
+
+  if (isExchangeRequestInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -73,13 +99,19 @@ export function parseCallback(query: URLSearchParams): LoginCallbackInput {
     const errors = query.getAll('error')
 
     // OAuth의 다른 query는 허용하되 state 하나와 code/error 중 하나만 받는다.
-    if (states.length !== 1 || codes.length + errors.length !== 1 || !(codes[0] ?? errors[0])) {
+    const hasSingleState = states.length === 1
+    const hasSingleOutcome = hasSingleState && codes.length + errors.length === 1
+    const hasTruthyOutcome = hasSingleOutcome && Boolean(codes[0] ?? errors[0])
+    const isCallbackQueryInvalid = !hasSingleState || !hasSingleOutcome || !hasTruthyOutcome
+
+    if (isCallbackQueryInvalid) {
       throw new Error()
     }
 
     decodeOpaque(states[0])
 
-    if (errors.length === 1) {
+    const hasProviderError = errors.length === 1
+    if (hasProviderError) {
       return { state: states[0], code: undefined, error: errors[0] }
     }
     return { state: states[0], code: codes[0], error: undefined }

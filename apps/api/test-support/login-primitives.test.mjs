@@ -8,6 +8,7 @@ import { creation, opaque, registration, registryConfiguration } from './login-f
 const crypto = await import('../dist/auth/login/crypto.js')
 const { LoginRegistry } = await import('../dist/auth/login/registry.js')
 const { parseCreation, parseExchange, parseCallback } = await import('../dist/auth/login/input.js')
+const { exchangeExpired } = await import('../dist/auth/login/state.js')
 
 test('app S256 and opaque code hashes have distinct exact inputs', () => {
   const value = opaque()
@@ -68,6 +69,150 @@ test('strict creation/exchange shapes reject injected identity, redirect and non
     { ...exchange, codeVerifier: verifier + '=' }
   ]) {
     assert.throws(() => parseExchange(bad), { code: 'INVALID_AUTH_REQUEST' })
+  }
+})
+
+test('field-count rejection does not inspect fields after the count mismatch', () => {
+  let descriptorReads = 0
+  const body = new Proxy(
+    {
+      provider: 'google',
+      clientId: 'desktop',
+      codeChallenge: 'extra',
+      codeChallengeMethod: 'S256',
+      extra: true
+    },
+    {
+      getOwnPropertyDescriptor(target, property) {
+        descriptorReads++
+        const isAfterObjectKeys = descriptorReads > 5
+        if (isAfterObjectKeys) {
+          throw new Error('field inspection should not run')
+        }
+        return Object.getOwnPropertyDescriptor(target, property)
+      },
+      ownKeys: (target) => Reflect.ownKeys(target)
+    }
+  )
+  assert.throws(() => parseCreation(body), { code: 'INVALID_AUTH_REQUEST' })
+})
+
+test('creation validation keeps provider and client guards short-circuiting later reads', () => {
+  const providerRejected = new Proxy(creation(opaque()), {
+    get(target, property) {
+      const isLaterCreationField = property === 'clientId' || property === 'codeChallengeMethod'
+      if (isLaterCreationField) {
+        throw new Error('later creation field should not be read')
+      }
+      return Reflect.get(target, property)
+    }
+  })
+  providerRejected.provider = 'other'
+  assert.throws(() => parseCreation(providerRejected), { code: 'INVALID_AUTH_REQUEST' })
+
+  const clientRejected = new Proxy(creation(opaque()), {
+    get(target, property) {
+      const isCodeChallengeMethod = property === 'codeChallengeMethod'
+      if (isCodeChallengeMethod) {
+        throw new Error('method should not be read')
+      }
+      return Reflect.get(target, property)
+    }
+  })
+  clientRejected.clientId = 'web'
+  assert.throws(() => parseCreation(clientRejected), { code: 'INVALID_AUTH_REQUEST' })
+})
+
+test('exchange validation preserves requestId reads and guard short-circuiting', () => {
+  const verifier = opaque()
+  let requestIdReads = 0
+  const requestIdChanges = {
+    clientId: 'desktop',
+    code: opaque(),
+    codeVerifier: verifier,
+    get requestId() {
+      requestIdReads++
+      const isFirstRequestIdRead = requestIdReads === 1
+      return isFirstRequestIdRead ? randomUUID() : 'not-uuid'
+    }
+  }
+  assert.throws(() => parseExchange(requestIdChanges), { code: 'INVALID_AUTH_REQUEST' })
+  assert.equal(requestIdReads, 2)
+
+  const invalidRequestId = new Proxy(
+    { requestId: 'not-uuid', clientId: 'desktop', code: opaque(), codeVerifier: verifier },
+    {
+      get(target, property) {
+        const isClientId = property === 'clientId'
+        if (isClientId) {
+          throw new Error('clientId should not be read')
+        }
+        return Reflect.get(target, property)
+      }
+    }
+  )
+  assert.throws(() => parseExchange(invalidRequestId), { code: 'INVALID_AUTH_REQUEST' })
+})
+
+test('expired requests do not inspect code expiry after request expiry', () => {
+  const checkedAt = new Date('2026-09-06T00:10:00Z')
+  const request = {
+    expiresAt: checkedAt,
+    get codeExpiresAt() {
+      throw new Error('code expiry should not be read')
+    }
+  }
+  assert.equal(exchangeExpired(request, checkedAt), true)
+})
+
+test('exchange expiry rereads the code deadline after the second clock read', () => {
+  const reads = []
+  let codeExpiryReads = 0
+  const request = {
+    expiresAt: new Date(30_000),
+    get codeExpiresAt() {
+      reads.push('codeExpiresAt')
+      codeExpiryReads++
+      const isFirstCodeExpiryRead = codeExpiryReads === 1
+      return new Date(isFirstCodeExpiryRead ? 20_000 : 5_000)
+    }
+  }
+  const checkedAt = {
+    getTime() {
+      reads.push('checkedAt')
+      return 10_000
+    }
+  }
+
+  const isExpired = exchangeExpired(request, checkedAt)
+
+  assert.deepEqual(reads, ['checkedAt', 'codeExpiresAt', 'checkedAt', 'codeExpiresAt'])
+  assert.equal(isExpired, true)
+})
+
+test('callback count rejection stops subsequent array length and index reads', () => {
+  for (const { query, expectedReads } of [
+    { query: 'code=x', expectedReads: ['state.length'] },
+    {
+      query: 'state=x&code=x&error=x',
+      expectedReads: ['state.length', 'code.length', 'error.length']
+    }
+  ]) {
+    const reads = []
+    class ObservedSearchParams extends URLSearchParams {
+      getAll(name) {
+        return new Proxy(super.getAll(name), {
+          get(target, property, receiver) {
+            reads.push(`${name}.${String(property)}`)
+            return Reflect.get(target, property, receiver)
+          }
+        })
+      }
+    }
+    const params = new ObservedSearchParams(query)
+
+    assert.throws(() => parseCallback(params), { code: 'LOGIN_REQUEST_INVALID' })
+    assert.deepEqual(reads, expectedReads)
   }
 })
 
