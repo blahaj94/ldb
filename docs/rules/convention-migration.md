@@ -38,6 +38,32 @@ review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재�
 
 작업 packet에는 대상 모듈, 변경 종류, 제외 범위, 기준 revision, 동작 보존 근거와 검증 command를 함께 둔다. 한 구현 PR이 끝나기 전에는 다음 구현을 병렬로 시작하지 않는다. 검토에서 의미 충돌이나 누락이 발견되면 해당 범위를 멈추고 같은 scope의 후속 판단을 기록한다.
 
+## 병렬 실행 제안 (승인 전 제안)
+
+다음 제안은 Issue #178에서 검토할 수 있는 좁은 lifecycle 변경안이다. 이 subsection은 Draft PR의 명시적인 사용자 `승인` comment와 사용자 merge 전까지 실행 authority가 없다. 그 전에는 위의 기존 순차 문장과 이 문서의 모든 active 원칙을 그대로 적용한다.
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 서로 독립적인 convention migration PR의 대기 시간을 줄이되 충돌·오래된 기준·검토 누락을 제한한다.
+evidence: "Issue #178, 사용자 병렬 실행 요청"
+exceptions: 의존성·evidence가 불명확하거나 scope가 겹치면 해당 작업은 순차로 진행하며 기존 active Rule을 적용한다.
+review-after: 동시에 진행한 첫 3개 PR이 사용자 merge된 뒤 실제 충돌·재작업·검토 부담과 동시 한도를 재검토한다.
+```
+
+승인되어 merge된 subsection은 위 `작업 단위와 순서`의 다음 세 문장의 적용 범위만 대체한다. “구현 PR은 한 번에 하나씩 순서대로 진행한다”, “사용자가 앞선 PR을 merge한 뒤 다음 PR을 시작한다”, “한 구현 PR이 끝나기 전에는 다음 구현을 병렬로 시작하지 않는다”가 그 대상이다. 작업 단위·독립 검토·소유권·기준 revision·의존성 판단·검증·사용자 merge를 포함한 나머지 Rule은 바꾸지 않는다.
+
+동시에 열어 둘 구현 PR은 최대 3개로 한다. 각 PR은 별도 Issue, integration branch, 전용 worktree, 단일 owner를 갖고 같은 고정 base에서 시작한다. PR 간 변경 file과 public type·API·generated fixture·producer/consumer·shared mutable runtime·test를 서로 충돌하게 변경하지 않도록 packet에 기록한다. 같은 것을 읽거나 같은 검증 command를 사용하는 것만으로 독립성을 부정하지 않는다. 기존 `agent-execution.md`의 의미대로 같은 file·public contract·generated source·artifact·test fixture·snapshot·shared state를 상충하게 변경하거나 검증 환경을 격리할 수 없는 경우 병렬로 dispatch하지 않는다. Issue별 실행·사용량 수집 범위도 서로 독립적으로 구분할 수 있어야 한다. 현재 수집 도구로 분리할 수 없으면 먼저 분리된 실행 단위를 준비하거나 병렬 착수를 보류한다. 보고 의무 완화, 추정 분배, 새 collector 구현은 이 제안의 범위가 아니다.
+
+병렬 dispatch는 기존 [`agent-execution.md`](agent-execution.md)의 독립성·실행 slot·roster·handoff·소유권 계약을 따른다. 이 제안은 slot 증설, owner 간 checkout 공유, 통합 branch 직접 편집, 또는 오래된 result의 자동 채택을 허용하지 않는다. 결과가 반환된 뒤 integration head가 전진했으면 [`change-control.md`](change-control.md)의 rebase와 semantic 확인을 거치고 필요한 validation을 다시 실행한다.
+
+각 PR은 한 module·한 종류의 변경·작은 diff 원칙, 독립적인 최종 head validation·review·usage 기록을 유지한다. 여러 PR을 동시에 ready 상태로 준비할 수 있지만, 하나가 main에 merge된 뒤 남은 PR은 최신 main으로 rebase하고 semantic check와 전체 required validation을 다시 통과해야 ready·merge 대상이 된다. 병렬 사전 검증이 이 최종 확인을 대신하거나 일괄 면제를 만들지 않는다.
+
+main이 전진하면 아직 merge되지 않은 모든 관련 PR을 다시 대조한다.
+재검증 결과가 없으면 해당 PR을 ready로 표시하지 않는다.
+
+각 PR의 merge는 기존과 같이 사용자만 수행한다. AI는 merge하지 않으며 scheduler나 자동 merge를 추가하지 않는다. 동시에 진행한 첫 3개 PR이 merge된 뒤 기록된 결과로 효과와 동시 한도를 재검토하며, 자동 만료나 매 묶음 재승인 조건을 만들지 않는다. 그 전에는 범위를 넓히거나 다른 Rule을 중복 작성하지 않는다.
+
 ## 전수 목록과 완료 기준
 
 전수 확인 목록과 파일별 backlog는 수정 전에 후속 Execution Issue에 반드시 만든다. Planner가 목록의 생성·갱신·완료 상태를 책임지고, 실제 조사는 Scout나 Worker에게 맡길 수 있다. 기준 repository revision에서 범위를 확정하고 각 대상에 대해 `변경 필요`, `이미 준수`, `적용 제외`, `판단 필요`를 구분한다. 이미 준수·적용 제외에는 Rule 적용 범위와 연결된 근거를 남기며, 범위를 줄이거나 새 예외를 자동으로 판정하지 않는다. 변경 필요에는 연결된 PR의 사용자 merge evidence를 남긴다. 최종 Reviewer와 Planner는 전체 목록, 기준 revision, 분류 근거, merge evidence, 판단 필요·미반영 존재를 확인한 뒤 기존 완료 절차에 따라 처리한다. 판단 필요나 미반영 항목이 남아 있으면 전수 이행은 완료되지 않는다. 최종 main에서 새 파일·삭제·규칙 변경 보정을 다시 대조한다. 전수 조사 완료와 실제 리팩토링 완료는 별도 상태로 관리한다. 생성물은 원본 source를 기준으로 처리하고 generated artifact만 따로 정리하지 않는다. 이미 준수한 code는 수정하지 않는다.
