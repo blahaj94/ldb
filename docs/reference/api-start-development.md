@@ -38,7 +38,9 @@ pnpm --filter @ldb/api start
 
 파일은 시작 때 한 번만 읽는다. 설정을 바꿀 때는 필요한 과거 registry·secret·decrypt/verify key를 유지한 일관된 새 파일을 준비한 뒤 재시작한다. 진행 중 요청을 새 active version으로 대체하지 않으며, 지원하지 않는 과거 version은 기존 실패 경로를 따른다.
 
-`SIGINT`/`SIGTERM`에서는 앱의 검색 취소와 종료가 끝난 뒤 소유 DB 연결을 닫는다. 초기화 중 signal은 기록하고 완료 후 listen을 건너뛴다. Listen 진행 중 signal은 해당 작업이 끝난 뒤 정리한다. 초기화 완료 표시 이전에 확보한 DB 연결도 실패 정리 대상이며 앱 종료 실패가 DB 정리를 막지 않는다. `SIGKILL`·host 장애의 즉시 정리는 보장하지 않는다.
+정상 실행 중 `SIGINT`/`SIGTERM`에서는 앱의 검색 취소와 종료가 끝난 뒤 소유 DB 연결을 닫는다. 시작 중 첫 신호에는 1000ms 정리 유예를 한 번만 설정하며 반복 신호로 연장하지 않는다. 초기화가 먼저 끝나면 listen을 건너뛰고, listen이 진행 중이면 해당 작업이 끝난 뒤 정리한다. 앱·DB 정리가 끝나면 유예 timer를 제거한다.
+
+기한이 지나도 시작이나 정리가 끝나지 않으면 `API failed to start`를 출력하고 process를 종료 코드 1로 끝낸다. 이 fallback은 비동기 정리 성공이 아니라 process와 연결 중 socket의 종료다. TypeORM/pg 내부 pool에 접근하거나 운영 DB 연결 timeout을 바꾸지 않는다. 초기화 완료 표시 이전에 확보한 연결도 기존 실패 정리 대상이며 앱 종료 실패가 DB 정리를 막지 않는다. `SIGKILL`·host 장애의 즉시 정리는 보장하지 않는다.
 
 ## 구현과 검증 위치
 
@@ -50,6 +52,7 @@ pnpm --filter @ldb/api start
 | `apps/api/src/runtime/application.ts` | 기존 login/session/account/search 합성, 앱·DB의 수명 |
 | `apps/api/src/auth/login/http.ts` | 기존 HTTP factory와 부분 앱 설정 실패의 정리 |
 | `apps/api/test-support/runtime-startup.test.mjs` | 실제 build entry의 설정 거절·시작·실패·signal 종료 |
+| `apps/api/test-support/runtime-handshake.test.mjs` | 응답 없는 실제 loopback TCP handshake의 신호 종료, 반복 신호와 정상 정리 뒤 timer 제거 |
 | `apps/api/test-support/runtime-http-integration.mjs` | 기존 Docker harness의 실제 DB·기본 entry·전체 HTTP 흐름 |
 
 `runtime-preload.mjs`는 테스트 child의 `--import`에만 지정한다. 기존 synthetic Google/JWKS와 Neople loopback fixture에 transport를 대응시키고 부분 초기화 실패를 주입한다. 제품 source는 이 module과 테스트 환경변수를 읽지 않는다. 실제 credential·`NODE_OPTIONS`를 child에 상속하지 않는다.
@@ -62,5 +65,7 @@ pnpm --filter @ldb/api test:database
 기본 entry만 반복 확인할 때는 `pnpm --filter @ldb/api test:database --runtime-only`를 사용한다. 기존 Docker 생성·image 검증·readiness·명시 Migration·정리를 그대로 사용하며 전체 DB matrix를 대체하지 않는다.
 
 Worker의 2026-09-08 검증에서 startup 설정·실패·signal 검증과 focused DB/HTTP 검증이 통과했다. 실제 흐름은 pending Google 요청 → 재시작·active version 변경 → 과거 version의 callback/exchange → 계정 조회·수정 → 검색 → refresh/logout → 계정 거절·잔여 JWT 검색 → DB lock 대기 검색의 종료 취소다. Fresh DB의 schema 불변과 부분 연결·Nest 생성/설정·listen 실패의 backend 소멸도 확인했다.
+
+시작 신호 검증의 TCP peer는 PostgreSQL 엔진이 아니다. 실제 pg startup bytes를 읽고 응답하지 않은 상태에서 child의 nonzero 종료·API 미listen·상대 socket 종료를 fixture 정리 전에 관측한다. 신호와 함께 초기화를 완료시키는 fake와 구분하며, 별도 fake 검증은 정상 정리 뒤 다른 handle이 남아 있어도 종료 timer가 실행되지 않는지 확인한다.
 
 환경은 Node `v24.19.0`, pnpm `11.23.0`, Docker server `29.7.2`, native `linux/arm64/v8`, PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`다. 실제 provider/credential, `linux/amd64`, Desktop·공개 배포·proxy/APM·운영 복원은 이 검증에 포함하지 않았다. 최종 전체 API/DB 검증과 독립 review evidence는 구현 PR에서 exact head와 연결한다.
