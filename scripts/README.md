@@ -7,12 +7,16 @@
 기존 OPEN Issue 확인, `origin/main` fetch, Issue별 branch와 worktree 생성을 한 번에 실행합니다. Git와 인증된 GitHub CLI가 필요하며, 대상 repository root에서 실행합니다.
 
 ```bash
-node scripts/start-task.mjs 123 ../ldb-worktrees/issue-123
+node scripts/start-task.mjs api 123 fix-character-search ../ldb-worktrees/api-123-fix-character-search
 ```
 
-`123`은 실제 Issue 번호로 바꿉니다. 두 번째 인자는 아직 존재하지 않는 경로이며, 공백이 있으면 quote합니다. 생성 branch는 `codex/issue-123`이고, base는 이번 fetch로 받은 main commit입니다. 현재 checkout의 미반영 변경은 포함하지 않습니다.
+인자 순서는 `<project> <Issue 번호> <description> <새 worktree 경로>`입니다. 위 명령은 `api-123-fix-character-search` 브랜치를 만듭니다. `123`은 현재 저장소의 실제 OPEN Issue 번호로 바꿉니다. 마지막 인자는 아직 존재하지 않는 경로이며, 공백이 있으면 quote합니다. Base는 이번 fetch로 받은 main commit이며 현재 checkout의 미반영 변경은 포함하지 않습니다.
 
-Root alias `pnpm start-task 123 ../ldb-worktrees/issue-123`도 제공합니다. 새 checkout에서는 pnpm이 dependency install을 먼저 수행할 수 있으므로, 준비만 할 때는 위 Node command를 사용합니다.
+`project`에는 `api`, `desktop`, `web`, `ui`, `cross`, `repo` 중 하나를 전달합니다. 작업 범위 선택과 통합·Worker 브랜치 기준은 [브랜치 명명 규칙](../docs/rules/change-control.md#브랜치-명명-규칙)을 따릅니다. `description`은 `fix-character-search`처럼 변경 동사로 시작하는 소문자 설명을 정합니다. 스크립트는 소문자로 시작하고 소문자·숫자를 하이픈 하나로 연결하는 형식을 검증하며, 동사 의미나 Issue 범위의 적합성은 담당자가 판단합니다.
+
+기존 두 인자 명령은 사용법 오류로 거절합니다. 기존 브랜치·worktree를 바꾸거나 지우지 않으며, 같은 이름의 로컬 브랜치나 대상 경로가 이미 존재하면 생성을 거절합니다.
+
+Root alias `pnpm start-task api 123 fix-character-search ../ldb-worktrees/api-123-fix-character-search`도 제공합니다. 새 checkout에서는 pnpm이 dependency install을 먼저 수행할 수 있으므로, 준비만 할 때는 위 Node command를 사용합니다.
 
 Issue 제목·URL, branch, 절대 worktree 경로, base SHA를 출력합니다. 기존 branch나 경로는 재사용하거나 덮어쓰지 않으며, 조회·fetch·생성 실패 시 non-zero로 종료합니다. 생성 후 출력된 worktree로 이동해 작업합니다.
 

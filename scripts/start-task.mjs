@@ -3,19 +3,36 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+const PROJECTS = new Set(['api', 'desktop', 'web', 'ui', 'cross', 'repo'])
+
 export function startTask(args, run = execFileSync) {
-  const [issueNumber, worktreePath] = args
-  if (
-    args.length !== 2 ||
-    !/^[1-9]\d*$/.test(issueNumber ?? '') ||
-    !Number.isSafeInteger(Number(issueNumber)) ||
-    !worktreePath?.trim()
-  ) {
-    throw new Error('사용법: pnpm start-task <Issue 번호> <새 worktree 경로>')
+  const [project, issueNumber, description, worktreePath] = args
+  const hasExpectedArgumentCount = args.length === 4
+  const isProjectAllowed = PROJECTS.has(project)
+  const hasIssueNumberFormat = /^[1-9]\d*$/.test(issueNumber ?? '')
+  const isIssueNumberSafeInteger = Number.isSafeInteger(Number(issueNumber))
+  const isIssueNumberTrimmed = issueNumber === issueNumber?.trim()
+  const hasDescriptionFormat = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(description ?? '')
+  const isDescriptionTrimmed = description === description?.trim()
+  const hasWorktreePath = (worktreePath?.trim().length ?? 0) > 0
+  const isInputValid =
+    hasExpectedArgumentCount &&
+    isProjectAllowed &&
+    hasIssueNumberFormat &&
+    isIssueNumberSafeInteger &&
+    isIssueNumberTrimmed &&
+    hasDescriptionFormat &&
+    isDescriptionTrimmed &&
+    hasWorktreePath
+  if (!isInputValid) {
+    throw new Error(
+      '사용법: pnpm start-task <project: api|desktop|web|ui|cross|repo> <Issue 번호> <description: 소문자-작업-설명> <새 worktree 경로>'
+    )
   }
 
   const destination = resolve(worktreePath)
-  if (existsSync(destination)) {
+  const isDestinationPresent = existsSync(destination)
+  if (isDestinationPresent) {
     throw new Error(`이미 존재하는 경로입니다: ${destination}`)
   }
 
@@ -23,16 +40,19 @@ export function startTask(args, run = execFileSync) {
   const issue = JSON.parse(
     run('gh', ['issue', 'view', issueNumber, '--json', 'number,title,url,state'], options)
   )
-  if (issue.number !== Number(issueNumber) || issue.state !== 'OPEN') {
+  const isIssueNumberMatching = issue.number === Number(issueNumber)
+  const isIssueOpen = issue.state === 'OPEN'
+  const isIssueEligible = isIssueNumberMatching && isIssueOpen
+  if (!isIssueEligible) {
     throw new Error(`현재 repository의 OPEN Issue #${issueNumber}가 필요합니다.`)
   }
 
   run('git', ['fetch', 'origin', 'main'], options)
   const base = run('git', ['rev-parse', '--verify', 'FETCH_HEAD^{commit}'], options).trim()
-  const branch = `codex/issue-${issueNumber}`
+  const branch = `${project}-${issueNumber}-${description}`
   run('git', ['worktree', 'add', '-b', branch, destination, base], options)
 
-  return [
+  const context = [
     `Issue #${issue.number}: ${issue.title}`,
     issue.url,
     `Branch: ${branch}`,
@@ -40,6 +60,8 @@ export function startTask(args, run = execFileSync) {
     `Base: ${base}`,
     '구현 전 Issue 본문과 docs/README.md를 읽고 docs/rules/change-control.md의 preflight·승인을 확인하세요.'
   ].join('\n')
+
+  return context
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
