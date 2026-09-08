@@ -109,8 +109,8 @@ Root의 `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`와 직접 dev
 
 - `scripts/create-app.mjs`: 새 app workspace 생성 script
 - `pnpm create-app`: root에서 생성 script 실행
-- `scripts/start-task.mjs`: OPEN Issue 확인 후 최신 main 기반 Issue branch와 worktree 생성
-- `pnpm start-task <Issue 번호> <새 worktree 경로>`: root에서 작업 준비; GitHub CLI 인증 필요
+- `scripts/start-task.mjs`: project·Issue 번호·description을 검증하고 OPEN Issue 확인 후 최신 main 기반 `{project}-{issue-number}-{description}` branch와 worktree 생성
+- `pnpm start-task <project> <Issue 번호> <description> <새 worktree 경로>`: root에서 작업 준비; GitHub CLI 인증 필요
 - 작업 준비와 workspace별 native validation 예제: [`scripts/README.md`](../../scripts/README.md)
 - Root `test` script는 현재 placeholder이며 성공하는 validation command가 아니다.
 
