@@ -9,15 +9,13 @@ import prettier from 'eslint-config-prettier/flat'
 
 const sourceFiles = ['**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}']
 const typeScriptFiles = ['**/*.{ts,mts,cts,tsx}']
-const reactFiles = [
-  'apps/desktop/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}',
-  'apps/web/src/**/*.{jsx,tsx}',
-  'packages/ui/{src,examples,test}/**/*.{jsx,tsx}'
-]
+const desktopFiles = ['apps/desktop/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}']
+const jsxFiles = ['apps/web/**/*.{jsx,tsx}', 'packages/ui/**/*.{jsx,tsx}']
 const browserFiles = [
   'apps/desktop/src/frontend/**/*.{js,jsx,ts,tsx}',
   'apps/web/src/**/*.{js,jsx,ts,tsx}',
-  'packages/ui/{src,examples,test}/**/*.{js,jsx,ts,tsx}'
+  'packages/ui/{src,test}/**/*.{js,jsx,ts,tsx}',
+  'packages/ui/examples/main.tsx'
 ]
 
 export default defineConfig(
@@ -37,24 +35,34 @@ export default defineConfig(
   { files: sourceFiles, extends: [eslint.configs.recommended] },
   { files: typeScriptFiles, extends: [tseslint.configs.recommended] },
   {
-    files: sourceFiles,
-    rules: { curly: ['error', 'all'] }
+    files: ['apps/api/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'],
+    extends: [tseslint.configs.recommended]
   },
   { files: sourceFiles, ignores: browserFiles, languageOptions: { globals: globals.node } },
   { files: browserFiles, languageOptions: { globals: globals.browser } },
   {
-    files: reactFiles,
+    files: desktopFiles,
     extends: [react.configs.flat.recommended, react.configs.flat['jsx-runtime']],
     settings: { react: { version: 'detect' } }
   },
   {
-    files: [
-      'apps/desktop/**/*.{ts,tsx}',
-      'apps/web/src/**/*.{js,jsx,ts,tsx}',
-      'packages/ui/{src,examples,test}/**/*.{js,jsx,ts,tsx}'
-    ],
+    files: jsxFiles,
+    extends: [react.configs.flat['jsx-runtime']],
+    rules: { 'react/jsx-uses-vars': 'error' }
+  },
+  {
+    files: ['apps/desktop/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: { ...reactHooks.configs.recommended.rules, ...reactRefresh.configs.vite.rules }
+  },
+  // Web's explicit Oxlint React checks keep their existing severity.
+  {
+    files: ['apps/web/**/*.{js,jsx,ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }]
+    }
   },
   // Preserve the Electron preset's static checks, including its JavaScript scope.
   {
@@ -88,5 +96,10 @@ export default defineConfig(
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   // Prettier only conflicts with curly's multi-line/minimum-size options, not all.
-  { ...prettier, rules: { ...prettier.rules, curly: ['error', 'all'] } }
+  { ...prettier, rules: { ...prettier.rules, curly: ['error', 'all'] } },
+  // Keep the API's existing ASI check after Prettier's conflict defaults.
+  {
+    files: ['apps/api/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}'],
+    rules: { 'no-unexpected-multiline': 'error' }
+  }
 )
