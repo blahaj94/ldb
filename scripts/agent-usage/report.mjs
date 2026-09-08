@@ -77,19 +77,22 @@ function hasKeys(value, expected) {
   const keys = Object.keys(value)
   const hasExpectedKeyCount = keys.length === expected.length
   const hasAllExpectedKeys = hasExpectedKeyCount && expected.every((key) => keys.includes(key))
-  return hasExpectedKeyCount && hasAllExpectedKeys
+  const hasExpectedKeys = hasExpectedKeyCount && hasAllExpectedKeys
+  return hasExpectedKeys
 }
 
 function positiveInteger(value) {
   const isSafeInteger = Number.isSafeInteger(value)
   const isPositive = isSafeInteger && value > 0
-  return isSafeInteger && isPositive
+  const isPositiveInteger = isSafeInteger && isPositive
+  return isPositiveInteger
 }
 
 function tokenCount(value) {
   const isSafeInteger = Number.isSafeInteger(value)
   const isNonNegative = isSafeInteger && value >= 0
-  return isSafeInteger && isNonNegative
+  const isValidTokenCount = isSafeInteger && isNonNegative
+  return isValidTokenCount
 }
 
 function utcTimestamp(value) {
