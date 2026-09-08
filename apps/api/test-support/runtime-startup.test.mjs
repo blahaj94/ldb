@@ -1,3 +1,4 @@
+/* global fetch */
 import assert from 'node:assert/strict'
 import { writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
@@ -9,6 +10,65 @@ import {
 } from './runtime-fixtures.mjs'
 
 const eventsOf = (runtime) => runtime.events.map(({ event }) => event)
+
+test('build entry preserves 404 for unregistered paths and existing registered route failures', async (t) => {
+  await withRuntimeConfiguration(async ({ path }) => {
+    const port = await unusedRuntimePort()
+    const runtime = startRuntime(runtimeEnvironment(path, port))
+    const canary = 'fixture-unregistered-request-secret'
+    try {
+      await waitForRuntime(port, runtime)
+      const base = `http://127.0.0.1:${port}`
+      for (const [name, method, route] of [
+        ['root', 'GET', '/'],
+        ['unknown path', 'GET', '/not-registered'],
+        ['unknown auth path', 'GET', `/auth/not-registered?code=${canary}`],
+        ['unknown account path', 'GET', `/me/not-registered?token=${canary}`],
+        ['unknown search path', 'GET', `/characters/not-registered?token=${canary}`],
+        ['unknown HEAD path', 'HEAD', `/not-registered?token=${canary}`],
+      ]) {
+        await t.test(name, async () => {
+          const response = await fetch(`${base}${route}`, {
+            method, headers: { authorization: `Bearer ${canary}`, cookie: `fixture=${canary}` },
+          })
+          assert.equal(response.status, 404)
+          assert.equal(response.headers.get('cache-control'), 'no-store')
+          const body = await response.text()
+          assert.equal(body.includes(canary), false, '404 response must not reflect request credentials')
+          assert.doesNotMatch(body, /AUTH_INTERNAL_ERROR|NotFoundException|\bat .*\.js:/)
+          const isHead = method === 'HEAD'
+          if (isHead) assert.equal(body, '')
+        })
+      }
+      for (const [name, method, route, status, code] of [
+        ['account authentication', 'GET', '/me', 401, 'AUTHENTICATION_REQUIRED'],
+        ['search authentication before query', 'GET', '/characters?unknown=value', 401, 'AUTHENTICATION_REQUIRED'],
+        ['login JSON validation', 'POST', '/auth/login-requests', 400, 'INVALID_AUTH_REQUEST'],
+        ['account HEAD refusal', 'HEAD', '/me', 400],
+        ['authorize HEAD refusal', 'HEAD', '/auth/login/authorize', 400],
+        ['callback validation', 'GET', '/auth/callback/google', 400],
+      ]) {
+        await t.test(name, async () => {
+          const isPost = method === 'POST'
+          const response = await fetch(`${base}${route}`, {
+            method,
+            ...(isPost ? { headers: { 'content-type': 'application/json' }, body: '{}' } : {}),
+          })
+          assert.equal(response.status, status)
+          assert.equal(response.headers.get('cache-control'), 'no-store')
+          const hasJsonCode = code !== undefined
+          if (hasJsonCode) assert.equal((await response.json()).error.code, code)
+          const isHead = method === 'HEAD'
+          if (isHead) assert.equal(await response.text(), '')
+        })
+      }
+      runtime.child.kill('SIGTERM')
+      assert.deepEqual(await collectRuntimeExit(runtime), { code: 0, signal: null, stdout: '', stderr: '' })
+    } finally {
+      await stopRuntime(runtime)
+    }
+  })
+})
 
 async function rejectedBeforeInitialization(environment) {
   const runtime = startRuntime(environment, { fault: 'stop-before-listen' })

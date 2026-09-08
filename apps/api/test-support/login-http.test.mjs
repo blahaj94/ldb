@@ -9,6 +9,7 @@ import process from 'node:process'
 import { URL, URLSearchParams } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { NotFoundException } from '@nestjs/common'
 import { creation, opaque } from './login-fixtures.mjs'
 
 const { createLoginHttpApp } = await import('../dist/auth/login/http.js')
@@ -53,6 +54,25 @@ before(async () => {
 })
 after(async () => {
   await app.close()
+})
+
+test('registered service NotFoundException remains a sanitized internal failure', async () => {
+  failure = new NotFoundException({ message: 'fixture-service-secret', detail: 'fixture-provider-code' })
+  try {
+    const response = await fetch(`${base}/auth/callback/google?state=${opaque()}&code=fixture-code`, {
+      redirect: 'manual',
+    })
+    assert.equal(response.status, 500)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    assert.doesNotMatch(await response.text(), /fixture-service-secret|fixture-provider-code|fixture-code|NotFoundException/)
+    const json = await post('/auth/login-requests', [JSON.stringify(creation(opaque()))])
+    assert.equal(json.status, 500)
+    assert.deepEqual(JSON.parse(json.body), {
+      error: { code: 'AUTH_INTERNAL_ERROR', message: '인증 요청을 처리하지 못했습니다.' },
+    })
+  } finally {
+    failure = undefined
+  }
 })
 
 for (const route of [
