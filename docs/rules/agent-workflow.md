@@ -84,6 +84,32 @@ review-after: 승인 후 서로 다른 code review 3건에서 설정 적용·누
 
 ## Issue 종류
 
+### Issue 제목
+
+모든 Issue 제목은 `[type] 한국어 제목` 형식을 사용한다. `type`은 아래 8개 중 하나를 소문자로 정확히 하나만 선택하며, 그 밖의 type은 사용하지 않는다. Issue의 주된 완료 결과를 기준으로 고른다. 작업 역할·task·execution·추적 대상·진행 방식은 제목 type을 추가하거나 대체하지 않는다.
+
+| type | 주된 완료 결과 |
+| --- | --- |
+| `feat` | 새 기능을 제공한다 |
+| `fix` | 결함을 수정한다 |
+| `refactor` | 동작을 보존하며 구조·명명·가독성을 개선한다 |
+| `docs` | 문서를 작성·수정하거나 확정된 결정을 반영한다 |
+| `test` | 테스트를 추가·보강하거나 동작·계약을 검증한다 |
+| `chore` | 설정·의존성·운영·유지보수를 처리한다 |
+| `design` | 설계·규칙·정책을 제안하거나 결정한다 |
+| `research` | 기술을 조사·비교하고 근거를 수집한다 |
+
+여러 결과가 겹치면 완료 조건에서 가장 중요한 결과 하나를 선택하며, 부모 Issue도 전체 목표를 기준으로 고른다. 새 설계·정책을 결정하는 것이 목적이면 `design`, 확정된 결정을 문서에 반영하는 것이 목적이면 `docs`를 선택한다. 제목의 type은 주된 완료 결과를 요약하며, 본문에 기록하는 작업 type·승인 상태·실행 조건을 대신하지 않는다. 제안·진행 현황과 `Desktop` 같은 접두어 안의 기술 대상 등 필요한 의미는 제목 본문에 보존한다. 이 기준은 사용자의 명시적 승인 후 활성화됐다.
+
+```yaml
+status: active
+enforcement: warning
+rationale: Issue 제목의 분류와 검색 기준을 통일해 주된 완료 결과를 빠르게 식별한다.
+evidence: "https://github.com/blahaj94/ldb/pull/191#issuecomment-5589200367"
+exceptions: "없음. 기술 식별자·고유명사는 제목 본문에서 원문을 유지할 수 있다."
+review-after: "5개 Issue에 적용한 뒤 분류 모호성과 누락을 검토한다."
+```
+
 ### Design / RFC Issue
 
 Workflow, Rule, architecture의 대안, trade-off, open question, decision history를 기록한다. 재사용 가치가 있는 Proposal Revision, Decision, Rejected Alternative만 comment로 남기고 모든 reasoning step을 복사하지 않는다.
@@ -92,7 +118,7 @@ Workflow, Rule, architecture의 대안, trade-off, open question, decision histo
 
 ### 부모 추적 Issue
 
-여러 자식 작업의 결과와 dependency를 추적한다. 제목이 Execution이어도 부모 전체를 Worker에게 배정하지 않는다. 부모·자식 관계는 실행 순서를 뜻하지 않으며 선행 dependency를 별도로 확인한다. 부모의 완료는 등록된 자식 수가 아니라 부모 자체의 acceptance criteria로 판단한다.
+여러 자식 작업의 결과와 dependency를 추적한다. 제목의 type이 `feat`, `design` 등 무엇이든 부모 전체를 Worker에게 배정하지 않는다. 부모·자식 관계는 실행 순서를 뜻하지 않으며 선행 dependency를 별도로 확인한다. 부모의 완료는 등록된 자식 수가 아니라 부모 자체의 acceptance criteria로 판단한다.
 
 ### Execution Issue
 
