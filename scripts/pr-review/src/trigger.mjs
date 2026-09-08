@@ -13,7 +13,9 @@ const PROVIDERS = new Map([[codexProvider.id, codexProvider]]);
 
 function requiredEnvironment(name) {
   const value = process.env[name];
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
   return value;
 }
 
@@ -29,7 +31,9 @@ async function main() {
 
   const providerId = process.env.REVIEW_PROVIDER ?? "codex";
   const provider = PROVIDERS.get(providerId);
-  if (!provider) throw new Error(`Unsupported REVIEW_PROVIDER: ${providerId}`);
+  if (!provider) {
+    throw new Error(`Unsupported REVIEW_PROVIDER: ${providerId}`);
+  }
 
   const client = new GitHubClient({
     token: requiredEnvironment("REVIEW_TRIGGER_TOKEN"),
