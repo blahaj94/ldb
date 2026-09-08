@@ -252,6 +252,14 @@ function registerCaptureWindow(window: BrowserWindow, rendererDocumentUrl: strin
     windowGeneration += 1
     clearSource()
   })
+  window.webContents.on('render-process-gone', () => {
+    const isCurrentWindow = captureWindow === window
+    if (!isCurrentWindow) {
+      return
+    }
+    windowGeneration += 1
+    clearSource()
+  })
   window.on('closed', () => {
     const isCurrentWindow = captureWindow === window
     if (!isCurrentWindow) return
