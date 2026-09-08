@@ -110,7 +110,8 @@ export function parseCallback(query: URLSearchParams): LoginCallbackInput {
 
     decodeOpaque(states[0])
 
-    if (errors.length === 1) {
+    const hasProviderError = errors.length === 1
+    if (hasProviderError) {
       return { state: states[0], code: undefined, error: errors[0] }
     }
     return { state: states[0], code: codes[0], error: undefined }
