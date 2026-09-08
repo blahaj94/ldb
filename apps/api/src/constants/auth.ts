@@ -3,6 +3,12 @@ export const AUTH_PROVIDERS = {
   DISCORD: 'discord'
 } as const
 
+type AuthErrorDefinitionShape = Readonly<{
+  code: string
+  status: number
+  message: string
+}>
+
 export const AUTH_ERRORS = {
   INTERNAL: {
     code: 'AUTH_INTERNAL_ERROR',
@@ -14,7 +20,7 @@ export const AUTH_ERRORS = {
     status: 503,
     message: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
   }
-} as const
+} as const satisfies Record<string, AuthErrorDefinitionShape>
 
 export const INITIAL_NICKNAME = { prefix: '모험가', digits: 6 } as const
 

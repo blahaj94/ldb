@@ -3,7 +3,7 @@ const messages = {
   INVALID_ACCESS_JWT_INPUT: 'Invalid access JWT input',
   INVALID_ACCESS_JWT: 'Invalid access JWT',
   ACCESS_JWT_SIGNING_FAILED: 'Access JWT signing failed'
-} as const
+} as const satisfies Record<string, string>
 
 export class AccessJwtError extends Error {
   constructor(readonly code: keyof typeof messages) {

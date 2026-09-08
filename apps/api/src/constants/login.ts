@@ -2,6 +2,12 @@ import { AUTH_ERRORS } from './auth.js'
 
 const invalidMessage = '로그인 요청이 유효하지 않습니다. 다시 로그인해 주세요.'
 
+type LoginErrorDefinitionShape = Readonly<{
+  code: string
+  status: number
+  message: string
+}>
+
 export const LOGIN_ERRORS = {
   ...AUTH_ERRORS,
   INVALID_REQUEST: {
@@ -39,7 +45,7 @@ export const LOGIN_ERRORS = {
     status: 415,
     message: 'JSON 형식으로 요청해 주세요.'
   }
-} as const
+} as const satisfies Record<string, LoginErrorDefinitionShape>
 
 export const LOGIN = {
   clientId: 'desktop',
