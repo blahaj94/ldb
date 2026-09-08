@@ -17,7 +17,8 @@
     "db:migrate:up": "pnpm run build && node --import reflect-metadata dist/database/cli.js up",
     "db:migrate:down": "pnpm run build && node --import reflect-metadata dist/database/cli.js down",
     "db:migrate:show": "pnpm run build && node --import reflect-metadata dist/database/cli.js show",
-    "db:migrate:generate": "pnpm run build && node --import reflect-metadata dist/database/generate-cli.js"
+    "db:migrate:generate": "pnpm run build && node --import reflect-metadata dist/database/generate-cli.js",
+    "auth:cleanup": "pnpm run build && node --import reflect-metadata dist/auth/cleanup/cli.js"
   },
   "dependencies": {
     "@nestjs/common": "12.0.1",

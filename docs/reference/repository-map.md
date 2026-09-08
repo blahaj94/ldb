@@ -32,6 +32,7 @@ last-reviewed: 2026-09-07
 - Identity session: `src/auth/identity-session.ts`가 검증된 provider identity에서 회원·독립 session·최초 refresh를 생성한다. 호출자의 active READ COMMITTED manager에 합성하며 commit 성공 이후에만 token을 전달한다. 사용 경계와 실제 DB 검증은 [`database-development.md`](database-development.md)의 Identity session 절을 참고한다. 공통 로그인 exchange와 Google 내부 adapter의 격리 연결을 구현했으며 실제 등록/credential은 별도 gate다.
 - 공통 로그인: `src/auth/login/service.ts`가 요청·launch·callback claim·일회용 exchange를 처리하고 기존 identity-session과 `src/auth/access-jwt` issuer를 같은 transaction에 합성한다. `src/auth/login/http.ts`의 Nest factory는 실제 HTTP 경계다. `src/auth/google`은 jose RS256 검증과 trusted token/JWKS·historical secret resolver를 연결한다. 기본 AppModule/main 활성화와 실제 등록/key/secret 저장소 검증은 gate로 남겨 두었다. Google 연결점·격리 검증 범위는 [`auth-login-development.md`](auth-login-development.md)를 참고한다.
 - Refresh/logout HTTP: 기존 Nest factory의 선택적 session service가 `POST /auth/refresh`, `POST /auth/logout`을 같은 16,384-byte strict JSON parser와 정제 filter에 연결한다. `src/auth/refresh`의 기존 transaction ownership을 유지하고 `src/auth/logout`이 제출 token의 해당 session만 종료한다. 기본 AppModule/main 활성화는 하지 않았다. Source·격리 검증 범위는 [`auth-refresh-development.md`](auth-refresh-development.md)를 참고한다.
+- 인증 데이터 정리: `src/auth/cleanup`의 명시 command가 종료 session·연결 refresh 전체와 terminal·만료 OAuth 요청을 잠금 뒤 재판정해 삭제한다. 기존 DB 설정·DataSource를 재사용하며 시작 자동 호출과 하루 1회 운영 연결은 미완료다. 삭제·보존과 실패 결과의 의미는 [`auth-cleanup-development.md`](auth-cleanup-development.md)를 참고한다.
 - Account HTTP: 기존 Nest factory의 선택적 account dependency가 `GET /me`, `PATCH /me/nickname`을 연결한다. `src/auth/account`가 기존 JWT verifier와 user→session 잠금을 재사용해 활동 commit 후 기능 transaction을 재확인하고 nickname을 native Unicode grapheme 기준으로 검증한다. 연결점과 HTTP/DB 경합 evidence는 [`auth-account-development.md`](auth-account-development.md)를 참고한다.
 - Authenticated search HTTP: 기존 Nest factory의 선택적 search dependency가 `GET /characters`를 strict raw query·기존 JWT·session 활동·account memory quota·Neople adapter에 연결한다. 요청별 PostgreSQL 연결과 단일 2초 admission/DB 취소를 사용하며 기본 main 활성화는 별개다. 연결과 실제 경합/취소 검증 범위는 [`authenticated-search-development.md`](authenticated-search-development.md)를 참고한다.
 - Database CLI 설정: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `DB_NAME`. 이 값은 DB command와 DB module을 실제 연결할 때만 필요하다.
@@ -45,6 +46,7 @@ last-reviewed: 2026-09-07
   - `pnpm --filter @ldb/api lint`
   - `pnpm --filter @ldb/api build`
   - `pnpm --filter @ldb/api test:database`
+  - `pnpm --filter @ldb/api auth:cleanup`
   - `pnpm --filter @ldb/api db:migrate:generate AddUserField` (EntitySchema와 개발 DB 차이로 Migration file 생성)
   - `pnpm --filter @ldb/api db:migrate:up`
   - `pnpm --filter @ldb/api db:migrate:show`
