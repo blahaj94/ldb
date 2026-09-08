@@ -28,7 +28,11 @@ export async function waitForAuthenticatedReadiness(
   timeoutMs = 20_000
 ) {
   const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
+  while (true) {
+    const isBeforeDeadline = Date.now() < deadline
+    if (!isBeforeDeadline) {
+      break
+    }
     const attemptTimeoutMs = Math.max(1, Math.min(500, deadline - Date.now()))
     try {
       return await withDataSource(
@@ -42,7 +46,8 @@ export async function waitForAuthenticatedReadiness(
       )
     } catch {
       const remainingMs = deadline - Date.now()
-      if (remainingMs > 0) {
+      const hasTimeRemaining = remainingMs > 0
+      if (hasTimeRemaining) {
         await delay(Math.min(125, remainingMs))
       }
     }
@@ -51,22 +56,21 @@ export async function waitForAuthenticatedReadiness(
 }
 
 export async function databaseSnapshot(dataSource) {
-  const [relations, columns, constraints, indexes, foreignKeys] = await Promise.all([
-    dataSource.query(`
+  const relationsSql = `
       SELECT c.relname AS name, c.relkind AS kind
       FROM pg_catalog.pg_class c
       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
       ORDER BY c.relname
-    `),
-    dataSource.query(`
+    `
+  const columnsSql = `
       SELECT table_name, ordinal_position, column_name, data_type, udt_name,
              is_nullable, collation_name, datetime_precision
       FROM information_schema.columns
       WHERE table_schema = 'public'
       ORDER BY table_name, ordinal_position
-    `),
-    dataSource.query(`
+    `
+  const constraintsSql = `
       SELECT c.relname AS table_name, con.conname AS constraint_name,
              CASE con.contype
                WHEN 'p' THEN 'PRIMARY KEY'
@@ -79,8 +83,8 @@ export async function databaseSnapshot(dataSource) {
       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND con.contype IN ('p', 'u', 'f', 'c')
       ORDER BY c.relname, con.conname
-    `),
-    dataSource.query(`
+    `
+  const indexesSql = `
       SELECT table_class.relname AS table_name, index_class.relname AS index_name,
              (
                SELECT json_agg(attribute.attname ORDER BY key.ordinality)
@@ -96,8 +100,8 @@ export async function databaseSnapshot(dataSource) {
       JOIN pg_catalog.pg_namespace namespace ON namespace.oid = table_class.relnamespace
       WHERE namespace.nspname = 'public'
       ORDER BY table_class.relname, index_class.relname
-    `),
-    dataSource.query(`
+    `
+  const foreignKeysSql = `
       SELECT source.relname AS source_table, constraint_info.conname AS constraint_name,
              (
                SELECT json_agg(attribute.attname ORDER BY key.ordinality)
@@ -119,7 +123,13 @@ export async function databaseSnapshot(dataSource) {
       JOIN pg_catalog.pg_namespace namespace ON namespace.oid = source.relnamespace
       WHERE namespace.nspname = 'public' AND constraint_info.contype = 'f'
       ORDER BY source.relname, constraint_info.conname
-    `)
+    `
+  const [relations, columns, constraints, indexes, foreignKeys] = await Promise.all([
+    dataSource.query(relationsSql),
+    dataSource.query(columnsSql),
+    dataSource.query(constraintsSql),
+    dataSource.query(indexesSql),
+    dataSource.query(foreignKeysSql)
   ])
   return { relations, columns, constraints, indexes, foreignKeys }
 }
@@ -301,12 +311,14 @@ export async function assertSchema(
       ({ table_name, constraint_name, constraint_type }) =>
         `${table_name}:${constraint_name}:${constraint_type}`
     )
-  const constraintDifference = Math.max(actualConstraints.length, expectedConstraints.length)
+  const hasConstraintsToCompare = Math.max(actualConstraints.length, expectedConstraints.length) > 0
+  const constraintDifference = hasConstraintsToCompare
     ? Array.from({
         length: Math.max(actualConstraints.length, expectedConstraints.length)
       }).findIndex((_, index) => actualConstraints[index] !== expectedConstraints[index])
     : -1
-  if (constraintDifference >= 0) {
+  const hasConstraintDifference = constraintDifference >= 0
+  if (hasConstraintDifference) {
     mark(
       `constraints ${expectedConstraints[constraintDifference] ?? 'end'} ${actualConstraints[constraintDifference] ?? 'end'}`
     )
@@ -348,8 +360,7 @@ export async function assertSchema(
   )
 
   mark('primary keys')
-  const primaryKeys = await dataSource.query(
-    `
+  const primaryKeysSql = `
     SELECT tc.table_name, json_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS columns
     FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu
@@ -358,9 +369,8 @@ export async function assertSchema(
       AND tc.table_name = ANY($1)
     GROUP BY tc.table_name
     ORDER BY tc.table_name
-  `,
-    [DOMAIN_TABLES]
-  )
+  `
+  const primaryKeys = await dataSource.query(primaryKeysSql, [DOMAIN_TABLES])
   assert.deepEqual(primaryKeys, [
     { table_name: 'auth_login_requests', columns: ['id'] },
     { table_name: 'auth_refresh_tokens', columns: ['token_hash'] },
@@ -385,7 +395,8 @@ export async function rejectConstraint(dataSource, expectedConstraint, operation
     await operation(queryRunner)
     assert.fail(`constraint ${expectedConstraint} accepted invalid data`)
   } catch (error) {
-    if (error?.code === 'ERR_ASSERTION') {
+    const isAssertionFailure = error?.code === 'ERR_ASSERTION'
+    if (isAssertionFailure) {
       throw error
     }
     assert.equal(error?.constraint, expectedConstraint)
@@ -755,13 +766,11 @@ export async function assertConstraintBehavior(dataSource) {
   )
 
   await dataSource.query('DELETE FROM "users" WHERE id = $1', [userId])
-  const cascadeCounts = await dataSource.query(
-    `
+  const cascadeCountsSql = `
     SELECT
       (SELECT count(*)::int FROM "auth_sessions" WHERE user_id = $1) AS sessions,
       (SELECT count(*)::int FROM "auth_refresh_tokens" WHERE session_id = $2) AS refresh_tokens
-  `,
-    [userId, sessionId]
-  )
+  `
+  const cascadeCounts = await dataSource.query(cascadeCountsSql, [userId, sessionId])
   assert.deepEqual(cascadeCounts, [{ sessions: 0, refresh_tokens: 0 }])
 }

@@ -63,7 +63,7 @@ function resourceNames(runId) {
   return { containerName: name, volumeName: name }
 }
 
-function announceRecovery(runId, names = resourceNames(runId)) {
+function announceRecovery({ runId, names = resourceNames(runId) }) {
   const { containerName, volumeName } = names
   process.stdout.write(
     `Database recovery: run=${runId} container=${containerName} volume=${volumeName}\n`
@@ -81,7 +81,10 @@ function nodeEnvironment(extra = {}) {
   ]
   return {
     ...Object.fromEntries(
-      names.flatMap((name) => (process.env[name] === undefined ? [] : [[name, process.env[name]]]))
+      names.flatMap((name) => {
+        const isVariableMissing = process.env[name] === undefined
+        return isVariableMissing ? [] : [[name, process.env[name]]]
+      })
     ),
     ...extra
   }
@@ -121,7 +124,8 @@ async function assertBoundedReadiness() {
   })
   try {
     const address = server.address()
-    assert(address && typeof address === 'object')
+    const isAddressObject = address != null && typeof address === 'object'
+    assert(isAddressObject)
     const startedAt = Date.now()
     await assert.rejects(
       waitForAuthenticatedReadiness(
@@ -137,18 +141,22 @@ async function assertBoundedReadiness() {
       ),
       /PostgreSQL readiness timed out/
     )
-    assert(Date.now() - startedAt < 2_000)
+    const finishedWithinReadinessBound = Date.now() - startedAt < 2_000
+    assert(finishedWithinReadinessBound)
   } finally {
     for (const socket of sockets) {
       socket.destroy()
     }
     await new Promise((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve()))
+      server.close((error) => {
+        const hasCloseError = error != null
+        return hasCloseError ? reject(error) : resolve()
+      })
     )
   }
 }
 
-async function runCompiledCli(configuration, operation) {
+async function runCompiledCli({ configuration, operation }) {
   const result = await command(
     process.execPath,
     ['--import', 'reflect-metadata', 'dist/database/cli.js', operation],
@@ -221,7 +229,9 @@ export async function assertServerAndContainer(
   assert.equal(inspected.stdout.trim(), `${JSON.stringify(image.imageId)} "linux"`)
   currentStage = 'container architecture'
   const architecture = await runDocker(['exec', resources.containerName, 'uname', '-m'])
-  assert.equal(architecture.stdout.trim(), image.platform.includes('arm64') ? 'aarch64' : 'x86_64')
+  const containerArchitecture = architecture.stdout.trim()
+  const isArm64Platform = image.platform.includes('arm64')
+  assert.equal(containerArchitecture, isArm64Platform ? 'aarch64' : 'x86_64')
 }
 
 async function assertFreshDatabaseRollback(resources) {
@@ -236,13 +246,13 @@ async function assertFreshDatabaseRollback(resources) {
     const before = await withDataSource(createDatabaseDataSource, configuration, databaseSnapshot)
     assert.deepEqual(before.relations, [])
 
-    const up = await runCompiledCli(configuration, 'up')
+    const up = await runCompiledCli({ configuration, operation: 'up' })
     assert.equal(up.code, 0)
     assert.equal(up.stderr, '')
     assert.equal(up.stdout, 'Database migration applied: 1\n')
     await withDataSource(createDatabaseDataSource, configuration, assertSchema)
 
-    const down = await runCompiledCli(configuration, 'down')
+    const down = await runCompiledCli({ configuration, operation: 'down' })
     assert.equal(down.code, 0)
     assert.equal(down.stderr, '')
     assert.equal(down.stdout, 'Database migration reverted\n')
@@ -262,9 +272,9 @@ async function assertFreshDatabaseRollback(resources) {
   }
 }
 
-async function runFailureScenario(scenario, image) {
+async function runFailureScenario({ scenario, image }) {
   const runId = newRunId(scenario.replaceAll('-', ''))
-  announceRecovery(runId)
+  announceRecovery({ runId })
   const result = await command(process.execPath, [scriptPath], {
     cwd: apiDirectory,
     env: nodeEnvironment({
@@ -278,13 +288,14 @@ async function runFailureScenario(scenario, image) {
   assert.equal(result.code, 1)
   assert.equal(result.signal, null)
   assert.equal(result.stderr, 'Database integration scenario failed\n')
-  assert.equal(result.stdout.includes('CHILD_RESOURCE_READY\n'), true)
+  const didChildAnnounceReadiness = result.stdout.includes('CHILD_RESOURCE_READY\n')
+  assert.equal(didChildAnnounceReadiness, true)
   await assertResourcesAbsent(runId)
 }
 
-async function runSignalScenario(signal, stage, image) {
+async function runSignalScenario({ signal, stage, image }) {
   const runId = newRunId(`${signal.toLowerCase()}${stage}`)
-  announceRecovery(runId)
+  announceRecovery({ runId })
   const child = spawn(process.execPath, [scriptPath], {
     cwd: apiDirectory,
     env: nodeEnvironment({
@@ -311,7 +322,8 @@ async function runSignalScenario(signal, stage, image) {
     )
     child.stdout.on('data', (chunk) => {
       stdout += chunk
-      if (stdout.includes('CHILD_RESOURCE_READY\n')) {
+      const isResourceReady = stdout.includes('CHILD_RESOURCE_READY\n')
+      if (isResourceReady) {
         clearTimeout(timer)
         resolve()
       }
@@ -329,10 +341,14 @@ async function runSignalScenario(signal, stage, image) {
       })
     ]).finally(() => clearTimeout(exitTimer))
     currentStage = `${signal} teardown result code=${String(result.code)} signal=${String(result.signal)}`
-    assert.deepEqual(result, { code: signal === 'SIGINT' ? 130 : 143, signal: null })
+    const isInterruptSignal = signal === 'SIGINT'
+    assert.deepEqual(result, { code: isInterruptSignal ? 130 : 143, signal: null })
     assert.equal(stderr, '')
   } finally {
-    if (child.exitCode === null && child.signalCode === null) {
+    const hasNoExitCode = child.exitCode === null
+    const hasNoSignalCode = hasNoExitCode && child.signalCode === null
+    const isChildRunning = hasNoExitCode && hasNoSignalCode
+    if (isChildRunning) {
       child.kill('SIGKILL')
     }
     await exited.catch(() => undefined)
@@ -345,7 +361,7 @@ async function assertOwnershipProtection() {
   const claimedRunId = newRunId('claimed')
   const suffix = claimedRunId.slice(0, 48)
   const volumeName = `ldb-db-${suffix}`
-  announceRecovery(protectedRunId, { containerName: 'none', volumeName })
+  announceRecovery({ runId: protectedRunId, names: { containerName: 'none', volumeName } })
   await docker([
     'volume',
     'create',
@@ -380,8 +396,12 @@ async function childScenario() {
   const platform = process.env.LDB_DB_PLATFORM
   const signalStage = process.env.LDB_DB_SIGNAL_STAGE
   const imageId = process.env.LDB_DB_IMAGE_ID
-  assert(runId && platform && imageId)
-  announceRecovery(runId)
+  const hasRunId = runId != null && runId !== ''
+  const hasPlatform = hasRunId && platform != null && platform !== ''
+  const hasImageId = hasPlatform && imageId != null && imageId !== ''
+  const hasScenarioConfiguration = hasRunId && hasPlatform && hasImageId
+  assert(hasScenarioConfiguration)
+  announceRecovery({ runId })
   let receivedSignal
   let resolveSignal
   const signalPromise = new Promise((resolve) => (resolveSignal = resolve))
@@ -412,14 +432,20 @@ async function childScenario() {
       { platform, imageId },
       {
         afterVolumeCreated: async () => {
-          if (scenario === 'signal' && signalStage === 'volume') {
+          const isSignalScenario = scenario === 'signal'
+          const isVolumeSignalStage = isSignalScenario && signalStage === 'volume'
+          const shouldWaitForSignal = isSignalScenario && isVolumeSignalStage
+          if (shouldWaitForSignal) {
             process.stdout.write('CHILD_RESOURCE_READY\n')
             await waitForSignal()
             throw new Error('Signal received')
           }
         },
         afterContainerCreated: async () => {
-          if (scenario === 'signal' && signalStage === 'container') {
+          const isSignalScenario = scenario === 'signal'
+          const isContainerSignalStage = isSignalScenario && signalStage === 'container'
+          const shouldWaitForSignal = isSignalScenario && isContainerSignalStage
+          if (shouldWaitForSignal) {
             process.stdout.write('CHILD_RESOURCE_READY\n')
             await waitForSignal()
             throw new Error('Signal received')
@@ -427,11 +453,13 @@ async function childScenario() {
         }
       }
     )
-    if (scenario === 'failure') {
+    const isFailureScenario = scenario === 'failure'
+    if (isFailureScenario) {
       process.stdout.write('CHILD_RESOURCE_READY\n')
       throw new Error('Expected scenario failure')
     }
-    if (scenario === 'timeout') {
+    const isTimeoutScenario = scenario === 'timeout'
+    if (isTimeoutScenario) {
       process.stdout.write('CHILD_RESOURCE_READY\n')
       await waitForAuthenticatedReadiness(
         createReadinessDataSource,
@@ -440,25 +468,29 @@ async function childScenario() {
       )
       throw new Error('Timeout scenario unexpectedly connected')
     }
-    if (scenario === 'signal') {
+    const isSignalScenario = scenario === 'signal'
+    if (isSignalScenario) {
       throw new Error('Signal scenario stage is invalid')
     }
     throw new Error('Unknown child scenario')
   } catch {
-    if (receivedSignal) {
-      process.exitCode = receivedSignal === 'SIGINT' ? 130 : 143
+    const hasReceivedSignal = receivedSignal != null
+    if (hasReceivedSignal) {
+      const isInterruptSignal = receivedSignal === 'SIGINT'
+      process.exitCode = isInterruptSignal ? 130 : 143
       return
     }
     process.stderr.write('Database integration scenario failed\n')
     process.exitCode = 1
   } finally {
-    if (resources) {
+    const hasResources = resources != null
+    if (hasResources) {
       await teardownPostgres(resources)
     }
   }
 }
 
-async function assertFocusedRuntime(configuration, checkSignal) {
+async function assertFocusedRuntime({ configuration, checkSignal }) {
   let failed = 0
   const run = async (name, operation) => {
     checkSignal()
@@ -478,7 +510,7 @@ async function assertFocusedRuntime(configuration, checkSignal) {
     assertRuntimeFreshStart(configuration, mark)
   )
   currentStage = 'runtime explicit compiled migration'
-  const migration = await runCompiledCli(configuration, 'up')
+  const migration = await runCompiledCli({ configuration, operation: 'up' })
   assert.equal(migration.code, 0)
   assert.equal(migration.stdout, 'Database migration applied: 1\n')
   await run('default entry full HTTP flow', (mark) =>
@@ -500,15 +532,18 @@ async function primaryScenario() {
   process.once('SIGINT', () => receiveSignal('SIGINT'))
   process.once('SIGTERM', () => receiveSignal('SIGTERM'))
   const checkSignal = () => {
-    if (receivedSignal) {
+    const hasReceivedSignal = receivedSignal != null
+    if (hasReceivedSignal) {
       throw new Error('Database integration interrupted')
     }
   }
   const finishSignal = () => {
-    if (!receivedSignal) {
+    const hasReceivedSignal = receivedSignal != null
+    if (!hasReceivedSignal) {
       return false
     }
-    process.exitCode = receivedSignal === 'SIGINT' ? 130 : 143
+    const isInterruptSignal = receivedSignal === 'SIGINT'
+    process.exitCode = isInterruptSignal ? 130 : 143
     return true
   }
 
@@ -518,7 +553,7 @@ async function primaryScenario() {
   const image = await verifyApprovedImage()
   checkSignal()
   const runId = newRunId('primary')
-  announceRecovery(runId)
+  announceRecovery({ runId })
   let resources
   try {
     currentStage = 'primary resource creation'
@@ -530,7 +565,7 @@ async function primaryScenario() {
     currentStage = 'server and container metadata'
     await assertServerAndContainer(resources, image)
     if (runtimeOnly) {
-      await assertFocusedRuntime(resources.configuration, checkSignal)
+      await assertFocusedRuntime({ configuration: resources.configuration, checkSignal })
       return
     }
     currentStage = 'compiled data source'
@@ -543,7 +578,10 @@ async function primaryScenario() {
       resources.configuration,
       databaseSnapshot
     )
-    const freshShow = await runCompiledCli(resources.configuration, 'show')
+    const freshShow = await runCompiledCli({
+      configuration: resources.configuration,
+      operation: 'show'
+    })
     assert.deepEqual(
       {
         code: freshShow.code,
@@ -566,7 +604,10 @@ async function primaryScenario() {
     currentStage = 'fresh Nest lifecycle'
     await assertNestLifecycle(resources.configuration)
     currentStage = 'initial migration CLI'
-    const firstUp = await runCompiledCli(resources.configuration, 'up')
+    const firstUp = await runCompiledCli({
+      configuration: resources.configuration,
+      operation: 'up'
+    })
     assert.deepEqual(
       {
         code: firstUp.code,
@@ -577,10 +618,16 @@ async function primaryScenario() {
       { code: 0, signal: null, stdout: 'Database migration applied: 1\n', stderr: '' }
     )
     currentStage = 'no-op migration rerun'
-    const secondUp = await runCompiledCli(resources.configuration, 'up')
+    const secondUp = await runCompiledCli({
+      configuration: resources.configuration,
+      operation: 'up'
+    })
     assert.equal(secondUp.stdout, 'Database migration applied: 0\n')
     assert.equal(secondUp.stderr, '')
-    const migratedShow = await runCompiledCli(resources.configuration, 'show')
+    const migratedShow = await runCompiledCli({
+      configuration: resources.configuration,
+      operation: 'show'
+    })
     assert.equal(migratedShow.code, 0)
     assert.equal(migratedShow.stdout, 'Database migrations current\n')
     assert.equal(migratedShow.stderr, '')
@@ -726,10 +773,10 @@ async function primaryScenario() {
     checkSignal()
 
     currentStage = 'sanitized CLI failure'
-    const failedCli = await runCompiledCli(
-      { ...resources.configuration, database: 'database_does_not_exist' },
-      'up'
-    )
+    const failedCli = await runCompiledCli({
+      configuration: { ...resources.configuration, database: 'database_does_not_exist' },
+      operation: 'up'
+    })
     assert.notEqual(failedCli.code, 0)
     assert.equal(failedCli.signal, null)
     assert.equal(failedCli.stdout, '')
@@ -753,11 +800,13 @@ async function primaryScenario() {
     currentStage = 'fresh database rollback'
     await assertFreshDatabaseRollback(resources)
   } catch (error) {
-    if (!receivedSignal) {
+    const hasReceivedSignal = receivedSignal != null
+    if (!hasReceivedSignal) {
       throw error
     }
   } finally {
-    if (resources) {
+    const hasResources = resources != null
+    if (hasResources) {
       await teardownPostgres(resources)
     }
     if (runtimeOnly) {
@@ -767,33 +816,39 @@ async function primaryScenario() {
   }
   await assertResourcesAbsent(runId)
 
-  if (finishSignal()) {
+  const finishedBeforeFailureScenario = finishSignal()
+  if (finishedBeforeFailureScenario) {
     return
   }
 
   currentStage = 'failure teardown'
-  await runFailureScenario('failure', image)
-  if (finishSignal()) {
+  await runFailureScenario({ scenario: 'failure', image })
+  const finishedAfterFailureScenario = finishSignal()
+  if (finishedAfterFailureScenario) {
     return
   }
   currentStage = 'timeout teardown'
-  await runFailureScenario('timeout', image)
-  if (finishSignal()) {
+  await runFailureScenario({ scenario: 'timeout', image })
+  const finishedAfterTimeoutScenario = finishSignal()
+  if (finishedAfterTimeoutScenario) {
     return
   }
   currentStage = 'SIGINT teardown'
-  await runSignalScenario('SIGINT', 'volume', image)
-  if (finishSignal()) {
+  await runSignalScenario({ signal: 'SIGINT', stage: 'volume', image })
+  const finishedAfterInterruptScenario = finishSignal()
+  if (finishedAfterInterruptScenario) {
     return
   }
   currentStage = 'SIGTERM teardown'
-  await runSignalScenario('SIGTERM', 'container', image)
-  if (finishSignal()) {
+  await runSignalScenario({ signal: 'SIGTERM', stage: 'container', image })
+  const finishedAfterTerminationScenario = finishSignal()
+  if (finishedAfterTerminationScenario) {
     return
   }
   currentStage = 'ownership protection'
   await assertOwnershipProtection()
-  if (finishSignal()) {
+  const finishedAfterOwnershipScenario = finishSignal()
+  if (finishedAfterOwnershipScenario) {
     return
   }
 
@@ -817,9 +872,13 @@ async function primaryScenario() {
   process.removeAllListeners('SIGTERM')
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+const hasScriptArgument = Boolean(process.argv[1])
+const isDirectExecution =
+  hasScriptArgument && pathToFileURL(process.argv[1]).href === import.meta.url
+if (isDirectExecution) {
   try {
-    if (process.env.LDB_DB_SCENARIO) {
+    const hasChildScenario = Boolean(process.env.LDB_DB_SCENARIO)
+    if (hasChildScenario) {
       await childScenario()
     } else {
       await primaryScenario()

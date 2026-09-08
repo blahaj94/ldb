@@ -6,7 +6,7 @@ import { POSTGRES_DATA, POSTGRES_INDEX_DIGEST } from './docker-postgres.mjs'
 const configDigest = `sha256:${'a'.repeat(64)}`
 const resources = { containerName: 'metadata-test-container', configuration: {} }
 
-function environment(image, overrides = {}) {
+function environment({ image, overrides = {} }) {
   const calls = []
   const dataSource = {
     isInitialized: false,
@@ -15,7 +15,8 @@ function environment(image, overrides = {}) {
     },
     query: async (sql) => {
       calls.push(sql)
-      if (sql === 'SHOW server_version') {
+      const isServerVersionQuery = sql === 'SHOW server_version'
+      if (isServerVersionQuery) {
         return [{ server_version: '18.6 (Debian 18.6-1.pgdg13+2)' }]
       }
       assert.equal(sql, 'SHOW data_directory')
@@ -28,7 +29,8 @@ function environment(image, overrides = {}) {
   }
   const runDocker = async (args) => {
     calls.push(args)
-    if (args[0] === 'container') {
+    const isContainerInspection = args[0] === 'container'
+    if (isContainerInspection) {
       assert.deepEqual(args, [
         'container',
         'inspect',
@@ -36,14 +38,18 @@ function environment(image, overrides = {}) {
         '--format',
         '{{json .Image}} {{json .Platform}}'
       ])
-      return {
-        stdout: `${JSON.stringify(overrides.imageId ?? image.imageId)} ${JSON.stringify(overrides.platform ?? 'linux')}\n`
-      }
+      const imageIdJson = JSON.stringify(overrides.imageId ?? image.imageId)
+      const platformJson = JSON.stringify(overrides.platform ?? 'linux')
+      return { stdout: `${imageIdJson} ${platformJson}\n` }
     }
     assert.deepEqual(args, ['exec', resources.containerName, 'uname', '-m'])
-    return {
-      stdout: `${overrides.architecture ?? (image.platform.includes('arm64') ? 'aarch64' : 'x86_64')}\n`
+    let architecture = overrides.architecture
+    const hasArchitectureOverride = architecture != null
+    if (!hasArchitectureOverride) {
+      const isArm64Platform = image.platform.includes('arm64')
+      architecture = isArm64Platform ? 'aarch64' : 'x86_64'
     }
+    return { stdout: `${architecture}\n` }
   }
   return { calls, dataSource, dependencies: { createDataSource: () => dataSource, runDocker } }
 }
@@ -52,7 +58,7 @@ test('later server/container stage accepts the verified classic and containerd I
   for (const imageId of [configDigest, POSTGRES_INDEX_DIGEST]) {
     for (const platform of ['linux/arm64/v8', 'linux/amd64']) {
       const image = { imageId, platform }
-      const fixture = environment(image)
+      const fixture = environment({ image })
       await assertServerAndContainer(resources, image, fixture.dependencies)
       assert.deepEqual(fixture.calls.slice(0, 3), [
         'SHOW server_version',
@@ -72,7 +78,7 @@ test('later server/container stage rejects a different image, platform or archit
     { platform: 'windows' },
     { architecture: 'x86_64' }
   ]) {
-    const fixture = environment(image, overrides)
+    const fixture = environment({ image, overrides })
     await assert.rejects(assertServerAndContainer(resources, image, fixture.dependencies), {
       code: 'ERR_ASSERTION'
     })
