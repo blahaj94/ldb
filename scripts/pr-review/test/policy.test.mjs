@@ -4,7 +4,8 @@ import test from "node:test";
 import { buildPolicyReport } from "../src/policy.mjs";
 
 function statusFor(report, name) {
-  return report.checks.find((check) => check.name === name)?.status;
+  const matchingCheck = report.checks.find((check) => check.name === name);
+  return matchingCheck?.status;
 }
 
 function createInput(overrides = {}) {
