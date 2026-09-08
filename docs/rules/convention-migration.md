@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: repository
 last-reviewed: 2026-09-08
 rationale: 기존 convention을 동작 보존 방식으로 작은 단위에 적용하고 저비용 실행의 판단 경계를 고정한다.
-evidence: "Issue #148의 동작 보존 이행 합의"
+evidence: "https://github.com/blahaj94/ldb/pull/150#issuecomment-5580132558"
 exceptions: 승인 전 실행 권한을 만들지 않으며 승인된 기존 Rule과 진행 중 Issue의 소유권을 바꾸지 않는다.
 review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재작업·검토 부담을 확인한다.
 ---
 
 # Convention Migration
 
-이 Rule은 기존 코드에 최신 [`convention.md`](../../convention.md)를 적용하는 후속 작업의 이행 기준 제안이다. 문서 자체는 제품 code, test, script, 설정, dependency를 바꾸지 않는다. Draft PR에서 사용자가 명시적으로 승인하고 merge하기 전에는 이 Rule을 구현 근거로 사용할 수 없다.
+이 Rule은 기존 코드에 최신 [`convention.md`](../../convention.md)를 적용하는 후속 작업의 이행 기준이다. 문서 자체는 제품 code, test, script, 설정, dependency를 바꾸지 않는다. Rule 승인과 사용자 merge 전에는 제품 code 이행을 시작하지 않는다.
 
 ## 동작 보존 범위
 
