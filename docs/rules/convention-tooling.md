@@ -18,7 +18,7 @@ review-after: 사용자 승인·merge 후 서로 다른 app 또는 tooling의 �
 
 ## 공통 설정 도입 제안의 승인 상태와 우선순위
 
-공통 설정 도입 제안은 `proposed`다. Draft PR에서 사용자가 명시적으로 `승인`하고 merge하기 전에는 기존 active Rule과 현재 app 설정이 우선한다. 승인 전에는 Prettier 출력 우선이나 fixer 적용 범위를 제품 code에 확장하지 않는다.
+공통 설정 도입 제안은 `proposed`다. Draft PR에서 사용자가 명시적으로 `승인`하기 전에는 기존 active Rule과 현재 app 설정이 우선한다. 승인 후 같은 PR에서 공통 설정·dependency·CI를 구현하고 검증하며, 최종 결과는 사용자가 merge한다. 승인 전에는 Prettier 출력 우선이나 fixer 적용 범위를 제품 code에 확장하지 않는다.
 
 승인 후 formatter가 적용되는 범위에서는 사용자가 선택한 대로 Prettier 출력을 기준으로 맞춘다. 기존 수동 체인 줄바꿈이나 여러 줄 template의 여는 백틱 위치가 Prettier 출력과 다르면, formatter 결과를 사람이 되돌리거나 다시 설계하지 않는다. 다만 문자열 내부의 값·개행·공백, 생성 함수의 책임, 의미별 빈 줄과 조건 이름, 평가 시점은 도구 출력이 약화시키지 않는지 별도로 확인한다.
 
