@@ -165,6 +165,57 @@ test('expired requests do not inspect code expiry after request expiry', () => {
   assert.equal(exchangeExpired(request, checkedAt), true)
 })
 
+test('exchange expiry rereads the code deadline after the second clock read', () => {
+  const reads = []
+  let codeExpiryReads = 0
+  const request = {
+    expiresAt: new Date(30_000),
+    get codeExpiresAt() {
+      reads.push('codeExpiresAt')
+      codeExpiryReads++
+      const isFirstCodeExpiryRead = codeExpiryReads === 1
+      return new Date(isFirstCodeExpiryRead ? 20_000 : 5_000)
+    }
+  }
+  const checkedAt = {
+    getTime() {
+      reads.push('checkedAt')
+      return 10_000
+    }
+  }
+
+  const isExpired = exchangeExpired(request, checkedAt)
+
+  assert.deepEqual(reads, ['checkedAt', 'codeExpiresAt', 'checkedAt', 'codeExpiresAt'])
+  assert.equal(isExpired, true)
+})
+
+test('callback count rejection stops subsequent array length and index reads', () => {
+  for (const { query, expectedReads } of [
+    { query: 'code=x', expectedReads: ['state.length'] },
+    {
+      query: 'state=x&code=x&error=x',
+      expectedReads: ['state.length', 'code.length', 'error.length']
+    }
+  ]) {
+    const reads = []
+    class ObservedSearchParams extends URLSearchParams {
+      getAll(name) {
+        return new Proxy(super.getAll(name), {
+          get(target, property, receiver) {
+            reads.push(`${name}.${String(property)}`)
+            return Reflect.get(target, property, receiver)
+          }
+        })
+      }
+    }
+    const params = new ObservedSearchParams(query)
+
+    assert.throws(() => parseCallback(params), { code: 'LOGIN_REQUEST_INVALID' })
+    assert.deepEqual(reads, expectedReads)
+  }
+})
+
 test('callback rejects duplicate/conflicting required fields but ignores standard unknown fields', () => {
   const state = opaque()
   assert.deepEqual(
