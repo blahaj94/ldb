@@ -46,18 +46,21 @@ function snapshot(overrides = {}) {
   }
 }
 
-function createAgents(count) {
-  return Array.from({ length: count }, (_, index) => ({
-    role: index === 0 ? 'main' : 'subagent',
-    agent: `agent-${index}-${'x'.repeat(50)}`,
-    model: 'm'.repeat(80),
-    effort: 'ultra',
-    inputTokens: 900_719_925,
-    cachedInputTokens: 123_456_789,
-    outputTokens: 123_456_789,
-    reasoningOutputTokens: 12_345_678,
-    totalTokens: 1_024_176_714
-  }))
+function manyAgents(count) {
+  return Array.from({ length: count }, (_, index) => {
+    const isMainAgent = index === 0
+    return {
+      role: isMainAgent ? 'main' : 'subagent',
+      agent: `agent-${index}-${'x'.repeat(50)}`,
+      model: 'm'.repeat(80),
+      effort: 'ultra',
+      inputTokens: 900_719_925,
+      cachedInputTokens: 123_456_789,
+      outputTokens: 123_456_789,
+      reasoningOutputTokens: 12_345_678,
+      totalTokens: 1_024_176_714
+    }
+  })
 }
 
 function pullRequest(overrides = {}) {
@@ -122,7 +125,7 @@ test('saveSnapshot requires current same-repository PR head and linked manifest 
 test('saveSnapshot rejects oversized rendered comments before GitHub calls', () => {
   const mock = apiMock()
   assert.throws(
-    () => saveSnapshot(snapshot({ agents: createAgents(100) }), mock.call),
+    () => saveSnapshot(snapshot({ agents: manyAgents(100) }), mock.call),
     /65536 character limit/
   )
   assert.deepEqual(mock.calls, [])
@@ -146,8 +149,8 @@ test('saveSnapshot creates a comment instead of overwriting another author', () 
   const result = saveSnapshot(snapshot(), mock.call)
   assert.equal(result.status, 'created')
   const hasPostCall = mock.calls.some(({ args }) => args.includes('POST'))
-  const hasPatchCall = mock.calls.some(({ args }) => args.includes('PATCH'))
   assert.ok(hasPostCall)
+  const hasPatchCall = mock.calls.some(({ args }) => args.includes('PATCH'))
   assert.ok(!hasPatchCall)
 })
 
@@ -159,8 +162,8 @@ test('saveSnapshot recognizes the default workflow token actor', () => {
     })
     assert.equal(saveSnapshot(snapshot(), mock.call).status, 'updated')
     const hasPatchCall = mock.calls.some(({ args }) => args.includes('PATCH'))
-    const hasUserLookup = mock.calls.some(({ args }) => args.join(' ') === 'api user')
     assert.ok(hasPatchCall)
+    const hasUserLookup = mock.calls.some(({ args }) => args.join(' ') === 'api user')
     assert.ok(!hasUserLookup)
   } finally {
     process.env.GITHUB_ACTIONS = 'false'

@@ -69,25 +69,26 @@ function isObject(value) {
   const isNonNull = value !== null
   const isObjectType = typeof value === 'object'
   const isNotArray = !Array.isArray(value)
-  return isNonNull && isObjectType && isNotArray
+  const isPlainObject = isNonNull && isObjectType && isNotArray
+  return isPlainObject
 }
 
 function hasKeys(value, expected) {
   const keys = Object.keys(value)
   const hasExpectedKeyCount = keys.length === expected.length
-  const hasAllExpectedKeys = expected.every((key) => keys.includes(key))
+  const hasAllExpectedKeys = hasExpectedKeyCount && expected.every((key) => keys.includes(key))
   return hasExpectedKeyCount && hasAllExpectedKeys
 }
 
 function positiveInteger(value) {
   const isSafeInteger = Number.isSafeInteger(value)
-  const isPositive = value > 0
+  const isPositive = isSafeInteger && value > 0
   return isSafeInteger && isPositive
 }
 
 function tokenCount(value) {
   const isSafeInteger = Number.isSafeInteger(value)
-  const isNonNegative = value >= 0
+  const isNonNegative = isSafeInteger && value >= 0
   return isSafeInteger && isNonNegative
 }
 
@@ -115,7 +116,8 @@ function safeIdentifier(value, maximum, pattern) {
   const isString = typeof value === 'string'
   const isWithinMaximum = isString && value.length <= maximum
   const matchesPattern = isWithinMaximum && pattern.test(value)
-  return isString && isWithinMaximum && matchesPattern
+  const isSafeIdentifier = isString && isWithinMaximum && matchesPattern
+  return isSafeIdentifier
 }
 
 export function validateSnapshot(value) {

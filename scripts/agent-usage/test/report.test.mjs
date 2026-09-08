@@ -50,18 +50,21 @@ function snapshot(overrides = {}) {
   }
 }
 
-function createAgents(count) {
-  return Array.from({ length: count }, (_, index) => ({
-    role: index === 0 ? 'main' : 'subagent',
-    agent: `agent-${index}-${'x'.repeat(50)}`,
-    model: 'm'.repeat(80),
-    effort: 'ultra',
-    inputTokens: 900_719_925,
-    cachedInputTokens: 123_456_789,
-    outputTokens: 123_456_789,
-    reasoningOutputTokens: 12_345_678,
-    totalTokens: 1_024_176_714
-  }))
+function manyAgents(count) {
+  return Array.from({ length: count }, (_, index) => {
+    const isMainAgent = index === 0
+    return {
+      role: isMainAgent ? 'main' : 'subagent',
+      agent: `agent-${index}-${'x'.repeat(50)}`,
+      model: 'm'.repeat(80),
+      effort: 'ultra',
+      inputTokens: 900_719_925,
+      cachedInputTokens: 123_456_789,
+      outputTokens: 123_456_789,
+      reasoningOutputTokens: 12_345_678,
+      totalTokens: 1_024_176_714
+    }
+  })
 }
 
 test('validateSnapshot returns a fresh allowlisted snapshot', () => {
@@ -197,14 +200,14 @@ test('snapshot comments round-trip only marked, validated JSON', () => {
 })
 
 test("snapshot comments enforce GitHub's rendered comment length", () => {
-  const withinLimit = snapshot({ agents: createAgents(80) })
+  const withinLimit = snapshot({ agents: manyAgents(80) })
   const body = snapshotComment(withinLimit)
   const isWithinCommentLimit = body.length <= 65_536
   assert.ok(isWithinCommentLimit)
   assert.deepEqual(parseSnapshotComment(body), withinLimit)
 
   assert.throws(
-    () => snapshotComment(snapshot({ agents: createAgents(100) })),
+    () => snapshotComment(snapshot({ agents: manyAgents(100) })),
     /65536 character limit/
   )
   assert.throws(

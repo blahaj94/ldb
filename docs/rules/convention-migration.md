@@ -5,7 +5,7 @@ enforcement: approval-required
 scope: repository
 last-reviewed: 2026-09-08
 rationale: 기존 convention을 동작 보존 방식으로 작은 단위에 적용하고 저비용 실행의 판단 경계를 고정한다.
-evidence: "https://github.com/blahaj94/ldb/pull/181#issuecomment-5588297098"
+evidence: "https://github.com/blahaj94/ldb/pull/150#issuecomment-5580132558"
 exceptions: 승인 전 실행 권한을 만들지 않으며 승인된 기존 Rule과 진행 중 Issue의 소유권을 바꾸지 않는다.
 review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재작업·검토 부담을 확인한다.
 ---
