@@ -30,7 +30,7 @@ Generated/vendor 코드는 산출물을 직접 고치지 않고 소유한 생성
 
 두 좁은 예외의 active 조건과 승인 lifecycle은 [`convention-exceptions-proposal.md`](docs/rules/convention-exceptions-proposal.md)를 따른다. PR #161의 사용자 승인·merge 이후에는 해당 문서의 조건을 충족하는 범위에 적용하며, 그 전에는 이 문서의 §2·§3과 동작 보존 기준이 우선한다.
 
-기계적 표기·정적 검사를 기존 설정 범위의 도구에 맡기는 active 역할 원칙은 PR #163의 사용자 승인·merge를 반영한 [`convention-tooling.md`](docs/rules/convention-tooling.md)를 따른다. 모든 프로젝트의 공통 설정·dependency·CI를 도입하는 구체 기준은 같은 문서의 proposed 절이며, 그 구현은 별도 사용자 승인을 따른다.
+기계적 표기·정적 검사를 기존 설정 범위의 도구에 맡기는 active 역할 원칙은 PR #163의 사용자 승인·merge를 반영한 [`convention-tooling.md`](docs/rules/convention-tooling.md)를 따른다. 모든 프로젝트의 공통 설정·dependency·CI를 도입하는 구체 기준도 PR #165의 사용자 승인·merge를 반영한 같은 문서의 active 절을 따른다.
 
 ## 1. 처리 순서와 결과가 보이는 주 흐름
 

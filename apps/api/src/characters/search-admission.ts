@@ -7,7 +7,7 @@ const capacity = 10
 export const searchClock: SearchClock = {
   now: () => performance.now(),
   setTimer: (callback, delay) => setTimeout(callback, delay),
-  clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+  clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>)
 }
 
 interface Lease {
@@ -35,49 +35,60 @@ export class SearchAdmission {
 
   constructor(private readonly clock: SearchClock = searchClock) {}
 
-  get entryCount(): number { return this.entries.size }
+  get entryCount(): number {
+    return this.entries.size
+  }
 
   acquire(account: string, signal: AbortSignal): Promise<Lease> {
     const cannotAcquire = signal.aborted || this.closed
-    if (cannotAcquire) return Promise.reject(neopleSearchFailure('internal'))
+    if (cannotAcquire) {
+      return Promise.reject(neopleSearchFailure('internal'))
+    }
     const entry = this.entries.get(account) ?? { reservations: [], waiting: new Set<Waiter>() }
     this.entries.set(account, entry)
 
     return new Promise<Lease>((resolve, reject) => {
       let released = false
       const release = (): void => {
-        if (released) return
+        if (released) {
+          return
+        }
         released = true
         signal.removeEventListener('abort', waiter.cancel)
         entry.waiting.delete(waiter)
         const ownsAdmission = entry.owner === waiter
-        if (ownsAdmission) entry.owner = undefined
+        if (ownsAdmission) {
+          entry.owner = undefined
+        }
         this.grantNext(entry)
         this.maintain(account, entry)
       }
       const assertActive = (): void => {
         const cannotUseLease = released || signal.aborted || this.closed
-        if (cannotUseLease) throw neopleSearchFailure('internal')
+        if (cannotUseLease) {
+          throw neopleSearchFailure('internal')
+        }
       }
       const waiter: Waiter = {
         cancel: () => {
           reject(neopleSearchFailure('internal'))
           release()
         },
-        grant: () => resolve({
-          assertCapacity: () => {
-            assertActive()
-            this.assertCapacity(entry, this.clock.now())
-          },
-          reserve: () => {
-            assertActive()
-            const calledAt = this.clock.now()
-            this.assertCapacity(entry, calledAt)
-            entry.reservations.push(calledAt)
-            this.maintain(account, entry)
-          },
-          release,
-        }),
+        grant: () =>
+          resolve({
+            assertCapacity: () => {
+              assertActive()
+              this.assertCapacity(entry, this.clock.now())
+            },
+            reserve: () => {
+              assertActive()
+              const calledAt = this.clock.now()
+              this.assertCapacity(entry, calledAt)
+              entry.reservations.push(calledAt)
+              this.maintain(account, entry)
+            },
+            release
+          })
       }
       entry.waiting.add(waiter)
       signal.addEventListener('abort', waiter.cancel, { once: true })
@@ -88,10 +99,14 @@ export class SearchAdmission {
   private grantNext(entry: AccountEntry): void {
     const hasOwner = entry.owner != null
     const cannotGrant = hasOwner || this.closed
-    if (cannotGrant) return
+    if (cannotGrant) {
+      return
+    }
     const next = entry.waiting.values().next().value as Waiter | undefined
     const hasNext = next != null
-    if (!hasNext) return
+    if (!hasNext) {
+      return
+    }
     entry.waiting.delete(next)
     entry.owner = next
     next.grant()
@@ -107,7 +122,9 @@ export class SearchAdmission {
   private assertCapacity(entry: AccountEntry, now: number): void {
     this.prune(entry, now)
     const isFull = entry.reservations.length >= capacity
-    if (!isFull) return
+    if (!isFull) {
+      return
+    }
     const oldest = entry.reservations[0]!
     const retryAfter = Math.max(1, Math.ceil((oldest + windowMs - now) / 1000))
     throw neopleSearchFailure('limited', retryAfter)
@@ -115,7 +132,9 @@ export class SearchAdmission {
 
   private maintain(account: string, entry: AccountEntry): void {
     const hasTimer = entry.timer != null
-    if (hasTimer) this.clock.clearTimer(entry.timer)
+    if (hasTimer) {
+      this.clock.clearTimer(entry.timer)
+    }
     entry.timer = undefined
     const now = this.clock.now()
     this.prune(entry, now)
@@ -123,9 +142,13 @@ export class SearchAdmission {
     const hasOwner = entry.owner != null
     const hasWaiters = entry.waiting.size > 0
     const canDelete = !hasReservations && !hasOwner && !hasWaiters
-    if (canDelete) this.entries.delete(account)
+    if (canDelete) {
+      this.entries.delete(account)
+    }
     const needsExpiry = hasReservations && !this.closed
-    if (!needsExpiry) return
+    if (!needsExpiry) {
+      return
+    }
     const last = entry.reservations.at(-1)!
     entry.timer = this.clock.setTimer(() => this.maintain(account, entry), last + windowMs - now)
   }
@@ -133,7 +156,9 @@ export class SearchAdmission {
   close(): void {
     this.closed = true
     for (const [account, entry] of this.entries) {
-      for (const waiter of [...entry.waiting]) waiter.cancel()
+      for (const waiter of [...entry.waiting]) {
+        waiter.cancel()
+      }
       entry.owner?.cancel()
       this.maintain(account, entry)
     }

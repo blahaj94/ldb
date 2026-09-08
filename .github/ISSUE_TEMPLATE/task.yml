@@ -1,6 +1,6 @@
 name: Development task
 description: AI agent가 구현할 하나의 bounded task를 정의합니다.
-title: "[Task] "
+title: '[Task] '
 body:
   - type: markdown
     attributes:
@@ -72,14 +72,14 @@ body:
       label: worker_count
       description: 1–8 중 현재 배정 계획의 Worker roster slot 수를 선택합니다. 동시 process, Scout·Reviewer와 누적 retry는 세지 않습니다.
       options:
-        - "1"
-        - "2"
-        - "3"
-        - "4"
-        - "5"
-        - "6"
-        - "7"
-        - "8"
+        - '1'
+        - '2'
+        - '3'
+        - '4'
+        - '5'
+        - '6'
+        - '7'
+        - '8'
       default: 0
       multiple: false
     validations:
@@ -123,7 +123,7 @@ body:
     id: dependencies
     attributes:
       label: Dependencies and blockers
-      description: "선행 관계는 `Blocked by #123`, 후속 관계는 `Blocks #456` 형식으로 작성하고 병렬 작업 충돌과 외부 dependency를 추가합니다."
+      description: '선행 관계는 `Blocked by #123`, 후속 관계는 `Blocks #456` 형식으로 작성하고 병렬 작업 충돌과 외부 dependency를 추가합니다.'
 
   - type: textarea
     id: validation

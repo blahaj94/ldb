@@ -7,6 +7,11 @@ import { uiNotices } from '../../packages/ui/build/notices.ts'
 export default defineConfig({
   plugins: [react(), seedDesignPlugin(), uiNotices()],
   resolve: {
-    alias: [{ find: /^@ldb\/ui$/, replacement: fileURLToPath(new URL('../../packages/ui/src/index.tsx', import.meta.url)) }]
+    alias: [
+      {
+        find: /^@ldb\/ui$/,
+        replacement: fileURLToPath(new URL('../../packages/ui/src/index.tsx', import.meta.url))
+      }
+    ]
   }
 })

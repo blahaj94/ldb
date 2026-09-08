@@ -1,4 +1,3 @@
-/* global AbortController */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { settled } from './login-test-control.mjs'
@@ -19,12 +18,16 @@ function clock() {
       now = time
       for (const [id, timer] of timers) {
         const isDue = timer.at <= now
-        if (!isDue) continue
+        if (!isDue) {
+          continue
+        }
         timers.delete(id)
         timer.callback()
       }
     },
-    get timerCount() { return timers.size },
+    get timerCount() {
+      return timers.size
+    }
   }
 }
 
@@ -40,21 +43,30 @@ async function reserve(admission, account = 'account') {
 }
 
 function assertLimited(lease, seconds) {
-  assert.throws(() => lease.assertCapacity(), (error) => {
-    assert.equal(error.status, 429)
-    assert.equal(error.body.error.code, 'SEARCH_RATE_LIMITED')
-    assert.equal(error.retryAfter, seconds)
-    return true
-  })
+  assert.throws(
+    () => lease.assertCapacity(),
+    (error) => {
+      assert.equal(error.status, 429)
+      assert.equal(error.body.error.code, 'SEARCH_RATE_LIMITED')
+      assert.equal(error.retryAfter, seconds)
+      return true
+    }
+  )
 }
 
 test('search quota expires at exactly 60000ms and rejected attempts do not extend the window', async () => {
   const { SearchAdmission } = await import('../dist/characters/search-admission.js')
   const time = clock()
   const admission = new SearchAdmission(time)
-  for (let count = 0; count < 10; count += 1) await reserve(admission)
+  for (let count = 0; count < 10; count += 1) {
+    await reserve(admission)
+  }
   const controller = new AbortController()
-  for (const [now, retryAfter] of [[0, 60], [58_001, 2], [59_999, 1]]) {
+  for (const [now, retryAfter] of [
+    [0, 60],
+    [58_001, 2],
+    [59_999, 1]
+  ]) {
     time.advance(now)
     const lease = await admission.acquire('account', controller.signal)
     assertLimited(lease, retryAfter)
@@ -86,7 +98,9 @@ test('search accounts serialize only admission and reserve using the final clock
   owner.release()
   const waiter = await pending
   waiter.release()
-  for (let count = 1; count < 10; count += 1) await reserve(admission)
+  for (let count = 1; count < 10; count += 1) {
+    await reserve(admission)
+  }
   time.advance(60_000)
   const beforeExactExpiry = await admission.acquire('account', new AbortController().signal)
   assertLimited(beforeExactExpiry, 1)

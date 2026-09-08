@@ -13,7 +13,9 @@ vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
 vi.mock('../../src/backend/capture/ipc-handler', () => ({
   registerCaptureIpc: () => {
     ipcMain.handle('notifyStableNicknameDetected', () => {
-      if (product.rejectNickname) throw new Error('Synthetic handler rejection')
+      if (product.rejectNickname) {
+        throw new Error('Synthetic handler rejection')
+      }
       return product.commandResult
     })
     return vi.fn()

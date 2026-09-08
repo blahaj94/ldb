@@ -54,7 +54,9 @@ describe('파티 인식 helper', () => {
         await new Promise<void>((resolve) => setTimeout(resolve, 100))
         activeCycles -= 1
         completedCycles += 1
-        if (completedCycles === 2) controller.abort()
+        if (completedCycles === 2) {
+          controller.abort()
+        }
       }
     })
 

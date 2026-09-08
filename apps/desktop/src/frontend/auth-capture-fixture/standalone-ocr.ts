@@ -7,7 +7,9 @@ export async function runStandaloneOcr(): Promise<{ matched: boolean; terminated
   canvas.height = 72
   const context = canvas.getContext('2d')
   const hasContext = context != null
-  if (!hasContext) throw new Error('Synthetic OCR canvas missing')
+  if (!hasContext) {
+    throw new Error('Synthetic OCR canvas missing')
+  }
   context.fillStyle = 'white'
   context.fillRect(0, 0, canvas.width, canvas.height)
   context.fillStyle = 'black'

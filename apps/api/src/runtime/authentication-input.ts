@@ -1,32 +1,44 @@
 import type { AccessJwtIssuerConfiguration } from '../auth/access-jwt/types.js'
 import { decodeOpaque } from '../auth/login/crypto.js'
-import type { LoginRegistryConfiguration, ProviderPkceConfiguration, ProviderRegistration } from '../types/login.js'
+import type {
+  LoginRegistryConfiguration,
+  ProviderPkceConfiguration,
+  ProviderRegistration
+} from '../types/login.js'
 
 const invalidConfiguration = 'Invalid authentication configuration'
 
 function record(value: unknown, fields: readonly string[]): Record<string, unknown> {
   const isObject = typeof value === 'object' && value !== null && !Array.isArray(value)
-  if (!isObject) throw new Error(invalidConfiguration)
+  if (!isObject) {
+    throw new Error(invalidConfiguration)
+  }
   const hasExpectedCount = Object.keys(value).length === fields.length
   const hasRequiredFields = fields.every((field) => {
     const hasField = Object.hasOwn(value, field)
     return hasField
   })
   const hasExactFields = hasExpectedCount && hasRequiredFields
-  if (!hasExactFields) throw new Error(invalidConfiguration)
+  if (!hasExactFields) {
+    throw new Error(invalidConfiguration)
+  }
   // JSON object와 정확한 field 집합을 확인했다. 각 값의 type은 아래 경계에서 검사한다.
   return value as Record<string, unknown>
 }
 
 function text(value: unknown): string {
   const isString = typeof value === 'string'
-  if (!isString) throw new Error(invalidConfiguration)
+  if (!isString) {
+    throw new Error(invalidConfiguration)
+  }
   return value
 }
 
 function array(value: unknown): unknown[] {
   const isArray = Array.isArray(value)
-  if (!isArray) throw new Error(invalidConfiguration)
+  if (!isArray) {
+    throw new Error(invalidConfiguration)
+  }
   return value
 }
 
@@ -40,7 +52,7 @@ function accessJwt(value: unknown): AccessJwtIssuerConfiguration {
     verificationKeys: array(input.verificationKeys).map((value) => {
       const key = record(value, ['kid', 'publicKeyPem'])
       return { kid: text(key.kid), publicKeyPem: text(key.publicKeyPem) }
-    }),
+    })
   }
 }
 
@@ -51,17 +63,25 @@ function providerPkce(value: unknown): ProviderPkceConfiguration {
     keys: array(input.keys).map((value) => {
       const key = record(value, ['id', 'key'])
       return { id: text(key.id), key: decodeOpaque(key.key) }
-    }),
+    })
   }
 }
 
 function registration(value: unknown): ProviderRegistration {
   const input = record(value, [
-    'provider', 'version', 'providerClientId', 'providerSecretRef', 'callbackUrl',
-    'authorizationEndpoint', 'expectedAudience', 'returnTarget',
+    'provider',
+    'version',
+    'providerClientId',
+    'providerSecretRef',
+    'callbackUrl',
+    'authorizationEndpoint',
+    'expectedAudience',
+    'returnTarget'
   ])
   const isGoogle = input.provider === 'google'
-  if (!isGoogle) throw new Error(invalidConfiguration)
+  if (!isGoogle) {
+    throw new Error(invalidConfiguration)
+  }
   const target = record(input.returnTarget, ['id', 'url'])
   return {
     provider: 'google',
@@ -71,7 +91,7 @@ function registration(value: unknown): ProviderRegistration {
     callbackUrl: text(input.callbackUrl),
     authorizationEndpoint: text(input.authorizationEndpoint),
     expectedAudience: text(input.expectedAudience),
-    returnTarget: { id: text(target.id), url: text(target.url) },
+    returnTarget: { id: text(target.id), url: text(target.url) }
   }
 }
 
@@ -81,7 +101,7 @@ function registry(value: unknown): LoginRegistryConfiguration {
   return {
     apiOrigin: text(input.apiOrigin),
     activeVersions: { google: text(active.google) },
-    registrations: array(input.registrations).map(registration),
+    registrations: array(input.registrations).map(registration)
   }
 }
 
@@ -90,15 +110,21 @@ function google(value: unknown) {
   return {
     registrations: array(input.registrations).map((value) => {
       const entry = record(value, ['version', 'tokenEndpoint', 'jwksUri'])
-      return { version: text(entry.version), tokenEndpoint: text(entry.tokenEndpoint), jwksUri: text(entry.jwksUri) }
+      return {
+        version: text(entry.version),
+        tokenEndpoint: text(entry.tokenEndpoint),
+        jwksUri: text(entry.jwksUri)
+      }
     }),
     secrets: array(input.secrets).map((value) => {
       const entry = record(value, ['version', 'reference', 'value'])
       const secret = text(entry.value)
       const hasSecret = secret.trim().length > 0
-      if (!hasSecret) throw new Error(invalidConfiguration)
+      if (!hasSecret) {
+        throw new Error(invalidConfiguration)
+      }
       return { version: text(entry.version), reference: text(entry.reference), value: secret }
-    }),
+    })
   }
 }
 
@@ -109,6 +135,6 @@ export function parseAuthenticationInput(value: unknown) {
     accessJwt: accessJwt(input.accessJwt),
     providerPkce: providerPkce(input.providerPkce),
     registry: registry(input.registry),
-    google: google(input.google),
+    google: google(input.google)
   }
 }

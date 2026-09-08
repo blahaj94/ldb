@@ -24,6 +24,6 @@ export function createLoginService(dependencies: LoginDependencies): LoginHttpSe
     create: (input) => createLoginRequest(deps, input),
     authorize: (ticket) => authorizeLogin(deps, ticket),
     callback: (provider, query, cookie) => completeLoginCallback(deps, provider, query, cookie),
-    exchange: (input) => exchangeLogin(deps, input),
+    exchange: (input) => exchangeLogin(deps, input)
   } satisfies LoginHttpService)
 }

@@ -802,10 +802,14 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   function authorization(signal?: AbortSignal): Promise<AuthAuthorization> {
     return waitForAuthorization(() => {
       const isSignedIn = state.phase === 'signedIn'
-      if (!isSignedIn) return Promise.resolve({ status: 'unavailable' })
+      if (!isSignedIn) {
+        return Promise.resolve({ status: 'unavailable' })
+      }
       const refreshing = session.currentRefresh(generation)
       const hasRefresh = refreshing != null
-      if (hasRefresh) return refreshing
+      if (hasRefresh) {
+        return refreshing
+      }
       const current = currentAuthorization()
       const canUseAccess = current.status === 'available'
       return canUseAccess ? Promise.resolve(current) : refreshAuthorization()
@@ -822,14 +826,18 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       const isSignedIn = state.phase === 'signedIn'
       const hasSameGeneration = rejected.generation === generation
       const canRecover = hasCredential && isSignedIn && hasSameGeneration
-      if (!canRecover) return Promise.resolve({ status: 'unavailable' })
+      if (!canRecover) {
+        return Promise.resolve({ status: 'unavailable' })
+      }
       const hasNewerAccess = credential.accessGeneration > rejected.accessGeneration
       if (hasNewerAccess) {
         const refreshing = session.currentRefresh(generation)
         return refreshing ?? Promise.resolve(currentAuthorization())
       }
       const isCurrentAccess = credential.accessGeneration === rejected.accessGeneration
-      if (!isCurrentAccess) return Promise.resolve({ status: 'unavailable' })
+      if (!isCurrentAccess) {
+        return Promise.resolve({ status: 'unavailable' })
+      }
       if (rejected.finalRejection) {
         // 기존 logout reservation이 진행 writer를 기다리고 같은 session을 한 번 정리한다.
         return logout('REAUTH_REQUIRED').then(() => ({ status: 'unavailable' }))

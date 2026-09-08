@@ -13,11 +13,16 @@ const output = resolve(outputPath)
 const uiRoot = fileURLToPath(new URL('../', import.meta.url))
 const files = await readdir(output, { recursive: true })
 const graph = JSON.parse(await readFile(resolve(output, 'notices/bundle-modules.json'), 'utf8'))
-const javaScriptFiles = JSON.parse(await readFile(resolve(output, 'notices/bundle-files.json'), 'utf8'))
+const javaScriptFiles = JSON.parse(
+  await readFile(resolve(output, 'notices/bundle-files.json'), 'utf8')
+)
 assert.ok(javaScriptFiles.length > 0, 'Generated JS bundle list must not be empty')
 for (const file of javaScriptFiles) {
   const code = await readFile(resolve(output, file), 'utf8')
-  assert.ok(code.startsWith('/*! LDB modified SEED source:'), `Distributed modification notice: ${file}`)
+  assert.ok(
+    code.startsWith('/*! LDB modified SEED source:'),
+    `Distributed modification notice: ${file}`
+  )
 }
 const changes = await readFile(resolve(output, 'notices/LDB-MODIFICATIONS.txt'), 'utf8')
 assert.ok(changes.includes('DialogTrigger'))
@@ -35,14 +40,22 @@ for (const name of await readdir(resolve(uiRoot, 'notices'))) {
   )
 }
 const provenanceText = await readFile(resolve(uiRoot, 'seed-provenance.json'), 'utf8')
-assert.equal(await readFile(resolve(output, 'notices/seed-provenance.json'), 'utf8'), provenanceText)
+assert.equal(
+  await readFile(resolve(output, 'notices/seed-provenance.json'), 'utf8'),
+  provenanceText
+)
 const provenance = JSON.parse(provenanceText)
 const foundationBytes = await readFile(resolve(uiRoot, provenance.foundation.local))
-assert.equal(createHash('sha256').update(foundationBytes).digest('hex'), provenance.foundation.localSha256)
+assert.equal(
+  createHash('sha256').update(foundationBytes).digest('hex'),
+  provenance.foundation.localSha256
+)
 for (const source of provenance.files) {
   const bytes = await readFile(resolve(uiRoot, source.local))
   const isModifiedSource = source.localChanges.length > 0
-  if (isModifiedSource) assert.ok(bytes.toString().includes('/*! LDB 수정:'))
+  if (isModifiedSource) {
+    assert.ok(bytes.toString().includes('/*! LDB 수정:'))
+  }
   const hash = createHash('sha256').update(bytes).digest('hex')
   assert.equal(hash, source.localSha256 ?? source.sha256, source.local)
 }

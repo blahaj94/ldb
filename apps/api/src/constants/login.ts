@@ -7,38 +7,38 @@ export const LOGIN_ERRORS = {
   INVALID_REQUEST: {
     code: 'INVALID_AUTH_REQUEST',
     status: 400,
-    message: '인증 요청을 확인해 주세요.',
+    message: '인증 요청을 확인해 주세요.'
   },
   REQUEST_INVALID: {
     code: 'LOGIN_REQUEST_INVALID',
     status: 400,
-    message: invalidMessage,
+    message: invalidMessage
   },
   EXCHANGE_INVALID: {
     code: 'LOGIN_EXCHANGE_INVALID',
     status: 400,
-    message: invalidMessage,
+    message: invalidMessage
   },
   CANCELLED: {
     code: 'LOGIN_CANCELLED',
     status: 400,
-    message: '로그인이 취소됐습니다.',
+    message: '로그인이 취소됐습니다.'
   },
   PROVIDER: {
     code: 'AUTH_PROVIDER_ERROR',
     status: 502,
-    message: '소셜 로그인을 완료하지 못했습니다. 다시 시도해 주세요.',
+    message: '소셜 로그인을 완료하지 못했습니다. 다시 시도해 주세요.'
   },
   TOO_LARGE: {
     code: 'REQUEST_TOO_LARGE',
     status: 413,
-    message: '요청 크기를 줄여 주세요.',
+    message: '요청 크기를 줄여 주세요.'
   },
   MEDIA: {
     code: 'UNSUPPORTED_MEDIA_TYPE',
     status: 415,
-    message: 'JSON 형식으로 요청해 주세요.',
-  },
+    message: 'JSON 형식으로 요청해 주세요.'
+  }
 } as const
 
 export const LOGIN = {
@@ -51,7 +51,8 @@ export const LOGIN = {
   idleSeconds: 2_592_000,
   jsonBytes: 16_384,
   cookiePrefix: '__Host-ldb-login-',
-  contentSecurityPolicy: "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  contentSecurityPolicy:
+    "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 } as const
 
 export const CLEARED_LOGIN_FIELDS = {
@@ -67,5 +68,5 @@ export const CLEARED_LOGIN_FIELDS = {
   providerPkceKeyId: null,
   verifiedSubject: null,
   exchangeCodeHash: null,
-  codeExpiresAt: null,
+  codeExpiresAt: null
 } as const

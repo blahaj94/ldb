@@ -9,19 +9,7 @@ test('PORT accepts ASCII decimal integers in the allowed range', () => {
 })
 
 test('PORT rejects missing, empty, out-of-range, and non-decimal values', () => {
-  const invalidValues = [
-    undefined,
-    '',
-    '0',
-    '65536',
-    '1.5',
-    '+1',
-    '-1',
-    ' 1',
-    '1 ',
-    '１',
-    '١',
-  ]
+  const invalidValues = [undefined, '', '0', '65536', '1.5', '+1', '-1', ' 1', '1 ', '１', '١']
 
   for (const value of invalidValues) {
     assert.throws(() => parsePort(value), { message: 'Invalid server configuration' })

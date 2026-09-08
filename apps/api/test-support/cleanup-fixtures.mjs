@@ -5,7 +5,13 @@ export const checkedAt = new Date('2026-09-08T00:00:00Z')
 export const idleMilliseconds = 2_592_000_000
 
 // 후보는 일부러 활성 row도 반환한다. 삭제 권한은 잠금 뒤 재판정에서만 생긴다.
-export function cleanupFixture({ sessions = [], requests = [], beforeLock, beforeCommit, afterCommit } = {}) {
+export function cleanupFixture({
+  sessions = [],
+  requests = [],
+  beforeLock,
+  beforeCommit,
+  afterCommit
+} = {}) {
   const events = []
   const deleted = { sessions: [], requests: [] }
   let commits = 0
@@ -45,32 +51,42 @@ export function cleanupFixture({ sessions = [], requests = [], beforeLock, befor
               const id = typeof where === 'string' ? where : where.id
               pending.push([kind, id])
               return { affected: 1 }
-            },
+            }
           }
-        },
+        }
       }
       const result = await operation(manager)
       commits++
       await beforeCommit?.(commits)
-      for (const [kind, id] of pending) deleted[kind].push(id)
+      for (const [kind, id] of pending) {
+        deleted[kind].push(id)
+      }
       events.push('commit')
       await afterCommit?.()
       return result
-    },
+    }
   }
   return { source, deleted, events }
 }
 
 export function session(patch = {}) {
   return {
-    id: randomUUID(), userId: randomUUID(), createdAt: new Date('2026-01-01T00:00:00Z'),
-    lastActiveAt: checkedAt, revokedAt: null, revokedReason: null, ...patch,
+    id: randomUUID(),
+    userId: randomUUID(),
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    lastActiveAt: checkedAt,
+    revokedAt: null,
+    revokedReason: null,
+    ...patch
   }
 }
 
 export function request(patch = {}) {
   return {
-    id: randomUUID(), status: 'processing', expiresAt: new Date(checkedAt.getTime() + 60_000),
-    codeExpiresAt: null, ...patch,
+    id: randomUUID(),
+    status: 'processing',
+    expiresAt: new Date(checkedAt.getTime() + 60_000),
+    codeExpiresAt: null,
+    ...patch
   }
 }

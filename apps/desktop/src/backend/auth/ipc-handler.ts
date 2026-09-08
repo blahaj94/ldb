@@ -32,10 +32,14 @@ function exactField(args: unknown[], key: string): unknown {
   const hasOneArgument = args.length === 1
   const value = args[0]
   const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
-  if (!hasOneArgument || !isObject) return undefined
+  if (!hasOneArgument || !isObject) {
+    return undefined
+  }
   const keys = Reflect.ownKeys(value)
   const hasExactKey = keys.length === 1 && keys[0] === key
-  if (!hasExactKey) return undefined
+  if (!hasExactKey) {
+    return undefined
+  }
   return Object.getOwnPropertyDescriptor(value, key)?.value
 }
 
@@ -65,12 +69,18 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
 
   function allowedWindow(window: BrowserWindow | null): window is BrowserWindow {
     const hasWindow = window != null
-    if (!hasWindow || disposed) return false
+    if (!hasWindow || disposed) {
+      return false
+    }
     const isWindowDestroyed = window.isDestroyed()
-    if (isWindowDestroyed) return false
+    if (isWindowDestroyed) {
+      return false
+    }
     const contents = window.webContents
     const isContentsDestroyed = contents.isDestroyed()
-    if (isContentsDestroyed) return false
+    if (isContentsDestroyed) {
+      return false
+    }
     const frame = contents.mainFrame
     const hasFrame = frame != null
     const isCurrentDocument = hasFrame && !frame.detached && frame.url === documentUrl
@@ -80,11 +90,15 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
   function requireSender(event: IpcMainInvokeEvent, expected = getWindow()): BrowserWindow {
     const isCurrentWindow = expected === getWindow()
     const isWindowAllowed = isCurrentWindow && allowedWindow(expected)
-    if (!isWindowAllowed) throw new Error('AUTH_NOT_ALLOWED')
+    if (!isWindowAllowed) {
+      throw new Error('AUTH_NOT_ALLOWED')
+    }
     const isSender = event.sender === expected.webContents
     const isMainFrame = event.senderFrame === expected.webContents.mainFrame
     const isAllowed = isSender && isMainFrame
-    if (!isAllowed) throw new Error('AUTH_NOT_ALLOWED')
+    if (!isAllowed) {
+      throw new Error('AUTH_NOT_ALLOWED')
+    }
     return expected
   }
 
@@ -94,7 +108,9 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
   ): Promise<AuthSnapshot> => {
     requireSender(event)
     const hasNoArguments = args.length === 0
-    if (!hasNoArguments) throw new Error('INVALID_AUTH_COMMAND')
+    if (!hasNoArguments) {
+      throw new Error('INVALID_AUTH_COMMAND')
+    }
     return publicSnapshot(coordinator.getSnapshot())
   }
   addHandler('getAuthState', getAuthState)
@@ -106,12 +122,13 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
   ): Promise<AuthCommandResult> {
     const window = requireSender(event)
     const hasValidArguments = validArguments(channel, args)
-    if (!hasValidArguments)
+    if (!hasValidArguments) {
       return {
         ok: false,
         error: { code: 'INVALID_AUTH_COMMAND' },
         snapshot: publicSnapshot(coordinator.getSnapshot())
       }
+    }
     let result: AuthCommandResult
     try {
       switch (channel) {
@@ -138,7 +155,9 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
     }
     requireSender(event, window)
     const snapshot = publicSnapshot(result.snapshot)
-    if (result.ok) return { ok: true, snapshot }
+    if (result.ok) {
+      return { ok: true, snapshot }
+    }
     return { ok: false, error: { code: result.error.code }, snapshot }
   }
   addHandler('beginLogin', (event, ...args) => mutate('beginLogin', event, args))
@@ -149,7 +168,9 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
   const unsubscribe = coordinator.subscribe((snapshot) => {
     const window = getWindow()
     const isAllowed = allowedWindow(window)
-    if (!isAllowed) return
+    if (!isAllowed) {
+      return
+    }
     window.webContents.send('authStateChanged', publicSnapshot(snapshot))
   })
   return () => {

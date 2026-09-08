@@ -9,7 +9,8 @@ import { insertLogin, loginRequest } from './database-contract.mjs'
 
 const digest = (token) => createHash('sha256').update(Buffer.from(token, 'base64url')).digest()
 const identity = (subject = randomUUID(), provider = 'google') => ({ provider, subject })
-const login = (source, create, input) => source.transaction('READ COMMITTED', (manager) => create(manager, input))
+const login = (source, create, input) =>
+  source.transaction('READ COMMITTED', (manager) => create(manager, input))
 
 async function rows(source) {
   const result = {}
@@ -31,8 +32,13 @@ async function expectFailure(operation, code) {
 async function blockedBy(source, waiter, blocker) {
   const deadline = Date.now() + 5_000
   while (Date.now() < deadline) {
-    const [state] = await source.query('SELECT $2::int = ANY(pg_blocking_pids($1::int)) AS blocked', [waiter, blocker])
-    if (state.blocked) return
+    const [state] = await source.query(
+      'SELECT $2::int = ANY(pg_blocking_pids($1::int)) AS blocked',
+      [waiter, blocker]
+    )
+    if (state.blocked) {
+      return
+    }
     await setTimeout(10)
   }
   assert.fail('expected PostgreSQL lock contention')
@@ -53,7 +59,9 @@ async function runners(source, operation) {
   } finally {
     // 대기 중인 두 번째 connection보다 blocker를 먼저 해제한다.
     for (const runner of [a, b]) {
-      if (runner.isTransactionActive) await runner.rollbackTransaction()
+      if (runner.isTransactionActive) {
+        await runner.rollbackTransaction()
+      }
       await runner.release()
     }
   }
@@ -65,7 +73,7 @@ async function consumeFixture(manager, request) {
   const columns = Object.keys(consumed).filter((column) => column !== 'id')
   await manager.query(
     `UPDATE auth_login_requests SET ${columns.map((column, i) => `"${column}" = $${i + 2}`).join(', ')} WHERE id = $1`,
-    [request.id, ...columns.map((column) => consumed[column])],
+    [request.id, ...columns.map((column) => consumed[column])]
   )
 }
 
@@ -74,7 +82,9 @@ async function assertUserInsertSql(source, create) {
   const query = runner.query.bind(runner)
   const inserts = []
   runner.query = async (sql, parameters, ...options) => {
-    if (/^\s*INSERT INTO "?users"?(?:\s|\()/.test(sql)) inserts.push({ sql, parameters })
+    if (/^\s*INSERT INTO "?users"?(?:\s|\()/.test(sql)) {
+      inserts.push({ sql, parameters })
+    }
     return query(sql, parameters, ...options)
   }
   try {
@@ -89,19 +99,34 @@ async function assertUserInsertSql(source, create) {
       VALUES ($1, $2, $3, $4, to_timestamp(floor(extract(epoch from clock_timestamp()))))
       ON CONFLICT (provider, provider_subject) DO NOTHING RETURNING id
     `
-    const normalize = (sql) => sql.replace(/\s+AS\s+"User"/g, '').replaceAll('"', '').replace(/\s+/g, '')
+    const normalize = (sql) =>
+      sql
+        .replace(/\s+AS\s+"User"/g, '')
+        .replaceAll('"', '')
+        .replace(/\s+/g, '')
     assert.equal(normalize(inserts[0].sql), normalize(originalSql))
-    assert.deepEqual(inserts[0].parameters, [result.user.id, input.provider, input.subject, result.user.nickname])
+    assert.deepEqual(inserts[0].parameters, [
+      result.user.id,
+      input.provider,
+      input.subject,
+      result.user.nickname
+    ])
   } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction()
+    if (runner.isTransactionActive) {
+      await runner.rollbackTransaction()
+    }
     await runner.release()
   }
 }
 
 async function assertStored(source, result) {
   const user = await source.getRepository(UserSchema).findOneByOrFail({ id: result.user.id })
-  const session = await source.getRepository(AuthSessionSchema).findOneByOrFail({ id: result.session.id })
-  const refresh = await source.getRepository(AuthRefreshTokenSchema).findBy({ sessionId: result.session.id })
+  const session = await source
+    .getRepository(AuthSessionSchema)
+    .findOneByOrFail({ id: result.session.id })
+  const refresh = await source
+    .getRepository(AuthRefreshTokenSchema)
+    .findBy({ sessionId: result.session.id })
   assert.equal(refresh.length, 1)
   assert.equal(session.userId, user.id)
   assert.equal(session.revokedAt, null)
@@ -113,9 +138,19 @@ async function assertStored(source, result) {
   assert.equal(refresh[0].consumedAt, null)
   assert.deepEqual(refresh[0].tokenHash, digest(result.refreshToken))
   assert.equal(Buffer.from(result.refreshToken, 'base64url').length, 32)
-  assert.equal(Buffer.from(result.refreshToken, 'base64url').toString('base64url'), result.refreshToken)
-  assert.deepEqual(Object.keys(refresh[0]).sort(), ['consumedAt', 'issuedAt', 'sessionId', 'tokenHash'])
-  if (result.isNewUser) assert.equal(user.createdAt.getTime(), session.createdAt.getTime())
+  assert.equal(
+    Buffer.from(result.refreshToken, 'base64url').toString('base64url'),
+    result.refreshToken
+  )
+  assert.deepEqual(Object.keys(refresh[0]).sort(), [
+    'consumedAt',
+    'issuedAt',
+    'sessionId',
+    'tokenHash'
+  ])
+  if (result.isNewUser) {
+    assert.equal(user.createdAt.getTime(), session.createdAt.getTime())
+  }
 }
 
 export async function assertIdentitySessions(source, mark = () => undefined) {
@@ -132,21 +167,32 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   assert.equal(first.isNewUser, true)
   assert.match(first.user.nickname, /^모험가[0-9]{6}$/)
   await assertStored(source, first)
-  await source.getRepository(UserSchema).update({ id: first.user.id }, { nickname: '기존 👩‍💻 닉네임' })
+  await source
+    .getRepository(UserSchema)
+    .update({ id: first.user.id }, { nickname: '기존 👩‍💻 닉네임' })
   const second = await login(source, create, input)
   const third = await login(source, create, input)
   // 한 기기의 소비 이력, 폐기된 기기, idle 기기를 모두 보존한다.
-  await source.getRepository(AuthRefreshTokenSchema).update(
-    { sessionId: first.session.id }, { consumedAt: first.session.createdAt },
-  )
+  await source
+    .getRepository(AuthRefreshTokenSchema)
+    .update({ sessionId: first.session.id }, { consumedAt: first.session.createdAt })
   await source.getRepository(AuthRefreshTokenSchema).insert({
-    tokenHash: randomBytes(32), sessionId: first.session.id, issuedAt: first.session.createdAt, consumedAt: null,
+    tokenHash: randomBytes(32),
+    sessionId: first.session.id,
+    issuedAt: first.session.createdAt,
+    consumedAt: null
   })
-  await source.getRepository(AuthSessionSchema).update({ id: second.session.id }, {
-    revokedAt: second.session.createdAt, revokedReason: 'logout',
-  })
+  await source.getRepository(AuthSessionSchema).update(
+    { id: second.session.id },
+    {
+      revokedAt: second.session.createdAt,
+      revokedReason: 'logout'
+    }
+  )
   const old = new Date('2025-01-01T00:00:00Z')
-  await source.getRepository(AuthSessionSchema).update({ id: third.session.id }, { createdAt: old, lastActiveAt: old })
+  await source
+    .getRepository(AuthSessionSchema)
+    .update({ id: third.session.id }, { createdAt: old, lastActiveAt: old })
   const beforeExisting = await rows(source)
   const again = await login(source, create, input)
   assert.equal(again.isNewUser, false)
@@ -155,21 +201,41 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   await assertStored(source, again)
   const afterExisting = await rows(source)
   assert.deepEqual(afterExisting.users, beforeExisting.users)
-  assert.deepEqual(afterExisting.auth_sessions.filter((row) => row.id !== again.session.id), beforeExisting.auth_sessions)
-  assert.deepEqual(afterExisting.auth_refresh_tokens.filter((row) => row.session_id !== again.session.id), beforeExisting.auth_refresh_tokens)
+  assert.deepEqual(
+    afterExisting.auth_sessions.filter((row) => row.id !== again.session.id),
+    beforeExisting.auth_sessions
+  )
+  assert.deepEqual(
+    afterExisting.auth_refresh_tokens.filter((row) => row.session_id !== again.session.id),
+    beforeExisting.auth_refresh_tokens
+  )
 
   mark('opaque identity and duplicate nickname')
   const prefix = randomUUID()
-  const inputs = [identity(`${prefix}Ab001`), identity(`${prefix}ab001`), identity(`${prefix}Ab001`, 'discord'),
-    identity(`${prefix}0009007199254740993`), identity(`${prefix}9007199254740993`), identity(` ${prefix}Ab001 `)]
+  const inputs = [
+    identity(`${prefix}Ab001`),
+    identity(`${prefix}ab001`),
+    identity(`${prefix}Ab001`, 'discord'),
+    identity(`${prefix}0009007199254740993`),
+    identity(`${prefix}9007199254740993`),
+    identity(` ${prefix}Ab001 `)
+  ]
   const distinct = []
   for (const item of inputs) {
-    distinct.push(await login(source, (manager, value) => createForTest(manager, value, { nicknameNumber: () => 7 }), item))
+    distinct.push(
+      await login(
+        source,
+        (manager, value) => createForTest(manager, value, { nicknameNumber: () => 7 }),
+        item
+      )
+    )
   }
   assert.equal(new Set(distinct.map((result) => result.user.id)).size, inputs.length)
   assert(distinct.every((result) => result.isNewUser && result.user.nickname === '모험가000007'))
   for (let index = 0; index < inputs.length; index++) {
-    const stored = await source.getRepository(UserSchema).findOneByOrFail({ id: distinct[index].user.id })
+    const stored = await source
+      .getRepository(UserSchema)
+      .findOneByOrFail({ id: distinct[index].user.id })
     assert.equal(stored.providerSubject, inputs[index].subject)
   }
 
@@ -188,7 +254,12 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     assert.deepEqual(loser.user, winner.user)
     assert.notEqual(loser.session.id, winner.session.id)
     assert.notEqual(loser.refreshToken, winner.refreshToken)
-    assert.equal(await source.getRepository(UserSchema).countBy({ provider: concurrent.provider, providerSubject: concurrent.subject }), 1)
+    assert.equal(
+      await source
+        .getRepository(UserSchema)
+        .countBy({ provider: concurrent.provider, providerSubject: concurrent.subject }),
+      1
+    )
     await assertStored(source, winner)
     await assertStored(source, loser)
   })
@@ -217,7 +288,9 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     const pending = create(b.manager, input)
     pending.catch(() => undefined)
     await blockedBy(source, bPid, aPid)
-    const [{ minimum }] = await a.query('SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS minimum')
+    const [{ minimum }] = await a.query(
+      'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS minimum'
+    )
     await a.commitTransaction()
     const result = await pending
     await b.commitTransaction()
@@ -228,55 +301,105 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   })
 
   mark('caller code consumption commits with identity session')
-  const request = loginRequest('exchange_ready', randomUUID(), { exchange_code_hash: randomBytes(32) })
+  const request = loginRequest('exchange_ready', randomUUID(), {
+    exchange_code_hash: randomBytes(32)
+  })
   await insertLogin(source, request)
   const composed = await source.transaction('READ COMMITTED', async (manager) => {
     await consumeFixture(manager, request)
     const result = await create(manager, identity())
     // Commit 전 다른 connection에서는 새 회원·session이 보이지 않는다.
     assert.equal(await source.getRepository(UserSchema).countBy({ id: result.user.id }), 0)
-    assert.equal(await source.getRepository(AuthSessionSchema).countBy({ id: result.session.id }), 0)
+    assert.equal(
+      await source.getRepository(AuthSessionSchema).countBy({ id: result.session.id }),
+      0
+    )
     return result
   })
-  const [consumed] = await source.query('SELECT * FROM auth_login_requests WHERE id = $1', [request.id])
+  const [consumed] = await source.query('SELECT * FROM auth_login_requests WHERE id = $1', [
+    request.id
+  ])
   assert.equal(consumed.status, 'consumed')
   assert.equal(consumed.exchange_code_hash, null)
   assert.equal(consumed.verified_subject, null)
   await assertStored(source, composed)
 
   mark('all writes roll back on caller session refresh and entropy failures')
-  const rollbackRequest = loginRequest('exchange_ready', randomUUID(), { exchange_code_hash: randomBytes(32) })
+  const rollbackRequest = loginRequest('exchange_ready', randomUUID(), {
+    exchange_code_hash: randomBytes(32)
+  })
   await insertLogin(source, rollbackRequest)
   const beforeFailures = await rows(source)
   let userPkViolation = false
   const variants = [
-    { code: 'AUTH_UNAVAILABLE', run: async (manager) => {
-      const runner = manager.queryRunner
-      const query = runner.query.bind(runner)
-      runner.query = async (...args) => {
-        try { return await query(...args) } catch (error) {
-          userPkViolation = error.driverError?.constraint === 'pk_users'
-          throw error
+    {
+      code: 'AUTH_UNAVAILABLE',
+      run: async (manager) => {
+        const runner = manager.queryRunner
+        const query = runner.query.bind(runner)
+        runner.query = async (...args) => {
+          try {
+            return await query(...args)
+          } catch (error) {
+            userPkViolation = error.driverError?.constraint === 'pk_users'
+            throw error
+          }
+        }
+        try {
+          return await createForTest(manager, identity(), { uuid: () => first.user.id })
+        } finally {
+          runner.query = query
         }
       }
-      try {
-        return await createForTest(manager, identity(), { uuid: () => first.user.id })
-      } finally { runner.query = query }
-    } },
-    { code: 'CALLER_FAILURE', run: async (manager) => { await create(manager, identity()); throw Object.assign(new Error('caller failed'), { code: 'CALLER_FAILURE' }) } },
-    { code: 'AUTH_UNAVAILABLE', run: async (manager) => {
-      let calls = 0
-      return createForTest(manager, identity(), { uuid: () => ++calls === 1 ? randomUUID() : first.session.id })
-    } },
-    { code: 'AUTH_UNAVAILABLE', run: (manager) => createForTest(manager, identity(), { refreshBytes: () => Buffer.from(again.refreshToken, 'base64url') }) },
-    { code: 'AUTH_INTERNAL_ERROR', run: (manager) => createForTest(manager, identity(), { refreshBytes: () => { throw new Error('entropy failed') } }) },
-    { code: 'AUTH_UNAVAILABLE', run: (manager) => createForTest(manager, input, { refreshBytes: () => Buffer.from(again.refreshToken, 'base64url') }) },
+    },
+    {
+      code: 'CALLER_FAILURE',
+      run: async (manager) => {
+        await create(manager, identity())
+        throw Object.assign(new Error('caller failed'), { code: 'CALLER_FAILURE' })
+      }
+    },
+    {
+      code: 'AUTH_UNAVAILABLE',
+      run: async (manager) => {
+        let calls = 0
+        return createForTest(manager, identity(), {
+          uuid: () => (++calls === 1 ? randomUUID() : first.session.id)
+        })
+      }
+    },
+    {
+      code: 'AUTH_UNAVAILABLE',
+      run: (manager) =>
+        createForTest(manager, identity(), {
+          refreshBytes: () => Buffer.from(again.refreshToken, 'base64url')
+        })
+    },
+    {
+      code: 'AUTH_INTERNAL_ERROR',
+      run: (manager) =>
+        createForTest(manager, identity(), {
+          refreshBytes: () => {
+            throw new Error('entropy failed')
+          }
+        })
+    },
+    {
+      code: 'AUTH_UNAVAILABLE',
+      run: (manager) =>
+        createForTest(manager, input, {
+          refreshBytes: () => Buffer.from(again.refreshToken, 'base64url')
+        })
+    }
   ]
   for (const variant of variants) {
-    await expectFailure(source.transaction('READ COMMITTED', async (manager) => {
-      await consumeFixture(manager, rollbackRequest)
-      await variant.run(manager)
-    }), variant.code)
+    await expectFailure(
+      source.transaction('READ COMMITTED', async (manager) => {
+        await consumeFixture(manager, rollbackRequest)
+        await variant.run(manager)
+      }),
+      variant.code
+    )
     assert.deepEqual(await rows(source), beforeFailures)
   }
   assert.equal(userPkViolation, true)
@@ -286,7 +409,10 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   mark('transaction preconditions leave database unchanged')
   const beforeGuards = await rows(source)
   await expectFailure(create(source.manager, identity()), 'AUTH_INTERNAL_ERROR')
-  await expectFailure(source.transaction('REPEATABLE READ', (manager) => create(manager, identity())), 'AUTH_INTERNAL_ERROR')
+  await expectFailure(
+    source.transaction('REPEATABLE READ', (manager) => create(manager, identity())),
+    'AUTH_INTERNAL_ERROR'
+  )
   assert.deepEqual(await rows(source), beforeGuards)
 
   mark('pre-existing fixture rows remain intact')
@@ -294,7 +420,10 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   for (const table of Object.keys(original)) {
     const key = table === 'auth_refresh_tokens' ? 'token_hash' : 'id'
     const ids = new Set(original[table].map((row) => String(row[key])))
-    assert.deepEqual(final[table].filter((row) => ids.has(String(row[key]))), original[table])
+    assert.deepEqual(
+      final[table].filter((row) => ids.has(String(row[key]))),
+      original[table]
+    )
   }
   return { scenarios: 10, rollbackVariants: variants.length }
 }

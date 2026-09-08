@@ -9,18 +9,27 @@ export class SearchDeadline {
   private readonly failure: Promise<never>
   private reject!: (error: Error) => void
 
-  constructor(private readonly clock: SearchClock, private readonly requestSignal?: AbortSignal) {
+  constructor(
+    private readonly clock: SearchClock,
+    private readonly requestSignal?: AbortSignal
+  ) {
     this.expiresAt = clock.now() + 2000
-    this.failure = new Promise<never>((_resolve, reject) => { this.reject = reject })
+    this.failure = new Promise<never>((_resolve, reject) => {
+      this.reject = reject
+    })
     // 이미 끊어진 HTTP 요청도 기다리는 Promise를 만들기 전에 abort할 수 있다.
     void this.failure.catch(() => undefined)
     this.timer = clock.setTimer(this.abort, 2000)
     requestSignal?.addEventListener('abort', this.abort, { once: true })
     const isAlreadyAborted = requestSignal?.aborted === true
-    if (isAlreadyAborted) this.abort()
+    if (isAlreadyAborted) {
+      this.abort()
+    }
   }
 
-  get signal(): AbortSignal { return this.controller.signal }
+  get signal(): AbortSignal {
+    return this.controller.signal
+  }
 
   readonly abort = (): void => {
     this.controller.abort()
@@ -30,7 +39,9 @@ export class SearchDeadline {
   check(): void {
     const isExpired = this.clock.now() >= this.expiresAt
     const cannotContinue = isExpired || this.signal.aborted
-    if (!cannotContinue) return
+    if (!cannotContinue) {
+      return
+    }
     this.abort()
     throw neopleSearchFailure('internal')
   }

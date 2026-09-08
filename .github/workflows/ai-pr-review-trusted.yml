@@ -2,7 +2,7 @@ name: AI PR Review Trusted
 
 on:
   workflow_run:
-    workflows: ["AI PR Review"]
+    workflows: ['AI PR Review']
     types: [completed]
 
 permissions: {}
@@ -33,7 +33,7 @@ jobs:
         run: node scripts/pr-review/src/run.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          REVIEW_LABEL: "@ldb-review"
+          REVIEW_LABEL: '@ldb-review'
 
   trigger:
     needs: policy
@@ -54,5 +54,5 @@ jobs:
         env:
           REVIEW_TRIGGER_TOKEN: ${{ secrets.LDB_REVIEW_TRIGGER_TOKEN }}
           REVIEW_TRIGGER_ACTOR: ${{ github.repository_owner }}
-          REVIEW_LABEL: "@ldb-review"
+          REVIEW_LABEL: '@ldb-review'
           REVIEW_PROVIDER: codex

@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { request } from 'node:http'
@@ -21,7 +20,7 @@ const loginService = {
     return {
       requestId: randomUUID(),
       browserUrl: 'https://api.test.invalid/auth/login/authorize?ticket=test',
-      expiresAt: '2026-09-06T00:00:00.000Z',
+      expiresAt: '2026-09-06T00:00:00.000Z'
     }
   },
   exchange: async () => {
@@ -32,36 +31,40 @@ const loginService = {
     loginCalls++
     return {
       redirectUrl: 'https://google.test.invalid/authorize?state=test',
-      cookie: '__Host-test=x; Secure; HttpOnly; SameSite=Lax; Path=/',
+      cookie: '__Host-test=x; Secure; HttpOnly; SameSite=Lax; Path=/'
     }
   },
   callback: async () => {
     loginCalls++
     return {
       returnUrl: 'ldb-test://login/complete?code=exchange-only',
-      cookie: '__Host-test=; Max-Age=0; Secure; HttpOnly; SameSite=Lax; Path=/',
+      cookie: '__Host-test=; Max-Age=0; Secure; HttpOnly; SameSite=Lax; Path=/'
     }
-  },
+  }
 }
 
 const sessionService = {
   refresh: async (rawToken) => {
     sessionCalls.refresh.push(rawToken)
     const hasRefreshFailure = refreshFailure != null
-    if (hasRefreshFailure) throw refreshFailure
+    if (hasRefreshFailure) {
+      throw refreshFailure
+    }
     return {
       tokenType: 'Bearer',
       accessToken: 'session-access',
       accessTokenExpiresAt: '2026-09-06T00:15:00.000Z',
       refreshToken: 'session-refresh',
-      sessionExpiresAt: '2026-10-06T00:00:00.000Z',
+      sessionExpiresAt: '2026-10-06T00:00:00.000Z'
     }
   },
   logout: async (rawToken) => {
     sessionCalls.logout.push(rawToken)
     const hasLogoutFailure = logoutFailure != null
-    if (hasLogoutFailure) throw logoutFailure
-  },
+    if (hasLogoutFailure) {
+      throw logoutFailure
+    }
+  }
 }
 
 before(async () => {
@@ -86,13 +89,15 @@ function post(path, chunks, headers = {}) {
           resolve({
             status: response.statusCode,
             headers: response.headers,
-            body: Buffer.concat(body).toString('utf8'),
+            body: Buffer.concat(body).toString('utf8')
           })
         })
-      },
+      }
     )
     httpRequest.on('error', reject)
-    for (const chunk of chunks) httpRequest.write(chunk)
+    for (const chunk of chunks) {
+      httpRequest.write(chunk)
+    }
     httpRequest.end()
   })
 }
@@ -107,7 +112,7 @@ test('refresh and logout accept only refreshToken and return no-store success re
     accessToken: 'session-access',
     accessTokenExpiresAt: '2026-09-06T00:15:00.000Z',
     refreshToken: 'session-refresh',
-    sessionExpiresAt: '2026-10-06T00:00:00.000Z',
+    sessionExpiresAt: '2026-10-06T00:00:00.000Z'
   })
   assert.deepEqual(sessionCalls.refresh, [refreshToken])
 
@@ -122,7 +127,7 @@ test('session routes apply media, size, UTF-8, JSON and exact-shape precedence b
   const baseline = {
     login: loginCalls,
     refresh: sessionCalls.refresh.length,
-    logout: sessionCalls.logout.length,
+    logout: sessionCalls.logout.length
   }
   for (const path of ['/auth/refresh', '/auth/logout']) {
     for (const [chunks, headers, status, code] of [
@@ -136,24 +141,31 @@ test('session routes apply media, size, UTF-8, JSON and exact-shape precedence b
       [['null'], {}, 400, 'INVALID_AUTH_REQUEST'],
       [['[]'], {}, 400, 'INVALID_AUTH_REQUEST'],
       [['{}'], {}, 400, 'INVALID_AUTH_REQUEST'],
-      [[JSON.stringify({ refreshToken: opaque(), sessionId: randomUUID() })], {}, 400, 'INVALID_AUTH_REQUEST'],
-      [[JSON.stringify({ refreshToken: 1 })], {}, 400, 'INVALID_AUTH_REQUEST'],
+      [
+        [JSON.stringify({ refreshToken: opaque(), sessionId: randomUUID() })],
+        {},
+        400,
+        'INVALID_AUTH_REQUEST'
+      ],
+      [[JSON.stringify({ refreshToken: 1 })], {}, 400, 'INVALID_AUTH_REQUEST']
     ]) {
       const response = await post(path, chunks, headers)
       assert.equal(response.status, status)
       assert.equal(response.headers['cache-control'], 'no-store')
       assert.equal(JSON.parse(response.body).error.code, code)
       const isTooLarge = status === 413
-      if (isTooLarge) assert.equal(response.headers.connection, 'close')
+      if (isTooLarge) {
+        assert.equal(response.headers.connection, 'close')
+      }
     }
   }
   assert.deepEqual(
     {
       login: loginCalls,
       refresh: sessionCalls.refresh.length,
-      logout: sessionCalls.logout.length,
+      logout: sessionCalls.logout.length
     },
-    baseline,
+    baseline
   )
 })
 
@@ -165,7 +177,7 @@ test('session routes accept exactly 16,384 UTF-8 bytes and reject the next byte'
     assert.equal(Buffer.byteLength(atLimit), 16_384)
     const accepted = await post(path, [atLimit.slice(0, 8_000), atLimit.slice(8_000)], {
       'content-type': 'application/json; charset="utf-8"',
-      'content-encoding': 'identity',
+      'content-encoding': 'identity'
     })
     const isLogoutPath = path.endsWith('logout')
     const expectedStatus = isLogoutPath ? 204 : 200
@@ -183,13 +195,13 @@ test('refresh preserves every explicit RefreshFailure and sanitizes unknown fail
       REFRESH_ERRORS.INVALID_REQUEST,
       REFRESH_ERRORS.AUTHENTICATION_REQUIRED,
       REFRESH_ERRORS.INTERNAL,
-      REFRESH_ERRORS.UNAVAILABLE,
+      REFRESH_ERRORS.UNAVAILABLE
     ]) {
       refreshFailure = new RefreshFailure(definition)
       const response = await post('/auth/refresh', [JSON.stringify({ refreshToken: opaque() })])
       assert.equal(response.status, definition.status)
       assert.deepEqual(JSON.parse(response.body), {
-        error: { code: definition.code, message: definition.message },
+        error: { code: definition.code, message: definition.message }
       })
     }
     refreshFailure = new Error('raw credential identity SQL https://private.invalid')
@@ -198,8 +210,8 @@ test('refresh preserves every explicit RefreshFailure and sanitizes unknown fail
     assert.deepEqual(JSON.parse(internal.body), {
       error: {
         code: 'AUTH_INTERNAL_ERROR',
-        message: '인증 요청을 처리하지 못했습니다.',
-      },
+        message: '인증 요청을 처리하지 못했습니다.'
+      }
     })
     assert.doesNotMatch(internal.body, /raw|credential|identity|SQL|private/)
   } finally {
@@ -215,8 +227,8 @@ test('logout never emits a success 204 when its result is unavailable', async ()
     assert.deepEqual(JSON.parse(response.body), {
       error: {
         code: 'AUTH_UNAVAILABLE',
-        message: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
-      },
+        message: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+      }
     })
   } finally {
     logoutFailure = undefined
@@ -228,14 +240,14 @@ test('adding session routes preserves login and HEAD behavior', async () => {
   const logoutBefore = sessionCalls.logout.length
   const head = await fetch(`${base}/auth/login/authorize?ticket=${opaque()}`, {
     method: 'HEAD',
-    redirect: 'manual',
+    redirect: 'manual'
   })
   assert.equal(head.status, 400)
   assert.equal(head.headers.get('cache-control'), 'no-store')
   assert.equal(await head.text(), '')
 
   const get = await fetch(`${base}/auth/login/authorize?ticket=${opaque()}`, {
-    redirect: 'manual',
+    redirect: 'manual'
   })
   assert.equal(get.status, 303)
   assert.equal(get.headers.get('cache-control'), 'no-store')

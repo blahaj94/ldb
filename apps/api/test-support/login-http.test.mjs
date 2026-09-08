@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { request } from 'node:http'
@@ -21,7 +20,9 @@ let calls = 0
 let failure
 const run = (result) => {
   calls++
-  if (failure) throw failure
+  if (failure) {
+    throw failure
+  }
   return result
 }
 before(async () => {
@@ -30,24 +31,24 @@ before(async () => {
       run({
         requestId: randomUUID(),
         browserUrl: 'https://api.test.invalid/auth/login/authorize?ticket=test',
-        expiresAt: '2026-09-06T00:00:00.000Z',
+        expiresAt: '2026-09-06T00:00:00.000Z'
       }),
     exchange: () =>
       run({
         tokenType: 'Bearer',
         accessToken: 'response-access',
-        refreshToken: 'response-refresh',
+        refreshToken: 'response-refresh'
       }),
     authorize: () =>
       run({
         redirectUrl: 'https://google.test.invalid/authorize?state=test',
-        cookie: '__Host-test=x; Secure; HttpOnly; SameSite=Lax; Path=/',
+        cookie: '__Host-test=x; Secure; HttpOnly; SameSite=Lax; Path=/'
       }),
     callback: () =>
       run({
         returnUrl: 'ldb-test://login/complete?code=exchange-only',
-        cookie: '__Host-test=; Max-Age=0; Secure; HttpOnly; SameSite=Lax; Path=/',
-      }),
+        cookie: '__Host-test=; Max-Age=0; Secure; HttpOnly; SameSite=Lax; Path=/'
+      })
   })
   await app.listen(0, '127.0.0.1')
   base = await app.getUrl()
@@ -57,18 +58,27 @@ after(async () => {
 })
 
 test('registered service NotFoundException remains a sanitized internal failure', async () => {
-  failure = new NotFoundException({ message: 'fixture-service-secret', detail: 'fixture-provider-code' })
+  failure = new NotFoundException({
+    message: 'fixture-service-secret',
+    detail: 'fixture-provider-code'
+  })
   try {
-    const response = await fetch(`${base}/auth/callback/google?state=${opaque()}&code=fixture-code`, {
-      redirect: 'manual',
-    })
+    const response = await fetch(
+      `${base}/auth/callback/google?state=${opaque()}&code=fixture-code`,
+      {
+        redirect: 'manual'
+      }
+    )
     assert.equal(response.status, 500)
     assert.equal(response.headers.get('cache-control'), 'no-store')
-    assert.doesNotMatch(await response.text(), /fixture-service-secret|fixture-provider-code|fixture-code|NotFoundException/)
+    assert.doesNotMatch(
+      await response.text(),
+      /fixture-service-secret|fixture-provider-code|fixture-code|NotFoundException/
+    )
     const json = await post('/auth/login-requests', [JSON.stringify(creation(opaque()))])
     assert.equal(json.status, 500)
     assert.deepEqual(JSON.parse(json.body), {
-      error: { code: 'AUTH_INTERNAL_ERROR', message: '인증 요청을 처리하지 못했습니다.' },
+      error: { code: 'AUTH_INTERNAL_ERROR', message: '인증 요청을 처리하지 못했습니다.' }
     })
   } finally {
     failure = undefined
@@ -78,7 +88,7 @@ test('registered service NotFoundException remains a sanitized internal failure'
 for (const route of [
   { name: 'authorize', path: '/auth/login/authorize', successStatus: 303 },
   { name: 'Google callback', path: '/auth/callback/google', successStatus: 200 },
-  { name: 'Discord callback', path: '/auth/callback/discord', successStatus: 200 },
+  { name: 'Discord callback', path: '/auth/callback/discord', successStatus: 200 }
 ]) {
   test(`HEAD ${route.name} rejects before the service and preserves the GET route`, async () => {
     const query =
@@ -115,13 +125,15 @@ function post(path, chunks, headers = {}) {
           resolve({
             status: res.statusCode,
             headers: res.headers,
-            body: Buffer.concat(body).toString('utf8'),
-          }),
+            body: Buffer.concat(body).toString('utf8')
+          })
         )
-      },
+      }
     )
     req.on('error', reject)
-    for (const chunk of chunks) req.write(chunk)
+    for (const chunk of chunks) {
+      req.write(chunk)
+    }
     req.end()
   })
 }
@@ -138,14 +150,16 @@ test('actual chunked stream cap and parser error priority run before auth servic
       [[], {}, 400, 'INVALID_AUTH_REQUEST'],
       [['{'], {}, 400, 'INVALID_AUTH_REQUEST'],
       [['null'], {}, 400, 'INVALID_AUTH_REQUEST'],
-      [['[]'], {}, 400, 'INVALID_AUTH_REQUEST'],
+      [['[]'], {}, 400, 'INVALID_AUTH_REQUEST']
     ]) {
       const response = await post(path, chunks, headers)
       assert.equal(response.status, status)
       assert.equal(response.headers['cache-control'], 'no-store')
       assert.deepEqual(Object.keys(JSON.parse(response.body)), ['error'])
       assert.equal(JSON.parse(response.body).error.code, code)
-      if (status === 413) assert.equal(response.headers.connection, 'close')
+      if (status === 413) {
+        assert.equal(response.headers.connection, 'close')
+      }
     }
   }
   assert.equal(calls, baseline)
@@ -157,17 +171,17 @@ test('HTTP rejects client-provided identity/redirect fields before service and a
   for (const extra of [
     { subject: 'do-not-trust' },
     { returnUrl: 'https://evil.invalid' },
-    { clientId: 'web' },
+    { clientId: 'web' }
   ]) {
     assert.equal(
       (await post('/auth/login-requests', [JSON.stringify({ ...body, ...extra })])).status,
-      400,
+      400
     )
   }
   assert.equal(calls, baseline)
   const response = await post('/auth/login-requests', [JSON.stringify(body)], {
     'content-type': 'application/json; charset=UTF-8',
-    'content-encoding': 'identity',
+    'content-encoding': 'identity'
   })
   assert.equal(response.status, 201)
   assert.equal(response.headers['cache-control'], 'no-store')
@@ -175,7 +189,7 @@ test('HTTP rejects client-provided identity/redirect fields before service and a
   const atLimit = text + ' '.repeat(16384 - Buffer.byteLength(text))
   assert.equal(
     (await post('/auth/login-requests', [atLimit.slice(0, 8000), atLimit.slice(8000)])).status,
-    201,
+    201
   )
   assert.equal((await post('/auth/login-requests', [atLimit, ' '])).status, 413)
 })
@@ -183,7 +197,7 @@ test('HTTP rejects client-provided identity/redirect fields before service and a
 test('browser HTML, redirects and errors never echo untrusted data and prohibit active content', async () => {
   const response = await fetch(
     `${base}/auth/callback/google?state=${opaque()}&code=provider-sensitive&extra=%3Cscript%3E`,
-    { redirect: 'manual' },
+    { redirect: 'manual' }
   )
   const html = await response.text()
   assert.equal(response.status, 200)
@@ -196,12 +210,12 @@ test('browser HTML, redirects and errors never echo untrusted data and prohibit 
   failure = new Error('raw-provider-code identity SQL credential URL https://evil.invalid')
   try {
     const error = await fetch(`${base}/auth/callback/google?state=${opaque()}&code=private`, {
-      redirect: 'manual',
+      redirect: 'manual'
     })
     assert.equal(error.status, 500)
     assert.doesNotMatch(
       await error.text(),
-      /raw-provider|identity|SQL|credential|evil.invalid|private/,
+      /raw-provider|identity|SQL|credential|evil.invalid|private/
     )
     failure = new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
     const json = await post('/auth/exchange', [
@@ -209,15 +223,15 @@ test('browser HTML, redirects and errors never echo untrusted data and prohibit 
         requestId: randomUUID(),
         clientId: 'desktop',
         code: opaque(),
-        codeVerifier: opaque(),
-      }),
+        codeVerifier: opaque()
+      })
     ])
     assert.equal(json.status, 400)
     assert.deepEqual(JSON.parse(json.body), {
       error: {
         code: 'LOGIN_EXCHANGE_INVALID',
-        message: '로그인 요청이 유효하지 않습니다. 다시 로그인해 주세요.',
-      },
+        message: '로그인 요청이 유효하지 않습니다. 다시 로그인해 주세요.'
+      }
     })
   } finally {
     failure = undefined
@@ -251,14 +265,14 @@ test('stream overflow responds before body end; framing rejection is separate an
       'x'.repeat(8192) +
       '\r\n2001\r\n' +
       'x'.repeat(8193) +
-      '\r\n',
+      '\r\n'
   )
   assert.match(overflow, /^HTTP\/1\.1 413/)
   assert.match(overflow, /Cache-Control: no-store/i)
   assert.match(overflow, /Connection: close/i)
   assert.match(overflow, /REQUEST_TOO_LARGE/)
   const framing = await rawHttp(
-    'POST /auth/exchange HTTP/1.1\r\nHost: test.invalid\r\nContent-Type: application/json\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\ncredential-canary',
+    'POST /auth/exchange HTTP/1.1\r\nHost: test.invalid\r\nContent-Type: application/json\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\ncredential-canary'
   )
   assert.match(framing, /^HTTP\/1\.1 400/)
   assert.doesNotMatch(framing, /credential-canary|Parse Error|stack/)
@@ -273,13 +287,13 @@ test('auth application and error log sinks omit raw URL/body/cookie/identity and
     {
       cwd: new URL('..', import.meta.url),
       env: { PATH: process.env.PATH },
-      timeout: 5000,
-    },
+      timeout: 5000
+    }
   )
   assert.equal(result.stdout, 'Login log probe passed\n')
   assert.equal(result.stderr, '')
   const authorize = await fetch(`${base}/auth/login/authorize?ticket=${opaque()}`, {
-    redirect: 'manual',
+    redirect: 'manual'
   })
   assert.equal(authorize.status, 303)
   assert.equal(authorize.headers.get('cache-control'), 'no-store')

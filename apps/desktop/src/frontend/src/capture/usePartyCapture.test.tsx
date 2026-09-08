@@ -84,7 +84,9 @@ async function renderPartyCaptureHook(): Promise<{
 
   return {
     getCurrent: () => {
-      if (!current) throw new Error('Hook did not render.')
+      if (!current) {
+        throw new Error('Hook did not render.')
+      }
       return current
     },
     unmount: async () => {
@@ -389,8 +391,11 @@ describe('usePartyCapture', () => {
       })
       await flushPromises()
       const video = vi.mocked(HTMLMediaElement.prototype.play).mock.contexts[0] as HTMLMediaElement
-      if (action === 'stop') act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
-      else await hook.unmount()
+      if (action === 'stop') {
+        act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
+      } else {
+        await hook.unmount()
+      }
 
       expect(track.stop).toHaveBeenCalledOnce()
       expect(video.pause).toHaveBeenCalledOnce()
@@ -489,8 +494,11 @@ describe('usePartyCapture', () => {
       await flushPromises()
       expect(moduleMocks.createPartyOcrWorker).toHaveBeenCalledOnce()
       await act(async () => hook.getCurrent().startCapture())
-      if (outcome === 'resolve') pendingWorker.resolve(previous.worker)
-      else pendingWorker.reject(new Error('Old worker failed.'))
+      if (outcome === 'resolve') {
+        pendingWorker.resolve(previous.worker)
+      } else {
+        pendingWorker.reject(new Error('Old worker failed.'))
+      }
       await act(async () => firstStart)
 
       expect(previous.track.stop).toHaveBeenCalledOnce()

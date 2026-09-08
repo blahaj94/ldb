@@ -5,7 +5,7 @@ import { authLoginRequestColumns } from './auth-login-request.columns.js'
 import {
   authLoginRequestValueChecks,
   authLoginRequestFieldGroupChecks,
-  authLoginRequestStateChecks,
+  authLoginRequestStateChecks
 } from './auth-login-request.checks.js'
 
 export interface AuthLoginRequest {
@@ -41,14 +41,12 @@ export const AuthLoginRequestSchema = new EntitySchema<AuthLoginRequest>({
   uniques: [
     { name: 'uq_auth_login_requests_launch_ticket_hash', columns: ['launchTicketHash'] },
     { name: 'uq_auth_login_requests_state_hash', columns: ['stateHash'] },
-    { name: 'uq_auth_login_requests_exchange_code_hash', columns: ['exchangeCodeHash'] },
+    { name: 'uq_auth_login_requests_exchange_code_hash', columns: ['exchangeCodeHash'] }
   ],
-  indices: [
-    { name: 'idx_auth_login_requests_expires_at', columns: ['expiresAt'] },
-  ],
+  indices: [{ name: 'idx_auth_login_requests_expires_at', columns: ['expiresAt'] }],
   checks: [
     ...authLoginRequestValueChecks,
     ...authLoginRequestFieldGroupChecks,
-    ...authLoginRequestStateChecks,
-  ],
+    ...authLoginRequestStateChecks
+  ]
 })

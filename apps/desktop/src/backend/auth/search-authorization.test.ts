@@ -89,11 +89,18 @@ describe('검색의 main authorization 소비 경계', () => {
       const storage = deferred<'confirmed'>()
       const isRefresh = boundary === 'refresh'
       const isCommit = boundary === 'commit'
-      if (isRefresh) harness.http.refresh.mockReturnValueOnce(refresh.promise)
-      else harness.http.refresh.mockResolvedValueOnce(tokens)
-      if (isCommit) harness.store.commitWaits.push(storage.promise)
+      if (isRefresh) {
+        harness.http.refresh.mockReturnValueOnce(refresh.promise)
+      } else {
+        harness.http.refresh.mockResolvedValueOnce(tokens)
+      }
+      if (isCommit) {
+        harness.store.commitWaits.push(storage.promise)
+      }
       const isFinalize = boundary === 'finalize'
-      if (isFinalize) harness.store.removeWaits.push(storage.promise)
+      if (isFinalize) {
+        harness.store.removeWaits.push(storage.promise)
+      }
       const controller = new AbortController()
       let cancelledResult: AuthAuthorization | undefined
       const cancelled = auth.authorization(controller.signal).then((result) => {
@@ -191,8 +198,9 @@ describe('검색의 main authorization 소비 경계', () => {
       const { auth, harness } = await setup()
       const access = await usedAccess(auth)
       const isUnconfirmed = serverLogout === 'unconfirmed'
-      if (isUnconfirmed)
+      if (isUnconfirmed) {
         harness.http.logout.mockRejectedValueOnce(new AuthHttpFailure('unavailable'))
+      }
 
       expect(await rejectAccess(auth, access, true)).toEqual({ status: 'unavailable' })
       expect(auth.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: 'REAUTH_REQUIRED' })
@@ -217,11 +225,20 @@ describe('검색의 main authorization 소비 경계', () => {
       const isHttp = boundary === 'http'
       const isCommit = boundary === 'commit'
       const isFinalize = boundary === 'finalize'
-      if (isHttp) harness.http.refresh.mockReturnValueOnce(refresh.promise)
-      else harness.http.refresh.mockResolvedValueOnce(tokens)
-      if (isMarker) harness.store.establishWaits.push(storage.promise)
-      if (isCommit) harness.store.commitWaits.push(storage.promise)
-      if (isFinalize) harness.store.removeWaits.push(storage.promise)
+      if (isHttp) {
+        harness.http.refresh.mockReturnValueOnce(refresh.promise)
+      } else {
+        harness.http.refresh.mockResolvedValueOnce(tokens)
+      }
+      if (isMarker) {
+        harness.store.establishWaits.push(storage.promise)
+      }
+      if (isCommit) {
+        harness.store.commitWaits.push(storage.promise)
+      }
+      if (isFinalize) {
+        harness.store.removeWaits.push(storage.promise)
+      }
       const refreshing = auth.authorization()
       const blockedEffect = isMarker
         ? harness.store.establishTransition

@@ -1,4 +1,3 @@
-/* global fetch, URL */
 import assert from 'node:assert/strict'
 import process from 'node:process'
 import { once } from 'node:events'
@@ -40,8 +39,12 @@ DataSource.prototype.initialize = async function () {
     observe('db.backend', row.pid)
     return result
   }
-  this.driver.disconnect = async () => { observe('db.disconnected') }
-  if (shouldFailPartially) throw new Error('fixture-sensitive-partial-connect')
+  this.driver.disconnect = async () => {
+    observe('db.disconnected')
+  }
+  if (shouldFailPartially) {
+    throw new Error('fixture-sensitive-partial-connect')
+  }
   const shouldWaitForSignal = fault === 'initialize-signal' || fault === 'initialize-signal-hold'
   if (shouldWaitForSignal) {
     // 실제 connecting socket을 대신하는 ref를 유지해야 Node가 await 중 종료하지 않는다.
@@ -59,7 +62,9 @@ DataSource.prototype.initialize = async function () {
 }
 DataSource.prototype.destroy = async function () {
   observe('db.destroy')
-  if (useRealDatabase) return destroy.call(this)
+  if (useRealDatabase) {
+    return destroy.call(this)
+  }
   this.isInitialized = false
   observe('db.disconnected')
   const shouldHoldAfterCleanup = fault === 'initialize-signal-hold'
@@ -73,14 +78,22 @@ const create = NestFactory.create.bind(NestFactory)
 NestFactory.create = async (...args) => {
   observe('app.create')
   const shouldFailCreation = fault === 'app-create'
-  if (shouldFailCreation) throw new Error('fixture-sensitive-app-creation')
+  if (shouldFailCreation) {
+    throw new Error('fixture-sensitive-app-creation')
+  }
   const shouldFailProvider = fault === 'nest-provider'
   if (shouldFailProvider) {
     class FaultyModule {}
-    Module({ providers: [{
-      provide: 'runtime-test-failure',
-      useFactory: () => { throw new Error('fixture-sensitive-nest-provider') },
-    }] })(FaultyModule)
+    Module({
+      providers: [
+        {
+          provide: 'runtime-test-failure',
+          useFactory: () => {
+            throw new Error('fixture-sensitive-nest-provider')
+          }
+        }
+      ]
+    })(FaultyModule)
     args[0] = FaultyModule
   }
   const app = await create(...args)
@@ -90,14 +103,18 @@ NestFactory.create = async (...args) => {
     await close()
     observe('app.closed')
     const shouldFailClose = fault === 'app-close'
-    if (shouldFailClose) throw new Error('fixture-sensitive-app-close')
+    if (shouldFailClose) {
+      throw new Error('fixture-sensitive-app-close')
+    }
   }
   const shouldFailConfiguration = fault === 'app-configure'
   const listen = app.listen.bind(app)
   const observedListen = async (...listenArgs) => {
     observe('app.listen')
     const shouldStopBeforeListening = fault === 'stop-before-listen'
-    if (shouldStopBeforeListening) throw new Error('fixture-sensitive-unexpected-listen')
+    if (shouldStopBeforeListening) {
+      throw new Error('fixture-sensitive-unexpected-listen')
+    }
     const result = await listen(...listenArgs)
     const shouldWaitForSignal = fault === 'listen-signal'
     if (shouldWaitForSignal) {
@@ -113,11 +130,19 @@ NestFactory.create = async (...args) => {
       const isClose = property === 'close'
       const isListen = property === 'listen'
       const isFailingUse = shouldFailConfiguration && property === 'use'
-      if (isClose) return observedClose
-      if (isListen) return observedListen
-      if (isFailingUse) return () => { throw new Error('fixture-sensitive-app-configuration') }
+      if (isClose) {
+        return observedClose
+      }
+      if (isListen) {
+        return observedListen
+      }
+      if (isFailingUse) {
+        return () => {
+          throw new Error('fixture-sensitive-app-configuration')
+        }
+      }
       return Reflect.get(target, property)
-    },
+    }
   })
 }
 
@@ -131,7 +156,10 @@ globalThis.fetch = (input, options) => {
   // 정의하지 않은 외부 연결은 거절한다. Test transport만 loopback URL에 대응시킨다.
   assert(isGoogleRequest || isNeopleRequest, 'unexpected outbound request in runtime test')
   if (isGoogleRequest) {
-    return nativeFetch(`${process.env.LDB_TEST_GOOGLE_ORIGIN}${isTokenRequest ? '/token' : '/certs'}`, options)
+    return nativeFetch(
+      `${process.env.LDB_TEST_GOOGLE_ORIGIN}${isTokenRequest ? '/token' : '/certs'}`,
+      options
+    )
   }
   return nativeFetch(`${process.env.LDB_TEST_NEOPLE_ORIGIN}${url.pathname}${url.search}`, options)
 }

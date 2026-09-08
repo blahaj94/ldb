@@ -36,7 +36,9 @@ async function setup(signedIn = true): Promise<{
   ) => Promise<unknown>
 }> {
   const harness = createAuthHarness()
-  if (signedIn) harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+  if (signedIn) {
+    harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+  }
   const auth = createAuthCoordinator(harness.dependencies)
   await auth.start()
   harness.http.refresh.mockClear()
@@ -58,13 +60,17 @@ async function setup(signedIn = true): Promise<{
   registerCaptureIpc(auth)
   registerCaptureWindow(window as unknown as BrowserWindow, rendererUrl)
   const handlers = new Map<string, Handler>()
-  for (const [channel, handler] of electron.handle.mock.calls) handlers.set(channel, handler)
+  for (const [channel, handler] of electron.handle.mock.calls) {
+    handlers.set(channel, handler)
+  }
   const event = { sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent
   const invoke = (channel: string, ...args: unknown[]): Promise<unknown> => {
     const handler = handlers.get(channel)
     expect(handler, `등록된 ${channel} IPC가 요청을 처리해야 한다`).toBeTypeOf('function')
     const hasHandler = handler != null
-    if (!hasHandler) throw new Error('Capture handler was not registered')
+    if (!hasHandler) {
+      throw new Error('Capture handler was not registered')
+    }
     return Promise.resolve().then(() => handler(event, ...args))
   }
   const dispatchMedia = (
@@ -160,7 +166,9 @@ describe('capture main auth boundary', () => {
       const isSelectingSource = condition === 'selecting-source'
       const pending = deferred<typeof sources>()
       let selection: Promise<unknown> | undefined
-      if (isStaleAuth) await fixture.invoke('selectCaptureSource', sources[0].id)
+      if (isStaleAuth) {
+        await fixture.invoke('selectCaptureSource', sources[0].id)
+      }
       if (isSelectingSource) {
         electron.getSources.mockReturnValueOnce(pending.promise)
         selection = fixture.invoke('selectCaptureSource', sources[0].id)
@@ -206,8 +214,11 @@ describe('capture main auth boundary', () => {
       const captureId = (begun as { snapshot: { captureId: string } }).snapshot.captureId
       const isLogout = condition === 'logout'
 
-      if (isLogout) await fixture.auth.logout()
-      else await fixture.invoke('selectCaptureSource', '')
+      if (isLogout) {
+        await fixture.auth.logout()
+      } else {
+        await fixture.invoke('selectCaptureSource', '')
+      }
 
       expect(await fixture.invoke('controlCharacterSearch', { action: 'read' })).toMatchObject({
         ok: true,
@@ -346,8 +357,11 @@ describe('capture main auth boundary', () => {
     async (kind) => {
       const fixture = await setup()
       const isSubframe = kind === 'subframe'
-      if (isSubframe) Object.assign(fixture.event, { senderFrame: { url: rendererUrl } })
-      else fixture.mainFrame.url = `${rendererUrl}?unexpected`
+      if (isSubframe) {
+        Object.assign(fixture.event, { senderFrame: { url: rendererUrl } })
+      } else {
+        fixture.mainFrame.url = `${rendererUrl}?unexpected`
+      }
       await expect(fixture.invoke('listCaptureSources')).rejects.toThrow()
       expect(electron.getSources).not.toHaveBeenCalled()
     }
@@ -408,9 +422,13 @@ describe('capture main auth boundary', () => {
       expect(electron.getSources).toHaveBeenCalledTimes(callsBeforeMedia + 1)
       const isLogout = kind === 'logout'
       const isClear = kind === 'clear'
-      if (isLogout) await fixture.auth.logout()
-      else if (isClear) await fixture.invoke('selectCaptureSource', '')
-      else fixture.mainFrame.url = 'about:blank'
+      if (isLogout) {
+        await fixture.auth.logout()
+      } else if (isClear) {
+        await fixture.invoke('selectCaptureSource', '')
+      } else {
+        fixture.mainFrame.url = 'about:blank'
+      }
       pending.resolve(sources)
       expect(await media).toBeNull()
     }
@@ -433,9 +451,11 @@ describe('capture main auth boundary', () => {
       await fixture.invoke('selectCaptureSource', sources[0].id)
       await beginCapture(fixture)
       const isFailure = kind === 'failure'
-      if (isFailure)
+      if (isFailure) {
         electron.getSources.mockRejectedValue(new Error('Synthetic enumeration failure'))
-      else electron.getSources.mockResolvedValue([])
+      } else {
+        electron.getSources.mockResolvedValue([])
+      }
 
       const callback = vi.fn()
       fixture.dispatchMedia(callback)
@@ -471,8 +491,11 @@ describe('capture main auth boundary', () => {
       const current = await fixture.invoke('controlCharacterSearch', { action: 'read' })
 
       const isFailure = kind === 'failure'
-      if (isFailure) pending.reject(new Error('Synthetic enumeration failure'))
-      else pending.resolve([])
+      if (isFailure) {
+        pending.reject(new Error('Synthetic enumeration failure'))
+      } else {
+        pending.resolve([])
+      }
       await vi.waitFor(() => expect(callback).toHaveBeenCalledExactlyOnceWith(null))
 
       expect(await fixture.invoke('controlCharacterSearch', { action: 'read' })).toEqual(current)
@@ -487,7 +510,9 @@ describe('capture main auth boundary', () => {
       await fixture.invoke('selectCaptureSource', sources[0].id)
       await beginCapture(fixture)
       const isDenied = kind === 'denied'
-      if (isDenied) electron.getSources.mockResolvedValue([])
+      if (isDenied) {
+        electron.getSources.mockResolvedValue([])
+      }
       const callback = vi.fn().mockImplementationOnce(() => {
         throw new Error('Synthetic callback already consumed')
       })

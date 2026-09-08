@@ -1,5 +1,9 @@
 import type { DataSource } from 'typeorm'
-import { createDatabaseDataSource, readDatabaseConfiguration, runMigrationCommand } from './index.js'
+import {
+  createDatabaseDataSource,
+  readDatabaseConfiguration,
+  runMigrationCommand
+} from './index.js'
 
 const command = process.argv[2]
 
@@ -8,7 +12,9 @@ function isMigrationCommand(value: string | undefined): value is 'up' | 'down' |
 }
 
 try {
-  if (!isMigrationCommand(command)) throw new Error('Database migration failed')
+  if (!isMigrationCommand(command)) {
+    throw new Error('Database migration failed')
+  }
   const result = await runMigrationCommand(command, (): DataSource => {
     return createDatabaseDataSource(readDatabaseConfiguration(process.env))
   })

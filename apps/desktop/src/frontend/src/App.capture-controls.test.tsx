@@ -48,7 +48,9 @@ function button(text: string): HTMLButtonElement {
     return hasLabel
   })
   const isMissing = result == null
-  if (isMissing) throw new Error(`Expected renderer button: ${text}`)
+  if (isMissing) {
+    throw new Error(`Expected renderer button: ${text}`)
+  }
   return result
 }
 

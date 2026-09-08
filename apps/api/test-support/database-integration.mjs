@@ -12,7 +12,11 @@ import { assertSessionHttpIntegration } from './session-http-integration.mjs'
 import { assertAccountHttpIntegration } from './account-http-integration.mjs'
 import { assertCharacterSearchHttpIntegration } from './character-search-http-integration.mjs'
 import { assertGoogleHttpIntegration } from './google-http-integration.mjs'
-import { assertRuntimeDatabaseFailures, assertRuntimeFreshStart, assertRuntimeHttpIntegration } from './runtime-http-integration.mjs'
+import {
+  assertRuntimeDatabaseFailures,
+  assertRuntimeFreshStart,
+  assertRuntimeHttpIntegration
+} from './runtime-http-integration.mjs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import process from 'node:process'
@@ -23,7 +27,7 @@ import { DataSource } from 'typeorm'
 import {
   DatabaseModule,
   createDatabaseDataSource,
-  createDatabaseOptions,
+  createDatabaseOptions
 } from '../dist/database/index.js'
 import {
   MIGRATIONS_TABLE,
@@ -31,7 +35,7 @@ import {
   assertSchema,
   databaseSnapshot,
   waitForAuthenticatedReadiness,
-  withDataSource,
+  withDataSource
 } from './database-contract.mjs'
 import {
   POSTGRES_CHILD_DIGESTS,
@@ -44,7 +48,7 @@ import {
   newRunId,
   removeOwnedVolume,
   teardownPostgres,
-  verifyApprovedImage,
+  verifyApprovedImage
 } from './docker-postgres.mjs'
 
 import { assertLoginRequestStateMatrix } from './auth-login-request-contract.mjs'
@@ -61,16 +65,25 @@ function resourceNames(runId) {
 
 function announceRecovery(runId, names = resourceNames(runId)) {
   const { containerName, volumeName } = names
-  process.stdout.write(`Database recovery: run=${runId} container=${containerName} volume=${volumeName}\n`)
+  process.stdout.write(
+    `Database recovery: run=${runId} container=${containerName} volume=${volumeName}\n`
+  )
 }
 
 function nodeEnvironment(extra = {}) {
   const names = [
-    'PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH',
+    'PATH',
+    'HOME',
+    'DOCKER_HOST',
+    'DOCKER_CONTEXT',
+    'DOCKER_TLS_VERIFY',
+    'DOCKER_CERT_PATH'
   ]
   return {
-    ...Object.fromEntries(names.flatMap((name) => (process.env[name] === undefined ? [] : [[name, process.env[name]]]))),
-    ...extra,
+    ...Object.fromEntries(
+      names.flatMap((name) => (process.env[name] === undefined ? [] : [[name, process.env[name]]]))
+    ),
+    ...extra
   }
 }
 
@@ -80,7 +93,7 @@ function databaseEnvironment(configuration) {
     DB_PORT: String(configuration.port),
     DB_USERNAME: configuration.username,
     DB_PASSWORD: configuration.password,
-    DB_NAME: configuration.database,
+    DB_NAME: configuration.database
   })
 }
 
@@ -91,8 +104,8 @@ function createReadinessDataSource(configuration, timeoutMs) {
     extra: {
       connectionTimeoutMillis: timeoutMs,
       query_timeout: timeoutMs,
-      statement_timeout: timeoutMs,
-    },
+      statement_timeout: timeoutMs
+    }
   })
 }
 
@@ -118,16 +131,20 @@ async function assertBoundedReadiness() {
           port: address.port,
           username: 'silent',
           password: 'silent',
-          database: 'silent',
+          database: 'silent'
         },
-        300,
+        300
       ),
-      /PostgreSQL readiness timed out/,
+      /PostgreSQL readiness timed out/
     )
     assert(Date.now() - startedAt < 2_000)
   } finally {
-    for (const socket of sockets) socket.destroy()
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    for (const socket of sockets) {
+      socket.destroy()
+    }
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    )
   }
 }
 
@@ -135,7 +152,7 @@ async function runCompiledCli(configuration, operation) {
   const result = await command(
     process.execPath,
     ['--import', 'reflect-metadata', 'dist/database/cli.js', operation],
-    { cwd: apiDirectory, env: databaseEnvironment(configuration), timeoutMs: 20_000 },
+    { cwd: apiDirectory, env: databaseEnvironment(configuration), timeoutMs: 20_000 }
   )
   return result
 }
@@ -146,25 +163,32 @@ async function assertCompiledDataSource(configuration) {
     'await dataSource.initialize()',
     "const rows = await dataSource.query('SELECT 1 AS ready')",
     "if (rows[0]?.ready !== 1) throw new Error('probe failed')",
-    'await dataSource.destroy()',
+    'await dataSource.destroy()'
   ].join(';')
-  const result = await command(process.execPath, ['--import', 'reflect-metadata', '--input-type=module', '--eval', source], {
-    cwd: apiDirectory,
-    env: databaseEnvironment(configuration),
-    timeoutMs: 20_000,
-  })
-  assert.deepEqual({ code: result.code, signal: result.signal, stdout: result.stdout, stderr: result.stderr }, {
-    code: 0,
-    signal: null,
-    stdout: '',
-    stderr: '',
-  })
+  const result = await command(
+    process.execPath,
+    ['--import', 'reflect-metadata', '--input-type=module', '--eval', source],
+    {
+      cwd: apiDirectory,
+      env: databaseEnvironment(configuration),
+      timeoutMs: 20_000
+    }
+  )
+  assert.deepEqual(
+    { code: result.code, signal: result.signal, stdout: result.stdout, stderr: result.stderr },
+    {
+      code: 0,
+      signal: null,
+      stdout: '',
+      stderr: ''
+    }
+  )
 }
 
 async function assertNestLifecycle(configuration) {
   const before = await withDataSource(createDatabaseDataSource, configuration, databaseSnapshot)
   const module = await Test.createTestingModule({
-    imports: [DatabaseModule.register(configuration)],
+    imports: [DatabaseModule.register(configuration)]
   }).compile()
   const nestDataSource = module.get(DataSource)
   assert.equal(nestDataSource.isInitialized, true)
@@ -175,7 +199,9 @@ async function assertNestLifecycle(configuration) {
 }
 
 export async function assertServerAndContainer(
-  resources, image, { createDataSource = createDatabaseDataSource, runDocker = docker } = {},
+  resources,
+  image,
+  { createDataSource = createDatabaseDataSource, runDocker = docker } = {}
 ) {
   currentStage = 'PostgreSQL server metadata'
   await withDataSource(createDataSource, resources.configuration, async (dataSource) => {
@@ -186,7 +212,11 @@ export async function assertServerAndContainer(
   })
   currentStage = 'container image metadata'
   const inspected = await runDocker([
-    'container', 'inspect', resources.containerName, '--format', '{{json .Image}} {{json .Platform}}',
+    'container',
+    'inspect',
+    resources.containerName,
+    '--format',
+    '{{json .Image}} {{json .Platform}}'
   ])
   assert.equal(inspected.stdout.trim(), `${JSON.stringify(image.imageId)} "linux"`)
   currentStage = 'container architecture'
@@ -199,7 +229,7 @@ async function assertFreshDatabaseRollback(resources) {
   assert.match(database, /^[a-z0-9_]+$/)
   const quotedDatabase = `"${database}"`
   await withDataSource(createDatabaseDataSource, resources.configuration, (dataSource) =>
-    dataSource.query(`CREATE DATABASE ${quotedDatabase}`),
+    dataSource.query(`CREATE DATABASE ${quotedDatabase}`)
   )
   const configuration = { ...resources.configuration, database }
   try {
@@ -218,13 +248,16 @@ async function assertFreshDatabaseRollback(resources) {
     assert.equal(down.stdout, 'Database migration reverted\n')
     await withDataSource(createDatabaseDataSource, configuration, async (dataSource) => {
       const after = await databaseSnapshot(dataSource)
-      assert.deepEqual(after.relations.map(({ name }) => name), [MIGRATIONS_TABLE])
+      assert.deepEqual(
+        after.relations.map(({ name }) => name),
+        [MIGRATIONS_TABLE]
+      )
       const history = await dataSource.query(`SELECT name FROM "${MIGRATIONS_TABLE}"`)
       assert.deepEqual(history, [])
     })
   } finally {
     await withDataSource(createDatabaseDataSource, resources.configuration, (dataSource) =>
-      dataSource.query(`DROP DATABASE IF EXISTS ${quotedDatabase}`),
+      dataSource.query(`DROP DATABASE IF EXISTS ${quotedDatabase}`)
     )
   }
 }
@@ -234,8 +267,13 @@ async function runFailureScenario(scenario, image) {
   announceRecovery(runId)
   const result = await command(process.execPath, [scriptPath], {
     cwd: apiDirectory,
-    env: nodeEnvironment({ LDB_DB_SCENARIO: scenario, LDB_DB_RUN_ID: runId, LDB_DB_PLATFORM: image.platform, LDB_DB_IMAGE_ID: image.imageId }),
-    timeoutMs: 30_000,
+    env: nodeEnvironment({
+      LDB_DB_SCENARIO: scenario,
+      LDB_DB_RUN_ID: runId,
+      LDB_DB_PLATFORM: image.platform,
+      LDB_DB_IMAGE_ID: image.imageId
+    }),
+    timeoutMs: 30_000
   })
   assert.equal(result.code, 1)
   assert.equal(result.signal, null)
@@ -254,9 +292,9 @@ async function runSignalScenario(signal, stage, image) {
       LDB_DB_RUN_ID: runId,
       LDB_DB_PLATFORM: image.platform,
       LDB_DB_IMAGE_ID: image.imageId,
-      LDB_DB_SIGNAL_STAGE: stage,
+      LDB_DB_SIGNAL_STAGE: stage
     }),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe']
   })
   child.stdout.setEncoding('utf8')
   child.stderr.setEncoding('utf8')
@@ -267,7 +305,10 @@ async function runSignalScenario(signal, stage, image) {
     child.once('exit', (code, childSignal) => resolve({ code, signal: childSignal }))
   })
   const ready = new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Signal scenario did not become ready')), 20_000)
+    const timer = setTimeout(
+      () => reject(new Error('Signal scenario did not become ready')),
+      20_000
+    )
     child.stdout.on('data', (chunk) => {
       stdout += chunk
       if (stdout.includes('CHILD_RESOURCE_READY\n')) {
@@ -285,13 +326,15 @@ async function runSignalScenario(signal, stage, image) {
       exited,
       new Promise((_, reject) => {
         exitTimer = setTimeout(() => reject(new Error('Signal scenario did not exit')), 20_000)
-      }),
+      })
     ]).finally(() => clearTimeout(exitTimer))
     currentStage = `${signal} teardown result code=${String(result.code)} signal=${String(result.signal)}`
     assert.deepEqual(result, { code: signal === 'SIGINT' ? 130 : 143, signal: null })
     assert.equal(stderr, '')
   } finally {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL')
+    }
     await exited.catch(() => undefined)
   }
   await assertResourcesAbsent(runId)
@@ -304,15 +347,27 @@ async function assertOwnershipProtection() {
   const volumeName = `ldb-db-${suffix}`
   announceRecovery(protectedRunId, { containerName: 'none', volumeName })
   await docker([
-    'volume', 'create', '--label', `com.ldb.database-test.run=${protectedRunId}`,
-    '--label', `com.ldb.database-test.fixture-owner=${claimedRunId}`, volumeName,
+    'volume',
+    'create',
+    '--label',
+    `com.ldb.database-test.run=${protectedRunId}`,
+    '--label',
+    `com.ldb.database-test.fixture-owner=${claimedRunId}`,
+    volumeName
   ])
   try {
     await assert.rejects(
       teardownPostgres({ runId: claimedRunId, containerName: `ldb-db-${suffix}`, volumeName }),
-      /Database test teardown failed/,
+      /Database test teardown failed/
     )
-    const present = await docker(['volume', 'ls', '--filter', `name=^${volumeName}$`, '--format', '{{.Name}}'])
+    const present = await docker([
+      'volume',
+      'ls',
+      '--filter',
+      `name=^${volumeName}$`,
+      '--format',
+      '{{.Name}}'
+    ])
     assert.equal(present.stdout.trim(), volumeName)
   } finally {
     await removeOwnedVolume(volumeName, protectedRunId)
@@ -337,7 +392,7 @@ async function childScenario() {
         signalPromise,
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(new Error('Signal scenario timed out')), 20_000)
-        }),
+        })
       ])
     } finally {
       clearTimeout(timer)
@@ -352,22 +407,26 @@ async function childScenario() {
 
   let resources
   try {
-    resources = await createPostgres(runId, { platform, imageId }, {
-      afterVolumeCreated: async () => {
-        if (scenario === 'signal' && signalStage === 'volume') {
-          process.stdout.write('CHILD_RESOURCE_READY\n')
-          await waitForSignal()
-          throw new Error('Signal received')
+    resources = await createPostgres(
+      runId,
+      { platform, imageId },
+      {
+        afterVolumeCreated: async () => {
+          if (scenario === 'signal' && signalStage === 'volume') {
+            process.stdout.write('CHILD_RESOURCE_READY\n')
+            await waitForSignal()
+            throw new Error('Signal received')
+          }
+        },
+        afterContainerCreated: async () => {
+          if (scenario === 'signal' && signalStage === 'container') {
+            process.stdout.write('CHILD_RESOURCE_READY\n')
+            await waitForSignal()
+            throw new Error('Signal received')
+          }
         }
-      },
-      afterContainerCreated: async () => {
-        if (scenario === 'signal' && signalStage === 'container') {
-          process.stdout.write('CHILD_RESOURCE_READY\n')
-          await waitForSignal()
-          throw new Error('Signal received')
-        }
-      },
-    })
+      }
+    )
     if (scenario === 'failure') {
       process.stdout.write('CHILD_RESOURCE_READY\n')
       throw new Error('Expected scenario failure')
@@ -377,11 +436,13 @@ async function childScenario() {
       await waitForAuthenticatedReadiness(
         createReadinessDataSource,
         { ...resources.configuration, password: 'intentionally-invalid' },
-        500,
+        500
       )
       throw new Error('Timeout scenario unexpectedly connected')
     }
-    if (scenario === 'signal') throw new Error('Signal scenario stage is invalid')
+    if (scenario === 'signal') {
+      throw new Error('Signal scenario stage is invalid')
+    }
     throw new Error('Unknown child scenario')
   } catch {
     if (receivedSignal) {
@@ -391,7 +452,9 @@ async function childScenario() {
     process.stderr.write('Database integration scenario failed\n')
     process.exitCode = 1
   } finally {
-    if (resources) await teardownPostgres(resources)
+    if (resources) {
+      await teardownPostgres(resources)
+    }
   }
 }
 
@@ -401,7 +464,9 @@ async function assertFocusedRuntime(configuration, checkSignal) {
     checkSignal()
     currentStage = name
     try {
-      await operation((part) => { currentStage = part })
+      await operation((part) => {
+        currentStage = part
+      })
       process.stdout.write(`Runtime database PASS: ${name}\n`)
     } catch {
       failed += 1
@@ -409,13 +474,19 @@ async function assertFocusedRuntime(configuration, checkSignal) {
     }
     checkSignal()
   }
-  await run('fresh startup without automatic migration', (mark) => assertRuntimeFreshStart(configuration, mark))
+  await run('fresh startup without automatic migration', (mark) =>
+    assertRuntimeFreshStart(configuration, mark)
+  )
   currentStage = 'runtime explicit compiled migration'
   const migration = await runCompiledCli(configuration, 'up')
   assert.equal(migration.code, 0)
   assert.equal(migration.stdout, 'Database migration applied: 1\n')
-  await run('default entry full HTTP flow', (mark) => assertRuntimeHttpIntegration(configuration, mark))
-  await run('partial startup database cleanup', (mark) => assertRuntimeDatabaseFailures(configuration, mark))
+  await run('default entry full HTTP flow', (mark) =>
+    assertRuntimeHttpIntegration(configuration, mark)
+  )
+  await run('partial startup database cleanup', (mark) =>
+    assertRuntimeDatabaseFailures(configuration, mark)
+  )
   currentStage = `runtime focused validation: ${failed} failed`
   assert.equal(failed, 0)
 }
@@ -429,10 +500,14 @@ async function primaryScenario() {
   process.once('SIGINT', () => receiveSignal('SIGINT'))
   process.once('SIGTERM', () => receiveSignal('SIGTERM'))
   const checkSignal = () => {
-    if (receivedSignal) throw new Error('Database integration interrupted')
+    if (receivedSignal) {
+      throw new Error('Database integration interrupted')
+    }
   }
   const finishSignal = () => {
-    if (!receivedSignal) return false
+    if (!receivedSignal) {
+      return false
+    }
     process.exitCode = receivedSignal === 'SIGINT' ? 130 : 143
     return true
   }
@@ -466,28 +541,40 @@ async function primaryScenario() {
     const freshBeforeShow = await withDataSource(
       createDatabaseDataSource,
       resources.configuration,
-      databaseSnapshot,
+      databaseSnapshot
     )
     const freshShow = await runCompiledCli(resources.configuration, 'show')
     assert.deepEqual(
-      { code: freshShow.code, signal: freshShow.signal, stdout: freshShow.stdout, stderr: freshShow.stderr },
-      { code: 0, signal: null, stdout: 'Database migrations pending\n', stderr: '' },
+      {
+        code: freshShow.code,
+        signal: freshShow.signal,
+        stdout: freshShow.stdout,
+        stderr: freshShow.stderr
+      },
+      { code: 0, signal: null, stdout: 'Database migrations pending\n', stderr: '' }
     )
     const freshAfterShow = await withDataSource(
       createDatabaseDataSource,
       resources.configuration,
-      databaseSnapshot,
+      databaseSnapshot
     )
     assert.deepEqual(freshAfterShow, freshBeforeShow)
 
-    await assertRuntimeFreshStart(resources.configuration, (part) => { currentStage = part })
+    await assertRuntimeFreshStart(resources.configuration, (part) => {
+      currentStage = part
+    })
     currentStage = 'fresh Nest lifecycle'
     await assertNestLifecycle(resources.configuration)
     currentStage = 'initial migration CLI'
     const firstUp = await runCompiledCli(resources.configuration, 'up')
     assert.deepEqual(
-      { code: firstUp.code, signal: firstUp.signal, stdout: firstUp.stdout, stderr: firstUp.stderr },
-      { code: 0, signal: null, stdout: 'Database migration applied: 1\n', stderr: '' },
+      {
+        code: firstUp.code,
+        signal: firstUp.signal,
+        stdout: firstUp.stdout,
+        stderr: firstUp.stderr
+      },
+      { code: 0, signal: null, stdout: 'Database migration applied: 1\n', stderr: '' }
     )
     currentStage = 'no-op migration rerun'
     const secondUp = await runCompiledCli(resources.configuration, 'up')
@@ -500,70 +587,138 @@ async function primaryScenario() {
     checkSignal()
 
     currentStage = 'authentication cleanup'
-    const cleanupScenarios = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertAuthenticationCleanup(source, resources.configuration, (part) => (currentStage = `authentication cleanup ${part}`)),
+    const cleanupScenarios = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertAuthenticationCleanup(
+          source,
+          resources.configuration,
+          (part) => (currentStage = `authentication cleanup ${part}`)
+        )
     )
     process.stdout.write(`Authentication cleanup: ${cleanupScenarios} scenarios\n`)
 
-    await assertRuntimeDatabaseFailures(resources.configuration, (part) => { currentStage = part })
-    const runtimeFlows = await assertRuntimeHttpIntegration(resources.configuration, (part) => { currentStage = part })
-    process.stdout.write(`Default API entry HTTP/database: ${runtimeFlows} flow stages and startup cleanup\n`)
+    await assertRuntimeDatabaseFailures(resources.configuration, (part) => {
+      currentStage = part
+    })
+    const runtimeFlows = await assertRuntimeHttpIntegration(resources.configuration, (part) => {
+      currentStage = part
+    })
+    process.stdout.write(
+      `Default API entry HTTP/database: ${runtimeFlows} flow stages and startup cleanup\n`
+    )
     checkSignal()
     currentStage = 'schema catalog verification'
     await withDataSource(createDatabaseDataSource, resources.configuration, (dataSource) =>
-      assertSchema(dataSource, (part) => (currentStage = `schema catalog ${part}`)),
+      assertSchema(dataSource, (part) => (currentStage = `schema catalog ${part}`))
     )
     currentStage = 'constraint behavior verification'
-    await withDataSource(createDatabaseDataSource, resources.configuration, assertConstraintBehavior)
+    await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      assertConstraintBehavior
+    )
     currentStage = 'AuthLoginRequest state matrix'
-    const stateMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, assertLoginRequestStateMatrix)
-    process.stdout.write(`AuthLoginRequest matrix: ${stateMatrix.accepted} accepted, ${stateMatrix.rejected} rejected\n`)
+    const stateMatrix = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      assertLoginRequestStateMatrix
+    )
+    process.stdout.write(
+      `AuthLoginRequest matrix: ${stateMatrix.accepted} accepted, ${stateMatrix.rejected} rejected\n`
+    )
     currentStage = 'authenticated character search'
-    const searchFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertCharacterSearchHttpIntegration(source, (part) => (currentStage = `character search ${part}`)),
+    const searchFlows = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertCharacterSearchHttpIntegration(
+          source,
+          (part) => (currentStage = `character search ${part}`)
+        )
     )
     process.stdout.write(`Character search HTTP/database/JWT/upstream: ${searchFlows} scenarios\n`)
     currentStage = 'identity session module'
-    const accountFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertAccountHttpIntegration(source, (part) => (currentStage = `account HTTP ${part}`)),
+    const accountFlows = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertAccountHttpIntegration(source, (part) => (currentStage = `account HTTP ${part}`))
     )
-    process.stdout.write(`Account HTTP/database/JWT: ${accountFlows} scenarios; Node ${process.version}; Unicode ${process.versions.unicode}; ICU ${process.versions.icu}\n`)
-    const identityMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertIdentitySessions(source, (part) => (currentStage = `identity session ${part}`)),
+    process.stdout.write(
+      `Account HTTP/database/JWT: ${accountFlows} scenarios; Node ${process.version}; Unicode ${process.versions.unicode}; ICU ${process.versions.icu}\n`
     )
-    process.stdout.write(`Identity session matrix: ${identityMatrix.scenarios} scenarios, ${identityMatrix.rollbackVariants} rollback variants\n`)
+    const identityMatrix = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertIdentitySessions(source, (part) => (currentStage = `identity session ${part}`))
+    )
+    process.stdout.write(
+      `Identity session matrix: ${identityMatrix.scenarios} scenarios, ${identityMatrix.rollbackVariants} rollback variants\n`
+    )
     currentStage = 'common login flow'
-    const loginMatrix = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertCommonLogin(source, (part) => (currentStage = `common login ${part}`)),
+    const loginMatrix = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) => assertCommonLogin(source, (part) => (currentStage = `common login ${part}`))
     )
     process.stdout.write(`Common login matrix: ${loginMatrix.scenarios} scenarios\n`)
-    const concurrency = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertLoginConcurrency(source, (part) => (currentStage = `login concurrency ${part}`)),
+    const concurrency = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertLoginConcurrency(source, (part) => (currentStage = `login concurrency ${part}`))
     )
-    const failures = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertLoginFailures(source, (part) => (currentStage = `login failures ${part}`)),
+    const failures = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) => assertLoginFailures(source, (part) => (currentStage = `login failures ${part}`))
     )
-    process.stdout.write(`Login concurrency/failure matrix: ${concurrency} concurrency/TTL, ${failures} failure scenarios\n`)
-    const httpFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertLoginHttpIntegration(source, (part) => (currentStage = `login HTTP ${part}`)),
+    process.stdout.write(
+      `Login concurrency/failure matrix: ${concurrency} concurrency/TTL, ${failures} failure scenarios\n`
+    )
+    const httpFlows = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertLoginHttpIntegration(source, (part) => (currentStage = `login HTTP ${part}`))
     )
     process.stdout.write(`Login HTTP/database/JWT: ${httpFlows} flows\n`)
-    const refreshRotation = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertRefreshRotation(source, (part) => (currentStage = `refresh rotation ${part}`)),
+    const refreshRotation = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertRefreshRotation(source, (part) => (currentStage = `refresh rotation ${part}`))
     )
-    const refreshConcurrency = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertRefreshConcurrency(source, (part) => (currentStage = `refresh concurrency ${part}`)),
+    const refreshConcurrency = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertRefreshConcurrency(source, (part) => (currentStage = `refresh concurrency ${part}`))
     )
-    const refreshFailures = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertRefreshFailures(source, (part) => (currentStage = `refresh failures ${part}`)),
+    const refreshFailures = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertRefreshFailures(source, (part) => (currentStage = `refresh failures ${part}`))
     )
-    process.stdout.write(`Refresh core: ${refreshRotation} rotation/history, ${refreshConcurrency} concurrency/TTL, ${refreshFailures} failure scenarios\n`)
-    const sessionHttpFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertSessionHttpIntegration(source, (part) => (currentStage = `session HTTP ${part}`)),
+    process.stdout.write(
+      `Refresh core: ${refreshRotation} rotation/history, ${refreshConcurrency} concurrency/TTL, ${refreshFailures} failure scenarios\n`
+    )
+    const sessionHttpFlows = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertSessionHttpIntegration(source, (part) => (currentStage = `session HTTP ${part}`))
     )
     process.stdout.write(`Refresh/logout HTTP/database: ${sessionHttpFlows} scenarios\n`)
-    const googleFlows = await withDataSource(createDatabaseDataSource, resources.configuration, (source) =>
-      assertGoogleHttpIntegration(source, (part) => (currentStage = `Google HTTP ${part}`)),
+    const googleFlows = await withDataSource(
+      createDatabaseDataSource,
+      resources.configuration,
+      (source) =>
+        assertGoogleHttpIntegration(source, (part) => (currentStage = `Google HTTP ${part}`))
     )
     process.stdout.write(`Google RS256/HTTP/database/JWT: ${googleFlows} scenarios\n`)
     currentStage = 'migrated Nest lifecycle'
@@ -573,7 +728,7 @@ async function primaryScenario() {
     currentStage = 'sanitized CLI failure'
     const failedCli = await runCompiledCli(
       { ...resources.configuration, database: 'database_does_not_exist' },
-      'up',
+      'up'
     )
     assert.notEqual(failedCli.code, 0)
     assert.equal(failedCli.signal, null)
@@ -581,21 +736,30 @@ async function primaryScenario() {
     assert.equal(failedCli.stderr, 'Database migration failed\n')
 
     currentStage = 'compiled generation CLI no-op'
-    const generation = await command(process.execPath, [
-      '--import', 'reflect-metadata', 'dist/database/generate-cli.js', 'NoChanges',
-    ], { cwd: apiDirectory, env: databaseEnvironment(resources.configuration) })
+    const generation = await command(
+      process.execPath,
+      ['--import', 'reflect-metadata', 'dist/database/generate-cli.js', 'NoChanges'],
+      { cwd: apiDirectory, env: databaseEnvironment(resources.configuration) }
+    )
     assert.equal(generation.code, 0)
     assert.equal(generation.stdout, 'Database schema is current\n')
     assert.equal(generation.stderr, '')
 
-    await assertSchemaFirst(resources.configuration, (part) => (currentStage = `Schema First ${part}`))
+    await assertSchemaFirst(
+      resources.configuration,
+      (part) => (currentStage = `Schema First ${part}`)
+    )
 
     currentStage = 'fresh database rollback'
     await assertFreshDatabaseRollback(resources)
   } catch (error) {
-    if (!receivedSignal) throw error
+    if (!receivedSignal) {
+      throw error
+    }
   } finally {
-    if (resources) await teardownPostgres(resources)
+    if (resources) {
+      await teardownPostgres(resources)
+    }
     if (runtimeOnly) {
       await assertResourcesAbsent(runId)
       process.stdout.write('Runtime database owned resources absent\n')
@@ -603,46 +767,63 @@ async function primaryScenario() {
   }
   await assertResourcesAbsent(runId)
 
-  if (finishSignal()) return
+  if (finishSignal()) {
+    return
+  }
 
   currentStage = 'failure teardown'
   await runFailureScenario('failure', image)
-  if (finishSignal()) return
+  if (finishSignal()) {
+    return
+  }
   currentStage = 'timeout teardown'
   await runFailureScenario('timeout', image)
-  if (finishSignal()) return
+  if (finishSignal()) {
+    return
+  }
   currentStage = 'SIGINT teardown'
   await runSignalScenario('SIGINT', 'volume', image)
-  if (finishSignal()) return
+  if (finishSignal()) {
+    return
+  }
   currentStage = 'SIGTERM teardown'
   await runSignalScenario('SIGTERM', 'container', image)
-  if (finishSignal()) return
+  if (finishSignal()) {
+    return
+  }
   currentStage = 'ownership protection'
   await assertOwnershipProtection()
-  if (finishSignal()) return
+  if (finishSignal()) {
+    return
+  }
 
-  process.stdout.write([
-    'Database integration passed',
-    `Platform: ${image.platform}`,
-    `Docker server: ${image.dockerServerVersion}`,
-    'PostgreSQL server: 18.6 (Debian 18.6-1.pgdg13+2)',
-    `Image index: ${POSTGRES_INDEX_DIGEST}`,
-    `Image child: ${image.childDigest}`,
-    `Image config: ${image.configDigest}`,
-    `PGDATA: ${POSTGRES_DATA.pgdata}`,
-    `Volume target: ${POSTGRES_DATA.volumeTarget}`,
-    'Teardown: normal, failure, timeout, SIGINT during volume creation, SIGTERM after container creation, ownership mismatch',
-    `Unverified platform: ${Object.keys(POSTGRES_CHILD_DIGESTS).find((platform) => platform !== image.platform)}`,
-    'Known limit: SIGKILL, host crash, or Docker daemon loss can leave owned resources for exact-ID recovery.',
-  ].join('\n') + '\n')
+  process.stdout.write(
+    [
+      'Database integration passed',
+      `Platform: ${image.platform}`,
+      `Docker server: ${image.dockerServerVersion}`,
+      'PostgreSQL server: 18.6 (Debian 18.6-1.pgdg13+2)',
+      `Image index: ${POSTGRES_INDEX_DIGEST}`,
+      `Image child: ${image.childDigest}`,
+      `Image config: ${image.configDigest}`,
+      `PGDATA: ${POSTGRES_DATA.pgdata}`,
+      `Volume target: ${POSTGRES_DATA.volumeTarget}`,
+      'Teardown: normal, failure, timeout, SIGINT during volume creation, SIGTERM after container creation, ownership mismatch',
+      `Unverified platform: ${Object.keys(POSTGRES_CHILD_DIGESTS).find((platform) => platform !== image.platform)}`,
+      'Known limit: SIGKILL, host crash, or Docker daemon loss can leave owned resources for exact-ID recovery.'
+    ].join('\n') + '\n'
+  )
   process.removeAllListeners('SIGINT')
   process.removeAllListeners('SIGTERM')
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   try {
-    if (process.env.LDB_DB_SCENARIO) await childScenario()
-    else await primaryScenario()
+    if (process.env.LDB_DB_SCENARIO) {
+      await childScenario()
+    } else {
+      await primaryScenario()
+    }
   } catch {
     process.stderr.write(`Database integration failed at ${currentStage}\n`)
     process.exitCode = 1

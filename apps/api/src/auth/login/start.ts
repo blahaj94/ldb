@@ -3,11 +3,20 @@ import { AuthLoginRequestSchema } from '../../database/schemas/auth-login-reques
 import { CLEARED_LOGIN_FIELDS, LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure, loginFailure } from '../../errors/login.js'
 import type {
-  CreatedLoginRequest, LoginAuthorization, LoginDependencies, ProviderRegistration,
+  CreatedLoginRequest,
+  LoginAuthorization,
+  LoginDependencies,
+  ProviderRegistration
 } from '../../types/login.js'
 import { challenge, decodeOpaque, newOpaque, opaqueHash } from './crypto.js'
 import { parseCreation } from './input.js'
-import { browserCookie, freshTime, loginTransaction, markLoginRequestFailed, requestExpired } from './state.js'
+import {
+  browserCookie,
+  freshTime,
+  loginTransaction,
+  markLoginRequestFailed,
+  requestExpired
+} from './state.js'
 
 type AuthorizationCommitResult =
   | { status: 'authorized'; authorization: LoginAuthorization }
@@ -15,7 +24,7 @@ type AuthorizationCommitResult =
 
 export async function createLoginRequest(
   deps: LoginDependencies,
-  input: unknown,
+  input: unknown
 ): Promise<CreatedLoginRequest> {
   const body = parseCreation(input)
   const registration = deps.registry.active(body.provider)
@@ -46,20 +55,20 @@ export async function createLoginRequest(
       codeChallenge: body.codeChallenge,
       method: LOGIN.method,
       launchTicketHash: opaqueHash(ticket),
-      consumedAt: null,
+      consumedAt: null
     })
 
     return {
       requestId,
       browserUrl: `${deps.registry.apiOrigin}/auth/login/authorize?ticket=${ticket}`,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt: expiresAt.toISOString()
     }
   })
 }
 
 export async function authorizeLogin(
   deps: LoginDependencies,
-  ticket: string,
+  ticket: string
 ): Promise<LoginAuthorization> {
   try {
     decodeOpaque(ticket)
@@ -76,7 +85,7 @@ export async function authorizeLogin(
         // 1. Ticket의 요청을 잠그고 아직 browser를 시작하지 않은 요청인지 확인한다.
         const request = await requests.findOne({
           where: { launchTicketHash: opaqueHash(ticket) },
-          lock: { mode: 'pessimistic_write' },
+          lock: { mode: 'pessimistic_write' }
         })
         const checkedAt = await freshTime(manager)
         if (!request || request.status !== 'created') {
@@ -87,7 +96,7 @@ export async function authorizeLogin(
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
-            error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID),
+            error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
           }
         }
 
@@ -98,7 +107,7 @@ export async function authorizeLogin(
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
-            error: new LoginFailure(LOGIN_ERRORS.INTERNAL),
+            error: new LoginFailure(LOGIN_ERRORS.INTERNAL)
           }
         }
 
@@ -109,14 +118,17 @@ export async function authorizeLogin(
         const nonce = request.provider === 'google' ? newOpaque() : null
 
         // Ticket 소비와 browser_started 전이를 함께 저장한다.
-        await requests.update({ id: request.id }, {
-          status: 'browser_started',
-          launchTicketHash: null,
-          stateHash: opaqueHash(state),
-          browserBindingHash: opaqueHash(browserBinding),
-          oidcNonceHash: nonce ? opaqueHash(nonce) : null,
-          ...deps.pkceKeys.encrypt(providerVerifier, request),
-        })
+        await requests.update(
+          { id: request.id },
+          {
+            status: 'browser_started',
+            launchTicketHash: null,
+            stateHash: opaqueHash(state),
+            browserBindingHash: opaqueHash(browserBinding),
+            oidcNonceHash: nonce ? opaqueHash(nonce) : null,
+            ...deps.pkceKeys.encrypt(providerVerifier, request)
+          }
+        )
 
         // 3. 요청에 저장된 등록값으로 provider URL과 이 요청 전용 cookie를 준비한다.
         const authorizationUrl = new URL(registration.authorizationEndpoint)
@@ -128,7 +140,7 @@ export async function authorizeLogin(
           state,
           code_challenge: challenge(providerVerifier),
           code_challenge_method: LOGIN.method,
-          ...(nonce ? { nonce } : {}),
+          ...(nonce ? { nonce } : {})
         }).toString()
         const remainingRequestSeconds = (request.expiresAt.getTime() - checkedAt.getTime()) / 1000
         const cookieSeconds = Math.min(LOGIN.requestSeconds, remainingRequestSeconds)
@@ -137,10 +149,10 @@ export async function authorizeLogin(
           status: 'authorized',
           authorization: {
             redirectUrl: authorizationUrl.href,
-            cookie: browserCookie(request.id, browserBinding, cookieSeconds),
-          },
+            cookie: browserCookie(request.id, browserBinding, cookieSeconds)
+          }
         }
-      },
+      }
     )
 
     // 만료·등록 오류의 정리도 commit·release가 확인된 뒤 거절 결과를 전달한다.

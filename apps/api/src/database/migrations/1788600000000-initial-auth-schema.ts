@@ -4,7 +4,9 @@ export class InitialAuthSchema1788600000000 implements MigrationInterface {
   readonly name = 'InitialAuthSchema1788600000000'
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    if (!queryRunner.isTransactionActive) throw new Error('Auth schema Migration requires an active transaction')
+    if (!queryRunner.isTransactionActive) {
+      throw new Error('Auth schema Migration requires an active transaction')
+    }
     await queryRunner.query(`
       CREATE TABLE "users" (
         "id" uuid NOT NULL,
@@ -170,7 +172,9 @@ export class InitialAuthSchema1788600000000 implements MigrationInterface {
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    if (!queryRunner.isTransactionActive) throw new Error('Auth schema Migration requires an active transaction')
+    if (!queryRunner.isTransactionActive) {
+      throw new Error('Auth schema Migration requires an active transaction')
+    }
     await queryRunner.query(`
       DROP TABLE "auth_login_requests";
       DROP TABLE "auth_refresh_tokens";

@@ -9,5 +9,5 @@ export const NEOPLE_SERVER_NAMES: ReadonlyMap<string, string> = new Map([
   ['diregie', '디레지에'],
   ['hilder', '힐더'],
   ['prey', '프레이'],
-  ['siroco', '시로코'],
+  ['siroco', '시로코']
 ])

@@ -48,7 +48,7 @@ test('Nest testing container resolves constructor metadata and overrides a provi
   assert.deepEqual(Reflect.getMetadata('design:paramtypes', TestController), [GreetingService])
   const testingModule = await Test.createTestingModule({
     controllers: [TestController],
-    providers: [GreetingService],
+    providers: [GreetingService]
   })
     .overrideProvider(GreetingService)
     .useValue({ message: () => 'overridden' })

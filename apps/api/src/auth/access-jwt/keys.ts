@@ -10,8 +10,11 @@ function requiredString(value: unknown): asserts value is string {
 }
 
 function requireEs256(key: CryptoKey, type: 'private' | 'public'): void {
-  if (key.type !== type || key.algorithm.name !== 'ECDSA' ||
-    (key.algorithm as EcKeyAlgorithm).namedCurve !== 'P-256') {
+  if (
+    key.type !== type ||
+    key.algorithm.name !== 'ECDSA' ||
+    (key.algorithm as EcKeyAlgorithm).namedCurve !== 'P-256'
+  ) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
 }
@@ -27,7 +30,9 @@ export async function loadVerificationKeys(config: AccessJwtVerifierConfiguratio
   for (const entry of config.verificationKeys) {
     requiredString(entry.kid)
     requiredString(entry.publicKeyPem)
-    if (keys.has(entry.kid)) throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+    if (keys.has(entry.kid)) {
+      throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+    }
     const key = await importSPKI(entry.publicKeyPem, ACCESS_JWT_ALGORITHM)
     requireEs256(key, 'public')
     keys.set(entry.kid, key)
@@ -37,13 +42,15 @@ export async function loadVerificationKeys(config: AccessJwtVerifierConfiguratio
 
 export async function loadSigningKey(
   config: AccessJwtIssuerConfiguration,
-  verificationKeys: ReadonlyMap<string, CryptoKey>,
+  verificationKeys: ReadonlyMap<string, CryptoKey>
 ) {
   const { kid, privateKeyPem } = config.signingKey
   requiredString(kid)
   requiredString(privateKeyPem)
   const publicKey = verificationKeys.get(kid)
-  if (!publicKey) throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+  if (!publicKey) {
+    throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+  }
   const privateKey = await importPKCS8(privateKeyPem, ACCESS_JWT_ALGORITHM)
   requireEs256(privateKey, 'private')
   // listen 전에 등록 public key와 signing key의 일치를 검증한다. Key 생성은 하지 않는다.

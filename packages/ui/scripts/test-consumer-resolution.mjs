@@ -10,22 +10,36 @@ const root = fileURLToPath(new URL('../../../', import.meta.url))
 // 전용 checkout에서 직렬 실행한다. 이전 case의 output/cache로 cold 실패를 가리지 않는다.
 beforeEach(() => {
   for (const path of [
-    'packages/ui/dist', 'packages/ui/dist-examples', 'apps/web/dist', 'apps/desktop/out',
-    'packages/ui/node_modules/.vite', 'apps/web/node_modules/.vite',
-    'apps/desktop/node_modules/.vite', 'apps/web/node_modules/.tmp'
+    'packages/ui/dist',
+    'packages/ui/dist-examples',
+    'apps/web/dist',
+    'apps/desktop/out',
+    'packages/ui/node_modules/.vite',
+    'apps/web/node_modules/.vite',
+    'apps/desktop/node_modules/.vite',
+    'apps/web/node_modules/.tmp'
   ]) {
     rmSync(new URL(`../../../${path}`, import.meta.url), { recursive: true, force: true })
   }
 })
 
 for (const [workspace, command] of [
-  ['@ldb/web', 'test'], ['@ldb/web', 'typecheck'], ['@ldb/web', 'build'],
-  ['@ldb/desktop', 'test'], ['@ldb/desktop', 'typecheck'], ['@ldb/desktop', 'build'],
-  ['@ldb/ui', 'test'], ['@ldb/ui', 'typecheck'], ['@ldb/ui', 'build:examples']
+  ['@ldb/web', 'test'],
+  ['@ldb/web', 'typecheck'],
+  ['@ldb/web', 'build'],
+  ['@ldb/desktop', 'test'],
+  ['@ldb/desktop', 'typecheck'],
+  ['@ldb/desktop', 'build'],
+  ['@ldb/ui', 'test'],
+  ['@ldb/ui', 'typecheck'],
+  ['@ldb/ui', 'build:examples']
 ]) {
   test(`cold pnpm --filter ${workspace} ${command}`, () => {
     const result = spawnSync('pnpm', ['--filter', workspace, command], {
-      cwd: root, encoding: 'utf8', timeout: 120_000, maxBuffer: 4 * 1024 * 1024
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 120_000,
+      maxBuffer: 4 * 1024 * 1024
     })
 
     assert.ifError(result.error)
@@ -34,24 +48,39 @@ for (const [workspace, command] of [
 }
 
 for (const { name, executable, args, cwd, entries } of [
-  { name: 'pnpm --filter @ldb/web dev', executable: 'pnpm',
+  {
+    name: 'pnpm --filter @ldb/web dev',
+    executable: 'pnpm',
     args: ['--filter', '@ldb/web', 'dev', '--host', '127.0.0.1', '--port', '0'],
-    cwd: root, entries: ['/src/main.tsx', '/src/App.tsx'] },
-  { name: 'pnpm --filter @ldb/ui dev:examples', executable: 'pnpm',
+    cwd: root,
+    entries: ['/src/main.tsx', '/src/App.tsx']
+  },
+  {
+    name: 'pnpm --filter @ldb/ui dev:examples',
+    executable: 'pnpm',
     args: ['--filter', '@ldb/ui', 'dev:examples', '--host', '127.0.0.1', '--port', '0'],
-    cwd: root, entries: ['/main.tsx'] },
-  { name: 'Desktop dev renderer config without Electron bootstrap', executable: 'node',
+    cwd: root,
+    entries: ['/main.tsx']
+  },
+  {
+    name: 'Desktop dev renderer config without Electron bootstrap',
+    executable: 'node',
     args: ['scripts/ui-renderer-resolution.mjs'],
     cwd: new URL('../../../apps/desktop/', import.meta.url),
-    entries: ['/src/main.tsx', '/src/App.tsx'] }
+    entries: ['/src/main.tsx', '/src/App.tsx']
+  }
 ]) {
   test(`cold ${name} resolves browser entries`, async () => {
     const child = spawn(executable, args, {
-      cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, NO_COLOR: '1' }
     })
     let output = ''
-    const appendOutput = (chunk) => { output += chunk.toString() }
+    const appendOutput = (chunk) => {
+      output += chunk.toString()
+    }
     child.stdout.on('data', appendOutput)
     child.stderr.on('data', appendOutput)
     const exited = once(child, 'exit')
@@ -63,17 +92,23 @@ for (const { name, executable, args, cwd, entries } of [
           child.stdout.on('data', () => {
             const match = output.match(/http:\/\/127\.0\.0\.1:\d+\//)
             const hasAddress = match != null
-            if (hasAddress) resolve(match[0])
+            if (hasAddress) {
+              resolve(match[0])
+            }
           })
         }),
-        exited.then(() => { throw new Error(`Dev command exited before ready:\n${output}`) }),
+        exited.then(() => {
+          throw new Error(`Dev command exited before ready:\n${output}`)
+        }),
         new Promise((_, reject) => {
           timeout = setTimeout(() => reject(new Error(`Dev startup timeout:\n${output}`)), 30_000)
         })
       ])
 
       for (const entry of entries) {
-        const response = await fetch(new URL(entry, origin), { signal: AbortSignal.timeout(30_000) })
+        const response = await fetch(new URL(entry, origin), {
+          signal: AbortSignal.timeout(30_000)
+        })
         const source = await response.text()
         assert.equal(response.status, 200, `${entry}\n${output}`)
         assert.match(source, /import /, `Expected transformed module: ${entry}`)
@@ -83,7 +118,9 @@ for (const { name, executable, args, cwd, entries } of [
       const hasNoExitCode = child.exitCode == null
       const hasNoSignalCode = child.signalCode == null
       const isRunning = hasNoExitCode && hasNoSignalCode
-      if (isRunning) process.kill(-child.pid, 'SIGTERM')
+      if (isRunning) {
+        process.kill(-child.pid, 'SIGTERM')
+      }
       await exited
     }
   })

@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url'
 
 const theme = process.argv[2] ?? 'light'
 const isThemeValid = ['light', 'dark', 'system'].includes(theme)
-if (!isThemeValid) throw new Error('Use light|dark|system')
+if (!isThemeValid) {
+  throw new Error('Use light|dark|system')
+}
 const userData = mkdtempSync(join(tmpdir(), 'ldb-auth-ui-fixture-'))
 app.setPath('userData', userData)
 app.setName('LDB Auth UI fixture')

@@ -24,7 +24,9 @@ export function uiNotices() {
       const changes: string[] = []
       for (const source of provenance.files) {
         const isModifiedSource = source.localChanges.length > 0
-        if (!isModifiedSource) continue
+        if (!isModifiedSource) {
+          continue
+        }
         changes.push(`${source.local}:\n${JSON.stringify(source.localChanges, null, 2)}`)
       }
       this.emitFile({
@@ -37,9 +39,13 @@ export function uiNotices() {
         const isJavaScript = chunk.type === 'chunk'
         const hasCode = typeof chunk.code === 'string'
         const shouldMarkSource = isJavaScript && hasCode
-        if (!shouldMarkSource) continue
+        if (!shouldMarkSource) {
+          continue
+        }
         generatedJavaScriptFiles.push(fileName)
-        chunk.code = '/*! LDB modified SEED source: see notices/LDB-MODIFICATIONS.txt and notices/seed-provenance.json. */\n' + chunk.code
+        chunk.code =
+          '/*! LDB modified SEED source: see notices/LDB-MODIFICATIONS.txt and notices/seed-provenance.json. */\n' +
+          chunk.code
       }
       this.emitFile({
         type: 'asset',
@@ -60,17 +66,24 @@ export function uiNotices() {
         source: readFileSync(join(uiRoot, 'seed-provenance.json'), 'utf8')
       })
 
-      const packages = new Map<string, { name: string; version: string; license: string; modules: string[] }>()
+      const packages = new Map<
+        string,
+        { name: string; version: string; license: string; modules: string[] }
+      >()
       for (const moduleId of this.getModuleIds()) {
         const isDependency = moduleId.includes('/node_modules/')
-        if (!isDependency) continue
+        if (!isDependency) {
+          continue
+        }
         const sourcePath = moduleId.split('?')[0]
         let directory = dirname(sourcePath)
         let hasManifest = existsSync(join(directory, 'package.json'))
         while (!hasManifest) {
           const parent = dirname(directory)
           const isFilesystemRoot = parent === directory
-          if (isFilesystemRoot) throw new Error('Bundled dependency has no package manifest')
+          if (isFilesystemRoot) {
+            throw new Error('Bundled dependency has no package manifest')
+          }
           directory = parent
           hasManifest = existsSync(join(directory, 'package.json'))
         }
@@ -98,7 +111,11 @@ export function uiNotices() {
           thirdParty.push(`${basename(name)}\n${readFileSync(join(directory, name), 'utf8')}`)
         }
       }
-      this.emitFile({ type: 'asset', fileName: 'notices/THIRD-PARTY.txt', source: thirdParty.join('\n\n') })
+      this.emitFile({
+        type: 'asset',
+        fileName: 'notices/THIRD-PARTY.txt',
+        source: thirdParty.join('\n\n')
+      })
       this.emitFile({
         type: 'asset',
         fileName: 'notices/bundle-modules.json',

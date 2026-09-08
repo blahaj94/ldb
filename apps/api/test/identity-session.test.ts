@@ -6,7 +6,10 @@ import { UserSchema } from '../src/database/schemas/users.js'
 import { AuthSessionSchema } from '../src/database/schemas/auth-sessions.js'
 import { AuthRefreshTokenSchema } from '../src/database/schemas/auth-refresh-tokens.js'
 
-interface Identity { provider: 'google' | 'discord'; subject: string }
+interface Identity {
+  provider: 'google' | 'discord'
+  subject: string
+}
 interface Result {
   user: { id: string; nickname: string }
   session: { id: string; createdAt: Date; lastActiveAt: Date }
@@ -20,16 +23,28 @@ interface Entropy {
 }
 interface SessionModule {
   createIdentitySession(manager: EntityManager, identity: Identity): Promise<Result>
-  createIdentitySessionForTest(manager: EntityManager, identity: Identity, entropy: Partial<Entropy>): Promise<Result>
+  createIdentitySessionForTest(
+    manager: EntityManager,
+    identity: Identity,
+    entropy: Partial<Entropy>
+  ): Promise<Result>
 }
 async function load(): Promise<SessionModule> {
-  return import(new URL('../src/auth/identity-session.js', import.meta.url).href) as Promise<SessionModule>
+  return import(
+    new URL('../src/auth/identity-session.js', import.meta.url).href
+  ) as Promise<SessionModule>
 }
 const identity: Identity = { provider: 'google', subject: 'test-subject' }
 const time = new Date('2026-09-06T00:00:10Z')
-const existing = { id: '00000000-0000-4000-8000-000000000001', nickname: '기존 👩‍💻', createdAt: new Date('2026-01-01Z') }
+const existing = {
+  id: '00000000-0000-4000-8000-000000000001',
+  nickname: '기존 👩‍💻',
+  createdAt: new Date('2026-01-01Z')
+}
 
-function fixture(options: { existing?: boolean; missing?: boolean; isolation?: string; active?: boolean } = {}) {
+function fixture(
+  options: { existing?: boolean; missing?: boolean; isolation?: string; active?: boolean } = {}
+) {
   const sessions: Record<string, unknown>[] = []
   const refresh: Record<string, unknown>[] = []
   const events: string[] = []
@@ -47,35 +62,54 @@ function fixture(options: { existing?: boolean; missing?: boolean; isolation?: s
     execute: async () => {
       events.push('user-insert')
       return { raw: options.missing ? [] : [{ id: inserted?.id }] }
-    },
+    }
   }
   const userRepository = {
     createQueryBuilder: () => insertBuilder,
     findOne: async (query: { where: unknown; lock: unknown }) => {
-      assert.deepEqual(query.where, { provider: identity.provider, providerSubject: identity.subject })
+      assert.deepEqual(query.where, {
+        provider: identity.provider,
+        providerSubject: identity.subject
+      })
       assert.deepEqual(query.lock, { mode: 'pessimistic_write' })
       events.push('user-lock')
-      return options.missing ? null : options.existing ? { ...existing } : inserted ?? null
+      return options.missing ? null : options.existing ? { ...existing } : (inserted ?? null)
     },
     update: async (_where: unknown, values: Record<string, unknown>) => {
       events.push('user-time')
       Object.assign(inserted ?? {}, values)
-    },
+    }
   }
   const manager = {
     queryRunner: { isTransactionActive: options.active ?? true },
     query: async (sql: string) => {
-      if (sql.startsWith('SHOW')) return [{ transaction_isolation: options.isolation ?? 'read committed' }]
+      if (sql.startsWith('SHOW')) {
+        return [{ transaction_isolation: options.isolation ?? 'read committed' }]
+      }
       assert.match(sql, /floor\(extract\(epoch from clock_timestamp\(\)\)\)/)
       events.push('fresh-time')
       return [{ now: time }]
     },
     getRepository: (schema: unknown) => {
-      if (schema === UserSchema) return userRepository
-      if (schema === AuthSessionSchema) return { insert: async (value: Record<string, unknown>) => { events.push('session'); sessions.push(value) } }
+      if (schema === UserSchema) {
+        return userRepository
+      }
+      if (schema === AuthSessionSchema) {
+        return {
+          insert: async (value: Record<string, unknown>) => {
+            events.push('session')
+            sessions.push(value)
+          }
+        }
+      }
       assert.equal(schema, AuthRefreshTokenSchema)
-      return { insert: async (value: Record<string, unknown>) => { events.push('refresh'); refresh.push(value) } }
-    },
+      return {
+        insert: async (value: Record<string, unknown>) => {
+          events.push('refresh')
+          refresh.push(value)
+        }
+      }
+    }
   } as unknown as EntityManager
   return { manager, sessions, refresh, events }
 }
@@ -96,8 +130,14 @@ test('new identity gets padded nickname, fresh whole-second session and hash of 
     const state = fixture()
     const bytes = Buffer.alloc(32, 250)
     const result = await createIdentitySessionForTest(state.manager, identity, {
-      nicknameNumber: (min, max) => { assert.deepEqual([min, max], [0, 1_000_000]); return value },
-      refreshBytes: (size) => { assert.equal(size, 32); return bytes },
+      nicknameNumber: (min, max) => {
+        assert.deepEqual([min, max], [0, 1_000_000])
+        return value
+      },
+      refreshBytes: (size) => {
+        assert.equal(size, 32)
+        return bytes
+      }
     })
     assert.equal(result.isNewUser, true)
     assert.equal(result.user.nickname, `모험가${String(value).padStart(6, '0')}`)
@@ -106,9 +146,33 @@ test('new identity gets padded nickname, fresh whole-second session and hash of 
     assert.match(result.session.id, /^[0-9a-f-]{36}$/)
     assert.notEqual(result.user.id, result.session.id)
     assert.equal(result.refreshToken, bytes.toString('base64url'))
-    assert.deepEqual(state.refresh, [{ tokenHash: createHash('sha256').update(bytes).digest(), sessionId: result.session.id, issuedAt: time, consumedAt: null }])
-    assert.deepEqual(state.sessions, [{ id: result.session.id, userId: result.user.id, createdAt: time, lastActiveAt: time, revokedAt: null, revokedReason: null }])
-    assert.deepEqual(state.events, ['user-lock', 'user-insert', 'user-lock', 'fresh-time', 'user-time', 'session', 'refresh'])
+    assert.deepEqual(state.refresh, [
+      {
+        tokenHash: createHash('sha256').update(bytes).digest(),
+        sessionId: result.session.id,
+        issuedAt: time,
+        consumedAt: null
+      }
+    ])
+    assert.deepEqual(state.sessions, [
+      {
+        id: result.session.id,
+        userId: result.user.id,
+        createdAt: time,
+        lastActiveAt: time,
+        revokedAt: null,
+        revokedReason: null
+      }
+    ])
+    assert.deepEqual(state.events, [
+      'user-lock',
+      'user-insert',
+      'user-lock',
+      'fresh-time',
+      'user-time',
+      'session',
+      'refresh'
+    ])
   }
 })
 
@@ -125,12 +189,25 @@ test('existing identity preserves nickname and creates independent sessions with
   assert.notEqual(a.refreshToken, b.refreshToken)
   assert.equal(Buffer.from(a.refreshToken, 'base64url').length, 32)
   assert.equal(Buffer.from(a.refreshToken, 'base64url').toString('base64url'), a.refreshToken)
-  assert.deepEqual(state.events, ['user-lock', 'fresh-time', 'session', 'refresh', 'user-lock', 'fresh-time', 'session', 'refresh'])
+  assert.deepEqual(state.events, [
+    'user-lock',
+    'fresh-time',
+    'session',
+    'refresh',
+    'user-lock',
+    'fresh-time',
+    'session',
+    'refresh'
+  ])
 })
 
 test('transaction and isolation preconditions reject before writing', async () => {
   const { createIdentitySession } = await load()
-  for (const options of [{ active: false }, { isolation: 'repeatable read' }, { isolation: 'serializable' }]) {
+  for (const options of [
+    { active: false },
+    { isolation: 'repeatable read' },
+    { isolation: 'serializable' }
+  ]) {
     const state = fixture(options)
     await failure(createIdentitySession(state.manager, identity), 'AUTH_INTERNAL_ERROR')
     assert.deepEqual(state.events, [])
@@ -148,11 +225,18 @@ test('a conflict without a visible user requires whole-transaction restart and c
 test('database and entropy failures expose only sanitized errors', async () => {
   const { createIdentitySession, createIdentitySessionForTest } = await load()
   const state = fixture({ existing: true })
-  state.manager.query = async () => { throw new Error(`private database detail ${identity.subject}`) }
+  state.manager.query = async () => {
+    throw new Error(`private database detail ${identity.subject}`)
+  }
   await failure(createIdentitySession(state.manager, identity), 'AUTH_UNAVAILABLE')
   const other = fixture({ existing: true })
-  await failure(createIdentitySessionForTest(other.manager, identity, {
-    refreshBytes: () => { throw new Error(`private entropy detail ${identity.subject}`) },
-  }), 'AUTH_INTERNAL_ERROR')
+  await failure(
+    createIdentitySessionForTest(other.manager, identity, {
+      refreshBytes: () => {
+        throw new Error(`private entropy detail ${identity.subject}`)
+      }
+    }),
+    'AUTH_INTERNAL_ERROR'
+  )
   assert.deepEqual(other.sessions, [])
 })

@@ -1,11 +1,11 @@
-import { buildProviderTriggerComment, providerMarker } from "../comments.mjs";
+import { buildProviderTriggerComment, providerMarker } from '../comments.mjs'
 
 export const codexProvider = {
-  id: "codex",
+  id: 'codex',
   marker(headSha) {
-    return providerMarker(this.id, headSha);
+    return providerMarker(this.id, headSha)
   },
   triggerComment(headSha) {
-    return buildProviderTriggerComment({ provider: this.id, headSha });
-  },
-};
+    return buildProviderTriggerComment({ provider: this.id, headSha })
+  }
+}

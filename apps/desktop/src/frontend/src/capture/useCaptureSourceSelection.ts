@@ -21,11 +21,14 @@ export function useCaptureSourceSelection(setStatus: (status: string) => void): 
     void window.api
       .listCaptureSources()
       .then((nextSources) => {
-        if (!cancelled) setSources(nextSources)
+        if (!cancelled) {
+          setSources(nextSources)
+        }
       })
       .catch((error: unknown) => {
-        if (!cancelled)
+        if (!cancelled) {
           setStatus(error instanceof Error ? error.message : 'Could not list windows.')
+        }
       })
     return () => {
       cancelled = true

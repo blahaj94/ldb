@@ -23,8 +23,12 @@ export async function until(condition: () => Promise<boolean>, deadlineMs = 10_0
   const deadline = performance.now() + deadlineMs
   while (true) {
     const hasTime = performance.now() < deadline
-    if (!hasTime) throw new Error('Capture fixture observation deadline exceeded')
-    if (await condition()) return
+    if (!hasTime) {
+      throw new Error('Capture fixture observation deadline exceeded')
+    }
+    if (await condition()) {
+      return
+    }
     await delay(50)
   }
 }

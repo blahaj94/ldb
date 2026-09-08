@@ -1,4 +1,3 @@
-/* global AbortController */
 import assert from 'node:assert/strict'
 import { createServer } from 'node:net'
 import { test } from 'node:test'
@@ -12,8 +11,12 @@ test('search abort closes a PostgreSQL connection still waiting for authenticati
   const sockets = new Set()
   let connected
   let disconnected
-  const connection = new Promise((resolve) => { connected = resolve })
-  const disconnection = new Promise((resolve) => { disconnected = resolve })
+  const connection = new Promise((resolve) => {
+    connected = resolve
+  })
+  const disconnection = new Promise((resolve) => {
+    disconnected = resolve
+  })
   const server = createServer((socket) => {
     sockets.add(socket)
     socket.once('close', () => {
@@ -25,8 +28,11 @@ test('search abort closes a PostgreSQL connection still waiting for authenticati
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const source = createDatabaseDataSource({
-    host: '127.0.0.1', port: server.address().port,
-    username: 'synthetic', password: 'synthetic', database: 'synthetic',
+    host: '127.0.0.1',
+    port: server.address().port,
+    username: 'synthetic',
+    password: 'synthetic',
+    database: 'synthetic'
   })
   const controller = new AbortController()
   const nativeConnect = Client.prototype.connect
@@ -54,7 +60,9 @@ test('search abort closes a PostgreSQL connection still waiting for authenticati
     Client.prototype.connect = nativeConnect
     controller.abort()
     await runner.release()
-    for (const socket of sockets) socket.destroy()
+    for (const socket of sockets) {
+      socket.destroy()
+    }
     await new Promise((resolve) => server.close(resolve))
   }
 })
@@ -70,8 +78,11 @@ test('search pre-aborted connection never opens a socket', async () => {
   const controller = new AbortController()
   controller.abort()
   const source = createDatabaseDataSource({
-    host: '127.0.0.1', port: server.address().port,
-    username: 'synthetic', password: 'synthetic', database: 'synthetic',
+    host: '127.0.0.1',
+    port: server.address().port,
+    username: 'synthetic',
+    password: 'synthetic',
+    database: 'synthetic'
   })
   const runner = createSearchQueryRunner(source, controller.signal)
   try {

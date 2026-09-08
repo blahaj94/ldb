@@ -13,7 +13,7 @@ export type { IdentitySession, VerifiedIdentity } from '../types/auth.js'
 const nativeEntropy: IdentitySessionEntropy = {
   uuid: randomUUID,
   nicknameNumber: randomInt,
-  refreshBytes: randomBytes,
+  refreshBytes: randomBytes
 }
 
 const databaseTimeExpression = 'to_timestamp(floor(extract(epoch from clock_timestamp())))'
@@ -29,15 +29,20 @@ function generate<T>(operation: () => T): T {
 async function create(
   manager: EntityManager,
   identity: VerifiedIdentity,
-  entropy: IdentitySessionEntropy,
+  entropy: IdentitySessionEntropy
 ): Promise<IdentitySession> {
   try {
-    if (!manager.queryRunner?.isTransactionActive ||
+    if (
+      !manager.queryRunner?.isTransactionActive ||
       !Object.values(AUTH_PROVIDERS).some((provider) => provider === identity.provider) ||
-      typeof identity.subject !== 'string' || identity.subject.length === 0) {
+      typeof identity.subject !== 'string' ||
+      identity.subject.length === 0
+    ) {
       throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
     }
-    const [isolation] = await manager.query('SHOW transaction_isolation') as Array<{ transaction_isolation: string }>
+    const [isolation] = (await manager.query('SHOW transaction_isolation')) as Array<{
+      transaction_isolation: string
+    }>
     if (isolation?.transaction_isolation !== 'read committed') {
       throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
     }
@@ -45,7 +50,7 @@ async function create(
     const users = manager.getRepository(UserSchema)
     const lookup = {
       where: { provider: identity.provider, providerSubject: identity.subject },
-      lock: { mode: 'pessimistic_write' as const },
+      lock: { mode: 'pessimistic_write' as const }
     }
     let user = await users.findOne(lookup)
     let isNewUser = false
@@ -56,14 +61,15 @@ async function create(
         return `${INITIAL_NICKNAME.prefix}${digits.padStart(INITIAL_NICKNAME.digits, '0')}`
       })
       // 빈 overwrite 목록은 명시한 identity 충돌에만 DO NOTHING을 생성한다.
-      const inserted = await users.createQueryBuilder()
+      const inserted = await users
+        .createQueryBuilder()
         .insert()
         .values({
           id,
           provider: identity.provider,
           providerSubject: identity.subject,
           nickname,
-          createdAt: () => databaseTimeExpression,
+          createdAt: () => databaseTimeExpression
         })
         .orUpdate([], ['provider', 'provider_subject'])
         .returning(['id'])
@@ -74,12 +80,14 @@ async function create(
       isNewUser = (inserted.raw as Array<{ id: string }>).length === 1
       // READ COMMITTED의 다음 statement로 insert 대기 중 commit된 winner를 읽는다.
       user = await users.findOne(lookup)
-      if (!user) throw new IdentitySessionFailure(AUTH_ERRORS.UNAVAILABLE)
+      if (!user) {
+        throw new IdentitySessionFailure(AUTH_ERRORS.UNAVAILABLE)
+      }
     }
 
-    const [clock] = await manager.query(
-      `SELECT ${databaseTimeExpression} AS now`,
-    ) as Array<{ now: Date }>
+    const [clock] = (await manager.query(`SELECT ${databaseTimeExpression} AS now`)) as Array<{
+      now: Date
+    }>
     const issuedAt = clock.now
     if (isNewUser) {
       // INSERT의 unique 대기가 끝난 뒤 획득한 fresh 시각으로 새 회원도 확정한다.
@@ -95,23 +103,25 @@ async function create(
       createdAt: issuedAt,
       lastActiveAt: issuedAt,
       revokedAt: null,
-      revokedReason: null,
+      revokedReason: null
     })
     await manager.getRepository(AuthRefreshTokenSchema).insert({
       tokenHash,
       sessionId,
       issuedAt,
-      consumedAt: null,
+      consumedAt: null
     })
     return {
       user: { id: user.id, nickname: user.nickname },
       session: { id: sessionId, createdAt: issuedAt, lastActiveAt: issuedAt },
       refreshToken,
-      isNewUser,
+      isNewUser
     }
   } catch (error) {
     // QueryFailedError의 SQL/parameters·identity를 호출자나 log에 전달하지 않는다.
-    if (error instanceof IdentitySessionFailure) throw error
+    if (error instanceof IdentitySessionFailure) {
+      throw error
+    }
     throw new IdentitySessionFailure(AUTH_ERRORS.UNAVAILABLE)
   }
 }
@@ -121,7 +131,10 @@ async function create(
  * 오류는 transaction 밖으로 전파해 전체 rollback하며, commit 성공 후에만 반환 token을 전달한다.
  * Random 충돌도 전체 rollback 대상이다. 재시작 시 새 transaction과 새 entropy를 사용한다.
  */
-export function createIdentitySession(manager: EntityManager, identity: VerifiedIdentity): Promise<IdentitySession> {
+export function createIdentitySession(
+  manager: EntityManager,
+  identity: VerifiedIdentity
+): Promise<IdentitySession> {
   return create(manager, identity, nativeEntropy)
 }
 
@@ -129,7 +142,7 @@ export function createIdentitySession(manager: EntityManager, identity: Verified
 export function createIdentitySessionForTest(
   manager: EntityManager,
   identity: VerifiedIdentity,
-  entropy: Partial<IdentitySessionEntropy>,
+  entropy: Partial<IdentitySessionEntropy>
 ): Promise<IdentitySession> {
   return create(manager, identity, { ...nativeEntropy, ...entropy })
 }

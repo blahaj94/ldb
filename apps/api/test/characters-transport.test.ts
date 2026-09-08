@@ -3,9 +3,7 @@ import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { setTimeout as delay } from 'node:timers/promises'
 import test from 'node:test'
-import {
-  createNeopleCharacterSearchForTest,
-} from '../src/characters/neople-character-search.js'
+import { createNeopleCharacterSearchForTest } from '../src/characters/neople-character-search.js'
 import { NeopleSearchFailure } from '../src/errors/neople-search.js'
 
 interface Loopback {
@@ -14,7 +12,7 @@ interface Loopback {
 }
 
 async function startLoopback(
-  handler: (request: IncomingMessage, response: ServerResponse) => void,
+  handler: (request: IncomingMessage, response: ServerResponse) => void
 ): Promise<Loopback> {
   const server = createServer(handler)
   await new Promise<void>((resolve, reject) => {
@@ -29,11 +27,14 @@ async function startLoopback(
 async function closeLoopback(server: Server): Promise<void> {
   server.closeAllConnections()
   await new Promise<void>((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
+    server.close((error) => (error ? reject(error) : resolve()))
   )
 }
 
-async function expectStatus(promise: Promise<unknown>, status: number): Promise<NeopleSearchFailure> {
+async function expectStatus(
+  promise: Promise<unknown>,
+  status: number
+): Promise<NeopleSearchFailure> {
   try {
     await promise
   } catch (error) {
@@ -51,15 +52,15 @@ test('native fetch safely encodes the fixed endpoint and sends one header-authen
     response.setHeader('content-type', 'application/json')
     response.end(
       JSON.stringify({
-        rows: [{ characterId: 'id', characterName: '가 나+&/?', serverId: 'cain', fame: 0 }],
-      }),
+        rows: [{ characterId: 'id', characterName: '가 나+&/?', serverId: 'cain', fame: 0 }]
+      })
     )
   })
 
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch,
-      origin: loopback.origin,
+      origin: loopback.origin
     })
     const result = await search({ characterName: '가 나+&/?', serverId: 'cain', limit: 200 })
 
@@ -96,11 +97,11 @@ test('native fetch does not follow redirects or retry upstream failures', async 
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch,
-      origin: loopback.origin,
+      origin: loopback.origin
     })
     const error = await expectStatus(
       search({ characterName: '리다이렉트', serverId: 'cain', limit: 10 }),
-      502,
+      502
     )
     assert.equal(error.body.error.code, 'NEOPLE_API_ERROR')
     assert.equal(requests, 1)
@@ -120,14 +121,17 @@ test('malformed loopback JSON keeps the upstream 503 fallback', async () => {
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch,
-      origin: loopback.origin,
+      origin: loopback.origin
     })
-    const error = await expectStatus(search({ characterName: '점검중', serverId: 'all', limit: 1 }), 503)
+    const error = await expectStatus(
+      search({ characterName: '점검중', serverId: 'all', limit: 1 }),
+      503
+    )
     assert.deepEqual(error.body, {
       error: {
         code: 'NEOPLE_UNAVAILABLE',
-        message: '현재 캐릭터 검색을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
-      },
+        message: '현재 캐릭터 검색을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+      }
     })
     assert.equal(requests, 1)
   } finally {
@@ -146,17 +150,17 @@ test('loopback API901 overrides HTTP 503 with the known-code 502 mapping', async
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch,
-      origin: loopback.origin,
+      origin: loopback.origin
     })
     const error = await expectStatus(
       search({ characterName: '코드우선', serverId: 'cain', limit: 10 }),
-      502,
+      502
     )
     assert.deepEqual(error.body, {
       error: {
         code: 'NEOPLE_API_ERROR',
-        message: '캐릭터 검색 중 오류가 발생했습니다.',
-      },
+        message: '캐릭터 검색 중 오류가 발생했습니다.'
+      }
     })
     assert.equal(requests, 1)
   } finally {
@@ -185,7 +189,9 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
-        if (init?.signal !== null && init?.signal !== undefined) captured.signal = init.signal
+        if (init?.signal !== null && init?.signal !== undefined) {
+          captured.signal = init.signal
+        }
         const response = await fetch(request, init)
         return {
           status: response.status,
@@ -196,7 +202,7 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
             assert(deadlineCallback)
             deadlineCallback()
             return body
-          },
+          }
         } as Response
       },
       origin: loopback.origin,
@@ -206,12 +212,12 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
         scheduledDelay = timeout
         return Symbol('timer')
       },
-      clearTimer: () => undefined,
+      clearTimer: () => undefined
     })
 
     const error = await expectStatus(
       search({ characterName: '본문지연', serverId: 'cain', limit: 10 }),
-      504,
+      504
     )
     assert.equal(error.body.error.code, 'NEOPLE_TIMEOUT')
     assert.equal(captured.signal?.aborted, true)
@@ -219,7 +225,7 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
     assert.equal(requests, 1)
     await Promise.race([
       responseClosed,
-      delay(1_000).then(() => assert.fail('upstream response was not closed after abort')),
+      delay(1_000).then(() => assert.fail('upstream response was not closed after abort'))
     ])
   } finally {
     await closeLoopback(loopback.server)
@@ -247,7 +253,9 @@ test('clock deadline aborts an unfinished native body before its timer callback 
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
-        if (init?.signal !== null && init?.signal !== undefined) captured.signal = init.signal
+        if (init?.signal !== null && init?.signal !== undefined) {
+          captured.signal = init.signal
+        }
         const response = await fetch(request, init)
         now = 5_000
         return response
@@ -260,12 +268,12 @@ test('clock deadline aborts an unfinished native body before its timer callback 
       },
       clearTimer: () => {
         timerCleared = true
-      },
+      }
     })
 
     const error = await expectStatus(
       search({ characterName: '헤더지연', serverId: 'cain', limit: 10 }),
-      504,
+      504
     )
     assert.equal(error.body.error.code, 'NEOPLE_TIMEOUT')
     assert.equal(captured.signal?.aborted, true)
@@ -274,7 +282,7 @@ test('clock deadline aborts an unfinished native body before its timer callback 
     assert.equal(requests, 1)
     await Promise.race([
       responseClosed,
-      delay(1_000).then(() => assert.fail('upstream response was not closed after clock timeout')),
+      delay(1_000).then(() => assert.fail('upstream response was not closed after clock timeout'))
     ])
   } finally {
     await closeLoopback(loopback.server)

@@ -22,26 +22,32 @@ export async function logoutSession(dataSource: DataSource, rawToken: unknown): 
       // 잠금 없는 조회는 잠글 ID의 hint일 뿐이며 unknown token은 어떤 session도 선택하지 않는다.
       const tokenHint = await refresh.findOneBy({ tokenHash: presentedHash })
       const hasTokenHint = tokenHint != null
-      if (!hasTokenHint) return
+      if (!hasTokenHint) {
+        return
+      }
 
       const sessionHint = await sessions.findOneBy({ id: tokenHint.sessionId })
       const hasSessionHint = sessionHint != null
-      if (!hasSessionHint) return
+      if (!hasSessionHint) {
+        return
+      }
 
       const user = await users.findOne({
         where: { id: sessionHint.userId },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: 'pessimistic_write' }
       })
       const hasUser = user != null
-      if (!hasUser) return
+      if (!hasUser) {
+        return
+      }
 
       const session = await sessions.findOne({
         where: { id: sessionHint.id },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: 'pessimistic_write' }
       })
       const token = await refresh.findOne({
         where: { tokenHash: presentedHash },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: 'pessimistic_write' }
       })
 
       const hasSession = session != null
@@ -51,30 +57,35 @@ export async function logoutSession(dataSource: DataSource, rawToken: unknown): 
       const hasSameTokenHash = hasToken && token.tokenHash.equals(presentedHash)
       const hasTrustedTarget =
         hasSession && hasToken && hasSameSessionOwner && hasSameTokenOwner && hasSameTokenHash
-      if (!hasTrustedTarget) return
+      if (!hasTrustedTarget) {
+        return
+      }
 
       const isAlreadyRevoked = session.revokedAt != null
-      if (isAlreadyRevoked) return
+      if (isAlreadyRevoked) {
+        return
+      }
 
       // 모든 대상 잠금 뒤의 DB 정수 초로 idle 종료와 revocation 시각을 판단한다.
-      const [clock] = await manager.query(
-        'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now',
-      ) as Array<{ now: Date }>
+      const [clock] = (await manager.query(
+        'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now'
+      )) as Array<{ now: Date }>
       const checkedAt = clock.now
       const checkedAtSeconds = checkedAt.getTime() / 1000
       const idleDeadline = session.lastActiveAt.getTime() / 1000 + LOGIN.idleSeconds
       const isIdleEnded = checkedAtSeconds >= idleDeadline
-      if (isIdleEnded) return
+      if (isIdleEnded) {
+        return
+      }
 
-      await sessions.update(
-        { id: session.id },
-        { revokedAt: checkedAt, revokedReason: 'logout' },
-      )
+      await sessions.update({ id: session.id }, { revokedAt: checkedAt, revokedReason: 'logout' })
     })
   } catch (error) {
     // DB/commit 결과 불명은 원문 상세와 성공 204 없이 정제한다. 자동 retry하지 않는다.
     const isLogoutFailure = error instanceof LogoutFailure
-    if (isLogoutFailure) throw error
+    if (isLogoutFailure) {
+      throw error
+    }
     throw new LogoutFailure(LOGOUT_ERRORS.UNAVAILABLE)
   }
 }

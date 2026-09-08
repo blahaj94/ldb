@@ -2,7 +2,9 @@ import { createDatabaseDataSource, readDatabaseConfiguration } from '../../datab
 import { runAuthenticationCleanup } from './command.js'
 
 try {
-  await runAuthenticationCleanup(() => createDatabaseDataSource(readDatabaseConfiguration(process.env)))
+  await runAuthenticationCleanup(() =>
+    createDatabaseDataSource(readDatabaseConfiguration(process.env))
+  )
   process.stdout.write('Authentication cleanup completed\n')
 } catch {
   process.stderr.write('Authentication cleanup failed\n')

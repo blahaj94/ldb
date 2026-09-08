@@ -85,9 +85,15 @@ export async function createStoreFixture(): Promise<StoreFixture> {
     const isDirectory = String(path) === directory
     const isCredentialTemp = name.startsWith('.credential.v1.') && name.endsWith('.tmp')
     const isMarkerTemp = name.startsWith('.transition.v1.') && name.endsWith('.tmp')
-    if (isDirectory) return 'directory'
-    if (isCredentialTemp) return 'credential-temp'
-    if (isMarkerTemp) return 'transition-temp'
+    if (isDirectory) {
+      return 'directory'
+    }
+    if (isCredentialTemp) {
+      return 'credential-temp'
+    }
+    if (isMarkerTemp) {
+      return 'transition-temp'
+    }
     return name
   }
 

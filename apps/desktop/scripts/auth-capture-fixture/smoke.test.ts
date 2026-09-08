@@ -19,7 +19,9 @@ beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation((message) => {
     // 이후 logout 경로와 독립적으로 실제 smoke의 capture 성공 판정까지만 실행한다.
     const hasPassedCapture = message === 'Capture fixture real media/OCR PASS'
-    if (hasPassedCapture) throw new Error('SYNTHETIC_CAPTURE_ACCEPTED')
+    if (hasPassedCapture) {
+      throw new Error('SYNTHETIC_CAPTURE_ACCEPTED')
+    }
   })
 })
 afterEach(() => vi.restoreAllMocks())

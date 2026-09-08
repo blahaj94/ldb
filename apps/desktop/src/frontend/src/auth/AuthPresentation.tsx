@@ -75,7 +75,7 @@ function PhaseContent({
   const isSignedIn = phase === 'signedIn'
   const hasUser = snapshot.user != null
   const canShowAccount = isSignedIn && hasUser
-  if (canShowAccount)
+  if (canShowAccount) {
     return (
       <SignedIn
         snapshot={snapshot}
@@ -84,6 +84,7 @@ function PhaseContent({
         onIntent={onIntent}
       />
     )
+  }
 
   const isSignedOut = phase === 'signedOut'
   if (isSignedOut) {

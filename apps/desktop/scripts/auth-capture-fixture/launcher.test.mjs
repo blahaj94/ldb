@@ -44,10 +44,13 @@ it.each(['remove throws', 'profile remains', 'inspection throws'])(
   async (failure) => {
     const isRemoveFailure = failure === 'remove throws'
     const isInspectionFailure = failure === 'inspection throws'
-    if (isRemoveFailure) fixture.remove.mockRejectedValue(new Error('SYNTHETIC_FILE_FAILURE'))
-    else if (isInspectionFailure)
+    if (isRemoveFailure) {
+      fixture.remove.mockRejectedValue(new Error('SYNTHETIC_FILE_FAILURE'))
+    } else if (isInspectionFailure) {
       fixture.inspect.mockRejectedValue(new Error('SYNTHETIC_FILE_FAILURE'))
-    else fixture.inspect.mockResolvedValue({})
+    } else {
+      fixture.inspect.mockResolvedValue({})
+    }
     expect(await runCaptureFixture(['--ocr'])).toBe(1)
     expect(console.error).toHaveBeenCalledExactlyOnceWith('Capture fixture cleanup FAIL')
     expect(console.log).not.toHaveBeenCalled()
@@ -109,7 +112,9 @@ function captureSignals() {
   ]) {
     vi.spyOn(process, method).mockImplementation((event, listener) => {
       const isSignal = event === 'SIGINT' || event === 'SIGTERM'
-      if (!isSignal) return original(event, listener)
+      if (!isSignal) {
+        return original(event, listener)
+      }
       handlers.set(event, { listener, once: method === 'once' })
       return process
     })
@@ -117,8 +122,11 @@ function captureSignals() {
   vi.spyOn(process, 'removeListener').mockImplementation((event, listener) => {
     const registration = handlers.get(event)
     const isRegistered = registration != null && registration.listener === listener
-    if (isRegistered) handlers.delete(event)
-    else originalRemove(event, listener)
+    if (isRegistered) {
+      handlers.delete(event)
+    } else {
+      originalRemove(event, listener)
+    }
     return process
   })
   return {
@@ -130,7 +138,9 @@ function captureSignals() {
         unhandled += 1
         return
       }
-      if (registration.once) handlers.delete(signal)
+      if (registration.once) {
+        handlers.delete(signal)
+      }
       registration.listener()
     },
     unhandled: () => unhandled,
@@ -176,8 +186,11 @@ it.each(['profile removal', 'absence inspection'])(
 
     signals.deliver('SIGTERM')
     signals.deliver('SIGTERM')
-    if (isRemovingProfile) pending.resolve(undefined)
-    else pending.reject(Object.assign(new Error('Absent'), { code: 'ENOENT' }))
+    if (isRemovingProfile) {
+      pending.resolve(undefined)
+    } else {
+      pending.reject(Object.assign(new Error('Absent'), { code: 'ENOENT' }))
+    }
 
     expect(await result).toBe(1)
     expect(fixture.remove).toHaveBeenCalledOnce()

@@ -7,11 +7,11 @@ export const REFRESH_ERRORS = {
   AUTHENTICATION_REQUIRED: {
     code: 'AUTHENTICATION_REQUIRED',
     status: 401,
-    message: '로그인이 필요합니다.',
-  },
+    message: '로그인이 필요합니다.'
+  }
 } as const
 
-export type RefreshErrorDefinition = typeof REFRESH_ERRORS[keyof typeof REFRESH_ERRORS]
+export type RefreshErrorDefinition = (typeof REFRESH_ERRORS)[keyof typeof REFRESH_ERRORS]
 
 export class RefreshFailure extends Error {
   readonly code: RefreshErrorDefinition['code']

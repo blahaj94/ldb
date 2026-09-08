@@ -23,7 +23,7 @@ interface DatabaseModuleExports {
   initialAuthSchema: new () => MigrationInterface
   runMigrationCommand(
     command: 'up' | 'down' | 'show',
-    createDataSource: () => DataSource,
+    createDataSource: () => DataSource
   ): Promise<string>
 }
 
@@ -37,7 +37,7 @@ const configuration: DatabaseConfiguration = {
   port: 5432,
   username: 'test-user',
   password: 'test-password',
-  database: 'test-database',
+  database: 'test-database'
 }
 
 test('database options discover compiled migrations without automatic schema changes', async () => {
@@ -58,9 +58,9 @@ test('database options discover compiled migrations without automatic schema cha
       port: options.port,
       username: options.username,
       password: options.password,
-      database: options.database,
+      database: options.database
     },
-    configuration,
+    configuration
   )
 })
 
@@ -80,29 +80,38 @@ test('database configuration accepts only complete discrete connection fields', 
       DB_PORT: '5432',
       DB_USERNAME: 'user',
       DB_PASSWORD: 'password',
-      DB_NAME: 'database',
+      DB_NAME: 'database'
     }),
     {
       host: '127.0.0.1',
       port: 5432,
       username: 'user',
       password: 'password',
-      database: 'database',
-    },
+      database: 'database'
+    }
   )
 
   for (const env of [
     {},
     { DB_HOST: '', DB_PORT: '5432', DB_USERNAME: 'user', DB_PASSWORD: 'secret', DB_NAME: 'db' },
-    { DB_HOST: 'host', DB_PORT: '+5432', DB_USERNAME: 'user', DB_PASSWORD: 'secret', DB_NAME: 'db' },
-    { DB_HOST: 'host', DB_PORT: '0', DB_USERNAME: 'user', DB_PASSWORD: 'secret', DB_NAME: 'db' },
+    {
+      DB_HOST: 'host',
+      DB_PORT: '+5432',
+      DB_USERNAME: 'user',
+      DB_PASSWORD: 'secret',
+      DB_NAME: 'db'
+    },
+    { DB_HOST: 'host', DB_PORT: '0', DB_USERNAME: 'user', DB_PASSWORD: 'secret', DB_NAME: 'db' }
   ]) {
-    assert.throws(() => readDatabaseConfiguration(env), (error: unknown) => {
-      assert(error instanceof Error)
-      assert.equal(error.message, 'Invalid database configuration')
-      assert.equal(error.message.includes('secret'), false)
-      return true
-    })
+    assert.throws(
+      () => readDatabaseConfiguration(env),
+      (error: unknown) => {
+        assert(error instanceof Error)
+        assert.equal(error.message, 'Invalid database configuration')
+        assert.equal(error.message.includes('secret'), false)
+        return true
+      }
+    )
   }
 })
 
@@ -138,7 +147,7 @@ test('migration command uses one all-migrations transaction and always destroys 
     destroy: async () => {
       calls.push('destroy')
       initialized = false
-    },
+    }
   }
   const dataSource = fakeDataSource as unknown as DataSource
 
@@ -164,17 +173,20 @@ test('migration command destroys its connection after a database failure', async
     destroy: async () => {
       destroyed = true
       initialized = false
-    },
+    }
   }
   const dataSource = fakeDataSource as unknown as DataSource
 
-  await assert.rejects(runMigrationCommand('up', () => dataSource), (error: unknown) => {
-    assert(error instanceof Error)
-    assert.equal(error.message, 'Database migration failed')
-    assert.equal(error.cause, undefined)
-    assert.equal(error.stack?.includes(rawError.message), false)
-    return true
-  })
+  await assert.rejects(
+    runMigrationCommand('up', () => dataSource),
+    (error: unknown) => {
+      assert(error instanceof Error)
+      assert.equal(error.message, 'Database migration failed')
+      assert.equal(error.cause, undefined)
+      assert.equal(error.stack?.includes(rawError.message), false)
+      return true
+    }
+  )
   assert.equal(destroyed, true)
 })
 
@@ -190,7 +202,7 @@ test('migration command sanitizes configuration factory failures', async () => {
       assert.equal(error.message, 'Database migration failed')
       assert.equal(error.stack?.includes('secret configuration value'), false)
       return true
-    },
+    }
   )
 })
 
@@ -207,25 +219,34 @@ test('migration status reads metadata without asking TypeORM to create its histo
       queries.push(sql)
       return [{ exists: false }]
     },
-    showMigrations: async () => assert.fail('showMigrations creates the history table on a fresh database'),
+    showMigrations: async () =>
+      assert.fail('showMigrations creates the history table on a fresh database'),
     destroy: async () => {
       fakeDataSource.isInitialized = false
-    },
+    }
   }
 
   const result = await runMigrationCommand('show', () => fakeDataSource as unknown as DataSource)
 
   assert.equal(result, 'Database migrations pending')
-  assert.deepEqual(queries, ["SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"])
+  assert.deepEqual(queries, [
+    "SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"
+  ])
 })
 
 test('database options register four typed schemas before migrations are generated', async () => {
   const { createDatabaseOptions } = await loadDatabaseModule()
   const options = createDatabaseOptions(configuration)
   assert(Array.isArray(options.entities))
-  assert.deepEqual(options.entities.map((schema) => { assert(schema instanceof EntitySchema); return schema.options.tableName }).sort(), [
-    'auth_login_requests', 'auth_refresh_tokens', 'auth_sessions', 'users',
-  ])
+  assert.deepEqual(
+    options.entities
+      .map((schema) => {
+        assert(schema instanceof EntitySchema)
+        return schema.options.tableName
+      })
+      .sort(),
+    ['auth_login_requests', 'auth_refresh_tokens', 'auth_sessions', 'users']
+  )
 })
 
 test('migration status reports a newly registered migration as pending', async () => {
@@ -233,11 +254,17 @@ test('migration status reports a newly registered migration as pending', async (
   const source = {
     isInitialized: false,
     migrations: [new initialAuthSchema(), { name: 'NextMigration1788690000000' }],
-    initialize: async () => { source.isInitialized = true },
-    query: async (sql: string) => sql.includes('to_regclass')
-      ? [{ exists: true }]
-      : [{ name: new initialAuthSchema().name }],
-    destroy: async () => { source.isInitialized = false },
+    initialize: async () => {
+      source.isInitialized = true
+    },
+    query: async (sql: string) =>
+      sql.includes('to_regclass') ? [{ exists: true }] : [{ name: new initialAuthSchema().name }],
+    destroy: async () => {
+      source.isInitialized = false
+    }
   }
-  assert.equal(await runMigrationCommand('show', () => source as unknown as DataSource), 'Database migrations pending')
+  assert.equal(
+    await runMigrationCommand('show', () => source as unknown as DataSource),
+    'Database migrations pending'
+  )
 })

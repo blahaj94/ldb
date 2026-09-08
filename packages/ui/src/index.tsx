@@ -12,7 +12,10 @@ import {
 } from './seed/dialog'
 
 // Runtime wrapper 없이 공식 Snippet을 제공하고 화면별 외형 override prop은 공개하지 않는다.
-type PublicProps<T extends ElementType> = Omit<ComponentPropsWithRef<T>, 'style' | 'className' | 'fontWeight' | keyof SeedStyleProps>
+type PublicProps<T extends ElementType> = Omit<
+  ComponentPropsWithRef<T>,
+  'style' | 'className' | 'fontWeight' | keyof SeedStyleProps
+>
 
 export type ActionButtonProps = PublicProps<typeof SeedActionButton>
 export const ActionButton: ComponentType<ActionButtonProps> = SeedActionButton

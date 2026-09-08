@@ -25,7 +25,7 @@ export function createDatabaseOptions(configuration: DatabaseConfiguration): Dat
     migrationsTransactionMode: 'all',
     migrationsTableName: 'typeorm_migrations',
     entities: authSchemas,
-    migrations: [fileURLToPath(new URL('./migrations/*.js', import.meta.url))],
+    migrations: [fileURLToPath(new URL('./migrations/*.js', import.meta.url))]
   }
 }
 
@@ -33,12 +33,14 @@ export function createDatabaseDataSource(configuration: DatabaseConfiguration): 
   return new DataSource(createDatabaseOptions(configuration))
 }
 
-export function createNestDatabaseOptions(configuration: DatabaseConfiguration): TypeOrmModuleOptions {
+export function createNestDatabaseOptions(
+  configuration: DatabaseConfiguration
+): TypeOrmModuleOptions {
   return {
     ...createDatabaseOptions(configuration),
     retryAttempts: 1,
     verboseRetryLog: false,
-    toRetry: () => false,
+    toRetry: () => false
   }
 }
 
@@ -48,7 +50,7 @@ export class DatabaseModule {
     return {
       module: DatabaseModule,
       imports: [TypeOrmModule.forRoot(createNestDatabaseOptions(configuration))],
-      exports: [TypeOrmModule],
+      exports: [TypeOrmModule]
     }
   }
 }
@@ -63,7 +65,7 @@ function sanitizeMigrationError(): Error {
 
 export async function runMigrationCommand(
   command: MigrationCommand,
-  createDataSource: () => DataSource,
+  createDataSource: () => DataSource
 ): Promise<string> {
   let dataSource: DataSource | undefined
   let result: string | undefined
@@ -79,17 +81,20 @@ export async function runMigrationCommand(
       result = 'Database migration reverted'
     } else {
       const relation = (await dataSource.query(
-        "SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists",
+        "SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"
       )) as Array<{ exists: boolean }>
       if (!relation[0]?.exists) {
         result = 'Database migrations pending'
       } else {
-        const history = (await dataSource.query(
-          'SELECT name FROM "typeorm_migrations"',
-        )) as Array<{ name: string }>
+        const history = (await dataSource.query('SELECT name FROM "typeorm_migrations"')) as Array<{
+          name: string
+        }>
         const applied = new Set(history.map(({ name }) => name))
-        result = dataSource.migrations.every((migration) => applied.has(migration.name ?? migration.constructor.name))
-          ? 'Database migrations current' : 'Database migrations pending'
+        result = dataSource.migrations.every((migration) =>
+          applied.has(migration.name ?? migration.constructor.name)
+        )
+          ? 'Database migrations current'
+          : 'Database migrations pending'
       }
     }
   } catch {
@@ -102,6 +107,8 @@ export async function runMigrationCommand(
       failed = true
     }
   }
-  if (failed || result === undefined) throw sanitizeMigrationError()
+  if (failed || result === undefined) {
+    throw sanitizeMigrationError()
+  }
   return result
 }

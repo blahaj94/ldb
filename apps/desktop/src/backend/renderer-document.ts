@@ -8,7 +8,9 @@ export function validateDevRendererUrl(value: string): string {
     return isControl
   })
   const hasForbiddenCharacters = hasWhitespaceOrBackslash || hasControlCharacter
-  if (hasForbiddenCharacters) throw new Error('Invalid local renderer URL')
+  if (hasForbiddenCharacters) {
+    throw new Error('Invalid local renderer URL')
+  }
   let url: URL
   try {
     url = new URL(value)
@@ -30,6 +32,8 @@ export function validateDevRendererUrl(value: string): string {
   const isViteOrigin = isBareOrigin && isRootDocument
   const hasCanonicalInput = isCanonicalUrl || isViteOrigin
   const isAllowed = isWebProtocol && isLoopback && !hasCredentials && hasCanonicalInput
-  if (!isAllowed) throw new Error('Invalid local renderer URL')
+  if (!isAllowed) {
+    throw new Error('Invalid local renderer URL')
+  }
   return url.href
 }

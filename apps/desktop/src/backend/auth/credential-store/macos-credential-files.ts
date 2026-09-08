@@ -27,7 +27,9 @@ function assertPrivate(stat: Stats, directory: boolean): void {
   const expectedMode = directory ? 0o700 : 0o600
   const hasPrivateMode = (stat.mode & 0o7777) === expectedMode
   const isPrivate = isExpectedType && hasExpectedOwner && hasPrivateMode
-  if (!isPrivate) throw new Error('Credential storage protection is unavailable.')
+  if (!isPrivate) {
+    throw new Error('Credential storage protection is unavailable.')
+  }
 }
 
 export class MacOsCredentialFiles {
@@ -48,7 +50,9 @@ export class MacOsCredentialFiles {
         assertPrivate(await this.files.lstat(path), true)
       } catch (error) {
         const wasMissing = isMissing(error)
-        if (!wasMissing) throw error
+        if (!wasMissing) {
+          throw error
+        }
         await this.files.mkdir(path, { mode: 0o700 })
         created = true
       }
@@ -66,7 +70,9 @@ export class MacOsCredentialFiles {
       return true
     } catch (error) {
       const wasMissing = isMissing(error)
-      if (wasMissing) return false
+      if (wasMissing) {
+        return false
+      }
       throw error
     }
   }
@@ -83,7 +89,9 @@ export class MacOsCredentialFiles {
 
   async read(name: RecordName): Promise<Buffer | null> {
     const exists = await this.present(name)
-    if (!exists) return null
+    if (!exists) {
+      return null
+    }
     const handle = await this.files.open(
       join(this.directory, name),
       constants.O_RDONLY | constants.O_NOFOLLOW
@@ -94,10 +102,14 @@ export class MacOsCredentialFiles {
       let offset = 0
       while (true) {
         const hasCapacity = offset < buffer.length
-        if (!hasCapacity) break
+        if (!hasCapacity) {
+          break
+        }
         const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset)
         const reachedEnd = bytesRead === 0
-        if (reachedEnd) break
+        if (reachedEnd) {
+          break
+        }
         offset += bytesRead
       }
       return buffer.subarray(0, offset)
@@ -125,7 +137,9 @@ export class MacOsCredentialFiles {
       await this.files.rename(temporary, join(this.directory, name))
       await this.syncDirectory()
       const isMarker = name === 'transition.v1'
-      if (isMarker) await this.discardMarkerTemporaries()
+      if (isMarker) {
+        await this.discardMarkerTemporaries()
+      }
       return 'confirmed'
     } catch {
       // rename 호출 이후 오류는 destination이 실제 교체됐는지 추측하지 않는다.
@@ -139,10 +153,16 @@ export class MacOsCredentialFiles {
       return isMarkerTemporary
     })
     const hasTemporaries = names.length > 0
-    if (!hasTemporaries) return
+    if (!hasTemporaries) {
+      return
+    }
     // 새 marker의 directory sync 이후에만 이전 시도의 temp를 지운다.
-    for (const name of names) await this.present(name)
-    for (const name of names) await this.files.unlink(join(this.directory, name))
+    for (const name of names) {
+      await this.present(name)
+    }
+    for (const name of names) {
+      await this.files.unlink(join(this.directory, name))
+    }
     await this.syncDirectory()
   }
 
@@ -154,7 +174,9 @@ export class MacOsCredentialFiles {
       const present: string[] = []
       for (const name of names) {
         const exists = await this.present(name)
-        if (exists) present.push(name)
+        if (exists) {
+          present.push(name)
+        }
       }
       for (const name of present) {
         deletionAttempted = true
@@ -172,7 +194,9 @@ export class MacOsCredentialFiles {
     try {
       await this.prepare()
       const exists = await this.present('transition.v1')
-      if (!exists) return 'unknown'
+      if (!exists) {
+        return 'unknown'
+      }
       await this.files.unlink(join(this.directory, 'transition.v1'))
       await this.syncDirectory()
       return 'confirmed'
@@ -188,7 +212,9 @@ export class MacOsCredentialFiles {
       constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
     )
     try {
-      if (requirePrivate) assertPrivate(await handle.stat(), true)
+      if (requirePrivate) {
+        assertPrivate(await handle.stat(), true)
+      }
       await handle.sync()
     } finally {
       await handle.close()

@@ -6,24 +6,35 @@ import { setTimeout as delay } from 'node:timers/promises'
 import test from 'node:test'
 import { bounded } from './login-test-control.mjs'
 import {
-  assertStartupFailure, collectRuntimeExit, runtimeEnvironment, startRuntime, stopRuntime,
-  unusedRuntimePort, withRuntimeConfiguration,
+  assertStartupFailure,
+  collectRuntimeExit,
+  runtimeEnvironment,
+  startRuntime,
+  stopRuntime,
+  unusedRuntimePort,
+  withRuntimeConfiguration
 } from './runtime-fixtures.mjs'
 
 async function assertPortClosed(port) {
   const client = createConnection({ port, host: '127.0.0.1' })
   try {
-    const connected = await bounded(new Promise((resolve) => {
-      client.once('connect', () => resolve(true))
-      client.once('error', () => resolve(false))
-    }))
+    const connected = await bounded(
+      new Promise((resolve) => {
+        client.once('connect', () => resolve(true))
+        client.once('error', () => resolve(false))
+      })
+    )
     assert.equal(connected, false, 'API must not listen during the stalled database handshake')
   } finally {
     client.destroy()
   }
 }
 
-for (const [signal, repeat] of [['SIGINT', false], ['SIGTERM', false], ['SIGTERM', true]]) {
+for (const [signal, repeat] of [
+  ['SIGINT', false],
+  ['SIGTERM', false],
+  ['SIGTERM', true]
+]) {
   const variant = repeat ? 'with repeated signals' : 'once'
   test(`startup ${signal} ${variant} terminates a stalled real TCP handshake`, async () => {
     const handshake = Promise.withResolvers()
@@ -45,11 +56,16 @@ for (const [signal, repeat] of [['SIGINT', false], ['SIGTERM', false], ['SIGTERM
       await withRuntimeConfiguration(async ({ path }) => {
         const port = await unusedRuntimePort()
         const configuration = {
-          host: '127.0.0.1', port: peer.address().port,
-          username: 'fixture-handshake-user', password: 'fixture-handshake-secret', database: 'fixture-handshake-db',
+          host: '127.0.0.1',
+          port: peer.address().port,
+          username: 'fixture-handshake-user',
+          password: 'fixture-handshake-secret',
+          database: 'fixture-handshake-db'
         }
         // 실제 TypeORM/pg initialize를 사용하며 신호로 Promise를 resolve하지 않는다.
-        runtime = startRuntime(runtimeEnvironment(path, port, configuration), { realDatabase: true })
+        runtime = startRuntime(runtimeEnvironment(path, port, configuration), {
+          realDatabase: true
+        })
         await bounded(handshake.promise)
         assert.equal(sockets.size, 1)
         await assertPortClosed(port)
@@ -71,13 +87,21 @@ for (const [signal, repeat] of [['SIGINT', false], ['SIGTERM', false], ['SIGTERM
         const events = runtime.events.map(({ event }) => event)
         assert.equal(events.includes('db.initialize'), true)
         assert.equal(events.includes('app.listen'), false)
-        assert.equal(events.includes('db.disconnected'), false, 'native exit is not successful async DB cleanup')
+        assert.equal(
+          events.includes('db.disconnected'),
+          false,
+          'native exit is not successful async DB cleanup'
+        )
       })
     } finally {
       clearInterval(repeatedSignals)
       const hasRuntime = runtime !== undefined
-      if (hasRuntime) await stopRuntime(runtime)
-      for (const socket of sockets) socket.destroy()
+      if (hasRuntime) {
+        await stopRuntime(runtime)
+      }
+      for (const socket of sockets) {
+        socket.destroy()
+      }
       await new Promise((resolve) => peer.close(resolve))
     }
   })
@@ -86,13 +110,15 @@ for (const [signal, repeat] of [['SIGINT', false], ['SIGTERM', false], ['SIGTERM
 test('completed startup shutdown clears its timer while another test handle stays alive', async () => {
   await withRuntimeConfiguration(async ({ path }) => {
     const runtime = startRuntime(runtimeEnvironment(path, await unusedRuntimePort()), {
-      fault: 'initialize-signal-hold',
+      fault: 'initialize-signal-hold'
     })
     try {
       let isInitializing = false
       for (let attempt = 0; attempt < 200; attempt += 1) {
         isInitializing = runtime.events.some(({ event }) => event === 'db.initializing')
-        if (isInitializing) break
+        if (isInitializing) {
+          break
+        }
         assert.equal(runtime.child.exitCode, null)
         await delay(10)
       }
@@ -103,7 +129,11 @@ test('completed startup shutdown clears its timer while another test handle stay
       const events = runtime.events.map(({ event }) => event)
       assert.equal(events.includes('app.listen'), false)
       assert.deepEqual(events.slice(-5), [
-        'app.close', 'app.closed', 'db.destroy', 'db.disconnected', 'test.keepalive-finished',
+        'app.close',
+        'app.closed',
+        'db.destroy',
+        'db.disconnected',
+        'test.keepalive-finished'
       ])
     } finally {
       await stopRuntime(runtime)

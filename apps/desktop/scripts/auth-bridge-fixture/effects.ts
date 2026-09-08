@@ -88,8 +88,12 @@ export function createFixtureEffects(): Effects {
     },
     store: {
       inspect: async () => {
-        if (marked) return { status: 'recovery-required' }
-        if (committed) return { status: 'ready', refreshToken }
+        if (marked) {
+          return { status: 'recovery-required' }
+        }
+        if (committed) {
+          return { status: 'ready', refreshToken }
+        }
         return { status: 'empty' }
       },
       establishTransition: async () => {

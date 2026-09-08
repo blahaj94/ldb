@@ -9,7 +9,9 @@ const theme = process.argv[3] ?? 'system'
 const isModeValid = ['desktop', 'example'].includes(mode)
 const isThemeValid = ['system', 'light', 'dark'].includes(theme)
 const isInputInvalid = !isModeValid || !isThemeValid
-if (isInputInvalid) throw new Error('Use desktop|example and system|light|dark')
+if (isInputInvalid) {
+  throw new Error('Use desktop|example and system|light|dark')
+}
 
 const userData = mkdtempSync(join(tmpdir(), 'ldb-ui-fixture-'))
 app.setPath('userData', userData)
@@ -48,7 +50,9 @@ app.whenReady().then(async () => {
     )
     ipcMain.once('ui-fixture-ready', (event) => {
       const isExpectedRenderer = event.sender === window.webContents
-      if (!isExpectedRenderer) return
+      if (!isExpectedRenderer) {
+        return
+      }
       clearTimeout(deadline)
       resolve()
     })

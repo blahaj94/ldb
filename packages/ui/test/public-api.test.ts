@@ -1,5 +1,10 @@
 import { expectTypeOf, it } from 'vitest'
-import type { ActionButtonProps, DialogBodyProps, DialogContentProps, TextFieldProps } from '../src/index'
+import type {
+  ActionButtonProps,
+  DialogBodyProps,
+  DialogContentProps,
+  TextFieldProps
+} from '../src/index'
 
 it('keeps semantic props and refs without exposing appearance overrides', () => {
   expectTypeOf<ActionButtonProps>().toHaveProperty('variant')

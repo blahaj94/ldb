@@ -45,7 +45,9 @@ export function createMacOsCredentialStore(options: StoreOptions): CredentialSto
     }
   }
   const hasAbsolutePath = isAbsolute(options.userDataPath)
-  if (!hasAbsolutePath) throw new Error('Credential storage requires a trusted absolute path.')
+  if (!hasAbsolutePath) {
+    throw new Error('Credential storage requires a trusted absolute path.')
+  }
   const context = validateCredentialContext(options.context)
   const files = new MacOsCredentialFiles(options.userDataPath, context.environment, options.files)
   const safeStorage = options.safeStorage
@@ -57,9 +59,13 @@ export function createMacOsCredentialStore(options: StoreOptions): CredentialSto
       const hasMarker = await files.present('transition.v1')
       const hasTemporary = (await files.ownedTemporaries()).length > 0
       const requiresRecovery = hasMarker || hasTemporary
-      if (requiresRecovery) return { status: 'recovery-required' }
+      if (requiresRecovery) {
+        return { status: 'recovery-required' }
+      }
       const isEncryptionAvailable = safeStorage.isEncryptionAvailable()
-      if (!isEncryptionAvailable) return { status: 'unavailable' }
+      if (!isEncryptionAvailable) {
+        return { status: 'unavailable' }
+      }
       const record = await files.read('credential.v1')
       const isEmpty = record == null
       if (isEmpty) {
@@ -70,7 +76,9 @@ export function createMacOsCredentialStore(options: StoreOptions): CredentialSto
       }
       const ciphertext = readCiphertext(record, context)
       const isInvalidRecord = ciphertext == null
-      if (isInvalidRecord) return { status: 'recovery-required' }
+      if (isInvalidRecord) {
+        return { status: 'recovery-required' }
+      }
       const plaintext = safeStorage.decryptString(ciphertext)
       const refreshToken = readRefreshToken(plaintext, context)
       const isInvalidPayload = refreshToken == null
@@ -88,7 +96,9 @@ export function createMacOsCredentialStore(options: StoreOptions): CredentialSto
       await files.prepare()
       const hasExistingMarker = await files.present('transition.v1')
       const cannotReplace = hasExistingMarker && !replaceExisting
-      if (cannotReplace) return 'failed'
+      if (cannotReplace) {
+        return 'failed'
+      }
       const marker: OwnedMarker = { version: 1, operationId: randomUUID(), kind }
       const outcome = await files.replace('transition.v1', Buffer.from(JSON.stringify(marker)))
       const wasConfirmed = outcome === 'confirmed'
@@ -102,13 +112,19 @@ export function createMacOsCredentialStore(options: StoreOptions): CredentialSto
   async function ownsMarker(): Promise<boolean> {
     const marker = ownedMarker
     const hasOwnership = marker != null
-    if (!hasOwnership) return false
+    if (!hasOwnership) {
+      return false
+    }
     await files.prepare()
     const bytes = await files.read('transition.v1')
     const hasRecord = bytes != null
-    if (!hasRecord) return false
+    if (!hasRecord) {
+      return false
+    }
     const parsed = markerSchema.safeParse(parseStoredJson(bytes))
-    if (!parsed.success) return false
+    if (!parsed.success) {
+      return false
+    }
     const hasSameOperation = parsed.data.operationId === marker.operationId
     const hasSameKind = parsed.data.kind === marker.kind
     const hasSameMarker = hasSameOperation && hasSameKind
@@ -121,17 +137,25 @@ export function createMacOsCredentialStore(options: StoreOptions): CredentialSto
       const isClearMarker = ownedMarker?.kind === 'clear'
       const ownsTransition = await ownsMarker()
       const canCommit = isCanonical && !isClearMarker && ownsTransition
-      if (!canCommit) return 'failed'
+      if (!canCommit) {
+        return 'failed'
+      }
       const isEncryptionAvailable = safeStorage.isEncryptionAvailable()
-      if (!isEncryptionAvailable) return 'failed'
+      if (!isEncryptionAvailable) {
+        return 'failed'
+      }
       const ciphertext = safeStorage.encryptString(
         JSON.stringify({ version: 1, ...context, refreshToken })
       )
       const hasCiphertext = ciphertext.byteLength > 0
-      if (!hasCiphertext) return 'failed'
+      if (!hasCiphertext) {
+        return 'failed'
+      }
       const record = encodeCredentialRecord(context, ciphertext)
       const isWithinLimit = record.byteLength <= MAX_RECORD_BYTES
-      if (!isWithinLimit) return 'failed'
+      if (!isWithinLimit) {
+        return 'failed'
+      }
       return files.replace('credential.v1', record)
     } catch {
       return 'failed'
@@ -152,10 +176,14 @@ export function createMacOsCredentialStore(options: StoreOptions): CredentialSto
   async function removeTransition(): Promise<StoreMutationOutcome> {
     try {
       const ownsTransition = await ownsMarker()
-      if (!ownsTransition) return 'unknown'
+      if (!ownsTransition) {
+        return 'unknown'
+      }
       const outcome = await files.removeMarker()
       const wasConfirmed = outcome === 'confirmed'
-      if (wasConfirmed) ownedMarker = null
+      if (wasConfirmed) {
+        ownedMarker = null
+      }
       return outcome
     } catch {
       return 'unknown'

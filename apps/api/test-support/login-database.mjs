@@ -35,9 +35,10 @@ export function assertCleared(request, status) {
     'provider_pkce_key_id',
     'verified_subject',
     'exchange_code_hash',
-    'code_expires_at',
-  ])
+    'code_expires_at'
+  ]) {
     assert.equal(request[field], null, field)
+  }
   assert.equal(request.consumed_at instanceof Date, status === 'consumed')
 }
 
@@ -47,7 +48,7 @@ export async function failure(operation, code) {
     assert.equal(error.cause, undefined)
     assert.doesNotMatch(
       String(error.stack),
-      /fixture-secret|fixture-subject|fixture-provider-code|SQL detail/,
+      /fixture-secret|fixture-subject|fixture-provider-code|SQL detail/
     )
     return true
   })
@@ -64,12 +65,12 @@ export async function fixture(source, overrides = {}) {
     issuer: 'https://issuer.test.invalid',
     audience: 'test-api',
     verificationKeys: [
-      { kid: 'test-key', publicKeyPem: keyPair.publicKey.export({ format: 'pem', type: 'spki' }) },
+      { kid: 'test-key', publicKeyPem: keyPair.publicKey.export({ format: 'pem', type: 'spki' }) }
     ],
     signingKey: {
       kid: 'test-key',
-      privateKeyPem: keyPair.privateKey.export({ format: 'pem', type: 'pkcs8' }),
-    },
+      privateKeyPem: keyPair.privateKey.export({ format: 'pem', type: 'pkcs8' })
+    }
   }
   const issueAccessJwt = await createAccessJwtIssuer(signing)
   const verifyJwt = await createAccessJwtVerifier(signing)
@@ -80,7 +81,7 @@ export async function fixture(source, overrides = {}) {
     registry: new LoginRegistry(registryConfiguration()),
     pkceKeys: new ProviderPkceKeys({
       activeKeyId: 'test-pkce',
-      keys: [{ id: 'test-pkce', key: randomBytes(32) }],
+      keys: [{ id: 'test-pkce', key: randomBytes(32) }]
     }),
     issueAccessJwt,
     verifyProvider: async (input) => {
@@ -89,7 +90,7 @@ export async function fixture(source, overrides = {}) {
       assert.equal(input.signal.aborted, false)
       return { provider: input.snapshot.provider, subject }
     },
-    ...overrides,
+    ...overrides
   }
   const service = createLoginService(dependencies)
   return { service, dependencies, issueAccessJwt, verifyJwt, verifiedCalls, subject }
@@ -111,7 +112,7 @@ export async function ready(service, provider = 'google') {
   const completion = await service.callback(
     provider,
     new URLSearchParams({ state: flow.state, code: 'fixture-provider-code', scope: 'ignored' }),
-    flow.cookie,
+    flow.cookie
   )
   const code = new URL(completion.returnUrl).searchParams.get('code')
   return {
@@ -122,8 +123,8 @@ export async function ready(service, provider = 'google') {
       requestId: flow.request.requestId,
       clientId: 'desktop',
       code,
-      codeVerifier: flow.verifier,
-    },
+      codeVerifier: flow.verifier
+    }
   }
 }
 
@@ -156,11 +157,12 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   assert.equal(authorization.searchParams.get('code_challenge_method'), 'S256')
   assert.equal(
     authorization.searchParams.get('redirect_uri'),
-    'https://api.test.invalid/auth/callback/google',
+    'https://api.test.invalid/auth/callback/google'
   )
   assert.match(browser.cookie, new RegExp(`^__Host-ldb-login-${request.requestId}=`))
-  for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/'])
+  for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/']) {
     assert(browser.cookie.includes(flag))
+  }
   assert.doesNotMatch(browser.cookie, /Domain=/i)
   assert(Number(/Max-Age=(\d+)/.exec(browser.cookie)[1]) <= 600)
   await failure(() => f.service.authorize(ticket), 'LOGIN_REQUEST_INVALID')
@@ -171,11 +173,11 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   await failure(() => f.service.callback('discord', params, cookie), 'LOGIN_REQUEST_INVALID')
   await failure(
     () => f.service.callback('google', params, '__Host-other=wrong'),
-    'LOGIN_REQUEST_INVALID',
+    'LOGIN_REQUEST_INVALID'
   )
   await failure(
     () => f.service.callback('google', params, `${cookie}; ${cookie}`),
-    'LOGIN_REQUEST_INVALID',
+    'LOGIN_REQUEST_INVALID'
   )
   assert.equal(f.verifiedCalls.length, 0)
   assert.deepEqual(await row(source, request.requestId), launched)
@@ -183,7 +185,7 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   assert.equal(f.verifiedCalls.length, 1)
   assert.equal(
     proof(f.verifiedCalls[0].providerVerifier),
-    authorization.searchParams.get('code_challenge'),
+    authorization.searchParams.get('code_challenge')
   )
   assert.deepEqual(f.verifiedCalls[0].nonceHash, launched.oidc_nonce_hash)
   const code = new URL(completion.returnUrl).searchParams.get('code')
@@ -201,16 +203,16 @@ export async function assertCommonLogin(source, mark = () => undefined) {
     requestId: request.requestId,
     clientId: 'desktop',
     code,
-    codeVerifier: verifier,
+    codeVerifier: verifier
   }
   await failure(
     () => f.service.exchange({ ...exchange, codeVerifier: opaque() }),
-    'LOGIN_EXCHANGE_INVALID',
+    'LOGIN_EXCHANGE_INVALID'
   )
   await failure(() => f.service.exchange({ ...exchange, code: opaque() }), 'LOGIN_EXCHANGE_INVALID')
   await failure(
     () => f.service.exchange({ ...exchange, requestId: randomUUID() }),
-    'LOGIN_EXCHANGE_INVALID',
+    'LOGIN_EXCHANGE_INVALID'
   )
   assert.deepEqual(await row(source, request.requestId), exchangeReady)
   assert.deepEqual(await counts(source), baseline)
@@ -221,10 +223,10 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   const principal = await f.verifyJwt(result.accessToken, Math.floor(Date.now() / 1000))
   assert.equal(principal.userId, result.user.id)
   const [session] = await source.query('SELECT * FROM auth_sessions WHERE id=$1', [
-    principal.sessionId,
+    principal.sessionId
   ])
   const [refresh] = await source.query('SELECT * FROM auth_refresh_tokens WHERE session_id=$1', [
-    session.id,
+    session.id
   ])
   assert.deepEqual(refresh.token_hash, digest(result.refreshToken))
   assert.equal(session.last_active_at.getTime(), principal.issuedAt * 1000)
@@ -235,7 +237,7 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   assert.deepEqual(await counts(source), {
     users: baseline.users + 1,
     sessions: baseline.sessions + 1,
-    refresh: baseline.refresh + 1,
+    refresh: baseline.refresh + 1
   })
 
   mark('existing identity preserves nickname and other sessions')
@@ -249,14 +251,14 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   const after = await source.query('SELECT * FROM auth_sessions ORDER BY id')
   assert.deepEqual(
     after.filter((item) => before.some((old) => old.id === item.id)),
-    before,
+    before
   )
 
   mark('sign failure rolls back actual code consumption and all identity writes')
   const broken = await fixture(source, {
     issueAccessJwt: async () => {
       throw new Error('fixture-secret SQL detail')
-    },
+    }
   })
   const brokenFlow = await ready(broken.service)
   const beforeFailure = await counts(source)
@@ -272,15 +274,15 @@ export async function assertCommonLogin(source, mark = () => undefined) {
       f.service.callback(
         'google',
         new URLSearchParams({ state: cancelled.state, error: 'access_denied' }),
-        cancelled.cookie,
+        cancelled.cookie
       ),
-    'LOGIN_CANCELLED',
+    'LOGIN_CANCELLED'
   )
   assertCleared(await row(source, cancelled.request.requestId), 'failed')
   const providerFailure = await fixture(source, {
     verifyProvider: async () => {
       throw new Error('fixture-secret')
-    },
+    }
   })
   const failed = await started(providerFailure.service)
   await failure(
@@ -288,9 +290,9 @@ export async function assertCommonLogin(source, mark = () => undefined) {
       providerFailure.service.callback(
         'google',
         new URLSearchParams({ state: failed.state, code: 'fixture-provider-code' }),
-        failed.cookie,
+        failed.cookie
       ),
-    'AUTH_PROVIDER_ERROR',
+    'AUTH_PROVIDER_ERROR'
   )
   assertCleared(await row(source, failed.request.requestId), 'failed')
   return { scenarios: 6 }

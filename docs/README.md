@@ -90,7 +90,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 
 - [`convention.md`](../convention.md): 프로젝트 전체 코드의 의미별 검사·boolean 합성·오류 책임과 가독성 기준
 - [`rules/convention-exceptions-proposal.md`](rules/convention-exceptions-proposal.md): 순회 선택·독립 pure check의 좁은 승인 예외와 적용 lifecycle
-- [`rules/convention-tooling.md`](rules/convention-tooling.md): PR #163에서 승인된 도구 책임 원칙과 Issue #164에서 제안한 공통 ESLint·Prettier 설정 기준
+- [`rules/convention-tooling.md`](rules/convention-tooling.md): PR #163에서 승인된 도구 책임 원칙과 PR #165에서 승인된 공통 ESLint·Prettier 설정 기준
 - [`rules/code-expression.md`](rules/code-expression.md): 처리 단계·문자열 생성·분기·메서드 체인·함수 입력의 가독성 기준. [PR #146 사용자 승인](https://github.com/blahaj94/ldb/pull/146#issuecomment-5579597615)과 merge를 반영한 active Rule
 - [`rules/change-control.md`](rules/change-control.md): approval, Issue, branch, commit, PR, parallel 작업
 - [`rules/testing.md`](rules/testing.md): Red-Green workflow와 validation 기준

@@ -12,7 +12,10 @@ class SearchQueryRunner extends PostgresQueryRunner {
   private ending?: Promise<void>
   private rejectConnecting?: (error: Error) => void
 
-  constructor(driver: PostgresDriver, private readonly signal: AbortSignal) {
+  constructor(
+    driver: PostgresDriver,
+    private readonly signal: AbortSignal
+  ) {
     super(driver, 'master')
     const options = driver.options
     this.client = new Client({
@@ -27,13 +30,15 @@ class SearchQueryRunner extends PostgresQueryRunner {
       // pg 8.23 non-pipeline의 end()는 진행 중 query의 socket을 실제로 종료한다.
       pipeline: false,
       // PostgreSQL 기본값 0은 lock 대기 중 끊긴 client를 감지하지 못한다. 이 연결에만 적용한다.
-      options: '-c client_connection_check_interval=100ms',
+      options: '-c client_connection_check_interval=100ms'
     })
     this.manager = driver.dataSource.createEntityManager(this)
     // Idle connection 오류도 원문을 log하거나 unhandled EventEmitter 오류로 노출하지 않는다.
     this.client.on('error', this.stop)
     signal.addEventListener('abort', this.stop, { once: true })
-    if (signal.aborted) this.stop()
+    if (signal.aborted) {
+      this.stop()
+    }
   }
 
   private readonly stop = (): void => {
@@ -47,7 +52,9 @@ class SearchQueryRunner extends PostgresQueryRunner {
   }
 
   override connect(): Promise<Client> {
-    if (this.isReleased) return Promise.reject(neopleSearchFailure('internal'))
+    if (this.isReleased) {
+      return Promise.reject(neopleSearchFailure('internal'))
+    }
     this.connecting ??= new Promise<Client>((resolve, reject) => {
       // pg는 connecting 중 client.end()로 종료하면 connect callback을 부르지 않을 수 있다.
       this.rejectConnecting = reject
@@ -55,8 +62,11 @@ class SearchQueryRunner extends PostgresQueryRunner {
         this.rejectConnecting = undefined
         const hasError = error != null
         const cannotUseConnection = hasError || this.isReleased
-        if (cannotUseConnection) reject(neopleSearchFailure('internal'))
-        else resolve(this.client)
+        if (cannotUseConnection) {
+          reject(neopleSearchFailure('internal'))
+        } else {
+          resolve(this.client)
+        }
       })
     })
     return this.connecting
@@ -75,6 +85,8 @@ class SearchQueryRunner extends PostgresQueryRunner {
 export function createSearchQueryRunner(source: DataSource, signal: AbortSignal): QueryRunner {
   const driver = source.driver
   const isPostgres = driver instanceof PostgresDriver
-  if (!isPostgres) throw neopleSearchFailure('internal')
+  if (!isPostgres) {
+    throw neopleSearchFailure('internal')
+  }
   return new SearchQueryRunner(driver, signal)
 }

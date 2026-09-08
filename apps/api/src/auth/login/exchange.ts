@@ -7,17 +7,17 @@ import { createIdentitySession } from '../identity-session.js'
 import { challenge, equalHash, opaqueHash } from './crypto.js'
 import { parseExchange } from './input.js'
 import {
-  exchangeExpired, freshTime, loginTransaction, markLoginRequestFailed, requestExpired,
+  exchangeExpired,
+  freshTime,
+  loginTransaction,
+  markLoginRequestFailed,
+  requestExpired
 } from './state.js'
 
 type ExchangeCommitResult =
-  | { status: 'issued'; tokens: LoginTokens }
-  | { status: 'rejected'; error: LoginFailure }
+  { status: 'issued'; tokens: LoginTokens } | { status: 'rejected'; error: LoginFailure }
 
-export async function exchangeLogin(
-  deps: LoginDependencies,
-  input: unknown,
-): Promise<LoginTokens> {
+export async function exchangeLogin(deps: LoginDependencies, input: unknown): Promise<LoginTokens> {
   const body = parseExchange(input)
   let needsCleanupAfterRollback = false
 
@@ -30,7 +30,7 @@ export async function exchangeLogin(
         // 1. 같은 code를 동시에 소비하지 못하도록 요청을 잠근 뒤 시각을 읽는다.
         const request = await requests.findOne({
           where: { id: body.requestId },
-          lock: { mode: 'pessimistic_write' },
+          lock: { mode: 'pessimistic_write' }
         })
         const checkedAt = await freshTime(manager)
 
@@ -43,7 +43,7 @@ export async function exchangeLogin(
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
-            error: new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID),
+            error: new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
           }
         }
 
@@ -62,7 +62,7 @@ export async function exchangeLogin(
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
-            error: new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID),
+            error: new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
           }
         }
 
@@ -73,7 +73,7 @@ export async function exchangeLogin(
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
-            error: new LoginFailure(LOGIN_ERRORS.INTERNAL),
+            error: new LoginFailure(LOGIN_ERRORS.INTERNAL)
           }
         }
 
@@ -81,7 +81,7 @@ export async function exchangeLogin(
         // exchange_ready의 DB CHECK가 verifiedSubject의 존재를 보장한다.
         const identitySession = await createIdentitySession(manager, {
           provider: registration.provider,
-          subject: request.verifiedSubject!,
+          subject: request.verifiedSubject!
         })
 
         // 회원의 잠금을 기다리는 동안 만료됐으면 방금 생성한 내용도 rollback한다.
@@ -100,7 +100,7 @@ export async function exchangeLogin(
             userId: identitySession.user.id,
             sessionId: identitySession.session.id,
             issuedAt,
-            idleDeadline,
+            idleDeadline
           })
         } catch {
           throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
@@ -113,11 +113,14 @@ export async function exchangeLogin(
           throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
         }
 
-        await requests.update({ id: request.id }, {
-          ...CLEARED_LOGIN_FIELDS,
-          status: 'consumed',
-          consumedAt,
-        })
+        await requests.update(
+          { id: request.id },
+          {
+            ...CLEARED_LOGIN_FIELDS,
+            status: 'consumed',
+            consumedAt
+          }
+        )
 
         return {
           status: 'issued',
@@ -128,10 +131,10 @@ export async function exchangeLogin(
             refreshToken: identitySession.refreshToken,
             sessionExpiresAt: new Date(idleDeadline * 1000).toISOString(),
             user: identitySession.user,
-            isNewUser: identitySession.isNewUser,
-          },
+            isNewUser: identitySession.isNewUser
+          }
         }
-      },
+      }
     )
 
     // transaction의 commit·release가 확인된 뒤에만 거절 또는 token 응답을 전달한다.
@@ -155,7 +158,7 @@ async function clearExpiredExchange(deps: LoginDependencies, id: string): Promis
   await loginTransaction(deps.dataSource, async (manager) => {
     const request = await manager.getRepository(AuthLoginRequestSchema).findOne({
       where: { id },
-      lock: { mode: 'pessimistic_write' },
+      lock: { mode: 'pessimistic_write' }
     })
     const checkedAt = await freshTime(manager)
 

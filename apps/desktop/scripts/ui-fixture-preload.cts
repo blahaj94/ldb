@@ -14,7 +14,9 @@ const isMediaIsolated = contextBridge.executeInMainWorld({
   }
 })
 
-if (!isMediaIsolated) throw new Error('UI fixture media isolation failed')
+if (!isMediaIsolated) {
+  throw new Error('UI fixture media isolation failed')
+}
 
 contextBridge.exposeInMainWorld('api', {
   listCaptureSources: async () => [{ id: 'example-window', name: 'Example window' }],

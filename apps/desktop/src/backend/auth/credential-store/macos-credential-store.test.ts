@@ -347,7 +347,9 @@ describe('macOS CredentialStore의 파일 protocol', () => {
       await fixture.store.establishTransition('refresh')
       await fixture.store.commitCredential(REFRESH_1)
       fixture.failures.set('unlink:transition.v1', ['after'])
-      if (!canReestablish) fixture.failures.set('open:transition-temp', ['before'])
+      if (!canReestablish) {
+        fixture.failures.set('open:transition-temp', ['before'])
+      }
 
       expect(await finalizeCredentialTransition(fixture.store, 'refresh')).toBe(
         canReestablish ? 'save-failed' : 'clear-unconfirmed'
@@ -395,7 +397,9 @@ describe('macOS CredentialStore의 파일 protocol', () => {
         status: hasProtectionError ? 'unavailable' : 'recovery-required'
       })
       expect(fixture.safeStorage.decryptString).not.toHaveBeenCalled()
-      if (isSymlink) expect(await fs.readFile(unrelated, 'utf8')).toBe('unrelated')
+      if (isSymlink) {
+        expect(await fs.readFile(unrelated, 'utf8')).toBe('unrelated')
+      }
     }
   )
 

@@ -8,7 +8,7 @@ import { decodeOpaque, equalHash, opaqueHash } from './crypto.js'
 /** 단순 transaction의 오류를 정제한다. 정리 commit 후 거절하는 결과는 각 호출부에서 처리한다. */
 export async function loginTransaction<T>(
   source: DataSource,
-  operation: (manager: EntityManager) => Promise<T>,
+  operation: (manager: EntityManager) => Promise<T>
 ): Promise<T> {
   try {
     return await source.transaction('READ COMMITTED', operation)
@@ -19,9 +19,9 @@ export async function loginTransaction<T>(
 }
 
 export async function freshTime(manager: EntityManager): Promise<Date> {
-  const [clock] = await manager.query(
-    'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now',
-  ) as Array<{ now: Date }>
+  const [clock] = (await manager.query(
+    'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now'
+  )) as Array<{ now: Date }>
   return clock.now
 }
 
@@ -30,20 +30,25 @@ export function requestExpired(request: AuthLoginRequest, checkedAt: Date): bool
 }
 
 export function exchangeExpired(request: AuthLoginRequest, checkedAt: Date): boolean {
-  return requestExpired(request, checkedAt) ||
+  return (
+    requestExpired(request, checkedAt) ||
     request.codeExpiresAt === null ||
     checkedAt.getTime() >= request.codeExpiresAt.getTime()
+  )
 }
 
 export async function markLoginRequestFailed(
   manager: EntityManager,
-  requestId: string,
+  requestId: string
 ): Promise<void> {
-  await manager.getRepository(AuthLoginRequestSchema).update({ id: requestId }, {
-    ...CLEARED_LOGIN_FIELDS,
-    status: 'failed',
-    consumedAt: null,
-  })
+  await manager.getRepository(AuthLoginRequestSchema).update(
+    { id: requestId },
+    {
+      ...CLEARED_LOGIN_FIELDS,
+      status: 'failed',
+      consumedAt: null
+    }
+  )
 }
 
 export function browserCookie(id: string, value: string, seconds: number): string {
@@ -53,14 +58,15 @@ export function browserCookie(id: string, value: string, seconds: number): strin
     'Secure',
     'HttpOnly',
     'SameSite=Lax',
-    'Path=/',
+    'Path=/'
   ].join('; ')
 }
 
 export function cookieMatches(request: AuthLoginRequest, header: string): boolean {
   try {
     const cookieName = `${LOGIN.cookiePrefix}${request.id}`
-    const matches = header.split(';')
+    const matches = header
+      .split(';')
       .map((part) => part.trim())
       .filter((part) => part.split('=')[0] === cookieName)
 

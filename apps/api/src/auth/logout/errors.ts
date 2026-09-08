@@ -7,10 +7,10 @@ type LogoutErrorDefinitionShape = Readonly<{
 }>
 
 export const LOGOUT_ERRORS = {
-  UNAVAILABLE: AUTH_ERRORS.UNAVAILABLE,
+  UNAVAILABLE: AUTH_ERRORS.UNAVAILABLE
 } as const satisfies Record<string, LogoutErrorDefinitionShape>
 
-export type LogoutErrorDefinition = typeof LOGOUT_ERRORS[keyof typeof LOGOUT_ERRORS]
+export type LogoutErrorDefinition = (typeof LOGOUT_ERRORS)[keyof typeof LOGOUT_ERRORS]
 
 export class LogoutFailure extends Error {
   readonly code: LogoutErrorDefinition['code']

@@ -3,7 +3,11 @@ import { jwtVerify } from 'jose'
 import type { JWTPayload } from 'jose'
 import { LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure, loginFailure } from '../../errors/login.js'
-import type { LoginDependencies, ProviderRegistration, ProviderVerificationInput } from '../../types/login.js'
+import type {
+  LoginDependencies,
+  ProviderRegistration,
+  ProviderVerificationInput
+} from '../../types/login.js'
 import { decodeOpaque, equalHash, opaqueHash } from '../login/crypto.js'
 import { LoginRegistry } from '../login/registry.js'
 import { createGoogleJwks } from './jwks.js'
@@ -31,8 +35,14 @@ function trustedUrl(value: string): string {
   const hasQuery = url.search.length > 0
   const hasFragment = url.hash.length > 0
   const hasWildcard = value.includes('*')
-  const isTrustedUrlShape = isHttps && isExactUrl && !hasUsername && !hasPassword &&
-    !hasQuery && !hasFragment && !hasWildcard
+  const isTrustedUrlShape =
+    isHttps &&
+    isExactUrl &&
+    !hasUsername &&
+    !hasPassword &&
+    !hasQuery &&
+    !hasFragment &&
+    !hasWildcard
   if (!isTrustedUrlShape) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
@@ -44,16 +54,27 @@ function sameSnapshot(expected: ProviderRegistration, actual: ProviderRegistrati
   const hasSameProvider = expected.provider === actual.provider
   const hasSameVersion = hasSameProvider && expected.version === actual.version
   const hasSameClientId = hasSameVersion && expected.providerClientId === actual.providerClientId
-  const hasSameSecretReference = hasSameClientId && expected.providerSecretRef === actual.providerSecretRef
+  const hasSameSecretReference =
+    hasSameClientId && expected.providerSecretRef === actual.providerSecretRef
   const hasSameCallback = hasSameSecretReference && expected.callbackUrl === actual.callbackUrl
-  const hasSameAuthorizationEndpoint = hasSameCallback &&
-    expected.authorizationEndpoint === actual.authorizationEndpoint
-  const hasSameAudience = hasSameAuthorizationEndpoint && expected.expectedAudience === actual.expectedAudience
-  const hasSameReturnTargetId = hasSameAudience && expected.returnTarget.id === actual.returnTarget.id
-  const hasSameReturnUrl = hasSameReturnTargetId && expected.returnTarget.url === actual.returnTarget.url
-  const isSameSnapshot = hasSameProvider && hasSameVersion && hasSameClientId &&
-    hasSameSecretReference && hasSameCallback && hasSameAuthorizationEndpoint &&
-    hasSameAudience && hasSameReturnTargetId && hasSameReturnUrl
+  const hasSameAuthorizationEndpoint =
+    hasSameCallback && expected.authorizationEndpoint === actual.authorizationEndpoint
+  const hasSameAudience =
+    hasSameAuthorizationEndpoint && expected.expectedAudience === actual.expectedAudience
+  const hasSameReturnTargetId =
+    hasSameAudience && expected.returnTarget.id === actual.returnTarget.id
+  const hasSameReturnUrl =
+    hasSameReturnTargetId && expected.returnTarget.url === actual.returnTarget.url
+  const isSameSnapshot =
+    hasSameProvider &&
+    hasSameVersion &&
+    hasSameClientId &&
+    hasSameSecretReference &&
+    hasSameCallback &&
+    hasSameAuthorizationEndpoint &&
+    hasSameAudience &&
+    hasSameReturnTargetId &&
+    hasSameReturnUrl
   return isSameSnapshot
 }
 
@@ -61,7 +82,7 @@ function verifyGoogleClaims(
   payload: JWTPayload,
   snapshot: ProviderRegistration,
   nonceHash: Buffer,
-  accessToken: unknown,
+  accessToken: unknown
 ): string {
   // jose의 audience 검사는 array도 수용하므로 Google의 단일 exact string을 추가 확인한다.
   const hasExpectedAudience = payload.aud === snapshot.expectedAudience
@@ -144,10 +165,12 @@ function verifyGoogleClaims(
     }
     const isAccessTokenString = typeof accessToken === 'string'
     const hasAccessToken = isAccessTokenString && accessToken.length > 0
-    const hasNonAsciiAccessToken = hasAccessToken && [...accessToken].some((character) => {
-      const isNonAscii = character.charCodeAt(0) > 127
-      return isNonAscii
-    })
+    const hasNonAsciiAccessToken =
+      hasAccessToken &&
+      [...accessToken].some((character) => {
+        const isNonAscii = character.charCodeAt(0) > 127
+        return isNonAscii
+      })
     const isValidAccessToken = isAccessTokenString && hasAccessToken && !hasNonAsciiAccessToken
     if (!isValidAccessToken) {
       throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
@@ -170,7 +193,7 @@ function verifyGoogleClaims(
 
 /** 실제 값의 저장 정책을 정하지 않는 server-only composition 경계다. Listen 전에 생성한다. */
 export function createGoogleProviderVerifier(
-  configuration: GoogleProviderConfiguration,
+  configuration: GoogleProviderConfiguration
 ): LoginDependencies['verifyProvider'] {
   try {
     const configuredFetch = configuration.fetch
@@ -190,7 +213,7 @@ export function createGoogleProviderVerifier(
       const registry = new LoginRegistry({
         apiOrigin: new URL(configured.snapshot.callbackUrl).origin,
         activeVersions: { google: configured.snapshot.version },
-        registrations: [configured.snapshot],
+        registrations: [configured.snapshot]
       })
       const snapshot = registry.active('google')
       const tokenEndpoint = trustedUrl(configured.tokenEndpoint)
@@ -200,7 +223,10 @@ export function createGoogleProviderVerifier(
         throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
       registrations.set(snapshot.version, {
-        snapshot, tokenEndpoint, jwksUri, resolveKey: createGoogleJwks(jwksUri, fetchGoogle),
+        snapshot,
+        tokenEndpoint,
+        jwksUri,
+        resolveKey: createGoogleJwks(jwksUri, fetchGoogle)
       })
     }
     const hasRegistrations = registrations.size > 0
@@ -222,14 +248,18 @@ export function createGoogleProviderVerifier(
           // 좁힌 입력은 token 호출을 시작하는 block에서만 보유한다.
           const providerInput = input
           const hasInput = providerInput != null
-          if (!hasInput) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          if (!hasInput) {
+            throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          }
           signal = providerInput.signal
           const isInitiallyAborted = signal.aborted
-          if (isInitiallyAborted) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          if (isInitiallyAborted) {
+            throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          }
           const resolvedRegistration = registrations.get(providerInput.snapshot.version)
           const hasRegistration = resolvedRegistration != null
-          const hasMatchingSnapshot = hasRegistration &&
-            sameSnapshot(resolvedRegistration.snapshot, providerInput.snapshot)
+          const hasMatchingSnapshot =
+            hasRegistration && sameSnapshot(resolvedRegistration.snapshot, providerInput.snapshot)
           if (!hasMatchingSnapshot) {
             throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
           }
@@ -284,23 +314,29 @@ export function createGoogleProviderVerifier(
 
         // 자체 ES256 JWT issuer/key/type와 공유하지 않는 Google RS256 신뢰 경계다.
         try {
-          const verified = await withAbort(jwtVerify(idToken,
-            (header, token) => registration.resolveKey(header, token, signal), {
+          const verified = await withAbort(
+            jwtVerify(idToken, (header, token) => registration.resolveKey(header, token, signal), {
               algorithms: ['RS256'],
               issuer: ['https://accounts.google.com', 'accounts.google.com'],
               audience: registration.snapshot.providerClientId,
               requiredClaims: ['iss', 'aud', 'exp', 'iat', 'sub', 'nonce'],
-              clockTolerance: 0,
-            }), signal)
+              clockTolerance: 0
+            }),
+            signal
+          )
           payload = verified.payload
         } catch (error) {
           throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
         }
         const isAbortedAfterSignature = signal.aborted
-        if (isAbortedAfterSignature) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+        if (isAbortedAfterSignature) {
+          throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+        }
         const subject = verifyGoogleClaims(payload, registration.snapshot, nonceHash, accessToken)
         const isAbortedAfterClaims = signal.aborted
-        if (isAbortedAfterClaims) throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+        if (isAbortedAfterClaims) {
+          throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+        }
         return { provider: 'google', subject }
       } catch (error) {
         throw loginFailure(error, LOGIN_ERRORS.PROVIDER)

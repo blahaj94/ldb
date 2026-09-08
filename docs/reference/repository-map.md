@@ -17,6 +17,19 @@ last-reviewed: 2026-09-08
 - Root package: `@ldb`
 - Root type: ESM
 
+## 공통 정적 검사와 정렬
+
+Root의 `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`와 직접 devDependency를 모든 프로젝트가 공유한다. API/Desktop의 compiler는 기존 TypeScript 5.9, Web/UI는 기존 6.0 계열이며 root TypeScript는 ESLint parser 전용이다.
+
+- `pnpm lint`, `pnpm lint:fix`: root 설정·scripts·API·Desktop·Web·UI의 ESLint 비수정 검사와 자동수정.
+- `pnpm format`, `pnpm format:check`: 같은 범위의 JS/TS·JSON/JSONC·YAML·CSS/SCSS/LESS·HTML을 Prettier로 정렬하거나 비수정 검사한다. Markdown은 자동 정렬 대상에 포함하지 않는다.
+- 각 workspace에서도 `pnpm --filter @ldb/api lint`처럼 같은 네 명령을 사용한다. Workspace에 등록하지 않은 scripts는 `pnpm --dir scripts lint`와 `format:check` 등으로 직접 실행한다.
+- `pnpm lint:oxlint`: Web/UI의 기존 Oxlint 전체 검사를 보조 실행한다. 개별 명령은 `pnpm --filter @ldb/web lint:oxlint`, `pnpm --filter @ldb/ui lint:oxlint`다. ESLint와 대응하지 않는 기본 검사도 유지하기 위해 Oxlint 설정과 dependency를 보존한다.
+
+각 leaf의 formatter 명령은 root config와 ignore 경로를 명시한다. 생성물·OCR·고정 SEED source·foundation/provenance·lockfile·license/notice와 기존 Desktop root tsconfig의 정렬 제외를 유지한다. 직접 관리하는 `packages/ui/build/notices.ts`는 검사·정렬 대상이다. 세부 범위는 실행되는 config와 ignore를 따른다.
+
+`.github/workflows/code-quality.yml`은 read-only 권한으로 root ESLint·Prettier 비수정 검사와 Web/UI 보조 Oxlint를 실행한다. 같은 범위의 leaf 검사를 CI에서 중복 실행하지 않는다. 적용 승인과 동작 보존 기준은 [`convention-tooling.md`](../rules/convention-tooling.md)를 따른다.
+
 ## Applications
 
 ### `apps/api`
