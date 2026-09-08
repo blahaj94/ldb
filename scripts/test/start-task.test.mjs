@@ -62,10 +62,10 @@ test('creates an isolated Issue branch at freshly fetched main and returns conci
   writeFileSync(join(f.repository, 'local.txt'), 'keep me\n')
   const headBefore = f.git(['rev-parse', 'HEAD'])
 
-  const result = startTask(['30', f.destination], f.run)
+  const result = startTask(['api', '30', 'fix-search', f.destination], f.run)
 
   assert.equal(f.git(['rev-parse', 'HEAD'], f.destination), latest)
-  assert.equal(f.git(['branch', '--show-current'], f.destination), 'codex/issue-30')
+  assert.equal(f.git(['branch', '--show-current'], f.destination), 'api-30-fix-search')
   assert.equal(f.git(['rev-parse', 'HEAD']), headBefore)
   assert.equal(readFileSync(join(f.repository, 'local.txt'), 'utf8'), 'keep me\n')
   assert.match(result, /Test task/)
@@ -74,16 +74,45 @@ test('creates an isolated Issue branch at freshly fetched main and returns conci
   assert.deepEqual(f.calls[0], ['gh', 'issue', 'view', '30', '--json', 'number,title,url,state'])
 })
 
+test('uses workspace and shared-scope prefixes without changing existing branches', (t) => {
+  const f = fixture(t)
+  f.git(['branch', 'codex/issue-30'])
+  const legacyHead = f.git(['rev-parse', 'codex/issue-30'])
+
+  for (const project of ['api', 'desktop', 'web', 'ui', 'cross', 'repo']) {
+    const destination = join(f.repository, `${project}-worktree`)
+    const result = startTask([project, '30', 'add-oauth2-login', destination], f.run)
+    const branch = `${project}-30-add-oauth2-login`
+
+    assert.equal(f.git(['branch', '--show-current'], destination), branch)
+    assert.ok(result.includes(`Branch: ${branch}`))
+  }
+
+  assert.equal(f.git(['rev-parse', 'codex/issue-30']), legacyHead)
+})
+
 test('rejects invalid arguments without external commands', () => {
   for (const args of [
     [],
-    ['30'],
-    ['0', 'target'],
-    ['-1', 'target'],
-    ['1;echo', 'target'],
-    ['9007199254740992', 'target'],
-    ['30', ' '],
-    ['30', 'target', 'extra']
+    ['30', 'target'],
+    ['api', '30', 'fix-search'],
+    ['api', '0', 'fix-search', 'target'],
+    ['api', '030', 'fix-search', 'target'],
+    ['api', '-1', 'fix-search', 'target'],
+    ['api', '1;echo', 'fix-search', 'target'],
+    ['api', '9007199254740992', 'fix-search', 'target'],
+    ['api', '30', 'fix-search', ' '],
+    ['api', '30', 'fix-search', 'target', 'extra'],
+    ['ldb', '30', 'fix-search', 'target'],
+    ['API', '30', 'fix-search', 'target'],
+    ['api', '30', '', 'target'],
+    ['api', '30', 'Fix-search', 'target'],
+    ['api', '30', 'fix/search', 'target'],
+    ['api', '30', 'fix--search', 'target'],
+    ['api', '30', '-fix-search', 'target'],
+    ['api', '30', 'fix-search-', 'target'],
+    ['api', '30', 'fix search', 'target'],
+    ['api', '30', 'fix-search\n', 'target']
   ]) {
     assert.throws(() => startTask(args, () => assert.fail('must not invoke a command')), /사용법/)
   }
@@ -92,14 +121,14 @@ test('rejects invalid arguments without external commands', () => {
 test('closed or mismatched Issue and GitHub failure do not fetch or create a worktree', (t) => {
   const f = fixture(t)
   f.issue.state = 'CLOSED'
-  assert.throws(() => startTask(['30', f.destination], f.run), /OPEN/)
+  assert.throws(() => startTask(['api', '30', 'fix-search', f.destination], f.run), /OPEN/)
   f.issue.state = 'OPEN'
   f.issue.number = 31
-  assert.throws(() => startTask(['30', f.destination], f.run), /Issue/)
+  assert.throws(() => startTask(['api', '30', 'fix-search', f.destination], f.run), /Issue/)
   assert.ok(f.calls.every(([command]) => command === 'gh'))
   assert.throws(
     () =>
-      startTask(['30', f.destination], () => {
+      startTask(['api', '30', 'fix-search', f.destination], () => {
         throw new Error('GitHub unavailable')
       }),
     /GitHub unavailable/
@@ -110,25 +139,25 @@ test('closed or mismatched Issue and GitHub failure do not fetch or create a wor
 test('fetch failure cannot fall back to stale origin/main', (t) => {
   const f = fixture(t)
   f.git(['remote', 'set-url', 'origin', join(f.repository, 'missing-origin.git')])
-  assert.throws(() => startTask(['30', f.destination], f.run))
+  assert.throws(() => startTask(['api', '30', 'fix-search', f.destination], f.run))
   assert.equal(existsSync(f.destination), false)
-  assert.equal(f.git(['branch', '--list', 'codex/issue-30']), '')
+  assert.equal(f.git(['branch', '--list', 'api-30-fix-search']), '')
 })
 
 test('existing destination and branch remain untouched', (t) => {
   const f = fixture(t)
   mkdirSync(f.destination)
-  assert.throws(() => startTask(['30', f.destination], f.run), /이미 존재/)
-  assert.equal(f.git(['branch', '--list', 'codex/issue-30']), '')
+  assert.throws(() => startTask(['api', '30', 'fix-search', f.destination], f.run), /이미 존재/)
+  assert.equal(f.git(['branch', '--list', 'api-30-fix-search']), '')
   writeFileSync(join(f.destination, 'keep.txt'), 'keep\n')
-  assert.throws(() => startTask(['30', f.destination], f.run), /이미 존재/)
+  assert.throws(() => startTask(['api', '30', 'fix-search', f.destination], f.run), /이미 존재/)
   assert.equal(readFileSync(join(f.destination, 'keep.txt'), 'utf8'), 'keep\n')
 
-  f.git(['branch', 'codex/issue-30'])
-  const original = f.git(['rev-parse', 'codex/issue-30'])
+  f.git(['branch', 'api-30-fix-search'])
+  const original = f.git(['rev-parse', 'api-30-fix-search'])
   const otherPath = join(f.repository, 'other-worktree')
-  assert.throws(() => startTask(['30', otherPath], f.run))
-  assert.equal(f.git(['rev-parse', 'codex/issue-30']), original)
+  assert.throws(() => startTask(['api', '30', 'fix-search', otherPath], f.run))
+  assert.equal(f.git(['rev-parse', 'api-30-fix-search']), original)
   assert.equal(existsSync(otherPath), false)
 })
 
