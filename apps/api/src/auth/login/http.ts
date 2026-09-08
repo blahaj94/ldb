@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { Catch, Controller, Get, Inject, Module, Post, Req, Res } from '@nestjs/common'
+import { Catch, Controller, Get, Inject, Module, NotFoundException, Post, Req, Res } from '@nestjs/common'
 import type { ArgumentsHost, ExceptionFilter, INestApplication } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import type { Request, Response } from 'express'
@@ -76,6 +76,15 @@ class LoginHttpFilter implements ExceptionFilter {
     const response = context.getResponse<Response>()
     if (response.headersSent) {
       response.end()
+      return
+    }
+
+    const hasRegisteredRoute = request.route != null
+    const isNotFound = error instanceof NotFoundException
+    const isUnregisteredRoute = !hasRegisteredRoute && isNotFound
+    if (isUnregisteredRoute) {
+      // Nest의 원문 message에는 credential을 포함한 URL이 있을 수 있어 반사하지 않는다.
+      response.status(404).json({ statusCode: 404, message: 'Not Found' })
       return
     }
 
