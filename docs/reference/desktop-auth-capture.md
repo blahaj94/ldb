@@ -68,6 +68,10 @@ Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercont
 
 이 실행에서 무선택 요청 거절 callback은 Electron의 `Video was requested, but no video stream was provided` unhandled rejection warning을 남겼으나 renderer의 media promise는 거절됐다. 마지막 logout과 진행 중 source 열거가 경합해 main의 `Capture source access denied`도 출력됐다. 이 출력은 숨기지 않으며 경고 없는 실행이라고 주장하지 않는다. Launcher의 cleanup PASS와 exit 0은 확인했지만 별도 종료 후 검증의 결과는 해당 exact head와 함께 따로 기록한다.
 
+이후 독립 review에서 빈 객체 거절이 실제 Electron API 형식 결함임을 확인해 보완했다. Pinned [native 결과 처리](https://raw.githubusercontent.com/electron/electron/v39.8.10/shell/browser/electron_browser_context.cc)는 `null`에 예외 없는 `CAPTURE_FAILURE`를 반환한다. 제품의 `deliverMediaResult`는 공개 `Streams` type에 없는 이 native 거절을 좁은 interop로 전달하고, 이미 소비됐을 수 있는 callback의 예외를 source 열거 실패와 분리해 재호출하지 않는다. 기존 `{}` 기대 test는 거절 의미를 유지하면서 실제 runtime 형식에 맞게 정정했고 fixture 관측도 `null`을 그대로 전달한다.
+
+수정 후 입력 `cf0c5640988aa0faf67578211f9bac969e15435b`에서 같은 OS/Electron의 `post-exit-check.mjs --media`를 한 번 실행했다. 정상 실제 stream/OCR·logout 정리·재로그인 무선택 거절 smoke와 child exit 0·process group 종료·종료 뒤 profile 0개가 PASS했다. Check는 고정된 video 누락 TypeError와 `UnhandledPromiseRejectionWarning`이 child 출력에 없음을 별도로 확인했다. Source 열거의 정상 auth 거절 출력은 이 경고 회귀로 분류하지 않는다.
+
 `capture:fixture:ocr`는 별도 검증이다. 같은 sandbox와 실제 제품 preload를 사용하되 `createPartyOcrWorker`에 synthetic canvas를 직접 전달한다. 실제 Korean/English asset·WASM·Worker 인식 결과의 예상값 일치와 생성 1·terminate 1을 확인했으며 media 요청·stream은 각각 0이다. Raw 인식 문자열은 반환하거나 log하지 않는다. 이 PASS는 native window capture나 통합 capture cleanup을 대체하지 않는다. Stream·loop·late OCR의 제품 수명 경합은 unit/hook doubles의 evidence와 구분한다.
 
 ## 종료 후 profile 정리
@@ -84,12 +88,12 @@ node apps/desktop/scripts/auth-capture-fixture/post-exit-check.mjs --ocr
 node apps/desktop/scripts/auth-capture-fixture/post-exit-check.mjs --media
 ```
 
-첫 command는 `capture:fixture:deny`의 의도된 media 차단 exit 1 뒤 cleanup을 검증하므로 check PASS가 media PASS를 뜻하지 않는다. `--ocr`는 실제 OCR 단독 성공과 종료 뒤 정리를 확인하며, `--media`는 실제 stream/OCR smoke exit 0과 종료 뒤 정리를 요구한다. 일반 Vitest는 native process를 시작하지 않으며 launcher의 삭제/확인 실패·child 실패·group 종료 미확인과 직접 child 거절을 mocks로 검증한다.
+첫 command는 `capture:fixture:deny`의 의도된 media 차단 exit 1 뒤 cleanup을 검증하므로 check PASS가 media PASS를 뜻하지 않는다. `--ocr`는 실제 OCR 단독 성공과 종료 뒤 정리를 확인하며, `--media`는 실제 stream/OCR smoke exit 0, native 거절 경고 부재와 종료 뒤 정리를 요구한다. 일반 Vitest는 native process를 시작하지 않으며 launcher의 삭제/확인 실패·child 실패·group 종료 미확인과 직접 child 거절을 mocks로 검증한다.
 
 ## 검증과 제한
 
 ```sh
-pnpm --filter @ldb/desktop exec vitest run scripts/auth-capture-fixture/main.test.ts scripts/auth-capture-fixture/permission.test.ts scripts/auth-capture-fixture/launcher.test.mjs src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
+pnpm --filter @ldb/desktop exec vitest run scripts/auth-capture-fixture/main.test.ts scripts/auth-capture-fixture/capture-observation.test.ts scripts/auth-capture-fixture/permission.test.ts scripts/auth-capture-fixture/launcher.test.mjs src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
 pnpm --filter @ldb/desktop run --sequential '/^(test|lint|build)$/'
 git diff --check
 ```
