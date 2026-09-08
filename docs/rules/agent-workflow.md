@@ -51,6 +51,12 @@ review-after: Execution Issue 10개 적용 후
 - Low-cost first-pass review를 기본으로 하고 escalation 조건에 해당할 때만 high-capability reviewer 또는 사람에게 넘긴다.
 - Agent Reviewer는 Approve와 merge를 수행하지 않는다.
 
+#### Code review model proposal
+
+사용자 요청에 따라 repository code Reviewer의 1차 검토·재검토·필요한 AI 최종 검토를 `gpt-6-astra`, reasoning effort `medium`으로 고정하는 예외를 제안한다. repository 일반 규칙으로는 사용자 승인 후 code review에 우선 적용하며, 승인 전에는 위의 low-cost first-pass와 기존 escalation을 유지한다. 다만 현재 task에서 사용자가 명시한 이 model·effort 선택은 기존 사용자 선택 우선 규칙에 따라 즉시 적용하며 같은 선택을 다시 승인받지 않는다. 코드가 없는 문서의 1차 review는 저비용 경로를 유지하고, [`Convention migration proposal`](#convention-migration-proposal)의 code 작성·조사·분할·통합 조정에는 적용하지 않는다.
+
+배정·착수 전에 실제 model과 effort 선택을 확인한다. 사용할 수 없거나 확인할 수 없으면 해당 review 배정과 완료 판정을 보류하고 가용성 문제를 보고하며, 다른 설정으로 대체하거나 high·ultra로 상향하지 않는다. 외부 review나 model 설정을 확인할 수 없는 결과는 이 고정 mapping의 적용 evidence로 사용하지 않는다. 예상 밖 실패·범위 초과·검증 불가·retry 소진은 기존 retry와 escalation을 따르되 자동 상향하지 않고 사람에게 판단을 요청한다. 사용자가 다른 model 또는 effort를 명시하면 그 선택이 우선하며, validation·사람의 최종 판단·Rule 승인·사용자 merge 경계는 유지한다.
+
 ## 수행 모드 선택
 
 이 절의 직접 수행 예외와 실행 효율 계약은 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)과 merge를 반영한다. 여기서 parent는 현재 Issue의 Planner다.
@@ -133,7 +139,7 @@ Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전�
 
 `docs/rules/convention-migration.md`의 동작 보존 이행에 한해, 결과·범위·검증이 확정되고 uncertainty·risk가 `low`인 standard capability tier 코드 작성 작업을 `gpt-5.6-luna`, reasoning effort `low`로 실행하는 좁은 예외를 제안한다. 이는 capability tier를 low로 바꾸는 것이 아니라 standard tier 작업의 실제 model 비용을 낮추는 mapping이다. 따라서 low tier 전체의 코드 작성 금지와 충돌하지 않는다.
 
-이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 기존 Astra/Spark 일반 규칙에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. Rule·security의 최종 review는 사람 경로를 따른다.
+이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 기존 Astra/Spark 일반 규칙에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. 단, code Reviewer에는 [Code review model proposal](#code-review-model-proposal)의 고정 mapping을 우선 적용한다. Rule·security의 최종 review는 사람 경로를 따른다.
 
 기존 escalation의 고위험·Rule·architecture·security·API·schema·authentication, P0/P1 finding, 검증 불완전 조건은 그대로 적용하며 필수 최종 review를 생략하지 않는다. 이번 이행에서 해당 조건이 발생하면 자동으로 model이나 effort를 상향하지 않고 사람에게 최종 검토를 요청한다. 예상 밖 실패, 범위 초과, 검증 불가, retry 소진에도 같은 원칙을 적용한다. 후속 분할·배정·통합 조정에도 고비용 model을 자동 배정하지 않으며, 반복 구현을 이유로 별도 고비용 Planner를 만들지 않는다. 사용자가 model 또는 effort를 명시한 경우에는 기존 조항에 따라 그 선택을 우선한다.
 
