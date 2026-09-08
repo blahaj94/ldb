@@ -7,6 +7,7 @@ import { uiNotices } from '../../../packages/ui/build/notices'
 export default defineConfig({
   main: {
     build: {
+      externalizeDeps: { exclude: ['ky'] },
       lib: { entry: resolve('scripts/auth-capture-fixture/main.ts'), formats: ['cjs'] },
       outDir: 'out/auth-capture-fixture/main',
       rollupOptions: { output: { entryFileNames: 'main.cjs' } }
