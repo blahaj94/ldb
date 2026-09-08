@@ -44,7 +44,7 @@ function PartyCapture(): React.JSX.Element {
         </select>
       </label>
       <ActionButton
-        disabled={!sourceRegistered || starting}
+        disabled={!sourceRegistered || starting || !search.ready}
         loading={starting}
         type="button"
         onClick={() => void startCapture()}

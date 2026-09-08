@@ -16,6 +16,7 @@ type CaptureTicket = {
   cleared: boolean[]
 }
 export type SearchView = {
+  ready: boolean
   slots: readonly SearchSlot[]
   retryPending: readonly boolean[]
   connectionFailed: boolean
@@ -73,6 +74,9 @@ export class CaptureSearch {
     auth: AuthSnapshot
     signal: AbortSignal
   }): Promise<string | null> {
+    if (!this.connection.ready) {
+      return null
+    }
     this.end()
     const ticket: CaptureTicket = {
       active: true,
@@ -243,6 +247,7 @@ export class CaptureSearch {
 
   private publish(): void {
     this.options.onChange({
+      ready: this.connection.ready,
       slots: this.visibleSlots(),
       retryPending: Array.from({ length: 4 }, (_, slot) => this.pending.has(slot)),
       connectionFailed: this.failed

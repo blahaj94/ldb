@@ -15,13 +15,19 @@ type ConnectionOptions = {
 
 export class SearchConnection {
   private active = true
+  private synchronized = false
   private epoch = 0
   private current: SearchSnapshot | null = null
   private unsubscribe: () => void = () => {}
 
   constructor(private readonly options: ConnectionOptions) {}
 
+  get ready(): boolean {
+    return this.synchronized
+  }
+
   connect(): void {
+    this.synchronized = false
     this.unsubscribe()
     this.epoch += 1
     const expected = this.epoch
@@ -97,6 +103,7 @@ export class SearchConnection {
   }
 
   dispose(): void {
+    this.synchronized = false
     this.active = false
     this.epoch += 1
     this.unsubscribe()
@@ -117,11 +124,18 @@ export class SearchConnection {
       if (!isValid) {
         throw new Error('Invalid search bridge response')
       }
+      const isCurrent = this.isCurrent(expected)
+      if (!isCurrent) {
+        return false
+      }
+      this.synchronized = true
       this.accept(result.snapshot, expected)
-      return true
+      const isSynchronized = this.isCurrent(expected) && this.synchronized
+      return isSynchronized
     } catch {
       const isCurrent = this.isCurrent(expected)
       if (isCurrent) {
+        this.synchronized = false
         this.current = null
         this.options.onSnapshot(null)
         this.options.onFailure()

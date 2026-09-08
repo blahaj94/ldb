@@ -19,6 +19,7 @@ export function useCharacterSearch(onInvalidated: () => void): CharacterSearch {
   }, [auth, onInvalidated])
   const bridgeRef = useRef<CaptureSearch | null>(null)
   const [view, setView] = useState<SearchView>({
+    ready: false,
     slots: emptySearchSlots(),
     retryPending: [false, false, false, false],
     connectionFailed: false
