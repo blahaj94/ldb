@@ -75,15 +75,15 @@ review-after: 승인 후 실제 답변·Issue·PR·인계 설명 중 3건을 작
 | `consequential finding 없음` | 이번 검토에서는 수정이 필요한 중요한 문제를 발견하지 못했습니다. |
 | 알림 발행 당시의 snapshot 유지 | 알림에는 알림을 발행한 시점의 상태를 담는다. |
 
-#### GitHub 글의 문체와 형식 보완안
+#### GitHub 글의 문체와 형식
 
-이 절은 [Issue #192](https://github.com/blahaj94/ldb/issues/192)의 규칙 변경안입니다. Draft PR의 명시적인 사용자 승인 전까지 `proposed`이며, 위의 승인된 작성 기준은 계속 적용합니다. 승인 후에는 위 기준과 함께 적용합니다.
+이 절은 [PR #193의 사용자 승인](https://github.com/blahaj94/ldb/pull/193#issuecomment-5589616464)을 반영한 active Rule입니다. 위의 승인된 작성 기준과 함께 적용합니다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: warning
 rationale: GitHub에서 AI가 작성하는 글의 문체와 형식을 통일해 필요한 정보와 다음 행동을 쉽게 파악하도록 합니다.
-evidence: "사용자와 합의한 개선안: https://github.com/blahaj94/ldb/issues/192; Draft PR 승인 대기"
+evidence: "https://github.com/blahaj94/ldb/pull/193#issuecomment-5589616464"
 exceptions: 코드, 식별자, 명령어, schema field, 공식 명칭, 정확성이 필요한 원문 인용은 원래 표현을 유지합니다.
 review-after: 승인 후 GitHub 글 3건을 작성했거나 사용자가 다시 읽기 어렵다고 지적하면 실제 사례로 기준과 예시를 재검토합니다.
 ```
