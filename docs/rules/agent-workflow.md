@@ -84,6 +84,32 @@ review-after: 승인 후 서로 다른 code review 3건에서 설정 적용·누
 
 ## Issue 종류
 
+### Issue 제목 Rule 제안
+
+모든 Issue 제목은 `[type] 한국어 제목` 형식을 사용한다. `type`은 아래 8개 중 하나를 소문자로 정확히 하나만 선택하며, Issue의 주된 완료 결과를 기준으로 고른다. 작업 역할·task·execution·추적 대상·진행 방식은 제목 type을 추가하거나 대체하지 않는다.
+
+| type | 주된 완료 결과 |
+| --- | --- |
+| `feat` | 새 기능을 제공한다 |
+| `fix` | 결함을 수정한다 |
+| `refactor` | 동작을 보존하며 구조나 명명을 개선한다 |
+| `docs` | 문서를 작성·수정하거나 확정된 결정을 반영한다 |
+| `test` | 검증을 수행하고 주된 결과를 남긴다 |
+| `chore` | 설정·의존성·운영·유지보수를 처리한다 |
+| `design` | 설계·규칙·정책을 제안하거나 결정한다 |
+| `research` | 기술을 조사·비교하고 근거를 수집한다 |
+
+여러 결과가 겹치면 완료 조건에서 가장 중요한 결과 하나를 선택한다. 제목의 type은 이 문서의 Issue 분류를 나타내며, 본문에 기록하는 작업 type·승인 상태·실행 조건을 대신하지 않는다. 사용자 승인 전에는 이 제안된 기준을 템플릿이나 기존 Issue에 적용하지 않는다.
+
+```yaml
+status: proposed
+enforcement: warning
+rationale: Issue 제목의 분류와 검색 기준을 통일해 주된 완료 결과를 빠르게 식별한다.
+evidence: "Issue #190의 제목 형식·허용 목록 통일 요청"
+exceptions: "사용자 승인된 8개 목록 밖의 새 type은 Rule 변경 절차를 따른다."
+review-after: "5개 Issue에 적용한 뒤 분류 모호성과 누락을 검토한다."
+```
+
 ### Design / RFC Issue
 
 Workflow, Rule, architecture의 대안, trade-off, open question, decision history를 기록한다. 재사용 가치가 있는 Proposal Revision, Decision, Rejected Alternative만 comment로 남기고 모든 reasoning step을 복사하지 않는다.
@@ -92,7 +118,7 @@ Workflow, Rule, architecture의 대안, trade-off, open question, decision histo
 
 ### 부모 추적 Issue
 
-여러 자식 작업의 결과와 dependency를 추적한다. 제목이 Execution이어도 부모 전체를 Worker에게 배정하지 않는다. 부모·자식 관계는 실행 순서를 뜻하지 않으며 선행 dependency를 별도로 확인한다. 부모의 완료는 등록된 자식 수가 아니라 부모 자체의 acceptance criteria로 판단한다.
+여러 자식 작업의 결과와 dependency를 추적한다. 제목의 type이 `feat`, `design` 등 무엇이든 부모 전체를 Worker에게 배정하지 않는다. 부모·자식 관계는 실행 순서를 뜻하지 않으며 선행 dependency를 별도로 확인한다. 부모의 완료는 등록된 자식 수가 아니라 부모 자체의 acceptance criteria로 판단한다.
 
 ### Execution Issue
 
