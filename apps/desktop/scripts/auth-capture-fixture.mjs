@@ -73,9 +73,10 @@ export async function runCaptureFixture(args = []) {
   const isInteractive = args.length === 0
   const hasOneMode = args.length === 1
   const isSmoke = hasOneMode && args[0] === '--smoke'
+  const isSearchSmoke = hasOneMode && args[0] === '--search-smoke'
   const isOcr = hasOneMode && args[0] === '--ocr'
   const isDenyMedia = hasOneMode && args[0] === '--deny-media'
-  const hasValidMode = isInteractive || isSmoke || isOcr || isDenyMedia
+  const hasValidMode = isInteractive || isSmoke || isOcr || isDenyMedia || isSearchSmoke
   const hasPosixGroups = process.platform !== 'win32'
   if (!hasValidMode || !hasPosixGroups) {
     console.error('Capture fixture launcher configuration FAIL')
@@ -121,7 +122,9 @@ export async function runCaptureFixture(args = []) {
       detached: true,
       stdio: ['ignore', 'inherit', 'inherit']
     })
-    if (!isInteractive) deadline = setTimeout(interrupt, 120_000)
+    if (!isInteractive) {
+      deadline = setTimeout(interrupt, isSearchSmoke ? 210_000 : 120_000)
+    }
     const code = await new Promise((accept, reject) => {
       child.once('error', () => reject(new Error('Capture fixture child could not start')))
       child.once('close', accept)
