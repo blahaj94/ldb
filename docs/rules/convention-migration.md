@@ -14,7 +14,7 @@ review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재�
 
 이 Rule은 기존 코드에 최신 [`convention.md`](../../convention.md)를 적용하는 후속 작업의 이행 기준이다. 문서 자체는 제품 code, test, script, 설정, dependency를 바꾸지 않는다. Rule 승인과 사용자 merge 전에는 제품 code 이행을 시작하지 않는다.
 
-기계적 formatter·lint 적용과 사람의 의미 판단을 나누는 제안은 [`convention-tooling.md`](convention-tooling.md)를 따른다. 이 proposed Rule이 승인되기 전에는 기존 active Rule과 현재 설정을 우선하며, 승인 후에도 확인된 config·version·glob·ignore 범위만 사용한다.
+기계적 formatter·lint 적용과 사람의 의미 판단을 나누는 active 역할 원칙과 공통 설정 도입 proposed 계약은 [`convention-tooling.md`](convention-tooling.md)를 따른다. PR #163 승인·merge로 active가 된 역할 원칙은 현재 설정 범위에 적용하며, 공통 도입 제안이 별도 Draft PR에서 승인되기 전에는 실제 config·dependency·CI를 바꾸지 않는다.
 
 ## 동작 보존 범위
 
