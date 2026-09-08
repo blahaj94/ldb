@@ -42,7 +42,10 @@ it('60초 이후 내부 실행과 정리를 마친 정상 child를 outer timeout
   })
   fixture.spawn.mockImplementation(() => {
     setTimeout(() => {
-      child.stdout.emit('data', 'Capture fixture smoke PASS')
+      child.stdout.emit(
+        'data',
+        'Capture fixture synthetic matches: {"displayMatchedSlots":15,"nicknameMatchedSlots":15}\nCapture fixture smoke PASS'
+      )
       hasExited = true
       child.emit('close', 0)
     }, 125_000)

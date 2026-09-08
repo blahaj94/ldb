@@ -60,10 +60,11 @@ try {
   child.stderr.on('data', (chunk) => {
     output += chunk.toString()
   })
+  // Fixture 90초와 launcher 120초 제한 뒤 child/group 정리까지 기다린다.
   const deadline = setTimeout(() => {
     const hasPid = child.pid != null
     if (hasPid) process.kill(-child.pid, 'SIGTERM')
-  }, 60_000)
+  }, 150_000)
   let code
   try {
     code = await new Promise((resolve, reject) => {
@@ -86,6 +87,11 @@ try {
   assert.equal(code, expectedCode, 'Child result did not match the requested check')
   assert.equal(output.includes(expectedMessage), true)
   if (isMedia) {
+    const hasAllSyntheticMatches = output.includes(
+      'Capture fixture synthetic matches: {"displayMatchedSlots":15,"nicknameMatchedSlots":15}'
+    )
+    assert.equal(hasAllSyntheticMatches, true)
+    console.log('Capture fixture synthetic matches: display mask 15; notification mask 15')
     assert.equal(output.includes('Video was requested, but no video stream was provided'), false)
     assert.equal(output.includes('UnhandledPromiseRejectionWarning'), false)
     console.log('Capture fixture native denial warnings: 0')

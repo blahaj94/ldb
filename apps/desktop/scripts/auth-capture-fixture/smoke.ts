@@ -119,7 +119,21 @@ export async function smoke(
   console.log('Capture fixture actual stream acquired')
   await until(() => hasText('Capture ready at 1920×1080.'), 30_000)
   console.log('Capture fixture actual OCR worker ready')
-  await until(() => hasText('Slot 1: ALICE'), 30_000)
+  let displayMatchedSlots = 0
+  await until(async () => {
+    displayMatchedSlots = (await evaluate(`(() => {
+      const lines = document.querySelector('pre')?.textContent?.split('\\n') ?? [];
+      let matchedSlots = 0;
+      for (let slot = 0; slot < 4; slot += 1) {
+        const isExpectedDisplay = lines.includes('Slot ' + (slot + 1) + ': ALICE');
+        if (isExpectedDisplay) matchedSlots |= 1 << slot;
+      }
+      return matchedSlots;
+    })()`)) as number
+    const hasAllDisplays = displayMatchedSlots === 0b1111
+    const hasAllNotifications = mainObservation.nicknameMatchedSlots === 0b1111
+    return hasAllDisplays && hasAllNotifications
+  }, 30_000)
   const active = await observe()
   assert.equal(mainObservation.displayRequests, 1)
   assert.equal(mainObservation.displayAllowed, 1)
@@ -129,7 +143,9 @@ export async function smoke(
   assert.equal(active.frameWidth, 1920)
   assert.equal(active.frameHeight, 1080)
   assert.equal(active.allSlotsPresent, true)
-  await until(async () => mainObservation.nicknameAccepted > 0)
+  console.log(
+    `Capture fixture synthetic matches: ${JSON.stringify({ displayMatchedSlots, nicknameMatchedSlots: mainObservation.nicknameMatchedSlots })}`
+  )
   console.log(
     `Capture fixture geometry: ${JSON.stringify({ trackWidth: active.width, trackHeight: active.height, frameWidth: active.frameWidth, frameHeight: active.frameHeight, allSlotsPresent: active.allSlotsPresent })}`
   )
