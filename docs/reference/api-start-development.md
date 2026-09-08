@@ -8,6 +8,8 @@ last-reviewed: 2026-09-08
 
 `pnpm --filter @ldb/api start`는 `apps/api/dist/main.js`에서 Google 로그인·refresh/logout·계정·인증 검색을 한 앱으로 시작한다. 기존 factory와 transaction을 사용하며 필수 설정을 검증한 뒤 DB를 초기화하고 마지막에 listen한다. 실제 provider 등록·credential과 운영 ingress/TLS·배포 검증은 별도로 준비해야 한다.
 
+`/` 등 미등록 경로는 요청 URL이나 예외 원문을 포함하지 않는 고정 404 JSON을 반환한다. 등록된 service가 던진 예외는 기존 인증·계정·검색의 정제 오류 처리에 남으며 미등록 route의 404와 구분한다.
+
 ## 준비할 입력
 
 | 환경변수 | 입력 |
