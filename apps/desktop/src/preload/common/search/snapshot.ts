@@ -116,7 +116,9 @@ function hasExactOwnShape(input: unknown, parsed: unknown): boolean {
   const hasSameKeyCount = Reflect.ownKeys(input).length === expectedKeys.length
   const hasSameFields = expectedKeys.every((key) => {
     const hasOwnField = Object.hasOwn(input, key)
-    return hasOwnField && hasExactOwnShape(Reflect.get(input, key), Reflect.get(parsed, key))
+    const hasSameShape =
+      hasOwnField && hasExactOwnShape(Reflect.get(input, key), Reflect.get(parsed, key))
+    return hasSameShape
   })
   const isExact = hasSameKeyCount && hasSameFields
   return isExact

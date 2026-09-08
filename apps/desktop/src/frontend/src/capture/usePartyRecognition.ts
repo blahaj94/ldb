@@ -31,12 +31,16 @@ export function usePartyRecognition(
     worker: Worker,
     signal: AbortSignal
   ): Promise<void> {
-    if (signal.aborted) return
+    if (signal.aborted) {
+      return
+    }
     const crops = capturePartyNicknameCrops(video)
     const nextStableNicknames = stableNicknamesRef.current.slice()
     for (const [slot, crop] of crops.entries()) {
       const nickname = crop ? normalizeNickname((await worker.recognize(crop)).data.text) : null
-      if (signal.aborted) return
+      if (signal.aborted) {
+        return
+      }
       const stability = updateSlotStability(slotStabilityRef.current[slot], nickname || null)
       slotStabilityRef.current[slot] = stability
       const hasStableNickname = stability.stableNickname != null
@@ -50,14 +54,17 @@ export function usePartyRecognition(
         continue
       }
       nextStableNicknames[slot] = stability.stableNickname
-      if (reportedNicknamesRef.current[slot] !== stability.stableNickname) {
+      const isNewStableNickname = reportedNicknamesRef.current[slot] !== stability.stableNickname
+      if (isNewStableNickname) {
         observe({ nickname: stability.stableNickname, slot })
         reportedNicknamesRef.current[slot] = stability.stableNickname
       }
     }
-    if (
-      nextStableNicknames.some((nickname, slot) => nickname !== stableNicknamesRef.current[slot])
-    ) {
+    const hasChangedNicknames = nextStableNicknames.some((nickname, slot) => {
+      const hasChanged = nickname !== stableNicknamesRef.current[slot]
+      return hasChanged
+    })
+    if (hasChangedNicknames) {
       stableNicknamesRef.current = nextStableNicknames
       setStableNicknames(nextStableNicknames)
     }

@@ -102,7 +102,10 @@ export function usePartyCaptureSession({
       session.stream = stream
       signal.throwIfAborted()
       const track = stream.getVideoTracks()[0]
-      if (!track) throw new Error('The selected window did not provide a video track.')
+      const hasTrack = track != null
+      if (!hasTrack) {
+        throw new Error('The selected window did not provide a video track.')
+      }
 
       track.addEventListener('ended', () => stopCapture('Capture ended.'), { once: true, signal })
 
@@ -151,14 +154,18 @@ export function usePartyCaptureSession({
 }
 
 function releaseSession(session: CaptureSession | null): void {
-  if (!session) return
+  const hasSession = session != null
+  if (!hasSession) {
+    return
+  }
   const { controller, stream, video, worker } = session
   session.stream = null
   session.video = null
   session.worker = null
   controller.abort()
   stream?.getTracks().forEach((track) => track.stop())
-  if (video) {
+  const hasVideo = video != null
+  if (hasVideo) {
     video.pause()
     video.srcObject = null
   }
