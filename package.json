@@ -9,7 +9,12 @@
     "start-task": "node scripts/start-task.mjs",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:pr-review": "node --test scripts/pr-review/test/*.test.mjs",
-    "typecheck:pr-review": "find scripts/pr-review -name '*.mjs' -type f -exec node --check {} +"
+    "typecheck:pr-review": "find scripts/pr-review -name '*.mjs' -type f -exec node --check {} +",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --config ./.prettierrc.json --ignore-path ./.prettierignore --write \"**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,yaml,yml,css,scss,less,html}\"",
+    "format:check": "prettier --config ./.prettierrc.json --ignore-path ./.prettierignore --check \"**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,yaml,yml,css,scss,less,html}\"",
+    "lint:oxlint": "pnpm --filter @ldb/web lint:oxlint && pnpm --filter @ldb/ui lint:oxlint"
   },
   "keywords": [],
   "author": "",
@@ -22,5 +27,17 @@
     }
   },
   "packageManager": "pnpm@11.23.0",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.4.26",
+    "globals": "16.5.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.2",
+    "typescript-eslint": "8.69.0"
+  }
 }

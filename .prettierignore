@@ -1,0 +1,20 @@
+**/node_modules/**
+**/dist/**
+**/dist-ssr/**
+**/dist-examples/**
+**/out/**
+**/.test-dist/**
+**/coverage/**
+apps/desktop/src/frontend/public/ocr/**
+packages/ui/src/seed/**
+packages/ui/foundation.css
+packages/ui/seed-provenance.json
+packages/ui/notices/**
+**/pnpm-lock.yaml
+**/package-lock.json
+**/yarn.lock
+**/LICENSE*
+**/NOTICE*
+# Keep the Desktop formatter's existing tsconfig boundary.
+apps/desktop/tsconfig.json
+apps/desktop/tsconfig.*.json

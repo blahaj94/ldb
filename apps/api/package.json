@@ -18,7 +18,10 @@
     "db:migrate:down": "pnpm run build && node --import reflect-metadata dist/database/cli.js down",
     "db:migrate:show": "pnpm run build && node --import reflect-metadata dist/database/cli.js show",
     "db:migrate:generate": "pnpm run build && node --import reflect-metadata dist/database/generate-cli.js",
-    "auth:cleanup": "pnpm run build && node --import reflect-metadata dist/auth/cleanup/cli.js"
+    "auth:cleanup": "pnpm run build && node --import reflect-metadata dist/auth/cleanup/cli.js",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --config ../../.prettierrc.json --ignore-path ../../.prettierignore --write \"**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,yaml,yml,css,scss,less,html}\"",
+    "format:check": "prettier --config ../../.prettierrc.json --ignore-path ../../.prettierignore --check \"**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,yaml,yml,css,scss,less,html}\""
   },
   "dependencies": {
     "@nestjs/common": "12.0.1",
@@ -32,13 +35,10 @@
     "typeorm": "1.1.1"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.5",
     "@nestjs/testing": "12.0.1",
     "@types/express": "5.0.6",
     "@types/node": "24.13.3",
     "@types/pg": "8.23.1",
-    "eslint": "9.39.5",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.69.0"
+    "typescript": "5.9.3"
   }
 }

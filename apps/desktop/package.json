@@ -6,8 +6,8 @@
   "author": "example.com",
   "homepage": "https://electron-vite.org",
   "scripts": {
-    "format": "prettier --write .",
-    "lint": "eslint --cache .",
+    "format": "prettier --config ../../.prettierrc.json --ignore-path ../../.prettierignore --write \"**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,yaml,yml,css,scss,less,html}\"",
+    "lint": "eslint .",
     "prepare:ocr-assets": "node scripts/prepare-ocr-assets.mjs",
     "test": "vitest run",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -30,7 +30,9 @@
     "capture:fixture:search": "node scripts/auth-capture-fixture.mjs --search-smoke",
     "capture:fixture:smoke": "node scripts/auth-capture-fixture.mjs --smoke",
     "capture:fixture:ocr": "node scripts/auth-capture-fixture.mjs --ocr",
-    "capture:fixture:deny": "node scripts/auth-capture-fixture.mjs --deny-media"
+    "capture:fixture:deny": "node scripts/auth-capture-fixture.mjs --deny-media",
+    "lint:fix": "eslint . --fix",
+    "format:check": "prettier --config ../../.prettierrc.json --ignore-path ../../.prettierignore --check \"**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,yaml,yml,css,scss,less,html}\""
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
@@ -43,8 +45,6 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "@electron-toolkit/eslint-config-prettier": "^3.0.0",
-    "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@types/node": "^22.19.1",
     "@types/react": "^19.2.7",
@@ -53,12 +53,7 @@
     "electron": "^39.2.6",
     "electron-builder": "^26.0.12",
     "electron-vite": "^5.0.0",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
     "jsdom": "^30.0.1",
-    "prettier": "^3.7.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "^5.9.3",
