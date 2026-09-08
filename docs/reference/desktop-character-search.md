@@ -69,3 +69,22 @@ git diff --check
 ```
 
 일반 tests는 API·DB·native media를 실행하지 않는다. 실제 #125 API·disposable DB 소비 검증은 `apps/desktop/scripts/search-server-integration/README.md`의 별도 command와 격리를 따른다. 이는 Desktop HTTP 클라이언트 소비 검증이며 auth waiter·slot·IPC·renderer·실제 stream/OCR 성공을 대신하지 않는다. 최종 head의 unit/build·독립 review·실제 UI/media·서버 검증 결과는 Issue #144와 PR #149에서 관리한다.
+
+## 검색 UI 전용 native smoke
+
+기존 media smoke와 별도로 아래 command를 사용한다. 준비 build 뒤 Parent가 한 번 실행하며 같은 fixture의 수동 실행과 병렬로 사용하지 않는다.
+
+```sh
+pnpm --filter @ldb/desktop capture:fixture:build
+node apps/desktop/scripts/auth-capture-fixture/post-exit-check.mjs --search
+```
+
+직접 launcher 경로는 `pnpm --filter @ldb/desktop capture:fixture:search`다. 기존 media/OCR/deny 모드와 기준은 유지한다. 새 모드는 실제 App·preload·main, 고정 synthetic source의 native stream과 실제 OCR를 사용한다. HTTP는 기존 memory-only 합성 transport이며 실제 API/provider에 접근하지 않는다.
+
+`search-smoke.ts`는 0건 표시, 두 실패·pending·429의 동시 상태, 슬롯별 수동 retry 독립성, 15초 timeout, 429 양의 대기 중 disabled와 같은 실패의 만료 후 버튼 활성화, 자동 GET 부재, pending 중 logout 정리와 재로그인 후 새 source/Start를 관측한다. 네 합성 응답의 HTTP 도착 순서는 슬롯 번호 계약으로 취급하지 않고 실제 상태에서 대상 슬롯을 찾는다. 기존 로그인·source 선택·resource 관측 helper는 `actions.ts`에서 공유한다.
+
+`search-observation.ts`는 기존 read API와 실제 DOM의 문구·버튼·후보 field를 별도로 읽는다. Capture/request 식별자는 실행 중 전후 비교에만 사용하며 원문 DOM·nickname·source ID는 로그에 남기지 않는다. 최종 search evidence는 관측한 mask·boolean·요청/abort counter로 구성한다. Post-exit wrapper는 exact evidence, child 성공, native 거절/미처리 오류 부재, process group 종료와 profile 부재를 함께 요구한다. 실패 시 고정 단계만 전달한다.
+
+시간 제한은 새 모드에만 fixture 180초·launcher 210초·post-exit 240초를 적용한다. 네 capture 시작과 두 로그인, 동시에 진행하는 15초/5초 대기 및 cleanup의 전체 상한이며 완료 시간 보장은 아니다. 각 바깥 계층에 종료·정리 여유 30초를 둔다. 기존 모드는 90/120/150초, 제품 검색 예산은 15초를 유지한다.
+
+소유 window의 640/1100 content 폭과 app-scoped light/dark 전환은 별도 `layout evidence`의 표본 수·가로 overflow 수·theme 불일치 수로 기록한다. 이 보조 관측을 핵심 검색 PASS나 공식 시각 기준 비교의 성공으로 합치지 않는다. OS 설정은 변경하지 않는다. 실제 Tab/Shift+Tab/Return/Space와 focus/loading의 수동 관측은 별도 evidence이며 이 자동화는 native keyboard 검증을 대신하지 않는다. Reduced-motion·픽셀 비교·다른 OS는 이 모드에서 검증하지 않는다. Source/test/build 성공과 실제 native 실행 결과는 Issue/PR에서 구분해 기록한다.
