@@ -20,7 +20,8 @@ function number(value) {
 
 async function writeJson(file, value) {
   const temporary = `${file}.${randomUUID()}.tmp`
-  await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 })
+  const jsonFileContent = JSON.stringify(value, null, 2) + '\n'
+  await writeFile(temporary, jsonFileContent, { mode: 0o600 })
   await rename(temporary, file)
 }
 
