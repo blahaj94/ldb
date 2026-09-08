@@ -19,12 +19,16 @@ export function createFixtureSearch({
 }): {
   runtime: Runtime
   selectScenario: (scenario: SearchScenario) => void
+  queueScenarios: (scenarios: readonly SearchScenario[]) => void
+  counts: { requests: number; pendingAborts: number }
 } {
   const isSyntheticOrigin = apiOrigin === 'https://api.example.test'
   if (!isSyntheticOrigin) {
     throw new Error('Search fixture requires its fixed synthetic origin')
   }
   let scenario: SearchScenario = 'success'
+  let queued: SearchScenario[] = []
+  const counts = { requests: 0, pendingAborts: 0 }
   const transport: typeof fetch = async (input, init) => {
     const request = new Request(input, init)
     request.signal.throwIfAborted()
@@ -40,13 +44,17 @@ export function createFixtureSearch({
     if (!isAllowed) {
       throw new Error('Search fixture request denied')
     }
-    const currentScenario = scenario
+    counts.requests += 1
+    const currentScenario = queued.shift() ?? scenario
     const isPending = currentScenario === 'pending'
     if (isPending) {
       return new Promise<Response>((_resolve, reject) => {
         request.signal.addEventListener(
           'abort',
-          () => reject(new DOMException('Synthetic search cancelled', 'AbortError')),
+          () => {
+            counts.pendingAborts += 1
+            reject(new DOMException('Synthetic search cancelled', 'AbortError'))
+          },
           { once: true }
         )
       })
@@ -79,8 +87,13 @@ export function createFixtureSearch({
   }
   return {
     runtime: { apiOrigin, clock, fetch: transport },
+    counts,
+    queueScenarios: (scenarios) => {
+      queued = [...scenarios]
+    },
     selectScenario: (next) => {
       scenario = next
+      queued = []
     }
   }
 }
