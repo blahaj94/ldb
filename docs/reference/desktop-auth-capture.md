@@ -50,7 +50,7 @@ Build는 기존 OCR assets 준비, fixture 전용 TypeScript 검사와 Electron 
 
 수동 실행은 Google/Discord 버튼→앱 메뉴의 **Complete login**→**시작하기**→source 목록의 **LDB Synthetic Capture Source**→**Start** 순서다. 로그아웃 후 인식값과 capture UI가 사라지는지, 재로그인 뒤 source와 Start가 다시 필요한지 확인한다. 앱 메뉴의 **Quit LDB Auth Capture fixture**로 child를 종료하면 Node launcher가 process group 종료와 profile 최종 삭제를 확인한다. 삭제 또는 삭제 확인에 실패하면 고정된 cleanup FAIL과 exit 1로 종료하며 raw filesystem 오류를 출력하지 않는다. 기존 다른 Electron instance를 종료하지 않는다.
 
-통합 smoke는 실제 버튼·feature preload·main IPC·media·OCR를 검증한다. Renderer 관측 wrapper는 native `getDisplayMedia`, Worker 생성/종료·OCR 요청, video와 track stop을 그대로 호출한다. Main 관측 wrapper도 실제 제품 display/안정화 통지 handler를 그대로 호출하고 counter만 수집한다. MediaStream이나 OCR 결과를 test double로 대체하지 않는다. 실제 video에서 제품 crop 함수를 호출해 기존 frame 크기와 네 slot mana 영역 일치를 확인하고 native track 크기는 별도로 기록한다. 성공 판정에는 실제 stream, worker 초기화, synthetic 기대값의 안정화 표시·main 통지, logout 뒤 track/worker/video 정리와 재로그인 시 자동 capture 0이 필요하다. Raw nickname·credential·URL을 진단 출력으로 반환하지 않는다.
+통합 smoke는 실제 버튼·feature preload·main IPC·media·OCR를 검증한다. Renderer 관측 wrapper는 native `getDisplayMedia`, Worker 생성/종료·OCR 요청, video와 track stop을 그대로 호출한다. Main 관측 wrapper도 실제 제품 display/안정화 통지 handler를 그대로 호출하고 counter와 slot별 합성 기대값 일치 bitmask만 수집한다. 원문 통지 payload나 nickname은 보관하지 않는다. MediaStream이나 OCR 결과를 test double로 대체하지 않는다. 실제 video에서 제품 crop 함수를 호출해 기존 frame 크기와 네 slot mana 영역 일치를 확인하고 native track 크기는 별도로 기록한다. 성공 판정에는 실제 stream과 worker 초기화, 네 slot 각각의 정확한 synthetic 표시값과 실제 main handler 통과 뒤 기대값 통지가 모두 필요하다. 표시와 통지의 bitmask가 각각 `15`여야 하며 crop/mana 존재나 같은 slot의 중복 통지로 이를 대체하지 않는다. Logout 뒤 track/worker/video 정리와 재로그인 시 자동 capture 0도 확인한다. Raw nickname·credential·URL을 진단 출력으로 반환하지 않는다.
 
 Fixture constructor는 `sandbox:true`, `contextIsolation:true`, `nodeIntegration:false`를 고정한다. Product와 fixture의 preload는 동일 source의 CJS bundle이며 byte 동등성을 비교할 수 있다. Fixture의 `.cjs` 이름은 output 격리용이며 sandbox에서 다른 구현을 사용하는 우회가 아니다. CSP는 제품 entry와 같은 경계를 사용하고 webSecurity를 끄지 않는다. Network·native credential·provider·OS protocol은 사용하지 않는다.
 
@@ -66,13 +66,15 @@ Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercont
 
 첫 native 관측에서 auth·sandbox·synthetic source 열거/선택은 진행됐고 host screen permission은 `granted`였다. Native media 요청은 `NotAllowedError`, 실제 stream 0·worker 0으로 종료됐다. 당시 child의 cleanup PASS 이후 초기 실패 실행의 profile 두 개가 남은 것을 확인했으므로 이전 cleanup 성공 판정은 철회했다. OS 권한이 있다는 사실을 앱의 capture 경계 검증 완료로 해석하지 않는다. 이 기록은 승인 전 실패이며 아래 승인 후 관측과 구분한다.
 
-승인 후 입력 `cdfabca05111724d7c408abfd5d9c55139af0a40`에서 macOS 26.6.2 arm64·Electron 39.8.10으로 `capture:fixture:smoke`를 실행해 exit 0을 관측했다. 실제 제품 display handler 요청 1·허용 1, 실제 stream 1·worker 1, native track와 실제 video frame 모두 1920×1080·네 slot 일치, 실제 OCR 기대값과 안정화 통지를 확인했다. Logout 뒤 track 종료·worker terminate·video 해제는 각각 1이며 인식값과 capture UI가 사라졌다. 이어진 3.2초 동안 OCR 요청과 main 안정화 IPC가 증가하지 않았다. 재로그인 뒤 source는 비어 있고 Start는 비활성이며 자동 stream/worker 생성은 0이었다. Source를 다시 고르지 않은 실제 media 요청은 main display handler까지 도달해 거절돼 누적 요청 2·허용 1이었다. 새 source 선택 후 두 번째 capture 성공은 이 실행에서 관측하지 않았다. 강제로 지연시킨 이전 OCR 완료 경합은 별도 unit/hook evidence다.
+승인 후 입력 `cdfabca05111724d7c408abfd5d9c55139af0a40`에서 macOS 26.6.2 arm64·Electron 39.8.10으로 `capture:fixture:smoke`를 실행해 exit 0을 관측했다. 실제 제품 display handler 요청 1·허용 1, 실제 stream 1·worker 1, native track와 실제 video frame 모두 1920×1080·네 slot의 mana/crop 존재, Slot 1의 실제 OCR 기대값 표시와 main 안정화 통지 1회 이상을 확인했다. 당시 자동 검증은 Slot 2–4의 표시나 slot별 통지 기대값을 검사하지 않았으므로 네 slot OCR/IPC 완료 evidence로 해석하지 않는다. Logout 뒤 track 종료·worker terminate·video 해제는 각각 1이며 인식값과 capture UI가 사라졌다. 이어진 3.2초 동안 OCR 요청과 main 안정화 IPC가 증가하지 않았다. 재로그인 뒤 source는 비어 있고 Start는 비활성이며 자동 stream/worker 생성은 0이었다. Source를 다시 고르지 않은 실제 media 요청은 main display handler까지 도달해 거절돼 누적 요청 2·허용 1이었다. 새 source 선택 후 두 번째 capture 성공은 이 실행에서 관측하지 않았다. 강제로 지연시킨 이전 OCR 완료 경합은 별도 unit/hook evidence다.
 
 이 실행에서 무선택 요청 거절 callback은 Electron의 `Video was requested, but no video stream was provided` unhandled rejection warning을 남겼으나 renderer의 media promise는 거절됐다. 마지막 logout과 진행 중 source 열거가 경합해 main의 `Capture source access denied`도 출력됐다. 이 출력은 숨기지 않으며 경고 없는 실행이라고 주장하지 않는다. Launcher의 cleanup PASS와 exit 0은 확인했지만 별도 종료 후 검증의 결과는 해당 exact head와 함께 따로 기록한다.
 
 이후 독립 review에서 빈 객체 거절이 실제 Electron API 형식 결함임을 확인해 보완했다. Pinned [native 결과 처리](https://raw.githubusercontent.com/electron/electron/v39.8.10/shell/browser/electron_browser_context.cc)는 `null`에 예외 없는 `CAPTURE_FAILURE`를 반환한다. 제품의 `deliverMediaResult`는 공개 `Streams` type에 없는 이 native 거절을 좁은 interop로 전달하고, 이미 소비됐을 수 있는 callback의 예외를 source 열거 실패와 분리해 재호출하지 않는다. 기존 `{}` 기대 test는 거절 의미를 유지하면서 실제 runtime 형식에 맞게 정정했고 fixture 관측도 `null`을 그대로 전달한다.
 
-수정 후 입력 `cf0c5640988aa0faf67578211f9bac969e15435b`에서 같은 OS/Electron의 `post-exit-check.mjs --media`를 한 번 실행했다. 정상 실제 stream/OCR·logout 정리·재로그인 무선택 거절 smoke와 child exit 0·process group 종료·종료 뒤 profile 0개가 PASS했다. Check는 고정된 video 누락 TypeError와 `UnhandledPromiseRejectionWarning`이 child 출력에 없음을 별도로 확인했다. Source 열거의 정상 auth 거절 출력은 이 경고 회귀로 분류하지 않는다.
+수정 후 입력 `cf0c5640988aa0faf67578211f9bac969e15435b`에서 같은 OS/Electron의 `post-exit-check.mjs --media`를 한 번 실행했다. 당시 자동 검증 범위인 실제 stream·Slot 1 OCR 표시·안정화 통지 1회 이상, logout 정리·재로그인 무선택 거절과 child exit 0·process group 종료·종료 뒤 profile 0개가 PASS했다. 위 수동 관측의 네 slot 표시와 두 번째 capture는 이 자동 검증과 별도 evidence다. Check는 고정된 video 누락 TypeError와 `UnhandledPromiseRejectionWarning`이 child 출력에 없음을 별도로 확인했다. Source 열거의 정상 auth 거절 출력은 이 경고 회귀로 분류하지 않는다.
+
+[PR #142의 검토 지적](https://github.com/blahaj94/ldb/pull/142#discussion_r3954191493)을 반영한 입력 `6cc70e03d529342a6b5f24f70a63055d906aa983`에서 같은 macOS 26.6.2 arm64·Electron 39.8.10으로 강화된 `post-exit-check.mjs --media`를 한 번 실행했다. 네 slot의 정확한 실제 OCR 표시 bitmask `15`와 실제 main handler 통과 뒤 각 slot 기대값 통지 bitmask `15`를 함께 확인했다. 실제 media/OCR smoke와 child exit 0·process group 종료·native 거절 경고 0·종료 뒤 profile 0개가 PASS했다. Slot 누락·오인식·중복 통지나 표시/통지 한쪽만 일치하면 성공할 수 없는 회귀 검증도 추가했다. 이 실행은 기존 수동 재로그인·재선택 후 두 번째 capture 관측을 대체하거나 반복한 것이 아니다.
 
 `capture:fixture:ocr`는 별도 검증이다. 같은 sandbox와 실제 제품 preload를 사용하되 `createPartyOcrWorker`에 synthetic canvas를 직접 전달한다. 실제 Korean/English asset·WASM·Worker 인식 결과의 예상값 일치와 생성 1·terminate 1을 확인했으며 media 요청·stream은 각각 0이다. Raw 인식 문자열은 반환하거나 log하지 않는다. 이 PASS는 native window capture나 통합 capture cleanup을 대체하지 않는다. Stream·loop·late OCR의 제품 수명 경합은 unit/hook doubles의 evidence와 구분한다.
 
@@ -90,12 +92,12 @@ node apps/desktop/scripts/auth-capture-fixture/post-exit-check.mjs --ocr
 node apps/desktop/scripts/auth-capture-fixture/post-exit-check.mjs --media
 ```
 
-첫 command는 `capture:fixture:deny`의 의도된 media 차단 exit 1 뒤 cleanup을 검증하므로 check PASS가 media PASS를 뜻하지 않는다. `--ocr`는 실제 OCR 단독 성공과 종료 뒤 정리를 확인하며, `--media`는 실제 stream/OCR smoke exit 0, native 거절 경고 부재와 종료 뒤 정리를 요구한다. 일반 Vitest는 native process를 시작하지 않으며 launcher의 삭제/확인 실패·child 실패·group 종료 미확인과 직접 child 거절을 mocks로 검증한다.
+첫 command는 `capture:fixture:deny`의 의도된 media 차단 exit 1 뒤 cleanup을 검증하므로 check PASS가 media PASS를 뜻하지 않는다. `--ocr`는 실제 OCR 단독 성공과 종료 뒤 정리를 확인하며, `--media`는 실제 stream/OCR smoke exit 0, native 거절 경고 부재와 종료 뒤 정리를 요구한다. Post-exit check의 바깥 제한은 150초로 fixture 90초·launcher 120초와 후속 정리 시간을 포함한다. 가짜 child가 125초에 정상 완료할 때 조기 종료되지 않는 회귀 검증으로 이전 60초 제한 문제를 재현·보완했다. 제품 HTTP timeout은 바꾸지 않는다. 일반 Vitest는 native process를 시작하지 않으며 launcher의 삭제/확인 실패·child 실패·group 종료 미확인과 직접 child 거절을 mocks로 검증한다.
 
 ## 검증과 제한
 
 ```sh
-pnpm --filter @ldb/desktop exec vitest run scripts/auth-capture-fixture/main.test.ts scripts/auth-capture-fixture/capture-observation.test.ts scripts/auth-capture-fixture/permission.test.ts scripts/auth-capture-fixture/launcher.test.mjs src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
+pnpm --filter @ldb/desktop exec vitest run scripts/auth-capture-fixture src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
 pnpm --filter @ldb/desktop run --sequential '/^(test|lint|build)$/'
 git diff --check
 ```
