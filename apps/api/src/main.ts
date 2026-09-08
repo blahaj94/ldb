@@ -1,18 +1,6 @@
 import 'reflect-metadata'
-import type { INestApplication } from '@nestjs/common'
-import { createApp } from './app.js'
+import { closeApp, createApp } from './app.js'
 import { parsePort } from './port.js'
-
-const startupError = 'API failed to start'
-
-async function closeApp(app: INestApplication): Promise<void> {
-  try {
-    await app.close()
-  } catch {
-    console.error(startupError)
-    process.exitCode = 1
-  }
-}
 
 async function main(): Promise<void> {
   const port = parsePort(process.env.PORT)
@@ -37,6 +25,6 @@ async function main(): Promise<void> {
 try {
   await main()
 } catch {
-  console.error(startupError)
+  console.error(closeApp.startupError)
   process.exitCode = 1
 }
