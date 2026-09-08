@@ -6,24 +6,34 @@ const SUPPORTED_ACTIONS = new Set([
 ]);
 
 export function evaluateReviewRequest(event, { label = "@ldb-review" } = {}) {
-  if (!SUPPORTED_ACTIONS.has(event.action)) {
+  const isSupportedAction = SUPPORTED_ACTIONS.has(event.action);
+  if (!isSupportedAction) {
     return { eligible: false, reason: "unsupported_action" };
   }
 
-  if (event.action === "labeled" && event.label?.name !== label) {
+  const isLabeledEvent = event.action === "labeled";
+  const isLabeledEventWithWrongLabel =
+    isLabeledEvent && event.label?.name !== label;
+  if (isLabeledEventWithWrongLabel) {
     return { eligible: false, reason: "label_event_mismatch" };
   }
 
   const pullRequest = event.pull_request;
-  if (!pullRequest?.labels?.some((item) => item.name === label)) {
+  const hasRequiredLabel = pullRequest?.labels?.some(
+    (item) => item.name === label,
+  );
+  if (!hasRequiredLabel) {
     return { eligible: false, reason: "label_missing" };
   }
 
-  if (pullRequest.draft) {
+  const isDraft = pullRequest.draft;
+  if (isDraft) {
     return { eligible: false, reason: "draft" };
   }
 
-  if (pullRequest.head?.repo?.full_name !== event.repository?.full_name) {
+  const isFork =
+    pullRequest.head?.repo?.full_name !== event.repository?.full_name;
+  if (isFork) {
     return { eligible: false, reason: "fork" };
   }
 

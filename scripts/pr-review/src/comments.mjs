@@ -15,7 +15,8 @@ export function providerMarker(provider, headSha) {
 }
 
 export function buildProviderTriggerComment({ provider, headSha }) {
-  if (provider !== "codex") {
+  const isUnsupportedProvider = provider !== "codex";
+  if (isUnsupportedProvider) {
     throw new Error(`Unsupported review provider: ${provider}`);
   }
 
@@ -28,7 +29,10 @@ export function buildProviderTriggerComment({ provider, headSha }) {
 }
 
 export function findCommentByMarker(comments, marker) {
-  return comments.find((comment) => comment.body?.includes(marker));
+  const matchingComment = comments.find(
+    (comment) => comment.body?.includes(marker),
+  );
+  return matchingComment;
 }
 
 export function buildPolicySummary({ headSha, checks }) {
