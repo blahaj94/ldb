@@ -132,7 +132,8 @@ test('exchange validation preserves requestId reads and guard short-circuiting',
     codeVerifier: verifier,
     get requestId() {
       requestIdReads++
-      return requestIdReads === 1 ? randomUUID() : 'not-uuid'
+      const isFirstRequestIdRead = requestIdReads === 1
+      return isFirstRequestIdRead ? randomUUID() : 'not-uuid'
     }
   }
   assert.throws(() => parseExchange(requestIdChanges), { code: 'INVALID_AUTH_REQUEST' })

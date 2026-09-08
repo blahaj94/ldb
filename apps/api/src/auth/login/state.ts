@@ -32,10 +32,18 @@ export function requestExpired(request: AuthLoginRequest, checkedAt: Date): bool
 
 export function exchangeExpired(request: AuthLoginRequest, checkedAt: Date): boolean {
   const isRequestExpired = requestExpired(request, checkedAt)
+  if (isRequestExpired) {
+    return true
+  }
+
   const codeExpiresAt = request.codeExpiresAt
   const hasNoCodeExpiry = codeExpiresAt === null
+  if (hasNoCodeExpiry) {
+    return true
+  }
+
   const isPastCodeExpiry = !hasNoCodeExpiry && checkedAt.getTime() >= codeExpiresAt.getTime()
-  const isExchangeExpired = isRequestExpired || hasNoCodeExpiry || isPastCodeExpiry
+  const isExchangeExpired = isPastCodeExpiry
 
   return isExchangeExpired
 }

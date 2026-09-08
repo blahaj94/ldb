@@ -15,7 +15,8 @@ function requireExactFields(value: unknown, fields: readonly string[]): Record<s
 
   const objectValue = value as Record<string, unknown>
   const hasExpectedFieldCount = Object.keys(objectValue).length === fields.length
-  const hasExpectedFields = fields.every((field) => Object.hasOwn(objectValue, field))
+  const hasExpectedFields =
+    hasExpectedFieldCount && fields.every((field) => Object.hasOwn(objectValue, field))
   const hasExactFields = hasExpectedFieldCount && hasExpectedFields
 
   if (!hasExactFields) {
@@ -34,9 +35,17 @@ export function parseCreation(value: unknown): LoginCreation {
   ])
 
   const isSupportedProvider = body.provider === 'google' || body.provider === 'discord'
+  if (!isSupportedProvider) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
   const isDesktopClient = body.clientId === 'desktop'
+  if (!isDesktopClient) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
   const isS256CodeChallenge = body.codeChallengeMethod === 'S256'
-  const isCreationRequestInvalid = !isSupportedProvider || !isDesktopClient || !isS256CodeChallenge
+  const isCreationRequestInvalid = !isS256CodeChallenge
 
   if (isCreationRequestInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
@@ -50,11 +59,18 @@ export function parseExchange(value: unknown): LoginExchange {
   const body = requireExactFields(value, ['requestId', 'clientId', 'code', 'codeVerifier'])
 
   // Client의 string 형식만 확인한다. 실제 client binding은 exchange transaction에서 확인한다.
-  const requestId = body.requestId
-  const isRequestIdString = typeof requestId === 'string'
-  const isRequestIdValid = isRequestIdString && UUID_PATTERN.test(requestId)
+  const isRequestIdString = typeof body.requestId === 'string'
+  if (!isRequestIdString) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
+  const isRequestIdValid = UUID_PATTERN.test(body.requestId as string)
+  if (!isRequestIdValid) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+
   const isClientIdString = typeof body.clientId === 'string'
-  const isExchangeRequestInvalid = !isRequestIdValid || !isClientIdString
+  const isExchangeRequestInvalid = !isClientIdString
 
   if (isExchangeRequestInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
