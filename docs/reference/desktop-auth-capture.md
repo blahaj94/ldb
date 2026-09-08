@@ -89,7 +89,7 @@ node apps/desktop/scripts/auth-capture-fixture/post-exit-check.mjs --media
 ## 검증과 제한
 
 ```sh
-pnpm --filter @ldb/desktop exec vitest run scripts/auth-capture-fixture/main.test.ts scripts/auth-capture-fixture/permissions.test.ts scripts/auth-capture-fixture/launcher.test.mjs src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
+pnpm --filter @ldb/desktop exec vitest run scripts/auth-capture-fixture/main.test.ts scripts/auth-capture-fixture/permission.test.ts scripts/auth-capture-fixture/launcher.test.mjs src/backend/capture src/backend/main.test.ts src/frontend/src/auth src/frontend/src/capture src/frontend/src/App.test.tsx src/frontend/src/App.capture-controls.test.tsx
 pnpm --filter @ldb/desktop run --sequential '/^(test|lint|build)$/'
 git diff --check
 ```
