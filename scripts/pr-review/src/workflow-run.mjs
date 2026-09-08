@@ -23,7 +23,9 @@ export function evaluateTrustedReviewRequest(
   { label = "@ldb-review" } = {},
 ) {
   const source = evaluateWorkflowRunSource(event);
-  if (!source.eligible) return source;
+  if (!source.eligible) {
+    return source;
+  }
   if (pullRequest.number !== pullRequestNumber(event)) {
     return { eligible: false, reason: "pull_request_mismatch" };
   }
@@ -36,7 +38,9 @@ export function evaluateTrustedReviewRequest(
     },
     { label },
   );
-  if (!eligibility.eligible) return eligibility;
+  if (!eligibility.eligible) {
+    return eligibility;
+  }
   if (pullRequest.head.sha !== event.workflow_run.head_sha) {
     return { eligible: false, reason: "stale_head" };
   }
