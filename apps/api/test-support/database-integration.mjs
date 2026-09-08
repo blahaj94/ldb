@@ -12,6 +12,7 @@ import { assertSessionHttpIntegration } from './session-http-integration.mjs'
 import { assertAccountHttpIntegration } from './account-http-integration.mjs'
 import { assertCharacterSearchHttpIntegration } from './character-search-http-integration.mjs'
 import { assertGoogleHttpIntegration } from './google-http-integration.mjs'
+import { assertRuntimeDatabaseFailures, assertRuntimeFreshStart, assertRuntimeHttpIntegration } from './runtime-http-integration.mjs'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import process from 'node:process'
@@ -394,7 +395,33 @@ async function childScenario() {
   }
 }
 
+async function assertFocusedRuntime(configuration, checkSignal) {
+  let failed = 0
+  const run = async (name, operation) => {
+    checkSignal()
+    currentStage = name
+    try {
+      await operation((part) => { currentStage = part })
+      process.stdout.write(`Runtime database PASS: ${name}\n`)
+    } catch {
+      failed += 1
+      process.stdout.write(`Runtime database FAIL: ${currentStage}\n`)
+    }
+    checkSignal()
+  }
+  await run('fresh startup without automatic migration', (mark) => assertRuntimeFreshStart(configuration, mark))
+  currentStage = 'runtime explicit compiled migration'
+  const migration = await runCompiledCli(configuration, 'up')
+  assert.equal(migration.code, 0)
+  assert.equal(migration.stdout, 'Database migration applied: 1\n')
+  await run('default entry full HTTP flow', (mark) => assertRuntimeHttpIntegration(configuration, mark))
+  await run('partial startup database cleanup', (mark) => assertRuntimeDatabaseFailures(configuration, mark))
+  currentStage = `runtime focused validation: ${failed} failed`
+  assert.equal(failed, 0)
+}
+
 async function primaryScenario() {
+  const runtimeOnly = process.argv.includes('--runtime-only')
   let receivedSignal
   const receiveSignal = (signal) => {
     receivedSignal = signal
@@ -427,6 +454,10 @@ async function primaryScenario() {
     checkSignal()
     currentStage = 'server and container metadata'
     await assertServerAndContainer(resources, image)
+    if (runtimeOnly) {
+      await assertFocusedRuntime(resources.configuration, checkSignal)
+      return
+    }
     currentStage = 'compiled data source'
     await assertCompiledDataSource(resources.configuration)
     checkSignal()
@@ -449,6 +480,7 @@ async function primaryScenario() {
     )
     assert.deepEqual(freshAfterShow, freshBeforeShow)
 
+    await assertRuntimeFreshStart(resources.configuration, (part) => { currentStage = part })
     currentStage = 'fresh Nest lifecycle'
     await assertNestLifecycle(resources.configuration)
     currentStage = 'initial migration CLI'
@@ -473,6 +505,10 @@ async function primaryScenario() {
     )
     process.stdout.write(`Authentication cleanup: ${cleanupScenarios} scenarios\n`)
 
+    await assertRuntimeDatabaseFailures(resources.configuration, (part) => { currentStage = part })
+    const runtimeFlows = await assertRuntimeHttpIntegration(resources.configuration, (part) => { currentStage = part })
+    process.stdout.write(`Default API entry HTTP/database: ${runtimeFlows} flow stages and startup cleanup\n`)
+    checkSignal()
     currentStage = 'schema catalog verification'
     await withDataSource(createDatabaseDataSource, resources.configuration, (dataSource) =>
       assertSchema(dataSource, (part) => (currentStage = `schema catalog ${part}`)),
@@ -560,6 +596,10 @@ async function primaryScenario() {
     if (!receivedSignal) throw error
   } finally {
     if (resources) await teardownPostgres(resources)
+    if (runtimeOnly) {
+      await assertResourcesAbsent(runId)
+      process.stdout.write('Runtime database owned resources absent\n')
+    }
   }
   await assertResourcesAbsent(runId)
 

@@ -102,18 +102,18 @@ PostgreSQL current minor/security release와 major 지원 상태, base OS의 ful
 
 Migration의 문서 근거는 #39가 읽은 [TypeORM Migration setup](https://typeorm.io/docs/migrations/setup/)이며 선택 version의 실제 CLI·ESM 검증이 남아 있다. 이번 사용자 지시에 따라 Migration file/command/package script를 추가하거나 실행하지 않는다. 위 proposal이 승인되더라도 별도 구현 착수 지시를 뜻하지 않는다.
 
-## 기본 API의 배포 설정 입력 — 제안
+## 기본 API의 배포 설정 입력 — 승인됨
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 기본 API 실행에 필요한 기존 factory 설정의 직렬화 입력과 historical secret 참조 해석을 확정한다.
-evidence: "Issue #125 작업 전 확인: https://github.com/blahaj94/ldb/issues/125#issuecomment-5571836470"
+evidence: "PR #128 사용자 승인: https://github.com/blahaj94/ldb/pull/128#issuecomment-5572382154"
 exceptions: 실제 credential·등록값·secret 저장소 제품·배포 topology와 Discord PKCE gate는 이 제안으로 확정하지 않는다.
 review-after: 기본 entry의 설정 실패·전체 HTTP 흐름·자원 정리 검증 완료 또는 첫 설정 교체 검토 시
 ```
 
-이 절만 **승인 전 제안**이며 위의 active 계약을 변경하거나 구현을 허용하지 않는다. [`change-control.md`](change-control.md#approval-evidence)에 따라 Draft PR의 명시적인 `승인` 후 적용하며, 실행 범위는 [Issue #125](https://github.com/blahaj94/ldb/issues/125)를 따른다. 선택은 배포가 준비한 **단일 secret JSON 파일**을 시작 때 한 번 읽는 방식이다. 이미 승인된 factory의 설정 전달 경계를 연결하며 새 dependency·API·DB schema를 추가하지 않는다.
+이 절은 [PR #128의 사용자 승인](https://github.com/blahaj94/ldb/pull/128#issuecomment-5572382154)을 반영한 active 계약이다. 실제 구현·검증 완료와 구분하며, 실행 범위는 [Issue #125](https://github.com/blahaj94/ldb/issues/125)와 [`change-control.md`](change-control.md)를 따른다. 승인된 선택은 배포가 준비한 **단일 secret JSON 파일**을 시작 때 한 번 읽는 방식이다. 이미 승인된 factory의 설정 전달 경계를 연결하며 새 dependency·API·DB schema를 추가하지 않는다.
 
 ### 환경변수와 파일 경계
 
@@ -160,7 +160,7 @@ HTTP 합성은 기존 login/session/account/search factory를 사용한다. [`au
 
 대안은 registry·metadata JSON과 개별 secret 파일을 분리하고 metadata에서 secret 파일을 참조하는 방식이다. Secret별 읽기 권한과 교체 단위를 분리할 수 있지만 참조 path의 기준·허용 범위, 여러 파일의 읽기 실패·교체 중 일관성, 과거 version과 secret 파일의 수명까지 추가로 정하고 검증해야 한다.
 
-단일 파일은 기존 typed factory 입력을 작은 loader로 변환하고 한 번 읽은 설정의 결합을 유지하기 쉽다. 반면 metadata만 바꿀 때도 secret을 포함한 파일을 다시 배포하며 파일을 읽을 수 있는 주체는 그 안의 모든 secret을 읽을 수 있다. 현재 기본 API 연결 범위에는 이 비용을 수용하는 안을 제안한다. 서로 다른 권한·교체 주체가 실제로 필요해지면 분리안이나 secret manager adapter를 새 Rule 변경으로 검토한다.
+단일 파일은 기존 typed factory 입력을 작은 loader로 변환하고 한 번 읽은 설정의 결합을 유지하기 쉽다. 반면 metadata만 바꿀 때도 secret을 포함한 파일을 다시 배포하며 파일을 읽을 수 있는 주체는 그 안의 모든 secret을 읽을 수 있다. 현재 기본 API 연결 범위에는 이 비용을 수용하는 안이 승인됐다. 서로 다른 권한·교체 주체가 실제로 필요해지면 분리안이나 secret manager adapter를 새 Rule 변경으로 검토한다.
 
 ## 승인과 미결정 gate
 

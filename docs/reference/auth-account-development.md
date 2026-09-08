@@ -1,12 +1,12 @@
 ---
 type: reference
 scope: apps/api account profile HTTP and activity transactions
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 ---
 
 # 계정 프로필 조회와 nickname 변경 개발
 
-`apps/api/src/auth/login/http.ts`의 `createLoginHttpApp`은 선택적 세 번째 인자 `{ dataSource, verifyAccessJwt }`로 `GET /me`와 `PATCH /me/nickname`을 연결한다. 기존 DataSource와 `createAccessJwtVerifier`의 verifier를 명시적으로 주입한다. 두 번째 session service 인자의 refresh/logout 연결은 유지한다. 기본 AppModule/main의 운영 활성화는 이 factory 연결과 별개로 남아 있다.
+`apps/api/src/auth/login/http.ts`의 `createLoginHttpApp`은 선택적 세 번째 인자 `{ dataSource, verifyAccessJwt }`로 `GET /me`와 `PATCH /me/nickname`을 연결한다. 기존 DataSource와 `createAccessJwtVerifier`의 verifier를 명시적으로 주입한다. 두 번째 session service 인자의 refresh/logout 연결은 유지한다. 기본 main도 이 factory에 계정 dependency를 연결한다. 설정·실행과 기본 entry의 후속 통합 검증은 [`api-start-development.md`](api-start-development.md)를 참고한다.
 
 Contract는 `docs/rules/auth-api.md`, `docs/rules/auth-activity.md`, `docs/rules/auth-session.md`, `docs/rules/auth-database.md`가 정의한다. 기존 schema·Migration·dependency와 JWT issuer/verifier는 변경하지 않았다. 인증 검색과 탈퇴 lifecycle·control store 통합은 이 module의 구현 범위가 아니다.
 
@@ -50,4 +50,4 @@ pnpm --filter @ldb/api test:database
 git diff --check
 ```
 
-2026-09-07의 실행 환경은 Node `v24.19.0`, pnpm `11.23.0`, Unicode `17.0`, ICU `78.3`, Docker server `29.7.2`, native `linux/arm64/v8`, PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`다. 기존 harness가 승인된 image index와 arm64 child digest를 대조하고 정상·실패·timeout·SIGINT·SIGTERM·ownership mismatch teardown 및 해당 exact resource 부재를 확인했다. `linux/amd64`, 실제 provider/credential, 기본 main composition, Desktop, 탈퇴 통합, 운영 배포·proxy/APM·clock·cleanup과 물리 network 단절은 미검증이다.
+2026-09-07의 실행 환경은 Node `v24.19.0`, pnpm `11.23.0`, Unicode `17.0`, ICU `78.3`, Docker server `29.7.2`, native `linux/arm64/v8`, PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)`다. 기존 harness가 승인된 image index와 arm64 child digest를 대조하고 정상·실패·timeout·SIGINT·SIGTERM·ownership mismatch teardown 및 해당 exact resource 부재를 확인했다. `linux/amd64`, 실제 provider/credential, Desktop, 탈퇴 통합, 운영 배포·proxy/APM·clock·cleanup과 물리 network 단절은 미검증이다.

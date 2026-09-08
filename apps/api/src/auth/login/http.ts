@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { Catch, Controller, Get, Inject, Module, Post, Req, Res } from '@nestjs/common'
+import { Catch, Controller, Get, Inject, Module, NotFoundException, Post, Req, Res } from '@nestjs/common'
 import type { ArgumentsHost, ExceptionFilter, INestApplication } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import type { Request, Response } from 'express'
@@ -76,6 +76,15 @@ class LoginHttpFilter implements ExceptionFilter {
     const response = context.getResponse<Response>()
     if (response.headersSent) {
       response.end()
+      return
+    }
+
+    const hasRegisteredRoute = request.route != null
+    const isNotFound = error instanceof NotFoundException
+    const isUnregisteredRoute = !hasRegisteredRoute && isNotFound
+    if (isUnregisteredRoute) {
+      // Nest의 원문 message에는 credential을 포함한 URL이 있을 수 있어 반사하지 않는다.
+      response.status(404).json({ statusCode: 404, message: 'Not Found' })
       return
     }
 
@@ -229,17 +238,24 @@ export async function createLoginHttpApp(
   })
   class LoginHttpModule {}
 
-  const app = await NestFactory.create(LoginHttpModule, { logger: false, bodyParser: false })
-  app.use((request: Request, response: Response, next: () => void) => {
-    response.setHeader('Cache-Control', 'no-store')
-    response.removeHeader('X-Powered-By')
-    if (request.method === 'GET') {
-      response.setHeader('Referrer-Policy', 'no-referrer')
-      response.setHeader('Content-Security-Policy', LOGIN.contentSecurityPolicy)
-    }
-    next()
+  const app = await NestFactory.create(LoginHttpModule, {
+    logger: false, bodyParser: false, abortOnError: false,
   })
-  app.use(loginJsonParser)
-  app.useGlobalFilters(new LoginHttpFilter())
-  return app
+  try {
+    app.use((request: Request, response: Response, next: () => void) => {
+      response.setHeader('Cache-Control', 'no-store')
+      response.removeHeader('X-Powered-By')
+      if (request.method === 'GET') {
+        response.setHeader('Referrer-Policy', 'no-referrer')
+        response.setHeader('Content-Security-Policy', LOGIN.contentSecurityPolicy)
+      }
+      next()
+    })
+    app.use(loginJsonParser)
+    app.useGlobalFilters(new LoginHttpFilter())
+    return app
+  } catch (error) {
+    await app.close().catch(() => undefined)
+    throw error
+  }
 }
