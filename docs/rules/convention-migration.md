@@ -36,9 +36,9 @@ review-after: 시범 PR 2~3개를 사용자 merge한 뒤 실제 사용량·재�
 
 ## 전수 목록과 완료 기준
 
-전수 확인 목록과 파일별 backlog는 후속 Execution Issue의 소관이다. 기준 repository revision에서 범위를 확정하고 각 대상에 대해 `변경 필요`, `이미 준수`, `적용 제외`, `판단 필요`를 구분한다. 이미 준수·적용 제외에는 근거를 남기고, 변경 필요에는 연결된 PR의 사용자 merge evidence를 남긴다. 판단 필요나 미반영 항목이 남아 있으면 전수 이행은 완료되지 않는다. 최종 main에서 새 파일·삭제·규칙 변경 보정을 다시 대조한다. 전수 조사 완료와 실제 리팩토링 완료는 별도 상태로 관리한다. 생성물은 원본 source를 기준으로 처리하고 generated artifact만 따로 정리하지 않는다. 이미 준수한 code는 수정하지 않는다.
+전수 확인 목록과 파일별 backlog는 수정 전에 후속 Execution Issue에 반드시 만든다. Planner가 목록의 생성·갱신·완료 상태를 책임지고, 실제 조사는 Scout나 Worker에게 맡길 수 있다. 기준 repository revision에서 범위를 확정하고 각 대상에 대해 `변경 필요`, `이미 준수`, `적용 제외`, `판단 필요`를 구분한다. 이미 준수·적용 제외에는 Rule 적용 범위와 연결된 근거를 남기며, 범위를 줄이거나 새 예외를 자동으로 판정하지 않는다. 변경 필요에는 연결된 PR의 사용자 merge evidence를 남긴다. 최종 Reviewer와 Planner는 전체 목록, 기준 revision, 분류 근거, merge evidence, 판단 필요·미반영 존재를 확인한 뒤 기존 완료 절차에 따라 처리한다. 판단 필요나 미반영 항목이 남아 있으면 전수 이행은 완료되지 않는다. 최종 main에서 새 파일·삭제·규칙 변경 보정을 다시 대조한다. 전수 조사 완료와 실제 리팩토링 완료는 별도 상태로 관리한다. 생성물은 원본 source를 기준으로 처리하고 generated artifact만 따로 정리하지 않는다. 이미 준수한 code는 수정하지 않는다.
 
-이행 시작 시 적용할 `convention.md`와 연결 Rule의 revision을 고정한다. 의미 없는 표기 변경마다 새 test를 강제하지 않으며, 동작 보존 evidence가 부족한 부분만 기존 동작을 고정하는 test로 보강한다. 표기 refactor의 필수 workspace test·typecheck·lint·build, 기존 실패의 Draft 유지와 validation 범위는 [`testing.md`](testing.md)와 [`change-control.md`](change-control.md)를 따른다. 새 core logic이나 behavior는 `testing.md`의 Red-Green을 따른다. 억지로 Red를 만들거나 기대 결과의 의미를 바꾸지 않는다.
+이행 시작 시 적용할 `convention.md`와 연결 Rule의 revision을 고정한다. 의미가 바뀌지 않는 표기 변경마다 새 test를 강제하지 않으며, 동작 보존 evidence가 부족한 부분만 기존 동작을 고정하는 test로 보강한다. 표기 refactor의 필수 workspace test·typecheck·lint·build, 기존 실패의 Draft 유지와 validation 범위는 [`testing.md`](testing.md)와 [`change-control.md`](change-control.md)를 따른다. 새 core logic이나 behavior는 `testing.md`의 Red-Green을 따른다. 억지로 Red를 만들거나 기대 결과의 의미를 바꾸지 않는다.
 
 검증은 성공 여부만 적지 않고 대상 revision, command 범위와 필요한 입력이 같은지 확인한다. 기존 test·mock·fixture·snapshot이 동작을 고정하는 경우 그 의미를 약화하거나 skip하지 않는다. 변경 전후 결과가 다르면 표기 refactor로 간주하지 않고 원인과 판단을 분리한다.
 

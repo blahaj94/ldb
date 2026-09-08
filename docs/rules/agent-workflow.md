@@ -135,6 +135,8 @@ Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전�
 
 이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 기존 Astra/Spark 일반 규칙에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. Rule·security의 최종 review는 사람 경로를 따른다.
 
+기존 escalation의 고위험·Rule·architecture·security·API·schema·authentication, P0/P1 finding, 검증 불완전 조건은 그대로 적용하며 필수 최종 review를 생략하지 않는다. 이번 이행에서 해당 조건이 발생하면 자동으로 model이나 effort를 상향하지 않고 사람에게 최종 검토를 요청한다. 예상 밖 실패, 범위 초과, 검증 불가, retry 소진에도 같은 원칙을 적용한다. 사용자가 model 또는 effort를 명시한 경우에는 기존 조항에 따라 그 선택을 우선한다.
+
 ## 실행 효율 계약의 재검토
 
 ```yaml
