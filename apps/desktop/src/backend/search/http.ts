@@ -128,8 +128,9 @@ export function createSearchHttp({
         retryAfterReceivedAt: isRateLimited ? receivedAt : null
       })
     }
-    const isObject = body != null && typeof body === 'object' && !Array.isArray(body)
-    const hasError = isObject && Object.hasOwn(body, 'error')
+    const value = body
+    const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
+    const hasError = isObject && Object.hasOwn(value, 'error')
     const parsed = responseSchema.safeParse(body)
     const isValidResponse = !hasError && parsed.success
     if (!isValidResponse) {
