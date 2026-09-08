@@ -113,9 +113,11 @@ test('generation rejects unsafe names, reports no changes and sanitizes connecti
         directory
       ),
       (error: unknown) => {
-        assert(error instanceof Error)
+        const isGenerationError = error instanceof Error
+        assert(isGenerationError)
         assert.equal(error.message, 'Database migration generation failed')
-        assert.equal(error.stack?.includes('secret connection value'), false)
+        const stackContainsConnectionValue = error.stack?.includes('secret connection value')
+        assert.equal(stackContainsConnectionValue, false)
         return true
       }
     )

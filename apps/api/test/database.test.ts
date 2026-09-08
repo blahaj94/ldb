@@ -50,7 +50,8 @@ test('database options discover compiled migrations without automatic schema cha
   assert.equal(options.logging, false)
   assert.equal(options.migrationsTransactionMode, 'all')
   assert.equal(options.migrationsTableName, 'typeorm_migrations')
-  assert(Array.isArray(options.migrations))
+  const areMigrationsAnArray = Array.isArray(options.migrations)
+  assert(areMigrationsAnArray)
   assert.match(String(options.migrations[0]), /\/database\/migrations\/\*\.js$/)
   assert.deepEqual(
     {
@@ -106,9 +107,11 @@ test('database configuration accepts only complete discrete connection fields', 
     assert.throws(
       () => readDatabaseConfiguration(env),
       (error: unknown) => {
-        assert(error instanceof Error)
+        const isConfigurationError = error instanceof Error
+        assert(isConfigurationError)
         assert.equal(error.message, 'Invalid database configuration')
-        assert.equal(error.message.includes('secret'), false)
+        const messageContainsSecret = error.message.includes('secret')
+        assert.equal(messageContainsSecret, false)
         return true
       }
     )
@@ -180,10 +183,12 @@ test('migration command destroys its connection after a database failure', async
   await assert.rejects(
     runMigrationCommand('up', () => dataSource),
     (error: unknown) => {
-      assert(error instanceof Error)
+      const isMigrationError = error instanceof Error
+      assert(isMigrationError)
       assert.equal(error.message, 'Database migration failed')
       assert.equal(error.cause, undefined)
-      assert.equal(error.stack?.includes(rawError.message), false)
+      const stackContainsRawErrorMessage = error.stack?.includes(rawError.message)
+      assert.equal(stackContainsRawErrorMessage, false)
       return true
     }
   )
@@ -198,9 +203,11 @@ test('migration command sanitizes configuration factory failures', async () => {
       throw new Error('secret configuration value')
     }),
     (error: unknown) => {
-      assert(error instanceof Error)
+      const isMigrationError = error instanceof Error
+      assert(isMigrationError)
       assert.equal(error.message, 'Database migration failed')
-      assert.equal(error.stack?.includes('secret configuration value'), false)
+      const stackContainsConfigurationValue = error.stack?.includes('secret configuration value')
+      assert.equal(stackContainsConfigurationValue, false)
       return true
     }
   )
@@ -237,11 +244,13 @@ test('migration status reads metadata without asking TypeORM to create its histo
 test('database options register four typed schemas before migrations are generated', async () => {
   const { createDatabaseOptions } = await loadDatabaseModule()
   const options = createDatabaseOptions(configuration)
-  assert(Array.isArray(options.entities))
+  const areEntitiesAnArray = Array.isArray(options.entities)
+  assert(areEntitiesAnArray)
   assert.deepEqual(
     options.entities
       .map((schema) => {
-        assert(schema instanceof EntitySchema)
+        const isEntitySchema = schema instanceof EntitySchema
+        assert(isEntitySchema)
         return schema.options.tableName
       })
       .sort(),
@@ -257,8 +266,12 @@ test('migration status reports a newly registered migration as pending', async (
     initialize: async () => {
       source.isInitialized = true
     },
-    query: async (sql: string) =>
-      sql.includes('to_regclass') ? [{ exists: true }] : [{ name: new initialAuthSchema().name }],
+    query: async (sql: string) => {
+      const isHistoryTableExistenceQuery = sql.includes('to_regclass')
+      return isHistoryTableExistenceQuery
+        ? [{ exists: true }]
+        : [{ name: new initialAuthSchema().name }]
+    },
     destroy: async () => {
       source.isInitialized = false
     }
