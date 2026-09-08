@@ -44,9 +44,10 @@ export class SearchConnection {
           this.accept(snapshot, expected)
           return
         }
-        const hasQueued = queued != null
-        const hasSameRun = hasQueued && queued.runId === snapshot.runId
-        const isOlder = hasSameRun && snapshot.revision <= queued.revision
+        const previousQueued = queued
+        const hasQueued = previousQueued != null
+        const hasSameRun = hasQueued && previousQueued.runId === snapshot.runId
+        const isOlder = hasSameRun && snapshot.revision <= previousQueued.revision
         if (!isOlder) {
           queued = snapshot
         }
