@@ -1,6 +1,12 @@
 import { AUTH_ERRORS } from '../../constants/auth.js'
 import { LOGIN_ERRORS } from '../../constants/login.js'
 
+type RefreshErrorDefinitionShape = Readonly<{
+  code: string
+  status: number
+  message: string
+}>
+
 export const REFRESH_ERRORS = {
   ...AUTH_ERRORS,
   INVALID_REQUEST: LOGIN_ERRORS.INVALID_REQUEST,
@@ -9,7 +15,7 @@ export const REFRESH_ERRORS = {
     status: 401,
     message: '로그인이 필요합니다.'
   }
-} as const
+} as const satisfies Record<string, RefreshErrorDefinitionShape>
 
 export type RefreshErrorDefinition = (typeof REFRESH_ERRORS)[keyof typeof REFRESH_ERRORS]
 
