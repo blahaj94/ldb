@@ -45,6 +45,7 @@ async function setup(signedIn = true): Promise<{
   const webContents = {
     mainFrame,
     on: vi.fn(),
+    send: vi.fn(),
     isDestroyed: () => false,
     session: {
       setDisplayMediaRequestHandler: (handler: MediaHandler) => {
@@ -224,6 +225,27 @@ describe('capture main auth boundary', () => {
     await fixture.invoke('selectCaptureSource', sources[0].id)
 
     expect(await fixture.requestMedia()).toBeNull()
+  })
+
+  it('이전 media 열거는 같은 source의 end와 새 begin 뒤에 stream을 허용하지 않는다', async () => {
+    const fixture = await setup()
+    await fixture.invoke('selectCaptureSource', sources[0].id)
+    await beginCapture(fixture)
+    const current = await fixture.invoke('controlCharacterSearch', { action: 'read' })
+    expect(current).toMatchObject({ ok: true, snapshot: { captureId: expect.any(String) } })
+    const captureId = (current as { snapshot: { captureId: string } }).snapshot.captureId
+    const pending = deferred<typeof sources>()
+    electron.getSources.mockReturnValueOnce(pending.promise)
+    const callsBeforeMedia = electron.getSources.mock.calls.length
+    const previousMedia = fixture.requestMedia()
+    expect(electron.getSources).toHaveBeenCalledTimes(callsBeforeMedia + 1)
+
+    await fixture.invoke('controlCharacterSearch', { action: 'end', captureId })
+    await beginCapture(fixture)
+    pending.resolve(sources)
+
+    expect(await previousMedia).toBeNull()
+    expect(await fixture.requestMedia()).toEqual({ video: sources[0] })
   })
 
   it.each([
