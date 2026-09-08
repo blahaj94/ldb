@@ -101,7 +101,14 @@ describe('main synthetic nickname observation', () => {
   })
 })
 
-it.each(['rejected', 'other capture', 'old observation', 'other nickname', 'idle'] as const)(
+it.each([
+  'rejected',
+  'other capture',
+  'old observation',
+  'newer observation',
+  'other nickname',
+  'idle'
+] as const)(
   '%s 결과는 정상 resolve해도 accepted counter와 slot mask를 올리지 않는다',
   async (mode) => {
     product.rejectNickname = false
@@ -120,6 +127,10 @@ it.each(['rejected', 'other capture', 'old observation', 'other nickname', 'idle
     const isOldObservation = mode === 'old observation'
     if (isOldObservation) {
       snapshot = withSearchSlot({ ...slot, observationRevision: 1 })
+    }
+    const isNewerObservation = mode === 'newer observation'
+    if (isNewerObservation) {
+      snapshot = withSearchSlot({ ...slot, observationRevision: 3 })
     }
     const isOtherNickname = mode === 'other nickname'
     if (isOtherNickname) {
