@@ -16,13 +16,13 @@ review-after: 사용자 승인·merge 후 서로 다른 app 또는 tooling의 �
 
 도구로 충분한 수정만을 위해 별도 AI 작성자나 조사자를 배정하지 않는다. 기존 편집 담당이 native CLI를 실행하되, 필요한 의미 판단·독립 review·기존 checkout 소유권·validation 책임은 생략하지 않는다.
 
-## 승인 상태와 우선순위
+## 공통 설정 도입 제안의 승인 상태와 우선순위
 
-이 문서는 `proposed`다. Draft PR에서 사용자가 명시적으로 `승인`하고 merge하기 전에는 기존 active Rule과 현재 app 설정이 우선한다. 승인 전에는 Prettier 출력 우선이나 fixer 적용 범위를 제품 code에 확장하지 않는다.
+공통 설정 도입 제안은 `proposed`다. Draft PR에서 사용자가 명시적으로 `승인`하고 merge하기 전에는 기존 active Rule과 현재 app 설정이 우선한다. 승인 전에는 Prettier 출력 우선이나 fixer 적용 범위를 제품 code에 확장하지 않는다.
 
 승인 후 formatter가 적용되는 범위에서는 사용자가 선택한 대로 Prettier 출력을 기준으로 맞춘다. 기존 수동 체인 줄바꿈이나 여러 줄 template의 여는 백틱 위치가 Prettier 출력과 다르면, formatter 결과를 사람이 되돌리거나 다시 설계하지 않는다. 다만 문자열 내부의 값·개행·공백, 생성 함수의 책임, 의미별 빈 줄과 조건 이름, 평가 시점은 도구 출력이 약화시키지 않는지 별도로 확인한다.
 
-기존 승인된 두 예외는 [`convention-exceptions-proposal.md`](convention-exceptions-proposal.md)의 active 기준을 따른다. PR #161의 사용자 승인과 merge는 그 두 예외의 lifecycle만 확정하며, 이 문서의 proposed 도구 우선 기준을 승인한 evidence로 해석하지 않는다.
+기존 승인된 두 예외는 [`convention-exceptions-proposal.md`](convention-exceptions-proposal.md)의 active 기준을 따른다. PR #161의 사용자 승인과 merge는 그 두 예외의 lifecycle만 확정하며, 아래 공통 설정 도입 제안의 proposed 기준을 승인한 evidence로 해석하지 않는다.
 
 ## 도구가 맡는 일
 
