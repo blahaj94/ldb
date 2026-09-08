@@ -14,25 +14,15 @@ import {
   tokenResponse
 } from './auth-test-fixtures'
 
-type AvailableAccess = Extract<AuthAuthorization, { status: 'available' }> & {
-  accessGeneration: number
-}
-type RejectedAccess = Pick<AvailableAccess, 'generation' | 'accessGeneration'> & {
-  finalRejection: boolean
-}
-// 새 소비 경계의 Red에서 기존 factory를 사용한다. 구현 뒤 제품 type으로 대체한다.
-type SearchCoordinator = Omit<AuthCoordinator, 'authorization'> & {
-  authorization(signal?: AbortSignal): Promise<AuthAuthorization>
-  recoverAuthorization(input: RejectedAccess, signal?: AbortSignal): Promise<AuthAuthorization>
-}
+type AvailableAccess = Extract<AuthAuthorization, { status: 'available' }>
 
 async function setup(): Promise<{
-  auth: SearchCoordinator
+  auth: AuthCoordinator
   harness: ReturnType<typeof createAuthHarness>
 }> {
   const harness = createAuthHarness()
   harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
-  const auth = createAuthCoordinator(harness.dependencies) as SearchCoordinator
+  const auth = createAuthCoordinator(harness.dependencies)
   await auth.start()
   harness.http.refresh.mockClear()
   harness.http.me.mockClear()
@@ -41,14 +31,14 @@ async function setup(): Promise<{
   return { auth, harness }
 }
 
-async function usedAccess(auth: SearchCoordinator): Promise<AvailableAccess> {
+async function usedAccess(auth: AuthCoordinator): Promise<AvailableAccess> {
   const result = await auth.authorization()
   expect(result).toMatchObject({ status: 'available' })
   return result as AvailableAccess
 }
 
 function rejectAccess(
-  auth: SearchCoordinator,
+  auth: AuthCoordinator,
   access: AvailableAccess,
   finalRejection = false,
   signal?: AbortSignal
@@ -195,17 +185,23 @@ describe('검색의 main authorization 소비 경계', () => {
     expect(harness.http.me).not.toHaveBeenCalled()
   })
 
-  it('사용자 재시도의 최신 access 최종 401은 추가 refresh 없이 인증과 저장을 정리한다', async () => {
-    const { auth, harness } = await setup()
-    const access = await usedAccess(auth)
+  it.each(['confirmed', 'unconfirmed'])(
+    '최종 401은 서버 logout %s여도 추가 refresh 없이 local 인증을 정리한다',
+    async (serverLogout) => {
+      const { auth, harness } = await setup()
+      const access = await usedAccess(auth)
+      const isUnconfirmed = serverLogout === 'unconfirmed'
+      if (isUnconfirmed)
+        harness.http.logout.mockRejectedValueOnce(new AuthHttpFailure('unavailable'))
 
-    expect(await rejectAccess(auth, access, true)).toEqual({ status: 'unavailable' })
-    expect(auth.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: 'REAUTH_REQUIRED' })
-    expect(auth.captureGeneration()).toBeNull()
-    expect(harness.store.inspection).toEqual({ status: 'empty' })
-    expect(harness.http.refresh).not.toHaveBeenCalled()
-    expect(harness.http.logout).toHaveBeenCalledTimes(1)
-  })
+      expect(await rejectAccess(auth, access, true)).toEqual({ status: 'unavailable' })
+      expect(auth.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: 'REAUTH_REQUIRED' })
+      expect(auth.captureGeneration()).toBeNull()
+      expect(harness.store.inspection).toEqual({ status: 'empty' })
+      expect(harness.http.refresh).not.toHaveBeenCalled()
+      expect(harness.http.logout).toHaveBeenCalledTimes(1)
+    }
+  )
 
   it.each(['marker', 'http', 'commit', 'finalize'])(
     'refresh %s 대기의 최종 401과 logout은 기존 writer 완료 뒤 하나의 정리를 수행한다',

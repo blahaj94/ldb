@@ -17,6 +17,7 @@ import type {
 export type SessionCredential = AuthTokens &
   Readonly<{
     accessTokenExpiresAtMs: number
+    accessGeneration: number
   }>
 
 type LogoutResult = Readonly<{ localConfirmed: boolean; serverConfirmed: boolean }>
@@ -76,6 +77,7 @@ export class CredentialWriter {
 }
 
 export class CredentialSession {
+  private accessGeneration = 0
   private credential: SessionCredential | null = null
   private knownRefreshToken: string | null = null
   private disposalFlight: Readonly<{ refreshToken: string; promise: Promise<boolean> }> | null =
@@ -147,6 +149,13 @@ export class CredentialSession {
     return promise
   }
 
+  currentRefresh(generation: number): Promise<AuthAuthorization> | null {
+    const flight = this.refreshFlight
+    const hasFlight = flight != null
+    const hasSameGeneration = hasFlight && flight.generation === generation
+    return hasSameGeneration ? flight.promise : null
+  }
+
   prepare(kind: CredentialTransitionKind): Promise<TransitionPreparation> {
     return prepareCredentialTransition(this.store, kind)
   }
@@ -200,9 +209,11 @@ export class CredentialSession {
   }
 
   acceptCommitted(tokens: AuthTokens): void {
+    this.accessGeneration += 1
     this.credential = {
       ...tokens,
-      accessTokenExpiresAtMs: Date.parse(tokens.accessTokenExpiresAt)
+      accessTokenExpiresAtMs: Date.parse(tokens.accessTokenExpiresAt),
+      accessGeneration: this.accessGeneration
     }
     this.knownRefreshToken = tokens.refreshToken
     this.disposalFlight = null
