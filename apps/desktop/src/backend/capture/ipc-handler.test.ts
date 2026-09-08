@@ -426,16 +426,59 @@ describe('capture main auth boundary', () => {
     expect(callback).toHaveBeenCalledExactlyOnceWith(null)
   })
 
-  it.each(['missing', 'failure'])('media source %s는 native null로 거절한다', async (kind) => {
-    const fixture = await setup()
-    await fixture.invoke('selectCaptureSource', sources[0].id)
-    await beginCapture(fixture)
-    const isFailure = kind === 'failure'
-    if (isFailure) electron.getSources.mockRejectedValue(new Error('Synthetic enumeration failure'))
-    else electron.getSources.mockResolvedValue([])
+  it.each(['missing', 'failure'])(
+    'media source %s는 native null로 거절하고 capture를 끝낸다',
+    async (kind) => {
+      const fixture = await setup()
+      await fixture.invoke('selectCaptureSource', sources[0].id)
+      await beginCapture(fixture)
+      const isFailure = kind === 'failure'
+      if (isFailure)
+        electron.getSources.mockRejectedValue(new Error('Synthetic enumeration failure'))
+      else electron.getSources.mockResolvedValue([])
 
-    expect(await fixture.requestMedia()).toBeNull()
-  })
+      const callback = vi.fn()
+      fixture.dispatchMedia(callback)
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledExactlyOnceWith(null))
+
+      expect(await fixture.invoke('controlCharacterSearch', { action: 'read' })).toMatchObject({
+        ok: true,
+        snapshot: { captureId: null }
+      })
+      electron.getSources.mockResolvedValue(sources)
+      await beginCapture(fixture)
+      expect(await fixture.requestMedia()).toEqual({ video: sources[0] })
+    }
+  )
+
+  it.each(['missing', 'failure'])(
+    '이전 media의 늦은 %s 결과는 새 capture를 끝내거나 callback을 반복하지 않는다',
+    async (kind) => {
+      const fixture = await setup()
+      await fixture.invoke('selectCaptureSource', sources[0].id)
+      await beginCapture(fixture)
+      const previous = await fixture.invoke('controlCharacterSearch', { action: 'read' })
+      expect(previous).toMatchObject({ ok: true, snapshot: { captureId: expect.any(String) } })
+      const captureId = (previous as { snapshot: { captureId: string } }).snapshot.captureId
+      const pending = deferred<typeof sources>()
+      electron.getSources.mockReturnValueOnce(pending.promise)
+      const callsBeforeMedia = electron.getSources.mock.calls.length
+      const callback = vi.fn()
+      fixture.dispatchMedia(callback)
+      expect(electron.getSources).toHaveBeenCalledTimes(callsBeforeMedia + 1)
+      await fixture.invoke('controlCharacterSearch', { action: 'end', captureId })
+      await beginCapture(fixture)
+      const current = await fixture.invoke('controlCharacterSearch', { action: 'read' })
+
+      const isFailure = kind === 'failure'
+      if (isFailure) pending.reject(new Error('Synthetic enumeration failure'))
+      else pending.resolve([])
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledExactlyOnceWith(null))
+
+      expect(await fixture.invoke('controlCharacterSearch', { action: 'read' })).toEqual(current)
+      expect(await fixture.requestMedia()).toEqual({ video: sources[0] })
+    }
+  )
 
   it.each(['allowed', 'denied'])(
     '비동기 %s callback이 소비 뒤 throw해도 다시 호출하지 않는다',
