@@ -62,6 +62,31 @@ review-after: 동시에 진행한 첫 3개 PR이 사용자 merge된 뒤 실제 �
 main이 전진하면 아직 merge되지 않은 모든 관련 PR을 다시 대조한다.
 재검증 결과가 없으면 해당 PR을 ready로 표시하지 않는다.
 
+## 작업 단위 재계획 제안
+
+Issue #196에서 사용자가 남은 PR 수를 줄이도록 작업 단위 재계획을 요청했다. 다음은 승인 전 제안이며, 사용자의 명시적인 `승인` comment와 이 Draft PR의 반영 전에는 기존 active Rule을 그대로 적용한다.
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: convention 항목을 인위적으로 한 종류씩 잘라 남은 PR을 늘리지 않고, 하나의 기능·모듈을 검토하고 되돌릴 수 있는 단위로 완료한다.
+evidence: "Issue #196 사용자의 남은 PR 재계획 요청"
+exceptions: 동작·API·보안·Rule·새 dependency의 미결정 사항은 기존 승인 경계에 따라 보류하며, PR 수를 줄이기 위해 자동 승인·항목 누락·거대 diff·테스트 생략을 허용하지 않는다.
+review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담·재작업·되돌리기 단위와 남은 항목의 판단 필요 여부를 확인한다.
+```
+
+승인 후 이 제안은 위 `작업 단위와 순서`의 다음 기존 문장에 우선 적용한다.
+
+- “한 모듈에서는 한 종류의 변경만 다룬다.”는 하나의 기능·모듈에 남은 승인된 convention 항목(예: 명명, 문자열 결과, 내부 인자명)을 관련 test와 필요한 callsite까지 함께 완료하는 단위로 대체한다.
+- “초기 제품 code 작업은 3~5개 파일, 약 200 변경줄을 목표 상한으로 삼는 soft 기준이다.”는 PR 분리의 hard 기준으로 사용하지 않는다. `code-quality.md`의 약 300 logic 줄 soft 기준과 review 부담은 그대로 적용한다.
+- 병렬 실행 subsection의 “각 PR은 한 module·한 종류의 변경·작은 diff 원칙”은 같은 기능·모듈의 승인된 항목을 한 PR에서 함께 검토할 수 있도록 대체하되, 독립 검토·되돌리기·기준 revision·의존성·최종 head 검증 조건은 그대로 유지한다.
+
+작업 packet은 대상 기능·모듈, 남은 승인 항목, 관련 test와 필요한 callsite, 제외 범위, 기준 revision, 동작 보존 근거, 예상 diff와 검증 command를 기록한다. 같은 PR 안에서는 단계별 commit과 명시적인 범위를 유지한다. 숫자 목표를 맞추려고 무관한 기능을 묶지 않으며, PR 수를 줄이기 위해 기존 항목을 생략하거나 test를 약화하지 않는다.
+
+모듈의 모든 항목을 완료했는지, 또는 승인·판단이 필요한 항목을 남겼는지 검토해 같은 파일을 불필요하게 다시 방문하지 않는다. 범위가 크면 예상 diff 규모, 검토를 나눌 이유, 되돌리기 단위와 상호 의존성을 근거로 분리를 제안한다. 임의의 새 파일 수 hard cap은 두지 않는다. 작은 Worker scope와 약 300 logic 줄의 commit soft 기준, 동시 최대 3개, dependency·사용량·root 분리, 독립 review, 최종 head 전체 검증, 사용자 merge 권한은 유지한다.
+
+이 제안은 13개 안팎의 구체 작업 목록이나 일시적인 backlog를 Rule에 저장하지 않는다. 해당 목록과 현재 roster·의존성·base는 부모 Issue #196에서 관리한다. 모델 mapping 변경이나 scheduler·자동 merge 권한도 만들지 않는다.
+
 각 PR의 merge는 기존과 같이 사용자만 수행한다. AI는 merge하지 않으며 scheduler나 자동 merge를 추가하지 않는다. 동시에 진행한 첫 3개 PR이 merge된 뒤 기록된 결과로 효과와 동시 한도를 재검토하며, 자동 만료나 매 묶음 재승인 조건을 만들지 않는다. 그 전에는 범위를 넓히거나 다른 Rule을 중복 작성하지 않는다.
 
 ## 전수 목록과 완료 기준
