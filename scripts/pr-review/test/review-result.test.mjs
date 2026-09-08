@@ -43,15 +43,14 @@ test('preserves repeated line reads before accepting a boundary value', () => {
     severity: 'P1',
     confidence: 0.95,
     path: 'src/service.ts',
-    line: 0,
-    evidence: 'Evidence',
-    impact: 'Impact',
-    suggestedAction: 'Action',
     get line() {
       lineReads += 1
       const isFirstLineRead = lineReads === 1
       return isFirstLineRead ? 1 : Number.NaN
-    }
+    },
+    evidence: 'Evidence',
+    impact: 'Impact',
+    suggestedAction: 'Action'
   }
 
   const result = validateReviewResult({

@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'

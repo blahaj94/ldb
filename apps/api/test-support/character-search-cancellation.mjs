@@ -1,4 +1,3 @@
-/* global AbortController */
 import assert from 'node:assert/strict'
 import { DataSource } from 'typeorm'
 import { performance } from 'node:perf_hooks'

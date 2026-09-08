@@ -1,4 +1,3 @@
-/* global AbortController, Response */
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { createHash, randomBytes } from 'node:crypto'

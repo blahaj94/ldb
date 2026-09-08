@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { URL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'

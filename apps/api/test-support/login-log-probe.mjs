@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import process from 'node:process'
 import { createLoginHttpApp } from '../dist/auth/login/http.js'

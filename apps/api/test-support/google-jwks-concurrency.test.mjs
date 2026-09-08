@@ -1,4 +1,3 @@
-/* global Response */
 import assert from 'node:assert/strict'
 import { setImmediate } from 'node:timers/promises'
 import { test } from 'node:test'

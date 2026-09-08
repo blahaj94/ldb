@@ -1,4 +1,3 @@
-/* global fetch, URL */
 import assert from 'node:assert/strict'
 import process from 'node:process'
 import { once } from 'node:events'

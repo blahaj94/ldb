@@ -20,14 +20,16 @@ function createEvent(overrides = {}) {
     ...overrides.pull_request
   }
 
-  return {
+  const event = {
     action: 'labeled',
     label: { name: '@ldb-review' },
     repository: { full_name: 'blahaj94/ldb', owner: { login: 'blahaj94' } },
     pull_request: pullRequest,
-    ...overrides,
-    pull_request: pullRequest
+    ...overrides
   }
+  event.pull_request = pullRequest
+
+  return event
 }
 
 test('accepts the target label on a same-repository non-draft PR', () => {

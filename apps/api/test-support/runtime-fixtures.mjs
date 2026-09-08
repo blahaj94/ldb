@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { generateKeyPairSync, randomBytes } from 'node:crypto'

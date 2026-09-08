@@ -28,7 +28,7 @@ test('trusted workflow runs default-branch code and isolates the trigger Secret'
   const workflow = await readFile(trustedWorkflowUrl, 'utf8')
 
   assert.match(workflow, /workflow_run:/)
-  assert.match(workflow, /workflows: \["AI PR Review"\]/)
+  assert.match(workflow, /workflows: \['AI PR Review'\]/)
   assert.match(workflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/)
   assert.match(workflow, /LDB_REVIEW_TRIGGER_TOKEN/)
   assert.match(workflow, /jobs:\s+policy:/s)

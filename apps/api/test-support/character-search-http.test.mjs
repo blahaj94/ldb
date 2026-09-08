@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { request } from 'node:http'
 import { Buffer } from 'node:buffer'

@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { URL } from 'node:url'

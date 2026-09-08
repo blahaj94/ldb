@@ -1,4 +1,3 @@
-/* global fetch */
 import assert from 'node:assert/strict'
 import { assertSearchConcurrency } from './character-search-concurrency.mjs'
 import { assertSearchCancellation } from './character-search-cancellation.mjs'

@@ -1,4 +1,3 @@
-/* global AbortController */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { settled } from './login-test-control.mjs'
