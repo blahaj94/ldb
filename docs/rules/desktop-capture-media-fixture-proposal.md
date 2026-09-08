@@ -1,22 +1,22 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: Issue 126 isolated desktop capture media fixture only
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 rationale: 고정된 검증 화면에서 실제 media와 OCR 연결을 관측하되 Electron 권한 정보의 한계를 제품 보안 보장과 구분한다.
-evidence: "Issue #126 판단: https://github.com/blahaj94/ldb/issues/126#issuecomment-5572323933 ; Electron 39.8.10 공식 source"
-exceptions: 명시 승인 전 실행 권한이 없으며 승인 후에도 아래 전용 fixture 외의 media 허용에는 적용하지 않는다.
+evidence: "PR #135 사용자 승인: https://github.com/blahaj94/ldb/pull/135#issuecomment-5578416858 ; 사용자 merge: 489e4aac61cffd0a6540c558e1e61a6361dd1036 ; Issue #126 판단: https://github.com/blahaj94/ldb/issues/126#issuecomment-5572323933 ; Electron 39.8.10 공식 source"
+exceptions: 승인 범위는 아래 전용 fixture에 한정되며 그 밖의 media 허용에는 적용하지 않는다.
 review-after: 최초 실제 media/OCR 관측 후 또는 Electron version·fixture 문서·권한 경계 변경 전
 ---
 
-# Desktop capture 실제 media 검증 허용안 — PROPOSED
+# Desktop capture 실제 media 검증 허용안
 
-## 승인할 선택과 적용 경계
+## 승인된 선택과 적용 경계
 
 **권장안은 고정된 local fixture에서 정상 `getDisplayMedia` → 기존 제품 main capture handler → 실제 stream → 실제 OCR 연결을 관측하도록 한정 허용하는 것이다.** 이는 통제된 fixture code를 신뢰하는 검증 예외다. 임의 renderer code의 모든 capture API를 main이 통제한다는 보장을 추가하지 않는다.
 
-현재 이 문서는 미승인 제안이다. [변경 승인 절차](change-control.md#approval-evidence)에 따라 Draft PR 첫 commit으로 제시하고, 사용자의 명시적인 `승인` comment와 연결된 실행 범위를 확인한 뒤에만 예외를 구현·실행한다. 기존 승인 범위의 작업과 이 예외에 의존하는 변경을 구분한다. 승인 전 `mediaTypes:[]` 허용을 추가하지 않는다.
+이 문서는 [PR #135의 명시적인 사용자 승인](https://github.com/blahaj94/ldb/pull/135#issuecomment-5578416858)과 사용자 merge `489e4aac61cffd0a6540c558e1e61a6361dd1036`를 반영한 active Rule이다. 구현·실행 범위는 [Issue #126의 재개 기록](https://github.com/blahaj94/ldb/issues/126#issuecomment-5578441165)을 따른다. 기존 승인 범위의 작업과 이 예외에 의존하는 변경을 구분하며 이후 변경은 [변경 승인 절차](change-control.md#approval-evidence)를 따른다.
 
 기존 [Desktop 인증·capture 계약](desktop-auth.md#최소-화면과-capture-경계)과 [플랫폼 검증 gate](desktop-auth-platform.md#향후-검증-계획과-완료-판정)는 유지한다. 이 제안의 예외는 아래 fixture의 media request에만 적용한다. Production 인증, credential 저장, provider/API, 검색, restore 종료 정책을 결정하거나 활성화하지 않는다.
 

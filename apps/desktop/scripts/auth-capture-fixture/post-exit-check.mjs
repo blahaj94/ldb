@@ -6,11 +6,16 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 
-// 일반 Vitest와 분리한 실제 deny-all 실패 종료 검증이다.
+// 일반 Vitest와 분리한 실제 child 종료 뒤 정리 검증이다. 기본 모드는 명시적 media 거절이다.
 const appDirectory = fileURLToPath(new URL('../..', import.meta.url))
 const testRoot = await mkdtemp(join(tmpdir(), 'ldb-capture-exit-check-'))
 const isOcr = process.argv.includes('--ocr')
-const command = isOcr ? 'capture:fixture:ocr' : 'capture:fixture:smoke'
+const isMedia = process.argv.includes('--media')
+const command = isOcr
+  ? 'capture:fixture:ocr'
+  : isMedia
+    ? 'capture:fixture:smoke'
+    : 'capture:fixture:deny'
 let child
 let groupStopped = false
 
@@ -55,10 +60,11 @@ try {
   child.stderr.on('data', (chunk) => {
     output += chunk.toString()
   })
+  // Fixture 90초와 launcher 120초 제한 뒤 child/group 정리까지 기다린다.
   const deadline = setTimeout(() => {
     const hasPid = child.pid != null
     if (hasPid) process.kill(-child.pid, 'SIGTERM')
-  }, 60_000)
+  }, 150_000)
   let code
   try {
     code = await new Promise((resolve, reject) => {
@@ -71,12 +77,25 @@ try {
   groupStopped = await waitForExit()
   console.log(`Capture fixture child exit: ${code}; group stopped: ${groupStopped}`)
   assert.equal(groupStopped, true, 'Test child group remains active')
-  const expectedCode = isOcr ? 0 : 1
+  const expectsSuccess = isOcr || isMedia
+  const expectedCode = expectsSuccess ? 0 : 1
   const expectedMessage = isOcr
     ? 'Capture fixture standalone OCR PASS'
-    : 'Capture fixture media BLOCKED / smoke FAIL'
+    : isMedia
+      ? 'Capture fixture smoke PASS'
+      : 'Capture fixture media BLOCKED / smoke FAIL'
   assert.equal(code, expectedCode, 'Child result did not match the requested check')
   assert.equal(output.includes(expectedMessage), true)
+  if (isMedia) {
+    const hasAllSyntheticMatches = output.includes(
+      'Capture fixture synthetic matches: {"displayMatchedSlots":15,"nicknameMatchedSlots":15}'
+    )
+    assert.equal(hasAllSyntheticMatches, true)
+    console.log('Capture fixture synthetic matches: display mask 15; notification mask 15')
+    assert.equal(output.includes('Video was requested, but no video stream was provided'), false)
+    assert.equal(output.includes('UnhandledPromiseRejectionWarning'), false)
+    console.log('Capture fixture native denial warnings: 0')
+  }
   const remaining = (await readdir(testRoot)).filter((name) => {
     const isCaptureProfile = name.startsWith('ldb-auth-capture-fixture-')
     return isCaptureProfile

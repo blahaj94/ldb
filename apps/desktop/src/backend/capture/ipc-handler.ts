@@ -162,6 +162,19 @@ function registerCaptureWindow(window: BrowserWindow, rendererDocumentUrl: strin
   })
 }
 
+function deliverMediaResult(
+  callback: (streams: Electron.Streams) => void,
+  streams: Electron.Streams | null
+): void {
+  // Electron 39.8.10 native는 null을 CAPTURE_FAILURE로 받지만 공개 Streams type에는 빠져 있다.
+  const nativeCallback = callback as (result: Electron.Streams | null) => void
+  try {
+    nativeCallback(streams)
+  } catch {
+    // Native once callback은 throw 전에 소비될 수 있으므로 재호출하지 않는다.
+  }
+}
+
 function registerDisplayMediaHandler(window: BrowserWindow): void {
   window.webContents.session.setDisplayMediaRequestHandler((request, callback) => {
     const generation = auth?.captureGeneration()
@@ -180,7 +193,7 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
     })
     const isAllowed = hasPermission && hasSource && isRequestAllowed
     if (!isAllowed) {
-      callback({})
+      deliverMediaResult(callback, null)
       return
     }
     void getWindowSources()
@@ -191,9 +204,9 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
         const canAllow = isCurrent && isStillTrusted && hasSameSelection
         const source = canAllow ? findSelectedSource(sources, sourceId) : null
         const hasSource = source != null
-        callback(hasSource ? { video: source } : {})
+        deliverMediaResult(callback, hasSource ? { video: source } : null)
       })
-      .catch(() => callback({}))
+      .catch(() => deliverMediaResult(callback, null))
   })
 }
 

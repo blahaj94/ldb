@@ -30,6 +30,7 @@ async function setup(signedIn = true): Promise<{
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
   event: IpcMainInvokeEvent
   mainFrame: { url: string; isDestroyed: () => boolean }
+  dispatchMedia: (callback: (result: unknown) => void) => void
   requestMedia: (
     changes?: Partial<Electron.DisplayMediaRequestHandlerHandlerRequest>
   ) => Promise<unknown>
@@ -64,9 +65,10 @@ async function setup(signedIn = true): Promise<{
     if (!hasHandler) throw new Error('Capture handler was not registered')
     return Promise.resolve().then(() => handler(event, ...args))
   }
-  const requestMedia = (
+  const dispatchMedia = (
+    callback: (result: unknown) => void,
     changes: Partial<Electron.DisplayMediaRequestHandlerHandlerRequest> = {}
-  ): Promise<unknown> => {
+  ): void => {
     const request = {
       frame: mainFrame,
       videoRequested: true,
@@ -74,11 +76,12 @@ async function setup(signedIn = true): Promise<{
       userGesture: true,
       ...changes
     }
-    return new Promise<unknown>((resolve) =>
-      mediaHandler?.(request as Electron.DisplayMediaRequestHandlerHandlerRequest, resolve)
-    )
+    mediaHandler?.(request as Electron.DisplayMediaRequestHandlerHandlerRequest, callback)
   }
-  return { auth, harness, invoke, event, mainFrame, requestMedia }
+  const requestMedia = (
+    changes: Partial<Electron.DisplayMediaRequestHandlerHandlerRequest> = {}
+  ): Promise<unknown> => new Promise((resolve) => dispatchMedia(resolve, changes))
+  return { auth, harness, invoke, event, mainFrame, dispatchMedia, requestMedia }
 }
 
 beforeEach(() => {
@@ -126,7 +129,7 @@ describe('capture main auth boundary', () => {
     expect(fixture.auth.getSnapshot().phase).toBe('signedIn')
     pending.resolve(sources)
     await rejection
-    expect(await fixture.requestMedia()).toEqual({})
+    expect(await fixture.requestMedia()).toBeNull()
   })
 
   it.each(['subframe', 'document'])(
@@ -171,14 +174,14 @@ describe('capture main auth boundary', () => {
   ])('기존 media 조건 위반 %j는 계속 거절한다', async (changes) => {
     const fixture = await setup()
     await fixture.invoke('selectCaptureSource', sources[0].id)
-    expect(await fixture.requestMedia(changes)).toEqual({})
+    expect(await fixture.requestMedia(changes)).toBeNull()
   })
 
   it('선택 뒤 logout은 main source를 지우고 media를 거절한다', async () => {
     const fixture = await setup()
     await fixture.invoke('selectCaptureSource', sources[0].id)
     await fixture.auth.logout()
-    expect(await fixture.requestMedia()).toEqual({})
+    expect(await fixture.requestMedia()).toBeNull()
   })
 
   it.each(['logout', 'clear', 'document'])(
@@ -195,7 +198,46 @@ describe('capture main auth boundary', () => {
       else if (isClear) await fixture.invoke('selectCaptureSource', '')
       else fixture.mainFrame.url = 'about:blank'
       pending.resolve(sources)
-      expect(await media).toEqual({})
+      expect(await media).toBeNull()
+    }
+  )
+
+  // Electron 39.8.10의 null 거절은 CAPTURE_FAILURE만 반환한다. {}는 별도 TypeError도 낸다.
+  it('선택 없는 즉시 거절은 native null 결과를 한 번 전달한다', async () => {
+    const fixture = await setup()
+    const callback = vi.fn()
+
+    fixture.dispatchMedia(callback)
+
+    expect(callback).toHaveBeenCalledExactlyOnceWith(null)
+  })
+
+  it.each(['missing', 'failure'])('media source %s는 native null로 거절한다', async (kind) => {
+    const fixture = await setup()
+    await fixture.invoke('selectCaptureSource', sources[0].id)
+    const isFailure = kind === 'failure'
+    if (isFailure) electron.getSources.mockRejectedValue(new Error('Synthetic enumeration failure'))
+    else electron.getSources.mockResolvedValue([])
+
+    expect(await fixture.requestMedia()).toBeNull()
+  })
+
+  it.each(['allowed', 'denied'])(
+    '비동기 %s callback이 소비 뒤 throw해도 다시 호출하지 않는다',
+    async (kind) => {
+      const fixture = await setup()
+      await fixture.invoke('selectCaptureSource', sources[0].id)
+      const isDenied = kind === 'denied'
+      if (isDenied) electron.getSources.mockResolvedValue([])
+      const callback = vi.fn().mockImplementationOnce(() => {
+        throw new Error('Synthetic callback already consumed')
+      })
+
+      fixture.dispatchMedia(callback)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      expect(callback).toHaveBeenCalledTimes(1)
+      expect(callback).toHaveBeenCalledWith(isDenied ? null : { video: sources[0] })
     }
   )
 

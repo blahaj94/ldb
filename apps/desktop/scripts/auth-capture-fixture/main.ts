@@ -4,9 +4,10 @@ import { basename, dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createAuthCoordinator } from '../../src/backend/auth/coordinator'
 import { registerAuthIpc } from '../../src/backend/auth/ipc-handler'
-import { registerCaptureIpc, registerCaptureWindow } from '../../src/backend/capture/ipc-handler'
+import { registerObservedCapture } from './capture-observation'
 import { canaries, createFixtureEffects, syntheticCode } from '../auth-bridge-fixture/effects'
 import { smoke, smokeStandaloneOcr } from './smoke'
+import { registerFixtureMediaPermissions } from './permissions'
 
 const profile = process.env.LDB_AUTH_CAPTURE_PROFILE
 const launcherPid = process.env.LDB_AUTH_CAPTURE_LAUNCHER_PID
@@ -18,6 +19,7 @@ const isLauncherChild = launcherPid === String(process.ppid)
 const canStart = hasExpectedDirectory && hasOwnedName && isLauncherChild
 const isAuto = process.argv.includes('--smoke')
 const isOcr = process.argv.includes('--ocr')
+const isDenyMedia = process.argv.includes('--deny-media')
 if (canStart) {
   app.setPath('userData', profile)
   app.setName('LDB Auth Capture fixture')
@@ -57,12 +59,14 @@ if (canStart) {
       })
       const entry = resolve(__dirname, '../renderer/index.html')
       const documentUrl = pathToFileURL(entry).href
-      session.defaultSession.setPermissionCheckHandler(() => false)
-      // Pinned Electron은 display와 legacy desktop을 mediaTypes:[]로 함께 전달한다.
-      // 구별 수단이 승인되기 전에는 어느 경로에도 native media를 허용하지 않는다.
-      session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
-        callback(false)
-      )
+      if (isDenyMedia) {
+        session.defaultSession.setPermissionCheckHandler(() => false)
+        session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
+          callback(false)
+        )
+      } else {
+        registerFixtureMediaPermissions(window, documentUrl, coordinator)
+      }
       session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
         const isLocal = details.url.startsWith('file:')
         callback({ cancel: !isLocal })
@@ -73,12 +77,11 @@ if (canStart) {
         getWindow: () => currentWindow,
         documentUrl
       })
-      const disposeCapture = registerCaptureIpc(coordinator)
-      registerCaptureWindow(window, documentUrl)
+      const captureObservation = registerObservedCapture(coordinator, window, documentUrl)
       window.on('closed', () => {
         currentWindow = null
         disposeAuth()
-        disposeCapture()
+        captureObservation.dispose()
         source.destroy()
       })
       let hasCanary = false
@@ -117,12 +120,12 @@ if (canStart) {
       await window.loadFile(entry)
       window.show()
       console.log(
-        'Capture fixture ready: synthetic source; memory-only auth; native media/credentials/network disabled'
+        'Capture fixture ready: synthetic source; memory-only auth; approved synthetic media only; native credentials/network disabled'
       )
       console.log(
         `Capture fixture screen permission: ${systemPreferences.getMediaAccessStatus('screen')}`
       )
-      const runsAutomatically = isAuto || isOcr
+      const runsAutomatically = isAuto || isOcr || isDenyMedia
       if (runsAutomatically) {
         const deadline = setTimeout(() => {
           console.error('Capture fixture timeout FAIL')
@@ -130,7 +133,7 @@ if (canStart) {
         }, 90_000)
         try {
           if (isOcr) await smokeStandaloneOcr(window)
-          else await smoke(window, coordinator, completeLogin)
+          else await smoke(window, coordinator, completeLogin, captureObservation.counts)
           if (hasCanary) throw new Error('Capture fixture canary detected')
           console.log(isOcr ? 'Capture fixture standalone OCR PASS' : 'Capture fixture smoke PASS')
           app.quit()
