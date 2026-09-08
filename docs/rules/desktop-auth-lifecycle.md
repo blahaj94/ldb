@@ -14,6 +14,8 @@ review-after: 최초 로그인·refresh·저장 실패 integration validation �
 
 승인 상태와 process/IPC/화면은 [Desktop contract](desktop-auth.md), OS·durable write protocol은 [platform](desktop-auth-platform.md)이 canonical source다. 아래 상태는 승인된 contract이며 현재 구현·실행 evidence가 아니다. 서버의 [auth API](auth-api.md)·[OAuth](auth-oauth.md)·[session](auth-session.md)·[활동](auth-activity.md) 계약을 그대로 소비한다.
 
+단, [저장 확정 뒤 복원 종료 제안](#저장-확정-뒤-복원-종료-제안)은 `proposed`이며 문서의 active metadata나 기존 PR #60 승인이 이 변경의 구현 권한을 만들지 않는다.
+
 이 문서의 pending/credential 수명은 기존 로그인·기기 session 범위다. 탈퇴 전용 statusToken과 준비/확정 이후 local auth 정리·재시작 상태 조회는 [승인된 탈퇴 contract](auth-withdrawal-proposal.md)의 최소 연결을 따른다. 이 확장으로 아래 login의 polling 없음·pending memory-only·refresh 단일 실행을 바꾸지 않는다.
 
 ## 상태·credential 수명
@@ -93,6 +95,27 @@ sequenceDiagram
 5. 사용 중에는 보호 HTTP가 필요할 때만 access 만료 안내 시각을 확인해 refresh한다. Concurrent caller는 같은 session generation/refresh Promise 결과를 공유한다. Access가 유효한 동안 sessionExpiresAt 안내값만으로 재로그인을 강제하거나 idle 시간을 연장하지 않는다. Logout·새 로그인 generation은 이전 refresh 결과를 받지 않는다.
 6. 보호 기능의 401은 caller가 쓴 access generation을 확인한다. 이미 교체된 access라면 최신 access로, 아니면 한 번의 shared refresh 후에 **허용된 요청만 최대 한 번** 재호출한다. `/me` 같은 read만 자동 재호출한다. Mutation/검색의 replay 정책은 각 feature 계약에서 별도로 정하며 범용 interceptor로 POST/PATCH를 재전송하지 않는다. 두 번째 401은 local 인증 상실이다.
 7. Refresh 401, 응답 유실/timeout/5xx·commit 불명, 새 token parsing/저장 실패는 R0 재사용 금지·marker 유지·보호 요청 중단·새 로그인이다. 원인을 공격으로 단정하지 않는다. 모든 대기 caller는 같은 실패를 받고 별도 refresh를 시작하지 않는다. 확실한 서버 rollback일 수 있어도 client에 확정 evidence가 없으면 재시도하지 않는 권장안이다.
+
+## 저장 확정 뒤 복원 종료 제안
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 저장 대기 중 access 만료·clock 불연속으로 복원이 끝나지 않거나 안전하지 않은 access를 사용하는 일을 막는다.
+evidence: "https://github.com/blahaj94/ldb/issues/137 ; https://github.com/blahaj94/ldb/issues/84#issuecomment-5569253103"
+exceptions: platform의 저장 확정·실패·crash 복구와 기존 401 처리는 유지하며 새 clock 임계값을 정하지 않는다.
+review-after: 승인 후 초기 restore·paused retry의 commit/finalize 지연과 후속 수동 재시도 검증 시
+```
+
+1. 초기 restore와 `restorePaused`에서 시작한 `retryAuth` 모두에 적용한다. **저장 확정은 R1 credential commit과 marker 삭제 각각의 durability 확인까지**이며 [platform의 저장 순서](desktop-auth-platform.md#credential-file과-crash-복구)를 생략하지 않는다. Commit 또는 finalize 대기 중 시간 문제가 관측돼도 그 이유만으로 저장을 취소하지 않는다. 저장이 정상 확정되고 현재 generation인 경우에만 아래 pause 정책을 적용한다.
+2. 복원의 access 사용 가능 판정, `/me` 전송 직전과 signedIn 발행 직전에 현재 auth generation·credential, access 만료 시각과 clock 신뢰를 다시 검사한다. Commit/finalize 및 `/me` 응답·body 처리 등 비동기 대기 뒤도 포함한다. 이미 만료됐거나 clock 불연속을 관측해 신뢰를 잃은 access는 이후 clock 읽기가 정상이라는 이유로 되살리지 않는다. 새 임계값이나 JWT 기반 권한 판정은 추가하지 않는다.
+3. 저장이 확정된 R1의 access가 만료됐거나 clock 때문에 유효성을 신뢰할 수 없으면, 같은 복원 호출에서 **이 시간 문제를 이유로 한 자동 추가 rotation은 0회**다. R1은 보존하고 `restorePaused`와 [제안 notice·문구](desktop-auth.md#저장-확정-뒤-복원-안내-제안)로 끝낸다. 이 사유만으로 clear·logout·marker 재생성·R0 재사용을 하지 않는다. `/me` 전 검사에 실패하면 전송 0회, 성공 응답 뒤 검사에 실패하면 받은 user를 발행하지 않으며 둘 다 signedIn은 0회다. 지연 뒤에도 모든 검사가 유효하면 정상 `/me`와 signedIn/home을 계속한다.
+4. 다음 사용자 `retryAuth`는 현재 access가 유효하고 clock 신뢰를 잃지 않았으면 `/me`만 재개한다. Access가 없거나 만료·신뢰 상실 상태면 **현재 저장 확정 credential**로 정상 shared refresh를 한 번 수행한 뒤 같은 검사와 `/me`를 거친다. 이전에 소비된 R0나 불명 결과의 credential로 돌아가지 않는다. 새 응답의 access도 저장 대기 후 유효하지 않으면 새로 확정된 credential을 보존하며 다시 pause로 끝낸다. 연속 사용자 재시도는 가능하지만 자동 호출·rotation 반복·TTL 연장은 없다.
+5. HTTP·저장 결과와 필요한 정리가 확정되면 해당 복원 작업이 소유한 writer·verification 대기를 끝내고 `restoring`에 남지 않는다. `retryAuth`는 처리가 끝난 현재 snapshot을 담은 기존 `AuthCommandResult`로 resolve하며, pause로 끝나면 다음 사용자 재시도를 받을 수 있어야 한다. 중복 호출은 현재 phase·writer 검사로 거절하고 새 작업을 queue하지 않는다. 이 종료 계약은 [동기 OS prompt](desktop-auth-platform.md#os-저장-선택)를 timer로 취소하거나 응답 시간을 보장한다는 뜻이 아니다.
+6. 기존 single writer·같은 session generation의 shared refresh를 유지한다. 각 대기 완료와 발행 직전에 generation을 확인하고 logout·복원 포기·새 generation이 먼저 유효해졌으면 이전 작업은 pause나 signedIn으로 덮어쓰지 않는다. Logout과 저장 정리는 기존 직렬화·late response 폐기 규칙을 따른다.
+7. Commit 실패·불명 결과, marker 삭제 durability 실패·재확립 실패와 crash는 저장 확정으로 분류하지 않고 기존 platform 처리를 따른다. `/me` network/5xx와 인증 상실도 기존 원인별 처리를 유지한다. 위 자동 rotation 0회는 local 시간 문제의 정책이며, 기존 `/me` 등 read의 제한된 401 처리와 그 적용 경계를 새로 정하거나 대체하지 않는다.
+
+이 절은 [명시적 Rule 승인](change-control.md#approval-evidence)을 기다리는 추천안이다. 상세 상황표·추가 rotation 대안·후속 Red→Green 검증 계획은 Issue/PR에 둔다. 제품 반영은 이 Rule의 승인·merge 뒤 별도 구현 범위에서 진행한다.
 
 ## 취소·로그아웃·실패의 최종 동작
 

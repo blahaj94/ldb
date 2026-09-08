@@ -16,6 +16,8 @@ review-after: 최초 Desktop 인증 구현 및 packaged platform validation 시
 
 아래 [OCR 검색 연결 제안](#ocr-검색-연결-제안)은 기존 승인에 포함되지 않는 `proposed` 절이다. 문서의 active metadata를 이 제안의 승인으로 사용하지 않는다.
 
+[저장 확정 뒤 복원 안내 제안](#저장-확정-뒤-복원-안내-제안)은 별도의 `proposed` 변경이다. 기존 notice allowlist의 승인이나 제품 구현 완료로 간주하지 않는다.
+
 서버의 [API](auth-api.md), [OAuth](auth-oauth.md), [session](auth-session.md), [활동](auth-activity.md), [runtime gate](auth-runtime.md)를 전제로 한다. Endpoint, TTL, JWT/refresh/session 정책, provider 설정과 DB를 변경하지 않는다. `clientId:"desktop"`은 public 등록 선택값이다. 실제 운영 URL·app identity·protocol 값은 platform 문서의 미확인 gate다.
 
 ## Process 책임과 권한
@@ -108,6 +110,22 @@ Capture component는 signedIn home에서 mount한다. 로그인 이탈 시 unmou
 이 화면 조건은 main 권한 검사를 대신하지 않는다. 후속 인증 연결에서는 `listCaptureSources`, 비어 있지 않은 source 선택, `notifyStableNicknameDetected`, display-media 허용에 main의 signedIn 검사를 추가한다. Source 열거/선택·media callback의 async 완료 직전에도 시작 auth generation과 현재 signedIn을 재검사하며 이탈했다면 목록/선택 성공을 반환하거나 stream을 허용하지 않는다. 기존 sender/frame/source/user-gesture 검사는 유지한다. 인증 이탈 시 main이 선택을 직접 무효화하고, trusted renderer의 빈 source 선택은 phase와 무관하게 cleanup용으로 허용한다. Renderer도 unmount된 capture instance의 late OCR 완료가 IPC를 보내지 않게 검사한다. Main이 이후 생성하는 검색 작업은 시작 auth generation에 묶는다.
 
 이 연결 경로의 기존 raw OCR nickname log도 제거하고 비민감 counter만 허용한다. 화면의 nickname text 표시와 진단 log 보관은 별개다. Auth 경계 밖의 무관한 module refactoring을 요구하는 것은 아니다.
+
+## 저장 확정 뒤 복원 안내 제안
+
+```yaml
+status: proposed
+enforcement: approval-required
+rationale: 저장이 확정돼도 access를 안전하게 사용할 수 없는 복원을 종료하고 사용자 재시도를 제공한다.
+evidence: "https://github.com/blahaj94/ldb/issues/137 ; https://github.com/blahaj94/ldb/issues/84#issuecomment-5569253103"
+exceptions: 기존 저장 실패·결과 불명·인증 상실 안내와 IPC shape를 바꾸지 않는다.
+review-after: 승인 후 초기 restore·paused retry의 저장 지연·clock 회귀와 화면 검증 시
+```
+
+- [저장 확정 뒤 복원 종료 제안](desktop-auth-lifecycle.md#저장-확정-뒤-복원-종료-제안)의 시간 문제로 복원을 마치지 못하면 `restorePaused`로 안내한다. Notice 후보는 `RESTORE_RETRY_REQUIRED`이며, 승인되면 기존 notice allowlist에 추가한다. 현재 승인된 enum으로 취급하지 않는다.
+- 고정 문구는 “로그인 상태 확인을 마치지 못했습니다. 다시 시도해 주세요.”로 제안한다. Network·서버·저장 장애나 인증 상실을 뜻하지 않는다. `user`와 `entry`는 null이고 보호 화면·capture는 열지 않는다.
+- 처리 종료 뒤 “다시 시도”(`retryAuth`)와 현재 기기 logout을 제공한다. 진행 중에는 복원 중 표시와 중복 실행 차단을 유지하고, 다시 pause로 끝나면 다음 수동 재시도를 제공한다. 저장된 credential만으로 로그인 성공을 표시하지 않는다.
+- 기존 `retryAuth`의 인자 0개·`AuthCommandResult`·snapshot/event 순서와 `ok:true`의 명령 처리 의미를 유지한다. 새 IPC, snapshot field, browser login 또는 자동 재시도를 추가하지 않는다. 이 절과 연결된 lifecycle 제안은 [Draft PR의 명시적 승인](change-control.md#approval-evidence) 전에는 구현 권한이 없다.
 
 ## 승인된 선택과 서버 별도 결정
 
