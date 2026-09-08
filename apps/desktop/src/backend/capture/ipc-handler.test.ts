@@ -61,6 +61,7 @@ async function setup(signedIn = true): Promise<{
   const event = { sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent
   const invoke = (channel: string, ...args: unknown[]): Promise<unknown> => {
     const handler = handlers.get(channel)
+    expect(handler, `등록된 ${channel} IPC가 요청을 처리해야 한다`).toBeTypeOf('function')
     const hasHandler = handler != null
     if (!hasHandler) throw new Error('Capture handler was not registered')
     return Promise.resolve().then(() => handler(event, ...args))
@@ -91,6 +92,181 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('capture main auth boundary', () => {
+  it('검색 read는 capture를 시작하거나 인증 HTTP를 실행하지 않는다', async () => {
+    const fixture = await setup()
+
+    const result = await fixture.invoke('controlCharacterSearch', { action: 'read' })
+
+    expect(result).toMatchObject({ ok: true, snapshot: { captureId: null } })
+    expect(electron.getSources).not.toHaveBeenCalled()
+    expect(fixture.harness.http.refresh).not.toHaveBeenCalled()
+  })
+
+  it('현재 auth와 선택 source로 begin하고 이전 end가 새 capture를 끝내지 않는다', async () => {
+    const fixture = await setup()
+    await fixture.invoke('selectCaptureSource', sources[0].id)
+    const authSnapshot = fixture.auth.getSnapshot()
+    const begin = {
+      action: 'begin',
+      authRunId: authSnapshot.runId,
+      authRevision: authSnapshot.revision
+    }
+
+    const first = await fixture.invoke('controlCharacterSearch', begin)
+
+    expect(first).toMatchObject({ ok: true, snapshot: { captureId: expect.any(String) } })
+    const firstCaptureId = (first as { snapshot: { captureId: string } }).snapshot.captureId
+    expect(firstCaptureId).toMatch(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i)
+    expect(await fixture.requestMedia()).toEqual({ video: sources[0] })
+    expect(await fixture.invoke('controlCharacterSearch', begin)).toMatchObject({
+      ok: false,
+      error: { code: 'SEARCH_BUSY' }
+    })
+
+    const ended = await fixture.invoke('controlCharacterSearch', {
+      action: 'end',
+      captureId: firstCaptureId
+    })
+
+    expect(ended).toMatchObject({ ok: true, snapshot: { captureId: null } })
+    expect(await fixture.requestMedia()).toBeNull()
+    const second = await fixture.invoke('controlCharacterSearch', begin)
+    expect(second).toMatchObject({ ok: true, snapshot: { captureId: expect.any(String) } })
+    const secondCaptureId = (second as { snapshot: { captureId: string } }).snapshot.captureId
+    expect(secondCaptureId).not.toBe(firstCaptureId)
+    expect(
+      await fixture.invoke('controlCharacterSearch', { action: 'end', captureId: firstCaptureId })
+    ).toMatchObject({ ok: true, snapshot: { captureId: secondCaptureId } })
+  })
+
+  it.each(['missing-source', 'stale-auth', 'selecting-source'])(
+    'begin은 %s 상태를 승인된 오류로 거절한다',
+    async (condition) => {
+      const fixture = await setup()
+      const authSnapshot = fixture.auth.getSnapshot()
+      const isStaleAuth = condition === 'stale-auth'
+      const isSelectingSource = condition === 'selecting-source'
+      const pending = deferred<typeof sources>()
+      let selection: Promise<unknown> | undefined
+      if (isStaleAuth) await fixture.invoke('selectCaptureSource', sources[0].id)
+      if (isSelectingSource) {
+        electron.getSources.mockReturnValueOnce(pending.promise)
+        selection = fixture.invoke('selectCaptureSource', sources[0].id)
+        await Promise.resolve()
+      }
+      const expectedCode = isStaleAuth
+        ? 'STALE_SEARCH'
+        : isSelectingSource
+          ? 'SEARCH_BUSY'
+          : 'SEARCH_NOT_ALLOWED'
+
+      try {
+        const result = await fixture.invoke('controlCharacterSearch', {
+          action: 'begin',
+          authRunId: authSnapshot.runId,
+          authRevision: authSnapshot.revision + (isStaleAuth ? 1 : 0)
+        })
+
+        expect(result).toMatchObject({
+          ok: false,
+          error: { code: expectedCode },
+          snapshot: { captureId: null }
+        })
+      } finally {
+        pending.resolve(sources)
+        await selection
+      }
+    }
+  )
+
+  it.each(['source-clear', 'logout'])(
+    '%s는 main capture를 지우고 종료된 ID의 cleanup을 허용한다',
+    async (condition) => {
+      const fixture = await setup()
+      await fixture.invoke('selectCaptureSource', sources[0].id)
+      const authSnapshot = fixture.auth.getSnapshot()
+      const begun = await fixture.invoke('controlCharacterSearch', {
+        action: 'begin',
+        authRunId: authSnapshot.runId,
+        authRevision: authSnapshot.revision
+      })
+      expect(begun).toMatchObject({ ok: true, snapshot: { captureId: expect.any(String) } })
+      const captureId = (begun as { snapshot: { captureId: string } }).snapshot.captureId
+      const isLogout = condition === 'logout'
+
+      if (isLogout) await fixture.auth.logout()
+      else await fixture.invoke('selectCaptureSource', '')
+
+      expect(await fixture.invoke('controlCharacterSearch', { action: 'read' })).toMatchObject({
+        ok: true,
+        snapshot: { captureId: null }
+      })
+      expect(
+        await fixture.invoke('controlCharacterSearch', { action: 'end', captureId })
+      ).toMatchObject({ ok: true, snapshot: { captureId: null } })
+      expect(await fixture.requestMedia()).toBeNull()
+    }
+  )
+
+  it('source 선택만으로는 begin 이전의 media 요청을 허용하지 않는다', async () => {
+    const fixture = await setup()
+    await fixture.invoke('selectCaptureSource', sources[0].id)
+
+    expect(await fixture.requestMedia()).toBeNull()
+  })
+
+  it.each([
+    { name: '기존 shape', args: [{ slot: 0, nickname: '가나' }] },
+    {
+      name: '알 수 없는 field',
+      args: [
+        {
+          captureId: '00000000-0000-4000-8000-000000000001',
+          slot: 0,
+          observationRevision: 1,
+          nickname: '가나',
+          unexpected: true
+        }
+      ]
+    },
+    {
+      name: '추가 인자',
+      args: [
+        {
+          captureId: '00000000-0000-4000-8000-000000000001',
+          slot: 0,
+          observationRevision: 1,
+          nickname: '가나'
+        },
+        null
+      ]
+    }
+  ])('관측의 $name는 정제된 입력 실패와 빈 현재 snapshot으로 응답한다', async ({ args }) => {
+    const fixture = await setup()
+
+    const result = await fixture.invoke('notifyStableNicknameDetected', ...args)
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'INVALID_SEARCH_COMMAND' },
+      snapshot: {
+        runId: expect.any(String),
+        revision: expect.any(Number),
+        captureId: null,
+        slots: [0, 1, 2, 3].map((slot) => ({
+          slot,
+          observationRevision: 0,
+          requestId: null,
+          nickname: null,
+          state: 'idle',
+          rows: [],
+          error: null
+        }))
+      }
+    })
+    expect(fixture.harness.http.refresh).not.toHaveBeenCalled()
+  })
+
   it('signedOut에서는 source 열거·선택을 거절하고 빈 선택 cleanup은 허용한다', async () => {
     const fixture = await setup(false)
     await expect(fixture.invoke('listCaptureSources')).rejects.toThrow()
