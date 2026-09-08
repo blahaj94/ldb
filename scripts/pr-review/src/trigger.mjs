@@ -32,7 +32,8 @@ async function main() {
 
   const providerId = process.env.REVIEW_PROVIDER ?? 'codex'
   const provider = PROVIDERS.get(providerId)
-  if (!provider) {
+  const isProviderMissing = provider == null
+  if (isProviderMissing) {
     throw new Error(`Unsupported REVIEW_PROVIDER: ${providerId}`)
   }
 

@@ -21,8 +21,11 @@ function requiredEnvironment(name) {
 }
 
 async function writeStepSummary(content) {
-  const hasSummaryPath = Boolean(process.env.GITHUB_STEP_SUMMARY)
-  if (hasSummaryPath) {
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY
+  const hasSummaryPath = summaryPath != null
+  const isSummaryPathEmpty = hasSummaryPath && summaryPath.length === 0
+  const canWriteSummary = hasSummaryPath && !isSummaryPathEmpty
+  if (canWriteSummary) {
     await appendFile(process.env.GITHUB_STEP_SUMMARY, `${content}\n`)
   }
 }
