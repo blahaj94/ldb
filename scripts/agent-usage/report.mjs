@@ -69,8 +69,8 @@ function isObject(value) {
   const isNonNull = value !== null
   const isObjectType = typeof value === 'object'
   const isNotArray = !Array.isArray(value)
-  const isPlainObject = isNonNull && isObjectType && isNotArray
-  return isPlainObject
+  const isNonArrayObject = isNonNull && isObjectType && isNotArray
+  return isNonArrayObject
 }
 
 function hasKeys(value, expected) {
