@@ -16,17 +16,18 @@ const graph = JSON.parse(await readFile(resolve(output, 'notices/bundle-modules.
 const javaScriptFiles = JSON.parse(
   await readFile(resolve(output, 'notices/bundle-files.json'), 'utf8')
 )
-assert.ok(javaScriptFiles.length > 0, 'Generated JS bundle list must not be empty')
+const hasJavaScriptFiles = javaScriptFiles.length > 0
+assert.ok(hasJavaScriptFiles, 'Generated JS bundle list must not be empty')
 for (const file of javaScriptFiles) {
   const code = await readFile(resolve(output, file), 'utf8')
-  assert.ok(
-    code.startsWith('/*! LDB modified SEED source:'),
-    `Distributed modification notice: ${file}`
-  )
+  const hasModificationNotice = code.startsWith('/*! LDB modified SEED source:')
+  assert.ok(hasModificationNotice, `Distributed modification notice: ${file}`)
 }
 const changes = await readFile(resolve(output, 'notices/LDB-MODIFICATIONS.txt'), 'utf8')
-assert.ok(changes.includes('DialogTrigger'))
-assert.ok(changes.includes('header/footer/children'))
+const mentionsDialogTrigger = changes.includes('DialogTrigger')
+assert.ok(mentionsDialogTrigger)
+const mentionsLayoutSlots = changes.includes('header/footer/children')
+assert.ok(mentionsLayoutSlots)
 const cssFiles = files.filter((file) => {
   const isStylesheet = file.endsWith('.css')
   return isStylesheet
@@ -54,7 +55,8 @@ for (const source of provenance.files) {
   const bytes = await readFile(resolve(uiRoot, source.local))
   const isModifiedSource = source.localChanges.length > 0
   if (isModifiedSource) {
-    assert.ok(bytes.toString().includes('/*! LDB 수정:'))
+    const hasSourceModificationNotice = bytes.toString().includes('/*! LDB 수정:')
+    assert.ok(hasSourceModificationNotice)
   }
   const hash = createHash('sha256').update(bytes).digest('hex')
   assert.equal(hash, source.localSha256 ?? source.sha256, source.local)
@@ -74,7 +76,8 @@ if (isLibrary) {
   }
   const code = await readFile(resolve(output, 'index.js'), 'utf8')
   for (const external of ['@seed-design/react', 'react', 'react/jsx-runtime']) {
-    assert.ok(code.includes(`from "${external}"`), `External import: ${external}`)
+    const hasExternalImport = code.includes(`from "${external}"`)
+    assert.ok(hasExternalImport, `External import: ${external}`)
   }
 } else {
   const expectedVersions = {
@@ -104,7 +107,8 @@ if (isLibrary) {
   const styles = await readFile(resolve(output, cssFiles[0]), 'utf8')
   assert.equal(styles.match(/Apple SD Gothic Neo/g)?.length, 1, 'Shared foundation font stack once')
   const licenses = await readFile(resolve(output, 'notices/THIRD-PARTY.txt'), 'utf8')
-  assert.ok(licenses.includes('MIT License'), 'Bundled dependency license text retained')
+  const hasMitLicense = licenses.includes('MIT License')
+  assert.ok(hasMitLicense, 'Bundled dependency license text retained')
 }
 
 console.log(`${mode}: source/notice hashes, dependency boundary and CSS checks passed`)
