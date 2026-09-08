@@ -8,6 +8,7 @@ import { creation, opaque, registration, registryConfiguration } from './login-f
 const crypto = await import('../dist/auth/login/crypto.js')
 const { LoginRegistry } = await import('../dist/auth/login/registry.js')
 const { parseCreation, parseExchange, parseCallback } = await import('../dist/auth/login/input.js')
+const { exchangeExpired } = await import('../dist/auth/login/state.js')
 
 test('app S256 and opaque code hashes have distinct exact inputs', () => {
   const value = opaque()
@@ -69,6 +70,93 @@ test('strict creation/exchange shapes reject injected identity, redirect and non
   ]) {
     assert.throws(() => parseExchange(bad), { code: 'INVALID_AUTH_REQUEST' })
   }
+})
+
+test('field-count rejection does not inspect fields after the count mismatch', () => {
+  let descriptorReads = 0
+  const body = new Proxy(
+    {
+      provider: 'google',
+      clientId: 'desktop',
+      codeChallenge: 'extra',
+      codeChallengeMethod: 'S256'
+    },
+    {
+      getOwnPropertyDescriptor(target, property) {
+        descriptorReads++
+        if (descriptorReads > 5) {
+          throw new Error('field inspection should not run')
+        }
+        return Object.getOwnPropertyDescriptor(target, property)
+      },
+      ownKeys: (target) => [...Reflect.ownKeys(target), 'extra']
+    }
+  )
+  assert.throws(() => parseCreation(body), { code: 'INVALID_AUTH_REQUEST' })
+})
+
+test('creation validation keeps provider and client guards short-circuiting later reads', () => {
+  const providerRejected = new Proxy(creation(opaque()), {
+    get(target, property) {
+      if (property === 'clientId' || property === 'codeChallengeMethod') {
+        throw new Error('later creation field should not be read')
+      }
+      return Reflect.get(target, property)
+    }
+  })
+  providerRejected.provider = 'other'
+  assert.throws(() => parseCreation(providerRejected), { code: 'INVALID_AUTH_REQUEST' })
+
+  const clientRejected = new Proxy(creation(opaque()), {
+    get(target, property) {
+      if (property === 'codeChallengeMethod') {
+        throw new Error('method should not be read')
+      }
+      return Reflect.get(target, property)
+    }
+  })
+  clientRejected.clientId = 'web'
+  assert.throws(() => parseCreation(clientRejected), { code: 'INVALID_AUTH_REQUEST' })
+})
+
+test('exchange validation preserves requestId reads and guard short-circuiting', () => {
+  const verifier = opaque()
+  let requestIdReads = 0
+  const requestIdChanges = {
+    clientId: 'desktop',
+    code: opaque(),
+    codeVerifier: verifier,
+    get requestId() {
+      requestIdReads++
+      return requestIdReads === 1 ? randomUUID() : 'not-uuid'
+    }
+  }
+  assert.throws(() => parseExchange(requestIdChanges), { code: 'INVALID_AUTH_REQUEST' })
+  assert.equal(requestIdReads, 2)
+
+  const invalidRequestId = new Proxy(
+    { requestId: 'not-uuid', clientId: 'desktop', code: opaque(), codeVerifier: verifier },
+    {
+      get(target, property) {
+        if (property === 'clientId') {
+          throw new Error('clientId should not be read')
+        }
+        return Reflect.get(target, property)
+      }
+    }
+  )
+  assert.throws(() => parseExchange(invalidRequestId), { code: 'INVALID_AUTH_REQUEST' })
+})
+
+test('expired requests do not inspect code expiry after request expiry', () => {
+  const checkedAt = new Date('2026-09-06T00:10:00Z')
+  const request = {
+    expiresAt: checkedAt,
+    get codeExpiresAt() {
+      throw new Error('code expiry should not be read')
+    }
+  }
+  assert.equal(exchangeExpired(request, checkedAt), true)
 })
 
 test('callback rejects duplicate/conflicting required fields but ignores standard unknown fields', () => {
