@@ -42,7 +42,7 @@ DataSource.prototype.initialize = async function () {
   }
   this.driver.disconnect = async () => { observe('db.disconnected') }
   if (shouldFailPartially) throw new Error('fixture-sensitive-partial-connect')
-  const shouldWaitForSignal = fault === 'initialize-signal'
+  const shouldWaitForSignal = fault === 'initialize-signal' || fault === 'initialize-signal-hold'
   if (shouldWaitForSignal) {
     // 실제 connecting socket을 대신하는 ref를 유지해야 Node가 await 중 종료하지 않는다.
     const connectionHandle = setTimeout(() => {}, 5000)
@@ -62,6 +62,11 @@ DataSource.prototype.destroy = async function () {
   if (useRealDatabase) return destroy.call(this)
   this.isInitialized = false
   observe('db.disconnected')
+  const shouldHoldAfterCleanup = fault === 'initialize-signal-hold'
+  if (shouldHoldAfterCleanup) {
+    // 정리 뒤에도 test 소유 handle을 남겨 취소되지 않은 시작 종료 timer를 관측한다.
+    setTimeout(() => observe('test.keepalive-finished'), 1300)
+  }
 }
 
 const create = NestFactory.create.bind(NestFactory)
