@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-08
 ---
 
 # Change Control
@@ -59,7 +59,7 @@ Rule 변경이 필요하면 AI는 다음 순서로 진행한다.
 1. 변경 이유, 영향, 대안을 사용자에게 설명한다.
 2. Draft PR의 첫 commit으로 Rule 변경안만 올린다.
 3. Draft PR에서 사용자의 명시적인 `승인` comment를 기다린다.
-4. 승인 후 같은 PR에 Red, Green, Reference commit을 순서대로 추가한다.
+4. 승인 후 같은 PR에서 [`testing.md`의 Red-Green workflow](testing.md#red-green-workflow)에 따라 필요한 검증·구현·Reference commit 순서로 진행한다.
 
 승인 전 Rule 변경안은 proposal이며 implementation authority가 아니다.
 
@@ -102,7 +102,7 @@ Issue의 현재 실행 contract와 PR의 실제 변경·evidence는 [`Execution 
 같은 PR 안에서 필요한 만큼 commit을 나누되 다음 의미 순서를 지킨다.
 
 1. `docs:` 승인 대상 Rule 변경안이 있을 때만
-2. `test:` 아직 구현되지 않은 behavior를 증명하는 Red test
+2. `test:` test 변경이 필요할 때. 구현 전 검증과 commit 적용 조건은 [`testing.md`의 Red-Green workflow](testing.md#red-green-workflow)를 따른다.
 3. `feat:` 또는 `refactor:` Green implementation
 4. 추가 `test:`, `docs:` Reference 갱신 등
 
