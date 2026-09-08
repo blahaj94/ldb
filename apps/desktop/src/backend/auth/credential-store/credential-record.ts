@@ -36,7 +36,9 @@ function sameContext(actual: CredentialContext, expected: CredentialContext): bo
 
 export function parseStoredJson(bytes: Uint8Array): unknown {
   const isWithinLimit = bytes.byteLength <= MAX_RECORD_BYTES
-  if (!isWithinLimit) return null
+  if (!isWithinLimit) {
+    return null
+  }
   try {
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
   } catch {
@@ -46,7 +48,9 @@ export function parseStoredJson(bytes: Uint8Array): unknown {
 
 export function readCiphertext(bytes: Uint8Array, context: CredentialContext): Buffer | null {
   const parsed = recordSchema.safeParse(parseStoredJson(bytes))
-  if (!parsed.success) return null
+  if (!parsed.success) {
+    return null
+  }
   const hasMatchingContext = sameContext(parsed.data, context)
   const ciphertext = Buffer.from(parsed.data.ciphertext, 'base64')
   const isNonempty = ciphertext.byteLength > 0
@@ -57,7 +61,9 @@ export function readCiphertext(bytes: Uint8Array, context: CredentialContext): B
 
 export function readRefreshToken(plaintext: string, context: CredentialContext): string | null {
   const parsed = payloadSchema.safeParse(parseStoredJson(Buffer.from(plaintext, 'utf8')))
-  if (!parsed.success) return null
+  if (!parsed.success) {
+    return null
+  }
   const hasMatchingContext = sameContext(parsed.data, context)
   return hasMatchingContext ? parsed.data.refreshToken : null
 }

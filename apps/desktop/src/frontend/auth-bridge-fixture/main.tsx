@@ -12,7 +12,9 @@ declare global {
 }
 const root = document.getElementById('root')
 const hasRoot = root != null
-if (!hasRoot) throw new Error('Auth fixture root missing')
+if (!hasRoot) {
+  throw new Error('Auth fixture root missing')
+}
 createRoot(root).render(
   <StrictMode>
     <AuthBridge api={window.auth} />

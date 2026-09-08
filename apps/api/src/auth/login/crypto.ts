@@ -1,4 +1,10 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  timingSafeEqual
+} from 'node:crypto'
 import { LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure } from '../../errors/login.js'
 import type { AuthLoginRequest } from '../../database/schemas/auth-login-requests.js'
@@ -37,13 +43,16 @@ export function challenge(verifier: string): string {
 }
 
 export function equalHash(storedHash: Buffer | null, candidateHash: Buffer): boolean {
-  return storedHash !== null &&
+  return (
+    storedHash !== null &&
     storedHash.length === candidateHash.length &&
     timingSafeEqual(storedHash, candidateHash)
+  )
 }
 
 type PkceContext = Pick<AuthLoginRequest, 'id' | 'provider' | 'purpose'>
-type SealedPkce = Pick<AuthLoginRequest,
+type SealedPkce = Pick<
+  AuthLoginRequest,
   'providerPkceCiphertext' | 'providerPkceIv' | 'providerPkceTag' | 'providerPkceKeyId'
 >
 
@@ -82,7 +91,7 @@ export class ProviderPkceKeys {
       // Active key는 생성자에서 확인했다. 매 암호화마다 독립적인 96-bit IV를 만든다.
       const iv = randomBytes(12)
       const cipher = createCipheriv('aes-256-gcm', this.#keys.get(this.#activeKeyId)!, iv, {
-        authTagLength: 16,
+        authTagLength: 16
       })
       cipher.setAAD(encodePkceContext(context))
       const ciphertext = Buffer.concat([cipher.update(verifier, 'ascii'), cipher.final()])
@@ -91,7 +100,7 @@ export class ProviderPkceKeys {
         providerPkceCiphertext: ciphertext,
         providerPkceIv: iv,
         providerPkceTag: cipher.getAuthTag(),
-        providerPkceKeyId: this.#activeKeyId,
+        providerPkceKeyId: this.#activeKeyId
       }
     } catch {
       throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
@@ -107,13 +116,13 @@ export class ProviderPkceKeys {
 
       // 저장 당시의 key ID와 동일한 AAD/tag로만 verifier를 복원한다.
       const decipher = createDecipheriv('aes-256-gcm', key, row.providerPkceIv, {
-        authTagLength: 16,
+        authTagLength: 16
       })
       decipher.setAAD(encodePkceContext(row))
       decipher.setAuthTag(row.providerPkceTag)
       const verifierBytes = Buffer.concat([
         decipher.update(row.providerPkceCiphertext),
-        decipher.final(),
+        decipher.final()
       ])
       const verifier = verifierBytes.toString('ascii')
       decodeOpaque(verifier)

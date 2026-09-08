@@ -61,7 +61,9 @@ app
     window.webContents.on('will-navigate', (event) => event.preventDefault())
     window.webContents.on('console-message', (_event, _level, message) => {
       const hasCanary = canaries.some((canary) => message.includes(canary))
-      if (hasCanary) failed = true
+      if (hasCanary) {
+        failed = true
+      }
     })
     const completeLogin = async (): Promise<void> => {
       await coordinator.handleReturnUrl(
@@ -92,7 +94,9 @@ app
     if (isAuto) {
       try {
         await smoke(window, coordinator, effects)
-        if (failed) throw new Error('Fixture canary detected')
+        if (failed) {
+          throw new Error('Fixture canary detected')
+        }
         console.log('Auth bridge fixture smoke PASS')
         app.quit()
       } catch {

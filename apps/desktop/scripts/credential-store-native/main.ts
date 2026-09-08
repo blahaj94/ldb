@@ -12,7 +12,9 @@ const phase = process.env.LDB_CREDENTIAL_NATIVE_PHASE ?? ''
 const hasTestName = /^LDB-Credential-Test-[0-9a-f-]{36}$/.test(appName)
 const hasAbsoluteProfile = isAbsolute(profile)
 const hasValidInput = hasTestName && hasAbsoluteProfile
-if (!hasValidInput) app.exit(1)
+if (!hasValidInput) {
+  app.exit(1)
+}
 
 // Electron/Chromium의 Keychain service/account 초기화보다 먼저 고유 시험 identity를 고정한다.
 app.setName(appName)

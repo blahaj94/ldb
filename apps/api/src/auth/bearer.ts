@@ -6,7 +6,9 @@ export function readBearerToken(rawHeaders: readonly string[]): string | undefin
     return isAuthorization ? [rawHeaders[index + 1]] : []
   })
   const hasOneAuthorization = authorizations.length === 1
-  if (!hasOneAuthorization) return undefined
+  if (!hasOneAuthorization) {
+    return undefined
+  }
 
   const bearer = /^Bearer ([^\s,]+)$/.exec(authorizations[0])
   return bearer?.[1]

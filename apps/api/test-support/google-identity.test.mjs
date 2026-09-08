@@ -6,7 +6,12 @@ import { decodeJwt, SignJWT } from 'jose'
 import { createGoogleProviderVerifier } from '../dist/auth/google/index.js'
 import { registration } from './login-fixtures.mjs'
 import {
-  adapterConfiguration, hashNonce, providerFailure, signingKey, tokenResponse, verificationInput,
+  adapterConfiguration,
+  hashNonce,
+  providerFailure,
+  signingKey,
+  tokenResponse,
+  verificationInput
 } from './google-fixtures.mjs'
 
 const key = await signingKey()
@@ -14,7 +19,10 @@ const key = await signingKey()
 test('Google RS256 returns only case-sensitive provider/subject and discards profile/tokens', async () => {
   for (const issuer of ['https://accounts.google.com', 'accounts.google.com']) {
     const f = verificationInput()
-    const response = await tokenResponse(key, f.nonce, { iss: issuer, azp: registration().expectedAudience })
+    const response = await tokenResponse(key, f.nonce, {
+      iss: issuer,
+      azp: registration().expectedAudience
+    })
     const transport = adapterConfiguration(key, response)
     const verify = createGoogleProviderVerifier(transport.configuration)
     const identity = await verify(f.input)
@@ -27,7 +35,12 @@ test('Google RS256 returns only case-sensitive provider/subject and discards pro
     const tokenRequest = transport.requests[0]
     assert.equal(tokenRequest.url, transport.configuration.registrations[0].tokenEndpoint)
     assert.deepEqual(Object.keys(tokenRequest.fields).sort(), [
-      'client_id', 'client_secret', 'code', 'code_verifier', 'grant_type', 'redirect_uri',
+      'client_id',
+      'client_secret',
+      'code',
+      'code_verifier',
+      'grant_type',
+      'redirect_uri'
     ])
     assert.equal(tokenRequest.fields.grant_type, 'authorization_code')
     const hasProviderCode = tokenRequest.fields.code === f.input.code
@@ -54,7 +67,7 @@ test('Google RS256 returns only case-sensitive provider/subject and discards pro
     assert.deepEqual(transport.secrets[0], {
       version: f.input.snapshot.version,
       reference: f.input.snapshot.providerSecretRef,
-      signal: f.input.signal,
+      signal: f.input.signal
     })
   }
 })
@@ -82,7 +95,7 @@ test('Google signed claims reject wrong canonical identity, audience, time, nonc
     ['missing nonce', { nonce: undefined }],
     ['wrong nonce', { nonce: Buffer.alloc(32).toString('base64url') }],
     ['wrong access hash', { at_hash: Buffer.alloc(16).toString('base64url') }],
-    ['access hash type', { at_hash: 123 }],
+    ['access hash type', { at_hash: 123 }]
   ]
   for (const [name, changes] of claims) {
     await t.test(name, async () => {
@@ -101,7 +114,11 @@ test('nonce hashes canonical decoded 32 bytes, never PKCE ASCII text', async () 
     const transport = adapterConfiguration(key, await tokenResponse(key, invalidNonce))
     await providerFailure(createGoogleProviderVerifier(transport.configuration)(f.input))
   }
-  for (const invalidHash of [null, Buffer.alloc(31), createHash('sha256').update(nonce, 'ascii').digest()]) {
+  for (const invalidHash of [
+    null,
+    Buffer.alloc(31),
+    createHash('sha256').update(nonce, 'ascii').digest()
+  ]) {
     const f = verificationInput()
     f.input.nonceHash = invalidHash
     const transport = adapterConfiguration(key, await tokenResponse(key, nonce))
@@ -113,7 +130,10 @@ test('optional at_hash may be absent; present hash requires exact canonical valu
   const f = verificationInput()
   const response = await tokenResponse(key, f.nonce, { at_hash: undefined, sub: 'A'.repeat(255) })
   const transport = adapterConfiguration(key, response)
-  assert.equal((await createGoogleProviderVerifier(transport.configuration)(f.input)).subject.length, 255)
+  assert.equal(
+    (await createGoogleProviderVerifier(transport.configuration)(f.input)).subject.length,
+    255
+  )
   const signed = await tokenResponse(key, f.nonce)
   for (const accessToken of [undefined, '', 'wrong-access-token']) {
     const invalid = adapterConfiguration(key, { ...signed, access_token: accessToken })
@@ -127,9 +147,13 @@ test('at_hash rejects padded and noncanonical encodings even when they decode to
   const payload = decodeJwt(response.id_token)
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
   const last = alphabet.indexOf(payload.at_hash.at(-1))
-  for (const atHash of [`${payload.at_hash}=`, `${payload.at_hash.slice(0, -1)}${alphabet[last | 1]}`]) {
+  for (const atHash of [
+    `${payload.at_hash}=`,
+    `${payload.at_hash.slice(0, -1)}${alphabet[last | 1]}`
+  ]) {
     const idToken = await new SignJWT({ ...payload, at_hash: atHash })
-      .setProtectedHeader({ alg: 'RS256', kid: key.kid }).sign(key.privateKey)
+      .setProtectedHeader({ alg: 'RS256', kid: key.kid })
+      .sign(key.privateKey)
     const invalid = adapterConfiguration(key, { ...response, id_token: idToken })
     await providerFailure(createGoogleProviderVerifier(invalid.configuration)(f.input))
   }

@@ -22,7 +22,9 @@ export async function withCleanupDeletionHeld(source, cleanup, table, id, operat
       const hasOwner = owner != null
       const isOtherRunner = runner !== owner
       const isWaitingLock = isTargetRead && hasWriteLock && hasOwner && isOtherRunner
-      if (isWaitingLock) waiter.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
+      if (isWaitingLock) {
+        waiter.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
+      }
       const result = await run()
       if (isDeletion) {
         owner = runner
@@ -30,7 +32,7 @@ export async function withCleanupDeletionHeld(source, cleanup, table, id, operat
         await release.promise
       }
       return result
-    },
+    }
   })
   const pending = settled(cleanup(source))
   try {
@@ -48,10 +50,13 @@ export async function cleanupWaitingOn(source, cleanup, table, id, blocker, unlo
   const observed = Promise.withResolvers()
   const restore = instrument(source, {
     query: async ({ sql, parameters, query, run }) => {
-      const isTargetLock = targets(sql, parameters, 'SELECT', table, id) && sql.includes('FOR UPDATE')
-      if (isTargetLock) observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
+      const isTargetLock =
+        targets(sql, parameters, 'SELECT', table, id) && sql.includes('FOR UPDATE')
+      if (isTargetLock) {
+        observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
+      }
       return run()
-    },
+    }
   })
   const pending = settled(cleanup(source))
   try {

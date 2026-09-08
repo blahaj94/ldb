@@ -34,7 +34,9 @@ function isAcceptedObservation(value: unknown, response: unknown): boolean {
 
 function syntheticSlotMask(value: unknown): number {
   const isObject = value != null && typeof value === 'object'
-  if (!isObject) return 0
+  if (!isObject) {
+    return 0
+  }
   const { slot, nickname } = value as { slot?: unknown; nickname?: unknown }
   const isSlotInteger = typeof slot === 'number' && Number.isInteger(slot)
   const isSlotInRange = isSlotInteger && slot >= 0 && slot < 4
@@ -73,7 +75,9 @@ export function registerObservedCapture(
         handler(request, (streams) => {
           const hasStreams = streams != null
           const isAllowed = hasStreams && streams.video != null
-          if (isAllowed) counts.displayAllowed += 1
+          if (isAllowed) {
+            counts.displayAllowed += 1
+          }
           callback(streams)
         })
       },

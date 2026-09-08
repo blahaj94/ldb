@@ -6,21 +6,29 @@ import type { DataSource } from 'typeorm'
 export async function generateMigration(
   name: string,
   createDataSource: () => DataSource,
-  directory: string,
+  directory: string
 ): Promise<string> {
   let dataSource: DataSource | undefined
   try {
-    if (!/^[A-Z][A-Za-z0-9]{0,79}$/.test(name)) throw new Error('Invalid migration name')
+    if (!/^[A-Z][A-Za-z0-9]{0,79}$/.test(name)) {
+      throw new Error('Invalid migration name')
+    }
     dataSource = createDataSource()
     await dataSource.initialize()
     const { upQueries, downQueries } = await dataSource.driver.createSchemaBuilder().log()
     await dataSource.destroy()
-    if (upQueries.length === 0) return 'Database schema is current'
+    if (upQueries.length === 0) {
+      return 'Database schema is current'
+    }
     const timestamp = Date.now()
     const className = `${name}${timestamp}`
-    const statements = (queries: typeof upQueries) => queries.map(({ query, parameters }) =>
-      `    await queryRunner.query(${JSON.stringify(query)}${parameters === undefined ? '' : `, ${JSON.stringify(parameters)}`})`,
-    ).join('\n')
+    const statements = (queries: typeof upQueries) =>
+      queries
+        .map(
+          ({ query, parameters }) =>
+            `    await queryRunner.query(${JSON.stringify(query)}${parameters === undefined ? '' : `, ${JSON.stringify(parameters)}`})`
+        )
+        .join('\n')
     const content = `import type { MigrationInterface, QueryRunner } from 'typeorm'
 
 export class ${className} implements MigrationInterface {
@@ -42,7 +50,11 @@ ${statements([...downQueries].reverse())}
     return `Database migration generated: ${filename}`
   } catch {
     if (dataSource?.isInitialized) {
-      try { await dataSource.destroy() } catch { /* 정제된 동일 오류로 처리한다. */ }
+      try {
+        await dataSource.destroy()
+      } catch {
+        /* 정제된 동일 오류로 처리한다. */
+      }
     }
     const error = new Error('Database migration generation failed')
     error.stack = `${error.name}: ${error.message}`

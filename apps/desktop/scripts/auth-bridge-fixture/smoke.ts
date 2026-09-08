@@ -8,9 +8,13 @@ async function until(condition: () => Promise<boolean>): Promise<void> {
   const deadline = performance.now() + 5_000
   while (true) {
     const hasTime = performance.now() < deadline
-    if (!hasTime) break
+    if (!hasTime) {
+      break
+    }
     const isReady = await condition()
-    if (isReady) return
+    if (isReady) {
+      return
+    }
     await delay(20)
   }
   throw new Error('Fixture observation deadline exceeded')
@@ -42,7 +46,9 @@ export async function smoke(
     (await evaluate('window.auth.getAuthState()')) as AuthSnapshot
   const noCanary = (value: unknown): void => {
     const encoded = JSON.stringify(value)
-    for (const canary of canaries) assert.equal(encoded.includes(canary), false)
+    for (const canary of canaries) {
+      assert.equal(encoded.includes(canary), false)
+    }
   }
 
   console.log('Auth bridge fixture step: initial')

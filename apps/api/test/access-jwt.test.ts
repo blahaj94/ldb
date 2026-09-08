@@ -1,14 +1,33 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CompactSign, decodeJwt, decodeProtectedHeader, importPKCS8, importSPKI, jwtVerify } from 'jose'
+import {
+  CompactSign,
+  decodeJwt,
+  decodeProtectedHeader,
+  importPKCS8,
+  importSPKI,
+  jwtVerify
+} from 'jose'
 import { createAccessJwtIssuer, createAccessJwtVerifier } from '../src/auth/access-jwt/index.js'
 import { AccessJwtError } from '../src/auth/access-jwt/errors.js'
 import {
-  active, claims, configuration, header, input, now, previous, sessionId, signed, tokenId, userId,
+  active,
+  claims,
+  configuration,
+  header,
+  input,
+  now,
+  previous,
+  sessionId,
+  signed,
+  tokenId,
+  userId
 } from './access-jwt.fixtures.js'
 
-const isInvalidToken = (error: unknown) => error instanceof AccessJwtError &&
-  error.code === 'INVALID_ACCESS_JWT' && error.message === 'Invalid access JWT' &&
+const isInvalidToken = (error: unknown) =>
+  error instanceof AccessJwtError &&
+  error.code === 'INVALID_ACCESS_JWT' &&
+  error.message === 'Invalid access JWT' &&
   !Object.hasOwn(error, 'cause')
 
 test('발급 token은 승인된 최소 claims만 담고 jose와 독립 verifier로 검증된다', async () => {
@@ -22,13 +41,22 @@ test('발급 token은 승인된 최소 claims만 담고 jose와 독립 verifier�
   assert.equal(payload.exp, now + 900)
   assert.equal(result.issuedAt, now)
   assert.equal(result.expiresAt, now + 900)
-  assert.match(payload.jti as string, /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/)
+  assert.match(
+    payload.jti as string,
+    /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/
+  )
   await jwtVerify(result.accessToken, await importSPKI(active.publicKeyPem, 'ES256'), {
-    issuer: configuration().issuer, audience: configuration().audience,
-    algorithms: ['ES256'], currentDate: new Date(now * 1000),
+    issuer: configuration().issuer,
+    audience: configuration().audience,
+    algorithms: ['ES256'],
+    currentDate: new Date(now * 1000)
   })
   assert.deepEqual(await verify(result.accessToken, now), {
-    userId, sessionId, issuedAt: now, expiresAt: now + 900, tokenId: payload.jti,
+    userId,
+    sessionId,
+    issuedAt: now,
+    expiresAt: now + 900,
+    tokenId: payload.jti
   })
   const another = await issue(input())
   assert.ok(payload.jti !== decodeJwt(another.accessToken).jti)
@@ -52,7 +80,11 @@ test('부호가 유효한 이전 key token도 등록되어 있는 동안 검증�
   const verify = await createAccessJwtVerifier(configuration())
   const token = await signed(claims(), { ...header(), kid: previous.kid }, previous)
   assert.deepEqual(await verify(token, now), {
-    userId, sessionId, issuedAt: now, expiresAt: now + 900, tokenId,
+    userId,
+    sessionId,
+    issuedAt: now,
+    expiresAt: now + 900,
+    tokenId
   })
   const config = configuration()
   config.verificationKeys = [config.verificationKeys[0]]
@@ -63,13 +95,22 @@ test('부호가 유효한 이전 key token도 등록되어 있는 동안 검증�
 test('발급 입력은 UUID와 UTC 정수 초를 요구하고 만료된 session은 발급하지 않는다', async () => {
   const issue = await createAccessJwtIssuer(configuration())
   const cases = [
-    { userId: 'invalid' }, { sessionId: '' }, { issuedAt: now + 0.1 },
-    { idleDeadline: now + 0.1 }, { issuedAt: NaN }, { idleDeadline: Infinity },
-    { idleDeadline: now }, { idleDeadline: now - 1 }, { issuedAt: Number.MAX_SAFE_INTEGER },
+    { userId: 'invalid' },
+    { sessionId: '' },
+    { issuedAt: now + 0.1 },
+    { idleDeadline: now + 0.1 },
+    { issuedAt: NaN },
+    { idleDeadline: Infinity },
+    { idleDeadline: now },
+    { idleDeadline: now - 1 },
+    { issuedAt: Number.MAX_SAFE_INTEGER }
   ]
   for (const value of cases) {
-    await assert.rejects(issue({ ...input(), ...value }), (error: unknown) =>
-      error instanceof AccessJwtError && error.code === 'INVALID_ACCESS_JWT_INPUT')
+    await assert.rejects(
+      issue({ ...input(), ...value }),
+      (error: unknown) =>
+        error instanceof AccessJwtError && error.code === 'INVALID_ACCESS_JWT_INPUT'
+    )
   }
 })
 
@@ -77,14 +118,23 @@ test('token 변조·다른 key 서명·malformed compact 입력을 거절한다'
   const verify = await createAccessJwtVerifier(configuration())
   const token = await signed()
   const parts = token.split('.')
-  const changedPayload = Buffer.from(JSON.stringify({ ...claims(), sub: sessionId })).toString('base64url')
+  const changedPayload = Buffer.from(JSON.stringify({ ...claims(), sub: sessionId })).toString(
+    'base64url'
+  )
   const signature = Buffer.from(parts[2], 'base64url')
   signature[0] ^= 1
   const wrongKey = await signed(claims(), header(), previous)
   for (const candidate of [
     `${parts[0]}.${changedPayload}.${parts[2]}`,
     `${parts[0]}.${parts[1]}.${signature.toString('base64url')}`,
-    wrongKey, '', 'broken', 'a.b.c', `${token}.extra`, null, 42, {},
+    wrongKey,
+    '',
+    'broken',
+    'a.b.c',
+    `${token}.extra`,
+    null,
+    42,
+    {}
   ]) {
     await assert.rejects(verify(candidate, now), isInvalidToken)
   }
@@ -97,7 +147,10 @@ for (const field of ['iss', 'aud', 'sub', 'sid', 'iat', 'exp', 'jti']) {
     delete missing[field]
     await assert.rejects(verify(await signed(missing), now), isInvalidToken)
     for (const value of [null, {}, [], true]) {
-      await assert.rejects(verify(await signed({ ...claims(), [field]: value }), now), isInvalidToken)
+      await assert.rejects(
+        verify(await signed({ ...claims(), [field]: value }), now),
+        isInvalidToken
+      )
     }
   })
 }
@@ -107,13 +160,20 @@ const invalidClaims: [string, Record<string, unknown>][] = [
   ['audience 불일치', { aud: 'urn:other:api' }],
   ['audience array', { aud: [configuration().audience] }],
   ['복수 audience', { aud: [configuration().audience, 'other'] }],
-  ['sub UUID', { sub: 'provider-subject' }], ['sid UUID', { sid: 'invalid' }],
-  ['jti UUID', { jti: 'invalid' }], ['소수 iat', { iat: now - 0.1 }],
-  ['소수 exp', { exp: now + 899.9 }], ['문자열 iat', { iat: String(now) }],
-  ['문자열 exp', { exp: String(now + 900) }], ['미래 iat', { iat: now + 1 }],
-  ['동일 iat exp', { iat: now, exp: now }], ['음수 lifetime', { exp: now - 1 }],
-  ['초과 lifetime', { exp: now + 901 }], ['unsafe iat', { iat: -Number.MAX_SAFE_INTEGER - 1 }],
-  ['과거 nbf', { nbf: now - 1 }], ['미래 nbf', { nbf: now + 1 }],
+  ['sub UUID', { sub: 'provider-subject' }],
+  ['sid UUID', { sid: 'invalid' }],
+  ['jti UUID', { jti: 'invalid' }],
+  ['소수 iat', { iat: now - 0.1 }],
+  ['소수 exp', { exp: now + 899.9 }],
+  ['문자열 iat', { iat: String(now) }],
+  ['문자열 exp', { exp: String(now + 900) }],
+  ['미래 iat', { iat: now + 1 }],
+  ['동일 iat exp', { iat: now, exp: now }],
+  ['음수 lifetime', { exp: now - 1 }],
+  ['초과 lifetime', { exp: now + 901 }],
+  ['unsafe iat', { iat: -Number.MAX_SAFE_INTEGER - 1 }],
+  ['과거 nbf', { nbf: now - 1 }],
+  ['미래 nbf', { nbf: now + 1 }]
 ]
 for (const [label, values] of invalidClaims) {
   test(`서명된 잘못된 claims 거절: ${label}`, async () => {
@@ -123,13 +183,24 @@ for (const [label, values] of invalidClaims) {
 }
 
 for (const values of [
-  { typ: undefined }, { typ: 'JWT' }, { typ: 'AT+JWT' }, { typ: 'application/at+jwt' },
-  { typ: 42 }, { kid: undefined }, { kid: '' }, { kid: 'unknown' }, { kid: 42 },
-  { kid: 'toString' }, { kid: '__proto__' },
+  { typ: undefined },
+  { typ: 'JWT' },
+  { typ: 'AT+JWT' },
+  { typ: 'application/at+jwt' },
+  { typ: 42 },
+  { kid: undefined },
+  { kid: '' },
+  { kid: 'unknown' },
+  { kid: 42 },
+  { kid: 'toString' },
+  { kid: '__proto__' }
 ]) {
   test(`잘못된 protected header 거절: ${JSON.stringify(values)}`, async () => {
     const verify = await createAccessJwtVerifier(configuration())
-    await assert.rejects(verify(await signed(claims(), { ...header(), ...values }), now), isInvalidToken)
+    await assert.rejects(
+      verify(await signed(claims(), { ...header(), ...values }), now),
+      isInvalidToken
+    )
   })
 }
 
@@ -146,9 +217,18 @@ test('비허용 alg와 token 제공 key/URL은 등록 key를 대체하지 못한
     const altered = Buffer.from(JSON.stringify({ ...header(), alg })).toString('base64url')
     await assert.rejects(verify(`${altered}.${parts[1]}.${parts[2]}`, now), isInvalidToken)
   }
-  await assert.rejects(verify(await signed(claims(), {
-    ...header(), kid: 'unknown', jku: 'https://invalid.example/jwks', jwk: { kty: 'EC' },
-  }), now), isInvalidToken)
+  await assert.rejects(
+    verify(
+      await signed(claims(), {
+        ...header(),
+        kid: 'unknown',
+        jku: 'https://invalid.example/jwks',
+        jwk: { kty: 'EC' }
+      }),
+      now
+    ),
+    isInvalidToken
+  )
 })
 
 test('미지원 crit 및 JSON object가 아닌 payload를 거절한다', async () => {
@@ -169,6 +249,10 @@ test('verify 시간은 server의 정수 초이고 추가 claim은 principal에 �
     await assert.rejects(verify(token, badNow), isInvalidToken)
   }
   assert.deepEqual(await verify(token, now), {
-    userId, sessionId, issuedAt: now, expiresAt: now + 900, tokenId,
+    userId,
+    sessionId,
+    issuedAt: now,
+    expiresAt: now + 900,
+    tokenId
   })
 })

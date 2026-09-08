@@ -31,20 +31,20 @@ export function logoutFixture() {
     createdAt: new Date('2026-08-01T00:00:00.000Z'),
     lastActiveAt: new Date('2026-09-05T00:00:00.000Z'),
     revokedAt: null as Date | null,
-    revokedReason: null as 'logout' | 'refresh_reuse' | null,
+    revokedReason: null as 'logout' | 'refresh_reuse' | null
   }
   const token = {
     tokenHash: refreshTokenHash(rawToken),
     sessionId: session.id,
     issuedAt: new Date('2026-09-05T00:00:00.000Z'),
-    consumedAt: null as Date | null,
+    consumedAt: null as Date | null
   }
   const state: FixtureState = {
     tokenHintMissing: false,
     sessionHintMissing: false,
     userMissing: false,
     sessionMissing: false,
-    tokenMissing: false,
+    tokenMissing: false
   }
   const events: string[] = []
 
@@ -53,7 +53,7 @@ export function logoutFixture() {
       events.push('user-lock')
       const isUserMissing = state.userMissing
       return isUserMissing ? null : user
-    },
+    }
   }
   const sessions = {
     findOneBy: async () => {
@@ -70,7 +70,7 @@ export function logoutFixture() {
       events.push('revoke')
       session.revokedAt = update.revokedAt
       session.revokedReason = update.revokedReason
-    },
+    }
   }
   const refresh = {
     findOneBy: async () => {
@@ -82,25 +82,29 @@ export function logoutFixture() {
       events.push('refresh-lock')
       const isTokenMissing = state.tokenMissing
       return isTokenMissing ? null : token
-    },
+    }
   }
   const manager = {
     getRepository: (schema: { options: { name: string } }) => {
       const isUserSchema = schema.options.name === 'User'
-      if (isUserSchema) return users
+      if (isUserSchema) {
+        return users
+      }
       const isSessionSchema = schema.options.name === 'AuthSession'
-      if (isSessionSchema) return sessions
+      if (isSessionSchema) {
+        return sessions
+      }
       return refresh
     },
     query: async () => {
       events.push('fresh-time')
       return [{ now: checkedAt }]
-    },
+    }
   }
   const dataSource = {
     transaction: async (
       isolation: string,
-      operation: (transactionManager: typeof manager) => Promise<void>,
+      operation: (transactionManager: typeof manager) => Promise<void>
     ) => {
       events.push('begin')
       const hasTransactionFailure = state.transactionFailure != null
@@ -122,7 +126,7 @@ export function logoutFixture() {
       if (!hasExpectedIsolation) {
         throw new Error('unexpected isolation')
       }
-    },
+    }
   } as unknown as DataSource
 
   return { dataSource, events, rawToken, session, state, token, user }

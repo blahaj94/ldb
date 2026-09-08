@@ -21,13 +21,17 @@ function decodeQueryPart(raw: string): string {
 function decodeRawQuery(originalUrl: string): DecodedQueryPair[] {
   const questionMarkIndex = originalUrl.indexOf('?')
   const hasQuery = questionMarkIndex >= 0
-  if (!hasQuery) throw neopleSearchFailure('query')
+  if (!hasQuery) {
+    throw neopleSearchFailure('query')
+  }
 
   // Map으로 바꾸기 전에 모든 pair를 보존해야 decoded key의 중복을 검증할 수 있다.
   const pairs: DecodedQueryPair[] = []
   for (const component of originalUrl.slice(questionMarkIndex + 1).split('&')) {
     const isEmptyComponent = component.length === 0
-    if (isEmptyComponent) throw neopleSearchFailure('query')
+    if (isEmptyComponent) {
+      throw neopleSearchFailure('query')
+    }
     const equalsIndex = component.indexOf('=')
     const hasEquals = equalsIndex >= 0
     const key = decodeQueryPart(hasEquals ? component.slice(0, equalsIndex) : component)
@@ -43,31 +47,41 @@ function validateSearchQuery(pairs: readonly DecodedQueryPair[]): NeopleCharacte
     const isAllowedKey = ['characterName', 'serverId', 'limit'].includes(key)
     const isDuplicate = values.has(key)
     const isInvalidKey = !isAllowedKey || isDuplicate
-    if (isInvalidKey) throw neopleSearchFailure('query')
+    if (isInvalidKey) {
+      throw neopleSearchFailure('query')
+    }
     values.set(key, value)
   }
 
   const characterName = values.get('characterName')
   const hasCharacterName = characterName != null
-  if (!hasCharacterName) throw neopleSearchFailure('query')
+  if (!hasCharacterName) {
+    throw neopleSearchFailure('query')
+  }
   const codePointCount = [...characterName].length
   const hasOuterWhitespace = characterName !== characterName.trim()
   const isLengthValid = codePointCount >= 2 && codePointCount <= 12
   const isNameInvalid = hasOuterWhitespace || !isLengthValid
-  if (isNameInvalid) throw neopleSearchFailure('query')
+  if (isNameInvalid) {
+    throw neopleSearchFailure('query')
+  }
 
   const serverId = values.get('serverId') ?? 'all'
   const isAllServers = serverId === 'all'
   const isKnownServer = NEOPLE_SERVER_NAMES.has(serverId)
   const isServerValid = isAllServers || isKnownServer
-  if (!isServerValid) throw neopleSearchFailure('query')
+  if (!isServerValid) {
+    throw neopleSearchFailure('query')
+  }
 
   const rawLimit = values.get('limit') ?? '10'
   const isDecimal = /^[0-9]+$/.test(rawLimit)
   const limit = Number(rawLimit)
   const isInRange = limit >= 1 && limit <= 200
   const isLimitValid = isDecimal && isInRange
-  if (!isLimitValid) throw neopleSearchFailure('query')
+  if (!isLimitValid) {
+    throw neopleSearchFailure('query')
+  }
 
   return { characterName, serverId, limit }
 }

@@ -11,8 +11,8 @@ import { digest, fixture, stored } from './refresh-fixtures.mjs'
 const unavailableBody = {
   error: {
     code: 'AUTH_UNAVAILABLE',
-    message: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
-  },
+    message: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+  }
 }
 
 const loginService = {
@@ -27,14 +27,14 @@ const loginService = {
   },
   exchange: async () => {
     throw new Error('login is outside this scenario')
-  },
+  }
 }
 
 function post(base, path, body) {
   return fetch(`${base}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   })
 }
 
@@ -50,13 +50,15 @@ function postChunks(base, path, chunks, headers = {}) {
           resolve({
             status: response.statusCode,
             headers: response.headers,
-            body: Buffer.concat(body).toString('utf8'),
+            body: Buffer.concat(body).toString('utf8')
           })
         })
-      },
+      }
     )
     httpRequest.on('error', reject)
-    for (const chunk of chunks) httpRequest.write(chunk)
+    for (const chunk of chunks) {
+      httpRequest.write(chunk)
+    }
     httpRequest.end()
   })
 }
@@ -85,7 +87,7 @@ async function normalRefreshAndLogout(source) {
 
   await withSessionApp(f, async (base) => {
     const refreshed = await post(base, '/auth/refresh', {
-      refreshToken: f.initial.refreshToken,
+      refreshToken: f.initial.refreshToken
     })
     assert.equal(refreshed.status, 200)
     assert.equal(refreshed.headers.get('cache-control'), 'no-store')
@@ -95,7 +97,7 @@ async function normalRefreshAndLogout(source) {
       'accessTokenExpiresAt',
       'refreshToken',
       'sessionExpiresAt',
-      'tokenType',
+      'tokenType'
     ])
     assert.notEqual(tokens.refreshToken, f.initial.refreshToken)
     const principal = await f.verifyJwt(tokens.accessToken, Math.floor(Date.now() / 1000))
@@ -103,7 +105,7 @@ async function normalRefreshAndLogout(source) {
 
     // 소비된 R0도 해당 session을 찾고, 성공 응답은 body 없는 204다.
     const firstLogout = await post(base, '/auth/logout', {
-      refreshToken: f.initial.refreshToken,
+      refreshToken: f.initial.refreshToken
     })
     assert.equal(firstLogout.status, 204)
     assert.equal(firstLogout.headers.get('cache-control'), 'no-store')
@@ -115,17 +117,20 @@ async function normalRefreshAndLogout(source) {
       assert.equal(await repeated.text(), '')
     }
     await expectAuthenticationRequired(
-      await post(base, '/auth/refresh', { refreshToken: tokens.refreshToken }),
+      await post(base, '/auth/refresh', { refreshToken: tokens.refreshToken })
     )
 
     const sessionAfter = await stored(source, f.initial.session.id)
     assert.equal(sessionAfter.session.revoked_reason, 'logout')
     assert.equal(
       sessionAfter.session.last_active_at.getTime(),
-      sessionBefore.session.last_active_at.getTime(),
+      sessionBefore.session.last_active_at.getTime()
     )
     assert.equal(sessionAfter.tokens.length, sessionBefore.tokens.length + 1)
-    assert.equal(sessionAfter.tokens.some((row) => row.token_hash.equals(digest(tokens.refreshToken))), true)
+    assert.equal(
+      sessionAfter.tokens.some((row) => row.token_hash.equals(digest(tokens.refreshToken))),
+      true
+    )
     assert.deepEqual(await stored(source, otherDevice.initial.session.id), otherBefore)
   })
 }
@@ -135,7 +140,7 @@ async function currentTokenLogout(source) {
   const before = await stored(source, f.initial.session.id)
   await withSessionApp(f, async (base) => {
     const response = await post(base, '/auth/logout', {
-      refreshToken: f.initial.refreshToken,
+      refreshToken: f.initial.refreshToken
     })
     assert.equal(response.status, 204)
     const after = await stored(source, f.initial.session.id)
@@ -153,7 +158,7 @@ async function deletedSessionLogout(source) {
 
   await withSessionApp(f, async (base) => {
     const response = await post(base, '/auth/logout', {
-      refreshToken: f.initial.refreshToken,
+      refreshToken: f.initial.refreshToken
     })
     assert.equal(response.status, 204)
     assert.equal(response.headers.get('cache-control'), 'no-store')
@@ -162,7 +167,7 @@ async function deletedSessionLogout(source) {
 
   assert.deepEqual(await stored(source, f.initial.session.id), {
     session: undefined,
-    tokens: [],
+    tokens: []
   })
   assert.deepEqual(await stored(source, otherDevice.initial.session.id), otherBefore)
 }
@@ -180,7 +185,7 @@ async function noResponseBeforeCommit(source, route) {
         await releaseCommit.promise
       }
       await commit()
-    },
+    }
   })
   try {
     await withSessionApp(f, async (base) => {
@@ -190,7 +195,7 @@ async function noResponseBeforeCommit(source, route) {
           post(base, route, { refreshToken: f.initial.refreshToken }).then((response) => {
             delivered = true
             return response
-          }),
+          })
         )
         await bounded(commitStarted.promise)
         assert.equal(delivered, false)
@@ -225,10 +230,12 @@ function observeTransactionStarts() {
         const [{ pid }] = await query('SELECT pg_backend_pid() AS pid')
         pids.push(pid)
         const hasSecondTransaction = pids.length === 2
-        if (hasSecondTransaction) secondStarted.resolve()
+        if (hasSecondTransaction) {
+          secondStarted.resolve()
+        }
       }
       return result
-    },
+    }
   }
 }
 
@@ -256,7 +263,7 @@ async function refreshThenLogoutWithLateResponse(source) {
       await commit()
       firstCommitApplied.resolve()
       await releaseRefreshResponse.promise
-    },
+    }
   })
   try {
     await withSessionApp(f, async (base) => {
@@ -269,14 +276,14 @@ async function refreshThenLogoutWithLateResponse(source) {
             async (response) => {
               refreshDelivered = true
               return { response, body: await response.json() }
-            },
-          ),
+            }
+          )
         )
         await bounded(firstCommitReached.promise)
         assert.equal(refreshDelivered, false)
 
         pendingLogout = settled(
-          post(base, '/auth/logout', { refreshToken: f.initial.refreshToken }),
+          post(base, '/auth/logout', { refreshToken: f.initial.refreshToken })
         )
         await bounded(transactionStarts.secondStarted)
         assert.equal(transactionStarts.pids.length, 2)
@@ -296,8 +303,8 @@ async function refreshThenLogoutWithLateResponse(source) {
         assert.equal(refreshResult.value.response.status, 200)
         await expectAuthenticationRequired(
           await post(base, '/auth/refresh', {
-            refreshToken: refreshResult.value.body.refreshToken,
-          }),
+            refreshToken: refreshResult.value.body.refreshToken
+          })
         )
         assert.equal((await stored(source, f.initial.session.id)).session.revoked_reason, 'logout')
         assert.deepEqual(await stored(source, otherDevice.initial.session.id), otherBefore)
@@ -336,7 +343,7 @@ async function logoutThenRefresh(source) {
         await releaseFirstCommit.promise
       }
       await commit()
-    },
+    }
   })
   try {
     await withSessionApp(f, async (base) => {
@@ -348,12 +355,12 @@ async function logoutThenRefresh(source) {
           post(base, '/auth/logout', { refreshToken: f.initial.refreshToken }).then((response) => {
             logoutDelivered = true
             return response
-          }),
+          })
         )
         await bounded(firstCommitReached.promise)
         assert.equal(logoutDelivered, false)
         pendingRefresh = settled(
-          post(base, '/auth/refresh', { refreshToken: f.initial.refreshToken }),
+          post(base, '/auth/refresh', { refreshToken: f.initial.refreshToken })
         )
         await bounded(transactionStarts.secondStarted)
         assert.equal(transactionStarts.pids.length, 2)
@@ -388,10 +395,13 @@ async function uncertainCommit(source, route, applied) {
   const before = await stored(source, f.initial.session.id)
   const restore = instrument(source, {
     commit: async (runner, commit) => {
-      if (applied) await commit()
-      else await runner.rollbackTransaction()
+      if (applied) {
+        await commit()
+      } else {
+        await runner.rollbackTransaction()
+      }
       throw new Error('private credential SQL commit acknowledgement')
-    },
+    }
   })
   try {
     await withSessionApp(f, async (base) => {
@@ -441,7 +451,13 @@ async function transportAndLogCanary(source) {
   try {
     await withSessionApp(f, async (base) => {
       for (const [path, chunks, headers, status, code] of [
-        ['/auth/refresh', [Buffer.alloc(17_000)], { 'content-type': 'text/plain' }, 415, 'UNSUPPORTED_MEDIA_TYPE'],
+        [
+          '/auth/refresh',
+          [Buffer.alloc(17_000)],
+          { 'content-type': 'text/plain' },
+          415,
+          'UNSUPPORTED_MEDIA_TYPE'
+        ],
         ['/auth/logout', [Buffer.alloc(8_000), Buffer.alloc(8_385)], {}, 413, 'REQUEST_TOO_LARGE'],
         ['/auth/refresh', [Buffer.from([0xff])], {}, 400, 'INVALID_AUTH_REQUEST'],
         ['/auth/logout', ['{'], {}, 400, 'INVALID_AUTH_REQUEST'],
@@ -450,22 +466,22 @@ async function transportAndLogCanary(source) {
           [JSON.stringify({ refreshToken: f.initial.refreshToken, sessionId: canary })],
           {},
           400,
-          'INVALID_AUTH_REQUEST',
+          'INVALID_AUTH_REQUEST'
         ],
         [
           '/auth/refresh',
           [JSON.stringify({ refreshToken: `${canary}=invalid` })],
           {},
           400,
-          'INVALID_AUTH_REQUEST',
+          'INVALID_AUTH_REQUEST'
         ],
         [
           '/auth/logout',
           [JSON.stringify({ refreshToken: `${canary}=invalid` })],
           {},
           400,
-          'INVALID_AUTH_REQUEST',
-        ],
+          'INVALID_AUTH_REQUEST'
+        ]
       ]) {
         const response = await postChunks(base, path, chunks, headers)
         assert.equal(response.status, status)
@@ -486,20 +502,35 @@ async function transportAndLogCanary(source) {
 
 export async function assertSessionHttpIntegration(source, mark) {
   const cases = [
-    ['normal refresh, consumed/repeated logout and other-device preservation', () => normalRefreshAndLogout(source)],
-    ['current token logout preserves activity and refresh history', () => currentTokenLogout(source)],
-    ['physically deleted session logout is 204 and preserves another device', () => deletedSessionLogout(source)],
+    [
+      'normal refresh, consumed/repeated logout and other-device preservation',
+      () => normalRefreshAndLogout(source)
+    ],
+    [
+      'current token logout preserves activity and refresh history',
+      () => currentTokenLogout(source)
+    ],
+    [
+      'physically deleted session logout is 204 and preserves another device',
+      () => deletedSessionLogout(source)
+    ],
     ['refresh response waits for commit', () => noResponseBeforeCommit(source, '/auth/refresh')],
     ['logout response waits for commit', () => noResponseBeforeCommit(source, '/auth/logout')],
-    ['refresh-first row lock blocks logout; delayed 200 leaves final token invalid', () => refreshThenLogoutWithLateResponse(source)],
+    [
+      'refresh-first row lock blocks logout; delayed 200 leaves final token invalid',
+      () => refreshThenLogoutWithLateResponse(source)
+    ],
     ['logout-first row lock blocks refresh and prevents issuance', () => logoutThenRefresh(source)],
     ...['/auth/refresh', '/auth/logout'].flatMap((route) =>
       [false, true].map((applied) => [
         `${route} uncertain ${applied ? 'committed' : 'rolled back'} outcome`,
-        () => uncertainCommit(source, route, applied),
-      ]),
+        () => uncertainCommit(source, route, applied)
+      ])
     ),
-    ['transport and shape rejection write nothing and omit credential canaries', () => transportAndLogCanary(source)],
+    [
+      'transport and shape rejection write nothing and omit credential canaries',
+      () => transportAndLogCanary(source)
+    ]
   ]
   for (const [name, run] of cases) {
     mark(name)

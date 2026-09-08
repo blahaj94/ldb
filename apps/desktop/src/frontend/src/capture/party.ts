@@ -46,7 +46,9 @@ export function isPartySlotPresent(rgba: Uint8ClampedArray): boolean {
       Math.abs(rgba[index + 2] - PARTY_MANA_COLOR[2]) <= MANA_COLOR_TOLERANCE
     ) {
       matches += 1
-      if (matches >= MINIMUM_MANA_PIXELS) return true
+      if (matches >= MINIMUM_MANA_PIXELS) {
+        return true
+      }
     }
   }
 
@@ -58,7 +60,9 @@ export function capturePartyNicknameCrops(video: HTMLVideoElement): (HTMLCanvasE
   frame.width = video.videoWidth
   frame.height = video.videoHeight
   const frameContext = frame.getContext('2d')
-  if (!frameContext) throw new Error('Could not create a party capture canvas.')
+  if (!frameContext) {
+    throw new Error('Could not create a party capture canvas.')
+  }
 
   frameContext.drawImage(video, 0, 0)
 
@@ -69,13 +73,17 @@ export function capturePartyNicknameCrops(video: HTMLVideoElement): (HTMLCanvasE
       slot.mana.width,
       slot.mana.height
     )
-    if (!isPartySlotPresent(mana.data)) return null
+    if (!isPartySlotPresent(mana.data)) {
+      return null
+    }
 
     const crop = document.createElement('canvas')
     crop.width = slot.nickname.width * OCR_SCALE
     crop.height = slot.nickname.height * OCR_SCALE
     const cropContext = crop.getContext('2d')
-    if (!cropContext) throw new Error('Could not create a party nickname canvas.')
+    if (!cropContext) {
+      throw new Error('Could not create a party nickname canvas.')
+    }
 
     cropContext.imageSmoothingEnabled = false
     cropContext.drawImage(

@@ -9,7 +9,7 @@ import { SearchDeadline } from './search-deadline.js'
 import type { AuthenticatedSearchDependencies, AuthenticatedSearchHttpService } from './types.js'
 
 export function createAuthenticatedSearchService(
-  dependencies: AuthenticatedSearchDependencies,
+  dependencies: AuthenticatedSearchDependencies
 ): AuthenticatedSearchHttpService {
   const deps = Object.freeze({ ...dependencies })
   const clock = deps.clock ?? searchClock
@@ -23,7 +23,9 @@ export function createAuthenticatedSearchService(
     async search(rawHeaders, originalUrl, requestSignal) {
       const token = readBearerToken(rawHeaders)
       const hasToken = token != null
-      if (!hasToken) throw neopleSearchFailure('authentication')
+      if (!hasToken) {
+        throw neopleSearchFailure('authentication')
+      }
       let principal: AccessJwtPrincipal
       try {
         principal = await deps.verifyAccessJwt(token, Math.floor(Date.now() / 1000))
@@ -34,7 +36,9 @@ export function createAuthenticatedSearchService(
       const isKeyString = typeof deps.apiKey === 'string'
       const hasKey = isKeyString && deps.apiKey.length > 0
       const cannotStart = !hasKey || closed
-      if (cannotStart) throw neopleSearchFailure('internal')
+      if (cannotStart) {
+        throw neopleSearchFailure('internal')
+      }
 
       const deadline = new SearchDeadline(clock, requestSignal)
       active.add(deadline)
@@ -49,7 +53,10 @@ export function createAuthenticatedSearchService(
         lease.assertCapacity()
         const activity = recordSearchActivity(deps, principal, deadline)
         activities.add(activity)
-        void activity.then(() => activities.delete(activity), () => activities.delete(activity))
+        void activity.then(
+          () => activities.delete(activity),
+          () => activities.delete(activity)
+        )
         await deadline.wait(activity)
 
         // 마지막 await는 활동 commit/연결 종료다. 예약과 기존 adapter 시작 사이에 await를 두지 않는다.
@@ -60,7 +67,9 @@ export function createAuthenticatedSearchService(
         return await result
       } catch (error) {
         const isSearchFailure = error instanceof NeopleSearchFailure
-        if (isSearchFailure) throw error
+        if (isSearchFailure) {
+          throw error
+        }
         throw neopleSearchFailure('internal')
       } finally {
         finishAdmission()
@@ -68,9 +77,11 @@ export function createAuthenticatedSearchService(
     },
     async onModuleDestroy() {
       closed = true
-      for (const deadline of active) deadline.abort()
+      for (const deadline of active) {
+        deadline.abort()
+      }
       admission.close()
       await Promise.allSettled(activities)
-    },
+    }
   }
 }

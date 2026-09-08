@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { atExactTime, databaseNow } from './login-test-control.mjs'
-import { digest, fixture, idleSeconds, opaque, rejected, setDeadline, stored } from './refresh-fixtures.mjs'
+import {
+  digest,
+  fixture,
+  idleSeconds,
+  opaque,
+  rejected,
+  setDeadline,
+  stored
+} from './refresh-fixtures.mjs'
 
 async function assertRotationHistory(source) {
   const before = await source.query('SELECT * FROM auth_refresh_tokens ORDER BY token_hash')
@@ -12,8 +20,14 @@ async function assertRotationHistory(source) {
   const unrelatedBefore = await stored(source, unrelatedUser.initial.session.id)
   // 30일보다 오래된 session과 발급 hash도 최근 활동이 있으면 보존하며 rotation할 수 있다.
   const oldIssuedAt = new Date((await databaseNow(source)).getTime() - 40 * 86_400_000)
-  await source.query('UPDATE auth_sessions SET created_at=$2 WHERE id=$1', [f.initial.session.id, oldIssuedAt])
-  await source.query('UPDATE auth_refresh_tokens SET issued_at=$2 WHERE token_hash=$1', [digest(f.initial.refreshToken), oldIssuedAt])
+  await source.query('UPDATE auth_sessions SET created_at=$2 WHERE id=$1', [
+    f.initial.session.id,
+    oldIssuedAt
+  ])
+  await source.query('UPDATE auth_refresh_tokens SET issued_at=$2 WHERE token_hash=$1', [
+    digest(f.initial.refreshToken),
+    oldIssuedAt
+  ])
   const initial = await stored(source, f.initial.session.id)
   let raw = f.initial.refreshToken
   const hashes = [digest(raw)]
@@ -39,7 +53,10 @@ async function assertRotationHistory(source) {
     assert.equal(principal.sessionId, f.initial.session.id)
     assert.equal(principal.expiresAt - principal.issuedAt, 900)
     assert.equal(result.accessTokenExpiresAt, new Date(principal.expiresAt * 1000).toISOString())
-    assert.equal(result.sessionExpiresAt, new Date(initial.session.last_active_at.getTime() + idleSeconds * 1000).toISOString())
+    assert.equal(
+      result.sessionExpiresAt,
+      new Date(initial.session.last_active_at.getTime() + idleSeconds * 1000).toISOString()
+    )
     raw = result.refreshToken
   }
   const rotated = await stored(source, f.initial.session.id)
@@ -55,7 +72,9 @@ async function assertRotationHistory(source) {
   assert.deepEqual(await stored(source, unrelatedUser.initial.session.id), unrelatedBefore)
   await otherDevice.rotate(otherDevice.initial.refreshToken)
   for (const token of before) {
-    const [after] = await source.query('SELECT * FROM auth_refresh_tokens WHERE token_hash=$1', [token.token_hash])
+    const [after] = await source.query('SELECT * FROM auth_refresh_tokens WHERE token_hash=$1', [
+      token.token_hash
+    ])
     assert.deepEqual(after, token)
   }
 }
@@ -66,8 +85,9 @@ async function assertBoundary(source) {
     const initial = await stored(source, f.initial.session.id)
     const deadline = new Date(initial.session.last_active_at.getTime() + idleSeconds * 1000)
     await atExactTime(source, new Date(deadline.getTime() + offset * 1000), async () => {
-      if (offset >= 0) await rejected(() => f.rotate(f.initial.refreshToken))
-      else {
+      if (offset >= 0) {
+        await rejected(() => f.rotate(f.initial.refreshToken))
+      } else {
         const result = await f.rotate(f.initial.refreshToken)
         assert.equal(result.accessTokenExpiresAt, deadline.toISOString())
         const principal = await f.verifyJwt(result.accessToken, deadline.getTime() / 1000 - 1)
@@ -76,7 +96,9 @@ async function assertBoundary(source) {
     })
     const after = await stored(source, f.initial.session.id)
     assert.deepEqual(after.session, initial.session)
-    if (offset >= 0) assert.deepEqual(after.tokens, initial.tokens)
+    if (offset >= 0) {
+      assert.deepEqual(after.tokens, initial.tokens)
+    }
   }
   // 현재 DB 시각으로 이미 만료된 consumed token도 reuse 쓰기로 session을 바꾸지 않는다.
   const expired = await fixture(source)
@@ -90,7 +112,7 @@ async function assertBoundary(source) {
 export async function assertRefreshRotation(source, mark) {
   const cases = [
     ['decoded hash, JWT, full history and other devices', assertRotationHistory],
-    ['exact idle boundary and expired consumed token', assertBoundary],
+    ['exact idle boundary and expired consumed token', assertBoundary]
   ]
   for (const [name, run] of cases) {
     mark(name)

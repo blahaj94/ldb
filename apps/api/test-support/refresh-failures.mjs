@@ -7,7 +7,9 @@ async function rollbackFailure(source, scenario) {
   const f = await fixture(source)
   const other = await fixture(source, f.identity)
   let raw = f.initial.refreshToken
-  if (scenario === 'old-hash') raw = (await f.rotate(raw)).refreshToken
+  if (scenario === 'old-hash') {
+    raw = (await f.rotate(raw)).refreshToken
+  }
   const before = await stored(source, f.initial.session.id)
   const otherBefore = await stored(source, other.initial.session.id)
   let consumed = false
@@ -23,7 +25,9 @@ async function rollbackFailure(source, scenario) {
           return await query(sql, [Buffer.alloc(31), ...parameters.slice(1)])
         }
         const result = await run()
-        if (sql.startsWith('UPDATE "auth_refresh_tokens"')) consumed = true
+        if (sql.startsWith('UPDATE "auth_refresh_tokens"')) {
+          consumed = true
+        }
         return result
       } catch (error) {
         constraint = error.constraint ?? error.driverError?.constraint
@@ -33,30 +37,50 @@ async function rollbackFailure(source, scenario) {
     commit: async (_runner, commit) => {
       commits++
       await commit()
-    },
+    }
   })
   const signer = f.deps.issueAccessJwt
-  if (scenario === 'signing') f.deps.issueAccessJwt = async () => { throw new Error('private detail') }
+  if (scenario === 'signing') {
+    f.deps.issueAccessJwt = async () => {
+      throw new Error('private detail')
+    }
+  }
   try {
     if (scenario === 'entropy') {
-      await rejected(() => f.rotateWithBytes(raw, () => {
-        entropyCalls++
-        throw new Error('private detail')
-      }), 'AUTH_INTERNAL_ERROR')
+      await rejected(
+        () =>
+          f.rotateWithBytes(raw, () => {
+            entropyCalls++
+            throw new Error('private detail')
+          }),
+        'AUTH_INTERNAL_ERROR'
+      )
     } else if (['current-hash', 'old-hash', 'other-device-hash'].includes(scenario)) {
-      const collision = scenario === 'other-device-hash' ? other.initial.refreshToken : f.initial.refreshToken
-      await rejected(() => f.rotateWithBytes(raw, () => {
-        entropyCalls++
-        return Buffer.from(collision, 'base64url')
-      }), 'AUTH_UNAVAILABLE')
+      const collision =
+        scenario === 'other-device-hash' ? other.initial.refreshToken : f.initial.refreshToken
+      await rejected(
+        () =>
+          f.rotateWithBytes(raw, () => {
+            entropyCalls++
+            return Buffer.from(collision, 'base64url')
+          }),
+        'AUTH_UNAVAILABLE'
+      )
       assert.equal(constraint, 'pk_auth_refresh_tokens')
       assert.equal(consumed, true)
     } else {
-      await rejected(() => f.rotate(raw), scenario === 'signing' ? 'AUTH_INTERNAL_ERROR' : 'AUTH_UNAVAILABLE')
+      await rejected(
+        () => f.rotate(raw),
+        scenario === 'signing' ? 'AUTH_INTERNAL_ERROR' : 'AUTH_UNAVAILABLE'
+      )
     }
     assert.equal(commits, 0)
-    if (scenario === 'insert') assert.equal(constraint, 'ck_auth_refresh_tokens_hash_length')
-    if (scenario === 'entropy' || scenario.includes('hash')) assert.equal(entropyCalls, 1)
+    if (scenario === 'insert') {
+      assert.equal(constraint, 'ck_auth_refresh_tokens_hash_length')
+    }
+    if (scenario === 'entropy' || scenario.includes('hash')) {
+      assert.equal(entropyCalls, 1)
+    }
   } finally {
     f.deps.issueAccessJwt = signer
     restore()
@@ -70,22 +94,29 @@ async function rollbackFailure(source, scenario) {
 async function uncertainCommit(source, applied, reuse) {
   const f = await fixture(source)
   let current = f.initial.refreshToken
-  if (reuse) current = (await f.rotate(current)).refreshToken
+  if (reuse) {
+    current = (await f.rotate(current)).refreshToken
+  }
   const before = await stored(source, f.initial.session.id)
   let attempts = 0
   let commits = 0
   const restore = instrument(source, {
     query: async ({ sql, run }) => {
-      if (sql === 'START TRANSACTION') attempts++
+      if (sql === 'START TRANSACTION') {
+        attempts++
+      }
       return run()
     },
     commit: async (runner, commit) => {
       commits++
       // 실제 commit된 DB와 실제 rollback된 DB 모두 같은 불명 응답으로 core에 전달한다.
-      if (applied) await commit()
-      else await runner.rollbackTransaction()
+      if (applied) {
+        await commit()
+      } else {
+        await runner.rollbackTransaction()
+      }
       throw new Error('private detail: commit acknowledgement lost')
-    },
+    }
   })
   try {
     await rejected(() => f.rotate(f.initial.refreshToken), 'AUTH_UNAVAILABLE')
@@ -103,11 +134,17 @@ async function uncertainCommit(source, applied, reuse) {
     await rejected(() => f.rotate(current))
   } else {
     assert.equal(after.tokens.length, before.tokens.length + 1)
-    assert(after.tokens.find((token) => token.token_hash.equals(digest(f.initial.refreshToken))).consumed_at)
+    assert(
+      after.tokens.find((token) => token.token_hash.equals(digest(f.initial.refreshToken)))
+        .consumed_at
+    )
     assert.equal(after.session.revoked_at, null)
     // 실제 응답 유실과 같은 상태다. 원문을 다시 제출하면 grace 없이 reuse 폐기한다.
     await rejected(() => f.rotate(f.initial.refreshToken))
-    assert.equal((await stored(source, f.initial.session.id)).session.revoked_reason, 'refresh_reuse')
+    assert.equal(
+      (await stored(source, f.initial.session.id)).session.revoked_reason,
+      'refresh_reuse'
+    )
   }
 }
 
@@ -119,7 +156,9 @@ export async function assertRefreshFailures(source, mark) {
   }
   for (const reuse of [false, true]) {
     for (const applied of [false, true]) {
-      mark(`${reuse ? 'reuse revocation' : 'rotation'} uncertain ${applied ? 'committed' : 'rolled back'} outcome`)
+      mark(
+        `${reuse ? 'reuse revocation' : 'rotation'} uncertain ${applied ? 'committed' : 'rolled back'} outcome`
+      )
       await uncertainCommit(source, applied, reuse)
     }
   }

@@ -9,12 +9,18 @@ export function ContentStack({ children }: PropsWithChildren) {
 export function ExampleSection({ title, children }: PropsWithChildren<{ title: string }>) {
   return (
     <VStack gap="x6" as="section">
-      <Text as="h2" textStyle="t5Medium">{title}</Text>
+      <Text as="h2" textStyle="t5Medium">
+        {title}
+      </Text>
       {children}
     </VStack>
   )
 }
 
 export function SupportingText({ children }: PropsWithChildren) {
-  return <Text as="p" textStyle="t3Regular" color="fg.neutralSubtle">{children}</Text>
+  return (
+    <Text as="p" textStyle="t3Regular" color="fg.neutralSubtle">
+      {children}
+    </Text>
+  )
 }

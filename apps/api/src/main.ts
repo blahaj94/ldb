@@ -16,15 +16,20 @@ async function main(): Promise<void> {
   const close = (ownedRuntime: Awaited<ReturnType<typeof createApiRuntime>>): Promise<void> => {
     const pendingClose = closing
     const isClosing = pendingClose !== undefined
-    if (isClosing) return pendingClose
-    closing = ownedRuntime.close().catch(() => {
-      console.error(closeApp.startupError)
-      process.exitCode = 1
-    }).finally(() => {
-      clearTimeout(startupShutdownTimer)
-      process.off('SIGINT', shutdown)
-      process.off('SIGTERM', shutdown)
-    })
+    if (isClosing) {
+      return pendingClose
+    }
+    closing = ownedRuntime
+      .close()
+      .catch(() => {
+        console.error(closeApp.startupError)
+        process.exitCode = 1
+      })
+      .finally(() => {
+        clearTimeout(startupShutdownTimer)
+        process.off('SIGINT', shutdown)
+        process.off('SIGTERM', shutdown)
+      })
     return closing
   }
   const shutdown = (): void => {
@@ -44,7 +49,9 @@ async function main(): Promise<void> {
     const ownedRuntime = runtime
     const hasRuntime = ownedRuntime !== undefined
     const canClose = hasRuntime && !starting
-    if (canClose) void close(ownedRuntime)
+    if (canClose) {
+      void close(ownedRuntime)
+    }
   }
 
   process.on('SIGINT', shutdown)
@@ -60,14 +67,18 @@ async function main(): Promise<void> {
     }
     await runtime.app.listen(configuration.port)
     starting = false
-    if (stopping) await close(runtime)
+    if (stopping) {
+      await close(runtime)
+    }
   } catch (error) {
     starting = false
     process.off('SIGINT', shutdown)
     process.off('SIGTERM', shutdown)
     const ownedRuntime = runtime
     const hasRuntime = ownedRuntime !== undefined
-    if (hasRuntime) await close(ownedRuntime)
+    if (hasRuntime) {
+      await close(ownedRuntime)
+    }
     clearTimeout(startupShutdownTimer)
     throw error
   }

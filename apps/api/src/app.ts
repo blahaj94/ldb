@@ -11,7 +11,6 @@ export function createApp(rootModule: Type = AppModule): Promise<INestApplicatio
 }
 
 export async function closeApp(app: INestApplication): Promise<void> {
-
   try {
     await app.close()
   } catch {

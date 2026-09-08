@@ -29,7 +29,9 @@ window.inspectFixtureFrame = (video) => ({
 
 const root = document.getElementById('root')
 const hasRoot = root != null
-if (!hasRoot) throw new Error('Capture fixture root missing')
+if (!hasRoot) {
+  throw new Error('Capture fixture root missing')
+}
 createRoot(root).render(
   <StrictMode>
     <App />

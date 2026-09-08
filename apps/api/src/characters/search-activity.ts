@@ -9,7 +9,7 @@ import type { AuthenticatedSearchDependencies } from './types.js'
 export async function recordSearchActivity(
   deps: AuthenticatedSearchDependencies,
   principal: AccessJwtPrincipal,
-  deadline: SearchDeadline,
+  deadline: SearchDeadline
 ): Promise<void> {
   const createRunner = deps.createQueryRunner ?? createSearchQueryRunner
   const runner = createRunner(deps.dataSource, deadline.signal)
@@ -21,21 +21,23 @@ export async function recordSearchActivity(
     const repository = runner.manager.getRepository(AuthSessionSchema)
     const session = await repository.findOne({
       where: { id: principal.sessionId, userId: principal.userId },
-      lock: { mode: 'pessimistic_write' },
+      lock: { mode: 'pessimistic_write' }
     })
     deadline.check()
 
     // Row가 없을 때도 조회가 끝난 뒤 fresh T로 JWT를 확인한다. User lock이나 복원은 없다.
-    const [clock] = await runner.manager.query(
-      'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now',
-    ) as Array<{ now: Date }>
+    const [clock] = (await runner.manager.query(
+      'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now'
+    )) as Array<{ now: Date }>
     deadline.check()
     const checkedAt = clock.now
     const checkedAtSeconds = checkedAt.getTime() / 1000
     const isJwtNotYetIssued = principal.issuedAt > checkedAtSeconds
     const isJwtExpired = checkedAtSeconds >= principal.expiresAt
     const isJwtInvalid = isJwtNotYetIssued || isJwtExpired
-    if (isJwtInvalid) throw neopleSearchFailure('authentication')
+    if (isJwtInvalid) {
+      throw neopleSearchFailure('authentication')
+    }
 
     const hasSession = session != null
     const isRevoked = hasSession && session.revokedAt != null
@@ -43,7 +45,9 @@ export async function recordSearchActivity(
     if (canRecordActivity) {
       const idleDeadline = session.lastActiveAt.getTime() / 1000 + LOGIN.idleSeconds
       const isIdleExpired = checkedAtSeconds >= idleDeadline
-      if (isIdleExpired) throw neopleSearchFailure('authentication')
+      if (isIdleExpired) {
+        throw neopleSearchFailure('authentication')
+      }
       const lastActiveAt = new Date(Math.max(session.lastActiveAt.getTime(), checkedAt.getTime()))
       await repository.update({ id: session.id }, { lastActiveAt })
       deadline.check()
@@ -52,7 +56,9 @@ export async function recordSearchActivity(
     deadline.check()
   } catch (error) {
     const canRollback = runner.isTransactionActive && !deadline.signal.aborted
-    if (canRollback) await runner.rollbackTransaction()
+    if (canRollback) {
+      await runner.rollbackTransaction()
+    }
     // Commit acknowledgement 불명은 실패로 남긴다. 활동 rollback 성공을 추정하지 않는다.
     throw error
   } finally {

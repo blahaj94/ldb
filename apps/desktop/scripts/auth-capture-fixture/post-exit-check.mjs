@@ -109,13 +109,17 @@ function reportSearchStages(output) {
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
 function hasGroupExited() {
   const hasChild = child?.pid != null
-  if (!hasChild) return true
+  if (!hasChild) {
+    return true
+  }
   try {
     process.kill(-child.pid, 0)
     return false
   } catch (error) {
     const isAbsent = error.code === 'ESRCH'
-    if (isAbsent) return true
+    if (isAbsent) {
+      return true
+    }
     throw new Error('Test child exit could not be confirmed')
   }
 }
@@ -125,9 +129,13 @@ function hasGroupExited() {
 async function waitForExit() {
   const deadline = Date.now() + 5_000
   while (true) {
-    if (hasGroupExited()) return true
+    if (hasGroupExited()) {
+      return true
+    }
     const hasExpired = Date.now() >= deadline
-    if (hasExpired) return false
+    if (hasExpired) {
+      return false
+    }
     await delay(50)
   }
 }
@@ -150,7 +158,9 @@ try {
   const deadline = setTimeout(
     () => {
       const hasPid = child.pid != null
-      if (hasPid) process.kill(-child.pid, 'SIGTERM')
+      if (hasPid) {
+        process.kill(-child.pid, 'SIGTERM')
+      }
     },
     isSearch ? 240_000 : 150_000
   )
@@ -220,5 +230,7 @@ try {
     }
     groupStopped = await waitForExit()
   }
-  if (groupStopped) await rm(testRoot, { recursive: true, force: true, maxRetries: 3 })
+  if (groupStopped) {
+    await rm(testRoot, { recursive: true, force: true, maxRetries: 3 })
+  }
 }

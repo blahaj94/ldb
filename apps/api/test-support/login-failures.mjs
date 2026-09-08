@@ -19,7 +19,7 @@ async function assertExchangeRollback(source) {
         throw new Error('fixture-secret SQL detail')
       }
       return result
-    },
+    }
   })
   try {
     await failure(() => f.service.exchange(flow.exchange), 'AUTH_UNAVAILABLE')
@@ -40,9 +40,11 @@ async function assertUnknownExchangeCommit(source, committed) {
   const restore = instrument(source, {
     commit: async (_runner, commit) => {
       commits++
-      if (committed) await commit()
+      if (committed) {
+        await commit()
+      }
       throw new Error('fixture-secret lost commit result')
-    },
+    }
   })
   try {
     await failure(() => f.service.exchange(flow.exchange), 'AUTH_UNAVAILABLE')
@@ -57,7 +59,7 @@ async function assertUnknownExchangeCommit(source, committed) {
     assert.deepEqual(await counts(source), {
       users: before.users + 1,
       sessions: before.sessions + 1,
-      refresh: before.refresh + 1,
+      refresh: before.refresh + 1
     })
   } else {
     assert.equal(stored.status, 'exchange_ready')
@@ -72,8 +74,10 @@ async function assertUnknownCallbackCommit(source, commitNumber) {
   const restore = instrument(source, {
     commit: async (_runner, commit) => {
       await commit()
-      if (++commits === commitNumber) throw new Error('fixture-secret lost callback commit result')
-    },
+      if (++commits === commitNumber) {
+        throw new Error('fixture-secret lost callback commit result')
+      }
+    }
   })
   const query = new URLSearchParams({ state: flow.state, code: 'fixture-provider-code' })
   try {
@@ -84,7 +88,7 @@ async function assertUnknownCallbackCommit(source, commitNumber) {
   assert.equal(f.verifiedCalls.length, commitNumber - 1)
   assert.equal(
     (await row(source, flow.request.requestId)).status,
-    commitNumber === 1 ? 'processing' : 'exchange_ready',
+    commitNumber === 1 ? 'processing' : 'exchange_ready'
   )
   await failure(() => f.service.callback('google', query, flow.cookie), 'LOGIN_REQUEST_INVALID')
   assert.equal(f.verifiedCalls.length, commitNumber - 1)
@@ -92,7 +96,7 @@ async function assertUnknownCallbackCommit(source, commitNumber) {
     // Crash/commit 응답 유실 뒤 남은 processing도 만료 read에서 정리한다.
     const expiresAt = (await row(source, flow.request.requestId)).expires_at
     await atExactTime(source, expiresAt, () =>
-      failure(() => f.service.callback('google', query, flow.cookie), 'LOGIN_REQUEST_INVALID'),
+      failure(() => f.service.callback('google', query, flow.cookie), 'LOGIN_REQUEST_INVALID')
     )
     assertCleared(await row(source, flow.request.requestId), 'failed')
   }
@@ -115,7 +119,7 @@ async function assertSnapshotsAndKeys(source) {
   const completion = await service.callback(
     'google',
     new URLSearchParams({ state: flow.state, code: 'fixture-provider-code' }),
-    flow.cookie,
+    flow.cookie
   )
   assert.equal(f.verifiedCalls.at(-1).snapshot.version, 'test-v1')
   assert.equal(f.verifiedCalls.at(-1).snapshot.providerClientId, 'google-test-client')
@@ -124,7 +128,7 @@ async function assertSnapshotsAndKeys(source) {
     requestId: flow.request.requestId,
     clientId: 'desktop',
     code: new URL(completion.returnUrl).searchParams.get('code'),
-    codeVerifier: flow.verifier,
+    codeVerifier: flow.verifier
   })
 
   const missing = await ready(f.service)
@@ -133,8 +137,8 @@ async function assertSnapshotsAndKeys(source) {
     registry: new LoginRegistry({
       ...config,
       registrations: [v2],
-      activeVersions: { google: 'test-v2' },
-    }),
+      activeVersions: { google: 'test-v2' }
+    })
   })
   await failure(() => withoutHistory.exchange(missing.exchange), 'AUTH_INTERNAL_ERROR')
   assertCleared(await row(source, missing.request.requestId), 'failed')
@@ -144,8 +148,8 @@ async function assertSnapshotsAndKeys(source) {
     ...f.dependencies,
     pkceKeys: new ProviderPkceKeys({
       activeKeyId: 'new-key',
-      keys: [{ id: 'new-key', key: randomBytes(32) }],
-    }),
+      keys: [{ id: 'new-key', key: randomBytes(32) }]
+    })
   })
   const before = f.verifiedCalls.length
   await failure(
@@ -153,9 +157,9 @@ async function assertSnapshotsAndKeys(source) {
       changedKeys.callback(
         'google',
         new URLSearchParams({ state: cannotDecrypt.state, code: 'fixture-provider-code' }),
-        cannotDecrypt.cookie,
+        cannotDecrypt.cookie
       ),
-    'AUTH_INTERNAL_ERROR',
+    'AUTH_INTERNAL_ERROR'
   )
   assert.equal(f.verifiedCalls.length, before)
   assertCleared(await row(source, cannotDecrypt.request.requestId), 'failed')
@@ -165,11 +169,11 @@ async function assertSnapshotsAndKeys(source) {
     count = await counts(source)
   await failure(
     () => f.service.exchange({ ...valid.exchange, clientId: 'another-client' }),
-    'LOGIN_EXCHANGE_INVALID',
+    'LOGIN_EXCHANGE_INVALID'
   )
   await failure(
     () => f.service.exchange({ ...valid.exchange, codeVerifier: opaque() }),
-    'LOGIN_EXCHANGE_INVALID',
+    'LOGIN_EXCHANGE_INVALID'
   )
   assert.deepEqual(await row(source, valid.request.requestId), original)
   assert.deepEqual(await counts(source), count)
@@ -182,13 +186,13 @@ export async function assertLoginFailures(source, mark) {
     ['exchange commit failed before send', () => assertUnknownExchangeCommit(source, false)],
     [
       'callback claim commit result lost and expired processing cleanup',
-      () => assertUnknownCallbackCommit(source, 1),
+      () => assertUnknownCallbackCommit(source, 1)
     ],
     ['callback completion commit result lost', () => assertUnknownCallbackCommit(source, 2)],
     [
       'historical registration, missing snapshot/key and invalid client isolation',
-      () => assertSnapshotsAndKeys(source),
-    ],
+      () => assertSnapshotsAndKeys(source)
+    ]
   ]
   for (const [name, run] of cases) {
     mark(name)

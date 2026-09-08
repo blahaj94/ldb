@@ -5,8 +5,12 @@ export function waitForAuthorization(
   signal?: AbortSignal
 ): Promise<AuthAuthorization> {
   const hasSignal = signal != null
-  if (!hasSignal) return operation()
-  if (signal.aborted) return Promise.resolve({ status: 'unavailable' })
+  if (!hasSignal) {
+    return operation()
+  }
+  if (signal.aborted) {
+    return Promise.resolve({ status: 'unavailable' })
+  }
 
   return new Promise((resolve, reject) => {
     const cancelWaiter = (): void => resolve({ status: 'unavailable' })

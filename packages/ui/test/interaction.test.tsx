@@ -2,7 +2,12 @@ import { act, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ActionButton, DialogContent, DialogRoot, DialogTrigger, TextField, TextFieldInput
+  ActionButton,
+  DialogContent,
+  DialogRoot,
+  DialogTrigger,
+  TextField,
+  TextFieldInput
 } from '../src/index'
 
 let container: HTMLDivElement
@@ -27,7 +32,9 @@ async function render(children: ReactNode) {
 function element<T extends HTMLElement>(selector: string): T {
   const result = document.querySelector<T>(selector)
   const isMissing = result == null
-  if (isMissing) throw new Error(`Test setup: expected rendered element ${selector}`)
+  if (isMissing) {
+    throw new Error(`Test setup: expected rendered element ${selector}`)
+  }
   return result
 }
 
@@ -47,7 +54,11 @@ describe('ActionButton interaction', () => {
 
   it('blocks a disabled button activation', async () => {
     const onClick = vi.fn()
-    await render(<ActionButton disabled onClick={onClick}>Run</ActionButton>)
+    await render(
+      <ActionButton disabled onClick={onClick}>
+        Run
+      </ActionButton>
+    )
 
     await click(element('button'))
 
@@ -56,7 +67,11 @@ describe('ActionButton interaction', () => {
 
   it('blocks a busy loading and disabled button without changing its label', async () => {
     const onClick = vi.fn()
-    await render(<ActionButton loading disabled onClick={onClick}>Run</ActionButton>)
+    await render(
+      <ActionButton loading disabled onClick={onClick}>
+        Run
+      </ActionButton>
+    )
 
     await click(element('button'))
 
@@ -67,7 +82,11 @@ describe('ActionButton interaction', () => {
 
 it('preserves the official loading-only state as interactive', async () => {
   const onClick = vi.fn()
-  await render(<ActionButton loading onClick={onClick}>Run</ActionButton>)
+  await render(
+    <ActionButton loading onClick={onClick}>
+      Run
+    </ActionButton>
+  )
 
   await click(element('button'))
 
@@ -76,7 +95,11 @@ it('preserves the official loading-only state as interactive', async () => {
 
 describe('TextField interaction and accessible connections', () => {
   it('connects its visible label to the editable input', async () => {
-    await render(<TextField label="Display name"><TextFieldInput /></TextField>)
+    await render(
+      <TextField label="Display name">
+        <TextFieldInput />
+      </TextField>
+    )
     const input = element<HTMLInputElement>('input')
     const label = element<HTMLLabelElement>('label')
 
@@ -88,17 +111,25 @@ describe('TextField interaction and accessible connections', () => {
     function ControlledField() {
       const [value, setValue] = useState('')
       return (
-        <TextField label="Display name" value={value} onValueChange={(details) => {
-          onValueChange(details.value)
-          setValue(details.value.toUpperCase())
-        }}><TextFieldInput /></TextField>
+        <TextField
+          label="Display name"
+          value={value}
+          onValueChange={(details) => {
+            onValueChange(details.value)
+            setValue(details.value.toUpperCase())
+          }}
+        >
+          <TextFieldInput />
+        </TextField>
       )
     }
     await render(<ControlledField />)
     const input = element<HTMLInputElement>('input')
     const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
     const isSetterMissing = valueSetter == null
-    if (isSetterMissing) throw new Error('Test setup: native input value setter unavailable')
+    if (isSetterMissing) {
+      throw new Error('Test setup: native input value setter unavailable')
+    }
 
     await act(async () => {
       valueSetter.call(input, 'New name')
@@ -112,7 +143,12 @@ describe('TextField interaction and accessible connections', () => {
 
   it('connects invalid state, description and error to the input', async () => {
     await render(
-      <TextField label="Display name" invalid description="Use a neutral name" errorMessage="Name required">
+      <TextField
+        label="Display name"
+        invalid
+        description="Use a neutral name"
+        errorMessage="Name required"
+      >
         <TextFieldInput />
       </TextField>
     )
@@ -130,7 +166,9 @@ function DialogExample({ defaultOpen = false, onOpenChange = vi.fn() }) {
   return (
     <DialogRoot defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
       <DialogTrigger>Open details</DialogTrigger>
-      <DialogContent title="Details"><ActionButton>Confirm</ActionButton></DialogContent>
+      <DialogContent title="Details">
+        <ActionButton>Confirm</ActionButton>
+      </DialogContent>
     </DialogRoot>
   )
 }

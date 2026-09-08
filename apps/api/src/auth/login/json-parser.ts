@@ -7,10 +7,7 @@ import type { RefreshErrorDefinition } from '../refresh/errors.js'
 import type { AccountErrorDefinition } from '../account/errors.js'
 
 type AuthJsonErrorCatalogEntry =
-  | LoginErrorDefinition
-  | LogoutErrorDefinition
-  | RefreshErrorDefinition
-  | AccountErrorDefinition
+  LoginErrorDefinition | LogoutErrorDefinition | RefreshErrorDefinition | AccountErrorDefinition
 
 type AuthJsonErrorDefinition = Readonly<{
   status: AuthJsonErrorCatalogEntry['status']
@@ -18,12 +15,9 @@ type AuthJsonErrorDefinition = Readonly<{
   message: string
 }>
 
-export function jsonError(
-  response: Response,
-  definition: AuthJsonErrorDefinition,
-): void {
+export function jsonError(response: Response, definition: AuthJsonErrorDefinition): void {
   response.status(definition.status).json({
-    error: { code: definition.code, message: definition.message },
+    error: { code: definition.code, message: definition.message }
   })
 }
 
@@ -46,7 +40,7 @@ export function loginJsonParser(request: Request, response: Response, next: Next
     '/auth/login-requests',
     '/auth/exchange',
     '/auth/refresh',
-    '/auth/logout',
+    '/auth/logout'
   ].includes(path)
   const isAuthPost = isPost && isAuthJsonPath
   const isPatch = request.method === 'PATCH'

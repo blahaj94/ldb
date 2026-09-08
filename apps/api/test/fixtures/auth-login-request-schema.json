@@ -113,29 +113,21 @@
   "uniques": [
     {
       "name": "uq_auth_login_requests_launch_ticket_hash",
-      "columns": [
-        "launchTicketHash"
-      ]
+      "columns": ["launchTicketHash"]
     },
     {
       "name": "uq_auth_login_requests_state_hash",
-      "columns": [
-        "stateHash"
-      ]
+      "columns": ["stateHash"]
     },
     {
       "name": "uq_auth_login_requests_exchange_code_hash",
-      "columns": [
-        "exchangeCodeHash"
-      ]
+      "columns": ["exchangeCodeHash"]
     }
   ],
   "indices": [
     {
       "name": "idx_auth_login_requests_expires_at",
-      "columns": [
-        "expiresAt"
-      ]
+      "columns": ["expiresAt"]
     }
   ],
   "checks": [

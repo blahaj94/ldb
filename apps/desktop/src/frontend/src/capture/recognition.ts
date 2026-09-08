@@ -57,13 +57,17 @@ export async function runSerialLoop({
 }: SerialLoopOptions): Promise<void> {
   while (!signal.aborted) {
     await runCycle()
-    if (signal.aborted) return
+    if (signal.aborted) {
+      return
+    }
     await wait(getIntervalMs(), signal)
   }
 }
 
 function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve()
+  if (signal.aborted) {
+    return Promise.resolve()
+  }
 
   return new Promise((resolve) => {
     const timeout = setTimeout(finish, milliseconds)

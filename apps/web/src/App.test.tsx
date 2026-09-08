@@ -15,7 +15,9 @@ it('preserves one counter increment for each activation', async () => {
     await act(async () => root.render(<App />))
     const button = container.querySelector('button')
     const isButtonMissing = button == null
-    if (isButtonMissing) throw new Error('Counter button did not render')
+    if (isButtonMissing) {
+      throw new Error('Counter button did not render')
+    }
     expect(button.textContent).toBe('Count is 0')
 
     await act(async () => button.click())

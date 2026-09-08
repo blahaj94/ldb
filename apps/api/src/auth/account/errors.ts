@@ -13,16 +13,16 @@ export const ACCOUNT_ERRORS = {
   AUTHENTICATION_REQUIRED: {
     code: 'AUTHENTICATION_REQUIRED',
     status: 401,
-    message: '로그인이 필요합니다.',
+    message: '로그인이 필요합니다.'
   },
   INVALID_NICKNAME: {
     code: 'INVALID_NICKNAME',
     status: 400,
-    message: '닉네임을 확인해 주세요.',
-  },
+    message: '닉네임을 확인해 주세요.'
+  }
 } as const satisfies Record<string, AccountErrorDefinitionShape>
 
-export type AccountErrorDefinition = typeof ACCOUNT_ERRORS[keyof typeof ACCOUNT_ERRORS]
+export type AccountErrorDefinition = (typeof ACCOUNT_ERRORS)[keyof typeof ACCOUNT_ERRORS]
 
 export class AccountFailure extends Error {
   readonly code: AccountErrorDefinition['code']

@@ -23,19 +23,52 @@ const terminalClearedFields = `"code_challenge" IS NULL AND "method" IS NULL AND
 
 export const authLoginRequestValueChecks = [
   { name: 'ck_auth_login_requests_purpose', expression: `"purpose" = 'login'` },
-  { name: 'ck_auth_login_requests_provider', expression: `"provider" IN ('${AUTH_PROVIDERS.GOOGLE}', '${AUTH_PROVIDERS.DISCORD}')` },
+  {
+    name: 'ck_auth_login_requests_provider',
+    expression: `"provider" IN ('${AUTH_PROVIDERS.GOOGLE}', '${AUTH_PROVIDERS.DISCORD}')`
+  },
   { name: 'ck_auth_login_requests_client', expression: `"client_id" = 'desktop'` },
-  { name: 'ck_auth_login_requests_config_nonempty', expression: `char_length("provider_config_version") > 0` },
-  { name: 'ck_auth_login_requests_return_target_nonempty', expression: `char_length("return_target_id") > 0` },
-  { name: 'ck_auth_login_requests_status', expression: `"status" IN ('created', 'browser_started', 'processing', 'exchange_ready', 'consumed', 'failed')` },
+  {
+    name: 'ck_auth_login_requests_config_nonempty',
+    expression: `char_length("provider_config_version") > 0`
+  },
+  {
+    name: 'ck_auth_login_requests_return_target_nonempty',
+    expression: `char_length("return_target_id") > 0`
+  },
+  {
+    name: 'ck_auth_login_requests_status',
+    expression: `"status" IN ('created', 'browser_started', 'processing', 'exchange_ready', 'consumed', 'failed')`
+  },
   { name: 'ck_auth_login_requests_method', expression: `"method" IS NULL OR "method" = 'S256'` },
-  { name: 'ck_auth_login_requests_code_challenge_nonempty', expression: `"code_challenge" IS NULL OR char_length("code_challenge") > 0` },
-  { name: 'ck_auth_login_requests_launch_hash_length', expression: `"launch_ticket_hash" IS NULL OR octet_length("launch_ticket_hash") = 32` },
-  { name: 'ck_auth_login_requests_state_hash_length', expression: `"state_hash" IS NULL OR octet_length("state_hash") = 32` },
-  { name: 'ck_auth_login_requests_browser_hash_length', expression: `"browser_binding_hash" IS NULL OR octet_length("browser_binding_hash") = 32` },
-  { name: 'ck_auth_login_requests_nonce_hash_length', expression: `"oidc_nonce_hash" IS NULL OR octet_length("oidc_nonce_hash") = 32` },
-  { name: 'ck_auth_login_requests_exchange_hash_length', expression: `"exchange_code_hash" IS NULL OR octet_length("exchange_code_hash") = 32` },
-  { name: 'ck_auth_login_requests_subject_nonempty', expression: `"verified_subject" IS NULL OR char_length("verified_subject") > 0` },
+  {
+    name: 'ck_auth_login_requests_code_challenge_nonempty',
+    expression: `"code_challenge" IS NULL OR char_length("code_challenge") > 0`
+  },
+  {
+    name: 'ck_auth_login_requests_launch_hash_length',
+    expression: `"launch_ticket_hash" IS NULL OR octet_length("launch_ticket_hash") = 32`
+  },
+  {
+    name: 'ck_auth_login_requests_state_hash_length',
+    expression: `"state_hash" IS NULL OR octet_length("state_hash") = 32`
+  },
+  {
+    name: 'ck_auth_login_requests_browser_hash_length',
+    expression: `"browser_binding_hash" IS NULL OR octet_length("browser_binding_hash") = 32`
+  },
+  {
+    name: 'ck_auth_login_requests_nonce_hash_length',
+    expression: `"oidc_nonce_hash" IS NULL OR octet_length("oidc_nonce_hash") = 32`
+  },
+  {
+    name: 'ck_auth_login_requests_exchange_hash_length',
+    expression: `"exchange_code_hash" IS NULL OR octet_length("exchange_code_hash") = 32`
+  },
+  {
+    name: 'ck_auth_login_requests_subject_nonempty',
+    expression: `"verified_subject" IS NULL OR char_length("verified_subject") > 0`
+  }
 ] satisfies LoginChecks
 
 export const authLoginRequestFieldGroupChecks = [
@@ -49,9 +82,12 @@ export const authLoginRequestFieldGroupChecks = [
       AND "provider_pkce_tag" IS NOT NULL AND "provider_pkce_key_id" IS NOT NULL
       AND octet_length("provider_pkce_ciphertext") > 0 AND octet_length("provider_pkce_iv") = 12
       AND octet_length("provider_pkce_tag") = 16 AND char_length("provider_pkce_key_id") > 0)
-      `,
+      `
   },
-  { name: 'ck_auth_login_requests_code_deadline', expression: `"code_expires_at" IS NULL OR "code_expires_at" <= "expires_at"` },
+  {
+    name: 'ck_auth_login_requests_code_deadline',
+    expression: `"code_expires_at" IS NULL OR "code_expires_at" <= "expires_at"`
+  }
 ] satisfies LoginChecks
 
 export const authLoginRequestStateChecks = [
@@ -67,7 +103,7 @@ export const authLoginRequestStateChecks = [
       AND "verified_subject" IS NULL AND "exchange_code_hash" IS NULL
       AND "code_expires_at" IS NULL AND "consumed_at" IS NULL
       )
-      `,
+      `
   },
   {
     name: 'ck_auth_login_requests_browser_started_fields',
@@ -75,7 +111,7 @@ export const authLoginRequestStateChecks = [
       "status" <> 'browser_started' OR (
       ${browserClaimFields}
       )
-      `,
+      `
   },
   {
     name: 'ck_auth_login_requests_processing_fields',
@@ -83,7 +119,7 @@ export const authLoginRequestStateChecks = [
       "status" <> 'processing' OR (
       ${browserClaimFields}
       )
-      `,
+      `
   },
   {
     name: 'ck_auth_login_requests_exchange_ready_fields',
@@ -94,7 +130,7 @@ export const authLoginRequestStateChecks = [
       AND "verified_subject" IS NOT NULL AND "exchange_code_hash" IS NOT NULL
       AND "code_expires_at" IS NOT NULL AND "consumed_at" IS NULL
       )
-      `,
+      `
   },
   {
     name: 'ck_auth_login_requests_consumed_fields',
@@ -102,7 +138,7 @@ export const authLoginRequestStateChecks = [
       "status" <> 'consumed' OR (
       ${terminalClearedFields} AND "consumed_at" IS NOT NULL
       )
-      `,
+      `
   },
   {
     name: 'ck_auth_login_requests_failed_fields',
@@ -110,6 +146,6 @@ export const authLoginRequestStateChecks = [
       "status" <> 'failed' OR (
       ${terminalClearedFields} AND "consumed_at" IS NULL
       )
-      `,
-  },
+      `
+  }
 ] satisfies LoginChecks

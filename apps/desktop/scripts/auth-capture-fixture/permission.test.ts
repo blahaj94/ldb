@@ -175,9 +175,13 @@ it.each(['window', 'contents', 'frame'])('종료된 %s에서는 허용하지 않
   const window = fixture.windows[0]
   const isWindow = target === 'window'
   const isContents = target === 'contents'
-  if (isWindow) window.isDestroyed = () => true
-  else if (isContents) window.webContents.isDestroyed = () => true
-  else window.webContents.mainFrame.detached = true
+  if (isWindow) {
+    window.isDestroyed = () => true
+  } else if (isContents) {
+    window.webContents.isDestroyed = () => true
+  } else {
+    window.webContents.mainFrame.detached = true
+  }
   expect(request()).toBe(false)
 })
 it('permission check는 모든 mediaType에서 계속 거절한다', () => {

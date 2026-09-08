@@ -2,18 +2,32 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { URL, URLSearchParams } from 'node:url'
 import { counts, failure, fixture, ready, row, started } from './login-database.mjs'
-import { blockedBy, bounded, databaseNow, instrument, settled, waitUntil } from './login-test-control.mjs'
+import {
+  blockedBy,
+  bounded,
+  databaseNow,
+  instrument,
+  settled,
+  waitUntil
+} from './login-test-control.mjs'
 import { cleanupWaitingOn, withCleanupDeletionHeld } from './cleanup-database-control.mjs'
 
 async function setRequestDeadline(source, id, deadline) {
-  await source.query(`UPDATE auth_login_requests
+  await source.query(
+    `UPDATE auth_login_requests
     SET created_at=$2::timestamptz-interval '600 seconds', expires_at=$2,
         code_expires_at=CASE WHEN code_expires_at IS NULL THEN NULL ELSE $2 END
-    WHERE id=$1`, [id, deadline])
+    WHERE id=$1`,
+    [id, deadline]
+  )
 }
 
 function callback(f, flow) {
-  return f.service.callback('google', new URLSearchParams({ state: flow.state, code: 'fixture-provider-code' }), flow.cookie)
+  return f.service.callback(
+    'google',
+    new URLSearchParams({ state: flow.state, code: 'fixture-provider-code' }),
+    flow.cookie
+  )
 }
 
 async function providerInFlight(source, cleanup, expired) {
@@ -27,7 +41,7 @@ async function providerInFlight(source, cleanup, expired) {
       entered.resolve()
       await release.promise
       return { provider: 'google', subject }
-    },
+    }
   })
   const flow = await started(f.service)
   const baseline = await counts(source)
@@ -35,17 +49,25 @@ async function providerInFlight(source, cleanup, expired) {
   try {
     await bounded(entered.promise)
     assert.equal((await row(source, flow.request.requestId)).status, 'processing')
-    if (expired) await setRequestDeadline(source, flow.request.requestId, await databaseNow(source))
+    if (expired) {
+      await setRequestDeadline(source, flow.request.requestId, await databaseNow(source))
+    }
     await cleanup(source)
     const remaining = await row(source, flow.request.requestId)
-    if (expired) assert.equal(remaining, undefined)
-    else assert.equal(remaining.status, 'processing')
+    if (expired) {
+      assert.equal(remaining, undefined)
+    } else {
+      assert.equal(remaining.status, 'processing')
+    }
     release.resolve()
     const result = await pending
     assert.equal(result.error?.code, expired ? 'LOGIN_REQUEST_INVALID' : undefined)
     const final = await row(source, flow.request.requestId)
-    if (expired) assert.equal(final, undefined)
-    else assert.equal(final.status, 'exchange_ready')
+    if (expired) {
+      assert.equal(final, undefined)
+    } else {
+      assert.equal(final.status, 'exchange_ready')
+    }
     assert.equal(providerCalls, 1)
     assert.deepEqual(await counts(source), baseline)
   } finally {
@@ -62,7 +84,7 @@ async function cleanupBeforeCallbackCompletion(source, cleanup) {
       providerEntered.resolve()
       await releaseProvider.promise
       return { provider: 'google', subject: randomUUID() }
-    },
+    }
   })
   const flow = await started(f.service)
   const baseline = await counts(source)
@@ -70,12 +92,18 @@ async function cleanupBeforeCallbackCompletion(source, cleanup) {
   try {
     await bounded(providerEntered.promise)
     await setRequestDeadline(source, flow.request.requestId, await databaseNow(source))
-    await withCleanupDeletionHeld(source, cleanup, 'auth_login_requests', flow.request.requestId, async ({ pid, waiter, release }) => {
-      releaseProvider.resolve()
-      await blockedBy(source, await bounded(waiter), pid)
-      release()
-      assert.equal((await pending).error?.code, 'LOGIN_REQUEST_INVALID')
-    })
+    await withCleanupDeletionHeld(
+      source,
+      cleanup,
+      'auth_login_requests',
+      flow.request.requestId,
+      async ({ pid, waiter, release }) => {
+        releaseProvider.resolve()
+        await blockedBy(source, await bounded(waiter), pid)
+        release()
+        assert.equal((await pending).error?.code, 'LOGIN_REQUEST_INVALID')
+      }
+    )
   } finally {
     releaseProvider.resolve()
     await pending
@@ -102,17 +130,33 @@ async function callbackCompletionBeforeCleanup(source, cleanup) {
         await release.promise
       }
       await commit()
-    },
+    }
   })
   const pending = settled(callback(f, flow))
   try {
     const pid = await bounded(committing.promise)
     await waitUntil(source, deadline)
-    await cleanupWaitingOn(source, cleanup, 'auth_login_requests', flow.request.requestId, pid, () => release.resolve())
+    await cleanupWaitingOn(
+      source,
+      cleanup,
+      'auth_login_requests',
+      flow.request.requestId,
+      pid,
+      () => release.resolve()
+    )
     const result = await pending
     assert.equal(result.error, undefined)
     const code = new URL(result.value.returnUrl).searchParams.get('code')
-    await failure(() => f.service.exchange({ requestId: flow.request.requestId, clientId: 'desktop', code, codeVerifier: flow.verifier }), 'LOGIN_EXCHANGE_INVALID')
+    await failure(
+      () =>
+        f.service.exchange({
+          requestId: flow.request.requestId,
+          clientId: 'desktop',
+          code,
+          codeVerifier: flow.verifier
+        }),
+      'LOGIN_EXCHANGE_INVALID'
+    )
   } finally {
     release.resolve()
     await pending
@@ -127,17 +171,23 @@ async function cleanupBeforeExchange(source, cleanup) {
   const flow = await ready(f.service)
   const baseline = await counts(source)
   await setRequestDeadline(source, flow.request.requestId, await databaseNow(source))
-  await withCleanupDeletionHeld(source, cleanup, 'auth_login_requests', flow.request.requestId, async ({ pid, waiter, release }) => {
-    const pending = settled(f.service.exchange(flow.exchange))
-    try {
-      await blockedBy(source, await bounded(waiter), pid)
-      release()
-      assert.equal((await pending).error?.code, 'LOGIN_EXCHANGE_INVALID')
-    } finally {
-      release()
-      await pending
+  await withCleanupDeletionHeld(
+    source,
+    cleanup,
+    'auth_login_requests',
+    flow.request.requestId,
+    async ({ pid, waiter, release }) => {
+      const pending = settled(f.service.exchange(flow.exchange))
+      try {
+        await blockedBy(source, await bounded(waiter), pid)
+        release()
+        assert.equal((await pending).error?.code, 'LOGIN_EXCHANGE_INVALID')
+      } finally {
+        release()
+        await pending
+      }
     }
-  })
+  )
   assert.equal(await row(source, flow.request.requestId), undefined)
   assert.deepEqual(await counts(source), baseline)
 }
@@ -159,21 +209,47 @@ async function exchangeBeforeCleanup(source, cleanup) {
         await release.promise
       }
       await commit()
-    },
+    }
   })
   const pending = settled(f.service.exchange(flow.exchange))
   try {
     const pid = await bounded(committing.promise)
     await waitUntil(source, deadline)
-    await cleanupWaitingOn(source, cleanup, 'auth_login_requests', flow.request.requestId, pid, () => release.resolve())
+    await cleanupWaitingOn(
+      source,
+      cleanup,
+      'auth_login_requests',
+      flow.request.requestId,
+      pid,
+      () => release.resolve()
+    )
     const result = await pending
     assert.equal(result.error, undefined)
     assert.equal(await row(source, flow.request.requestId), undefined)
-    assert.deepEqual(await counts(source), { users: baseline.users + 1, sessions: baseline.sessions + 1, refresh: baseline.refresh + 1 })
-    const principal = await f.verifyJwt(result.value.accessToken, (await databaseNow(source)).getTime() / 1000)
-    assert.equal((await source.query('SELECT id FROM auth_sessions WHERE id=$1 AND user_id=$2', [principal.sessionId, result.value.user.id])).length, 1)
+    assert.deepEqual(await counts(source), {
+      users: baseline.users + 1,
+      sessions: baseline.sessions + 1,
+      refresh: baseline.refresh + 1
+    })
+    const principal = await f.verifyJwt(
+      result.value.accessToken,
+      (await databaseNow(source)).getTime() / 1000
+    )
+    assert.equal(
+      (
+        await source.query('SELECT id FROM auth_sessions WHERE id=$1 AND user_id=$2', [
+          principal.sessionId,
+          result.value.user.id
+        ])
+      ).length,
+      1
+    )
     assert.deepEqual(await cleanup(source), { sessionsDeleted: 0, loginRequestsDeleted: 0 })
-    assert.equal((await source.query('SELECT id FROM auth_sessions WHERE id=$1', [principal.sessionId])).length, 1)
+    assert.equal(
+      (await source.query('SELECT id FROM auth_sessions WHERE id=$1', [principal.sessionId]))
+        .length,
+      1
+    )
   } finally {
     release.resolve()
     await pending
@@ -183,12 +259,30 @@ async function exchangeBeforeCleanup(source, cleanup) {
 
 export async function assertCleanupOAuthConcurrency(source, cleanup, mark) {
   const cases = [
-    ['valid provider HTTP processing survives cleanup', () => providerInFlight(source, cleanup, false)],
-    ['expired provider HTTP processing cannot be restored', () => providerInFlight(source, cleanup, true)],
-    ['callback completion waits on cleanup deletion', () => cleanupBeforeCallbackCompletion(source, cleanup)],
-    ['cleanup waits on callback completion and rereads expired row', () => callbackCompletionBeforeCleanup(source, cleanup)],
-    ['exchange waits on cleanup deletion without account/session creation', () => cleanupBeforeExchange(source, cleanup)],
-    ['cleanup waits on successful exchange and preserves issued account/session', () => exchangeBeforeCleanup(source, cleanup)],
+    [
+      'valid provider HTTP processing survives cleanup',
+      () => providerInFlight(source, cleanup, false)
+    ],
+    [
+      'expired provider HTTP processing cannot be restored',
+      () => providerInFlight(source, cleanup, true)
+    ],
+    [
+      'callback completion waits on cleanup deletion',
+      () => cleanupBeforeCallbackCompletion(source, cleanup)
+    ],
+    [
+      'cleanup waits on callback completion and rereads expired row',
+      () => callbackCompletionBeforeCleanup(source, cleanup)
+    ],
+    [
+      'exchange waits on cleanup deletion without account/session creation',
+      () => cleanupBeforeExchange(source, cleanup)
+    ],
+    [
+      'cleanup waits on successful exchange and preserves issued account/session',
+      () => exchangeBeforeCleanup(source, cleanup)
+    ]
   ]
   for (const [name, run] of cases) {
     mark(name)

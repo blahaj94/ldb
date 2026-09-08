@@ -14,7 +14,9 @@ const prepareOnly = process.argv.includes('--prepare-only')
 const failAfterWrite = process.argv.includes('--fail-after-write')
 const isMacOs = process.platform === 'darwin'
 const canRun = prepareOnly || isMacOs
-if (!canRun) throw new Error('Native credential validation requires macOS.')
+if (!canRun) {
+  throw new Error('Native credential validation requires macOS.')
+}
 const ownedGroups = new Set()
 let interrupted = false
 /** @returns {void} */
@@ -48,7 +50,9 @@ async function waitForGroupExit(pid, milliseconds) {
       throw new Error('Owned process group exit could not be confirmed.')
     }
     const hasExpired = Date.now() >= deadline
-    if (hasExpired) return false
+    if (hasExpired) {
+      return false
+    }
     await delay(50)
   }
 }
@@ -60,7 +64,9 @@ async function confirmPathAbsent(path) {
     await lstat(path)
   } catch (error) {
     const isAbsent = error.code === 'ENOENT'
-    if (isAbsent) return
+    if (isAbsent) {
+      return
+    }
   }
   throw new Error('Owned path cleanup could not be confirmed.')
 }
@@ -75,7 +81,9 @@ function execute(command, args, environment = process.env) {
       detached: true
     })
     const hasPid = child.pid != null
-    if (hasPid) ownedGroups.add(child.pid)
+    if (hasPid) {
+      ownedGroups.add(child.pid)
+    }
     let stdout = ''
     let stderr = ''
     let forcedKill
@@ -85,7 +93,9 @@ function execute(command, args, environment = process.env) {
     // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
     function stopGroup(signal) {
       const hasPid = child.pid != null
-      if (!hasPid) return
+      if (!hasPid) {
+        return
+      }
       try {
         process.kill(-child.pid, signal)
       } catch {
@@ -106,8 +116,11 @@ function execute(command, args, environment = process.env) {
         stopGroup('SIGKILL')
         return
       }
-      if (standardOutput) stdout += chunk.toString()
-      else stderr += chunk.toString()
+      if (standardOutput) {
+        stdout += chunk.toString()
+      } else {
+        stderr += chunk.toString()
+      }
     }
     child.stdout.on('data', (chunk) => capture(chunk, true))
     child.stderr.on('data', (chunk) => capture(chunk, false))
@@ -130,7 +143,9 @@ function execute(command, args, environment = process.env) {
             stopGroup('SIGKILL')
             stopped = await waitForGroupExit(child.pid, 1_000)
           }
-          if (!stopped) throw new Error('Owned process group remains active.')
+          if (!stopped) {
+            throw new Error('Owned process group remains active.')
+          }
         }
       } catch {
         reject(new Error('Owned process group cleanup was not confirmed.'))
@@ -152,7 +167,9 @@ function execute(command, args, environment = process.env) {
 async function defaultKeychain() {
   const result = await execute('/usr/bin/security', ['default-keychain', '-d', 'user'])
   const succeeded = result.code === 0
-  if (!succeeded) throw new Error('Default Keychain metadata unavailable.')
+  if (!succeeded) {
+    throw new Error('Default Keychain metadata unavailable.')
+  }
   return JSON.parse(result.stdout.trim())
 }
 
@@ -161,13 +178,17 @@ async function defaultKeychain() {
 async function itemExists(appName, keychain) {
   const args = ['find-generic-password', '-s', `${appName} Safe Storage`, '-a', appName]
   const hasKeychain = keychain != null
-  if (hasKeychain) args.push(keychain)
+  if (hasKeychain) {
+    args.push(keychain)
+  }
   // -g/-w를 사용하지 않는다. Metadata 결과는 capture하고 외부에 출력하지 않는다.
   const result = await execute('/usr/bin/security', args)
   const wasFound = result.code === 0
   const wasAbsent = result.code === 44
   const isRecognizedResult = wasFound || wasAbsent
-  if (!isRecognizedResult) throw new Error('Keychain item metadata could not be checked.')
+  if (!isRecognizedResult) {
+    throw new Error('Keychain item metadata could not be checked.')
+  }
   return wasFound
 }
 
@@ -190,7 +211,9 @@ async function removeOwnedItem(appName, keychain) {
   const stillExists = await itemExists(appName, keychain)
   const existsInSearchList = await itemExists(appName)
   const isCleanupConfirmed = wasDeleted && !stillExists && !existsInSearchList
-  if (!isCleanupConfirmed) throw new Error('Owned Keychain item cleanup was not confirmed.')
+  if (!isCleanupConfirmed) {
+    throw new Error('Owned Keychain item cleanup was not confirmed.')
+  }
 }
 
 const bundleParent = join(appDirectory, 'node_modules', '.tmp')
@@ -212,12 +235,16 @@ const phaseResults = []
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
 async function cleanupOwnedProfile() {
   const allGroupsStopped = ownedGroups.size === 0
-  if (!allGroupsStopped) throw new Error('Owned process group cleanup is incomplete.')
+  if (!allGroupsStopped) {
+    throw new Error('Owned process group cleanup is incomplete.')
+  }
   if (mayOwnItem) {
     await removeOwnedItem(appName, keychain)
     const stillHasSameDefault = (await defaultKeychain()) === keychain
     const hasStableDefault = stillHasSameDefault && !defaultChanged
-    if (!hasStableDefault) throw new Error('Keychain identity cleanup is uncertain.')
+    if (!hasStableDefault) {
+      throw new Error('Keychain identity cleanup is uncertain.')
+    }
   }
   const hasProfileRoot = profileRoot != null
   if (hasProfileRoot) {
@@ -246,14 +273,18 @@ try {
       minify: false
     }
   })
-  if (interrupted) throw new Error('Native credential validation was interrupted.')
+  if (interrupted) {
+    throw new Error('Native credential validation was interrupted.')
+  }
   if (!prepareOnly) {
     appName = `LDB-Credential-Test-${randomUUID()}`
     keychain = await defaultKeychain()
     const existsInSearchList = await itemExists(appName)
     const existsInDefault = await itemExists(appName, keychain)
     const identityAlreadyExists = existsInSearchList || existsInDefault
-    if (identityAlreadyExists) throw new Error('Test identity already exists; nothing was changed.')
+    if (identityAlreadyExists) {
+      throw new Error('Test identity already exists; nothing was changed.')
+    }
     profileRoot = await mkdtemp(join(tmpdir(), 'ldb-credential-native-127-'))
     await writeFile(join(profileRoot, 'owner.json'), JSON.stringify({ appName, keychain }), {
       mode: 0o600
@@ -261,7 +292,9 @@ try {
     const profile = join(profileRoot, 'profile')
     await mkdir(profile, { mode: 0o700 })
     for (const phase of ['write', 'restart', 'mark', 'recover']) {
-      if (interrupted) throw new Error('Native credential validation was interrupted.')
+      if (interrupted) {
+        throw new Error('Native credential validation was interrupted.')
+      }
       failedPhase = phase
       const hasSameDefault = (await defaultKeychain()) === keychain
       if (!hasSameDefault) {
@@ -305,8 +338,9 @@ try {
         hasExpectedPhase &&
         hasDecryptCount &&
         hasAvailabilityCount
-      if (!succeeded)
+      if (!succeeded) {
         throw new Error('Native credential phase failed; raw diagnostics were withheld.')
+      }
       phaseResults.push({
         phase,
         ok: true,
@@ -320,7 +354,9 @@ try {
       }
     }
     const createdOwnedItem = await itemExists(appName, keychain)
-    if (!createdOwnedItem) throw new Error('Expected isolated Keychain item was not observed.')
+    if (!createdOwnedItem) {
+      throw new Error('Expected isolated Keychain item was not observed.')
+    }
   }
 } catch {
   failure = 'Native credential validation failed; raw diagnostics were withheld.'
@@ -343,7 +379,9 @@ try {
   }
   const childGroupsStopped = ownedGroups.size === 0
   cleanupConfirmed = profileRemoved && bundleRemoved && childGroupsStopped
-  if (!cleanupConfirmed) failure = 'Owned resource cleanup was not confirmed.'
+  if (!cleanupConfirmed) {
+    failure = 'Owned resource cleanup was not confirmed.'
+  }
 }
 
 const failed = failure != null

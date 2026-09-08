@@ -29,11 +29,15 @@ async function waitForGroupExit(pid, milliseconds) {
       process.kill(-pid, 0)
     } catch (error) {
       const isAbsent = error.code === 'ESRCH'
-      if (isAbsent) return true
+      if (isAbsent) {
+        return true
+      }
       return false
     }
     const hasExpired = Date.now() >= deadline
-    if (hasExpired) return false
+    if (hasExpired) {
+      return false
+    }
     await delay(50)
   }
 }
@@ -42,10 +46,14 @@ async function waitForGroupExit(pid, milliseconds) {
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
 async function finishGroup(pid) {
   let stopped = await waitForGroupExit(pid, 500)
-  if (stopped) return true
+  if (stopped) {
+    return true
+  }
   signalGroup(pid, 'SIGTERM')
   stopped = await waitForGroupExit(pid, 2_000)
-  if (stopped) return true
+  if (stopped) {
+    return true
+  }
   signalGroup(pid, 'SIGKILL')
   return waitForGroupExit(pid, 1_000)
 }
@@ -92,11 +100,17 @@ export async function runCaptureFixture(args = []) {
   /** @returns {void} */
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
   function interrupt() {
-    if (interrupted) return
+    if (interrupted) {
+      return
+    }
     interrupted = true
-    if (finalizing) return
+    if (finalizing) {
+      return
+    }
     const hasPid = child?.pid != null
-    if (!hasPid) return
+    if (!hasPid) {
+      return
+    }
     signalGroup(child.pid, 'SIGTERM')
     forcedKill = setTimeout(() => signalGroup(child.pid, 'SIGKILL'), 2_000)
   }
@@ -104,13 +118,17 @@ export async function runCaptureFixture(args = []) {
   process.on('SIGTERM', interrupt)
   try {
     profile = await mkdtemp(join(tmpdir(), 'ldb-auth-capture-fixture-'))
-    if (interrupted) return 1
+    if (interrupted) {
+      return 1
+    }
     await writeFile(
       join(profile, 'owner.json'),
       JSON.stringify({ kind: 'auth-capture-fixture', launcherPid: process.pid }),
       { mode: 0o600 }
     )
-    if (interrupted) return 1
+    if (interrupted) {
+      return 1
+    }
     const environment = {
       ...process.env,
       LDB_AUTH_CAPTURE_PROFILE: profile,
@@ -142,8 +160,9 @@ export async function runCaptureFixture(args = []) {
     const hasProfile = profile != null
     const profileRemoved = hasProfile && groupStopped && (await removeProfile(profile))
     const cleanupConfirmed = groupStopped && profileRemoved
-    if (cleanupConfirmed) console.log('Capture fixture cleanup PASS')
-    else {
+    if (cleanupConfirmed) {
+      console.log('Capture fixture cleanup PASS')
+    } else {
       console.error('Capture fixture cleanup FAIL')
       exitCode = 1
     }
@@ -157,4 +176,6 @@ const invokedPath = process.argv[1]
 const hasInvokedPath = invokedPath != null
 const isDirectInvocation =
   hasInvokedPath && import.meta.url === pathToFileURL(resolve(invokedPath)).href
-if (isDirectInvocation) process.exitCode = await runCaptureFixture(process.argv.slice(2))
+if (isDirectInvocation) {
+  process.exitCode = await runCaptureFixture(process.argv.slice(2))
+}

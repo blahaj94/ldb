@@ -8,7 +8,9 @@ export const ACCOUNT_SERVICE = Symbol('ACCOUNT_SERVICE')
 function assertAccountGet(method: string): void {
   // Express의 HEAD→GET fallback이 계정 활동을 갱신하지 못하게 한다.
   const isGet = method === 'GET'
-  if (!isGet) throw new AccountFailure(ACCOUNT_ERRORS.INVALID_REQUEST)
+  if (!isGet) {
+    throw new AccountFailure(ACCOUNT_ERRORS.INVALID_REQUEST)
+  }
 }
 
 @Controller('me')

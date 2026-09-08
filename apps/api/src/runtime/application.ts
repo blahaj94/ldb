@@ -14,7 +14,9 @@ export async function createApiRuntime(configuration: RuntimeConfiguration) {
   const close = (): Promise<void> => {
     const pendingClose = closing
     const isClosing = pendingClose !== undefined
-    if (isClosing) return pendingClose
+    if (isClosing) {
+      return pendingClose
+    }
     const ownedApp = app
     closing = (async () => {
       let failed = false
@@ -28,13 +30,19 @@ export async function createApiRuntime(configuration: RuntimeConfiguration) {
       }
       try {
         const isInitialized = dataSource.isInitialized
-        if (isInitialized) await dataSource.destroy()
+        if (isInitialized) {
+          await dataSource.destroy()
+        }
         // Driver connect 중 실패하면 isInitialized=false여도 pool이 남을 수 있다.
-        else await dataSource.driver.disconnect()
+        else {
+          await dataSource.driver.disconnect()
+        }
       } catch {
         failed = true
       }
-      if (failed) throw new Error('API runtime cleanup failed')
+      if (failed) {
+        throw new Error('API runtime cleanup failed')
+      }
     })()
     return closing
   }
@@ -46,11 +54,17 @@ export async function createApiRuntime(configuration: RuntimeConfiguration) {
       registry: configuration.registry,
       pkceKeys: configuration.pkceKeys,
       issueAccessJwt: configuration.issueAccessJwt,
-      verifyProvider: configuration.verifyProvider,
+      verifyProvider: configuration.verifyProvider
     })
-    const session = createSessionHttpService({ dataSource, issueAccessJwt: configuration.issueAccessJwt })
+    const session = createSessionHttpService({
+      dataSource,
+      issueAccessJwt: configuration.issueAccessJwt
+    })
     const account = { dataSource, verifyAccessJwt: configuration.verifyAccessJwt }
-    app = await createLoginHttpApp(login, session, account, { ...account, apiKey: configuration.apiKey })
+    app = await createLoginHttpApp(login, session, account, {
+      ...account,
+      apiKey: configuration.apiKey
+    })
     return { app, close }
   } catch (error) {
     // 초기화 실패를 보존하며 앱을 얻지 못했거나 close가 실패해도 DB 정리를 시도한다.

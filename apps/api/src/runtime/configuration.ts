@@ -12,7 +12,9 @@ import { parseAuthenticationInput } from './authentication-input.js'
 const invalidConfiguration = 'Invalid API runtime configuration'
 
 function googleProvider(input: ReturnType<typeof parseAuthenticationInput>) {
-  const snapshots = new Map(input.registry.registrations.map((snapshot) => [snapshot.version, snapshot]))
+  const snapshots = new Map(
+    input.registry.registrations.map((snapshot) => [snapshot.version, snapshot])
+  )
   const registrations: GoogleProviderRegistration[] = []
   const versions = new Set<string>()
   for (const entry of input.google.registrations) {
@@ -20,7 +22,9 @@ function googleProvider(input: ReturnType<typeof parseAuthenticationInput>) {
     const hasSnapshot = snapshot !== undefined
     const isDuplicate = versions.has(entry.version)
     const isBindingValid = hasSnapshot && !isDuplicate
-    if (!isBindingValid) throw new Error(invalidConfiguration)
+    if (!isBindingValid) {
+      throw new Error(invalidConfiguration)
+    }
     versions.add(entry.version)
     registrations.push({ snapshot, tokenEndpoint: entry.tokenEndpoint, jwksUri: entry.jwksUri })
   }
@@ -33,13 +37,17 @@ function googleProvider(input: ReturnType<typeof parseAuthenticationInput>) {
     const binding = JSON.stringify([entry.version, entry.reference])
     const isDuplicate = secrets.has(binding)
     const isBindingValid = hasMatchingReference && !isDuplicate
-    if (!isBindingValid) throw new Error(invalidConfiguration)
+    if (!isBindingValid) {
+      throw new Error(invalidConfiguration)
+    }
     secrets.set(binding, entry.value)
   }
   const hasAllEndpoints = versions.size === snapshots.size
   const hasAllSecrets = secrets.size === snapshots.size
   const isComplete = hasAllEndpoints && hasAllSecrets
-  if (!isComplete) throw new Error(invalidConfiguration)
+  if (!isComplete) {
+    throw new Error(invalidConfiguration)
+  }
   return createGoogleProviderVerifier({
     registrations,
     resolveSecret: ({ version, reference, signal }) => {
@@ -47,9 +55,11 @@ function googleProvider(input: ReturnType<typeof parseAuthenticationInput>) {
       const hasSecret = secret !== undefined
       const isCancelled = signal.aborted
       const canResolve = hasSecret && !isCancelled
-      if (!canResolve) throw new Error(invalidConfiguration)
+      if (!canResolve) {
+        throw new Error(invalidConfiguration)
+      }
       return secret
-    },
+    }
   })
 }
 
@@ -60,11 +70,15 @@ export async function readRuntimeConfiguration(environment: NodeJS.ProcessEnv) {
     const database = readDatabaseConfiguration(environment)
     const apiKey = environment.NEOPLE_API_KEY
     const hasApiKey = apiKey !== undefined && apiKey.length > 0
-    if (!hasApiKey) throw new Error(invalidConfiguration)
+    if (!hasApiKey) {
+      throw new Error(invalidConfiguration)
+    }
     const path = environment.AUTH_CONFIG_FILE
     const hasPath = path !== undefined && path.length > 0
     const hasAbsolutePath = hasPath && isAbsolute(path)
-    if (!hasAbsolutePath) throw new Error(invalidConfiguration)
+    if (!hasAbsolutePath) {
+      throw new Error(invalidConfiguration)
+    }
     const bytes = await readFile(path)
     const json = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     const input = parseAuthenticationInput(JSON.parse(json) as unknown)
@@ -73,7 +87,16 @@ export async function readRuntimeConfiguration(environment: NodeJS.ProcessEnv) {
     const issueAccessJwt = await createAccessJwtIssuer(input.accessJwt)
     const verifyAccessJwt = await createAccessJwtVerifier(input.accessJwt)
     const verifyProvider = googleProvider(input)
-    return { port, database, apiKey, registry, pkceKeys, issueAccessJwt, verifyAccessJwt, verifyProvider }
+    return {
+      port,
+      database,
+      apiKey,
+      registry,
+      pkceKeys,
+      issueAccessJwt,
+      verifyAccessJwt,
+      verifyProvider
+    }
   } catch {
     // FS/JSON/crypto의 error와 cause는 파일 경로나 값을 포함할 수 있다.
     throw new Error(invalidConfiguration)

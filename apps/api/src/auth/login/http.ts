@@ -1,5 +1,15 @@
 import 'reflect-metadata'
-import { Catch, Controller, Get, Inject, Module, NotFoundException, Post, Req, Res } from '@nestjs/common'
+import {
+  Catch,
+  Controller,
+  Get,
+  Inject,
+  Module,
+  NotFoundException,
+  Post,
+  Req,
+  Res
+} from '@nestjs/common'
 import type { ArgumentsHost, ExceptionFilter, INestApplication } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import type { Request, Response } from 'express'
@@ -30,7 +40,7 @@ const htmlEntities: Record<string, string> = {
   '<': '&lt;',
   '>': '&gt;',
   '"': '&quot;',
-  "'": '&#39;',
+  "'": '&#39;'
 }
 
 function escapeHtml(value: string): string {
@@ -39,9 +49,7 @@ function escapeHtml(value: string): string {
 
 function loginPage(message: string, returnUrl?: string): string {
   const messageHtml = `<p>${escapeHtml(message)}</p>`
-  const returnLink = returnUrl
-    ? `<a href="${escapeHtml(returnUrl)}">앱으로 돌아가기</a>`
-    : ''
+  const returnLink = returnUrl ? `<a href="${escapeHtml(returnUrl)}">앱으로 돌아가기</a>` : ''
 
   return [
     '<!doctype html>',
@@ -52,7 +60,7 @@ function loginPage(message: string, returnUrl?: string): string {
     '<body>',
     messageHtml,
     returnLink,
-    '</body></html>',
+    '</body></html>'
   ].join('')
 }
 
@@ -61,7 +69,9 @@ function readOriginalQuery(request: Request): URLSearchParams {
   return new URL(request.originalUrl, 'https://request.invalid').searchParams
 }
 
-function authHttpFailure(error: unknown): LoginFailure | RefreshFailure | LogoutFailure | AccountFailure {
+function authHttpFailure(
+  error: unknown
+): LoginFailure | RefreshFailure | LogoutFailure | AccountFailure {
   const isSessionFailure = error instanceof RefreshFailure || error instanceof LogoutFailure
   const isAccountFailure = error instanceof AccountFailure
   const isKnownAuthFailure = isSessionFailure || isAccountFailure
@@ -94,7 +104,9 @@ class LoginHttpFilter implements ExceptionFilter {
       const isSearchFailure = error instanceof NeopleSearchFailure
       const failure = isSearchFailure ? error : neopleSearchFailure('internal')
       const hasRetryAfter = failure.retryAfter != null
-      if (hasRetryAfter) response.setHeader('Retry-After', String(failure.retryAfter))
+      if (hasRetryAfter) {
+        response.setHeader('Retry-After', String(failure.retryAfter))
+      }
       response.status(failure.status).json(failure.body)
       return
     }
@@ -179,7 +191,7 @@ class LoginController {
   private async callback(
     provider: AuthProvider,
     request: Request,
-    response: Response,
+    response: Response
   ): Promise<void> {
     // HEAD는 완료 HTML을 받지 못하므로 callback claim이나 provider 검증을 시작하지 않는다.
     if (request.method !== 'GET') {
@@ -192,9 +204,10 @@ class LoginController {
     const completion = await this.service.callback(provider, query, request.headers.cookie ?? '')
 
     response.setHeader('Set-Cookie', completion.cookie)
-    response.status(200).type('html').send(
-      loginPage('앱으로 돌아가 로그인을 완료해 주세요.', completion.returnUrl),
-    )
+    response
+      .status(200)
+      .type('html')
+      .send(loginPage('앱으로 돌아가 로그인을 완료해 주세요.', completion.returnUrl))
   }
 }
 
@@ -202,7 +215,7 @@ class LoginController {
 export function createSessionHttpService(deps: RefreshDependencies): SessionHttpService {
   return {
     refresh: (rawToken) => rotateRefresh(deps, rawToken),
-    logout: (rawToken) => logoutSession(deps.dataSource, rawToken),
+    logout: (rawToken) => logoutSession(deps.dataSource, rawToken)
   }
 }
 
@@ -210,7 +223,7 @@ export async function createLoginHttpApp(
   service: LoginHttpService,
   sessionService?: SessionHttpService,
   accountDependencies?: AccountDependencies,
-  searchDependencies?: AuthenticatedSearchDependencies,
+  searchDependencies?: AuthenticatedSearchDependencies
 ): Promise<INestApplication> {
   const hasSessionService = sessionService != null
   const hasAccountDependencies = accountDependencies != null
@@ -219,27 +232,39 @@ export async function createLoginHttpApp(
     LoginController,
     ...(hasSessionService ? [SessionController] : []),
     ...(hasAccountDependencies ? [AccountController] : []),
-    ...(hasSearchDependencies ? [CharacterSearchController] : []),
+    ...(hasSearchDependencies ? [CharacterSearchController] : [])
   ]
   const providers = [
     { provide: LOGIN_SERVICE, useValue: service },
     ...(hasSessionService ? [{ provide: SESSION_SERVICE, useValue: sessionService }] : []),
-    ...(hasAccountDependencies ? [{
-      provide: ACCOUNT_SERVICE, useValue: createAccountService(accountDependencies),
-    }] : []),
-    ...(hasSearchDependencies ? [{
-      provide: CHARACTER_SEARCH_SERVICE, useValue: createAuthenticatedSearchService(searchDependencies),
-    }] : []),
+    ...(hasAccountDependencies
+      ? [
+          {
+            provide: ACCOUNT_SERVICE,
+            useValue: createAccountService(accountDependencies)
+          }
+        ]
+      : []),
+    ...(hasSearchDependencies
+      ? [
+          {
+            provide: CHARACTER_SEARCH_SERVICE,
+            useValue: createAuthenticatedSearchService(searchDependencies)
+          }
+        ]
+      : [])
   ]
 
   @Module({
     controllers,
-    providers,
+    providers
   })
   class LoginHttpModule {}
 
   const app = await NestFactory.create(LoginHttpModule, {
-    logger: false, bodyParser: false, abortOnError: false,
+    logger: false,
+    bodyParser: false,
+    abortOnError: false
   })
   try {
     app.use((request: Request, response: Response, next: () => void) => {

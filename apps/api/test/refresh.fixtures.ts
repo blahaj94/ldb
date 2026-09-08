@@ -16,28 +16,50 @@ interface Tokens {
   refreshToken: string
   sessionExpiresAt: string
 }
-interface Dependencies { dataSource: DataSource; issueAccessJwt: IssueAccessJwt }
+interface Dependencies {
+  dataSource: DataSource
+  issueAccessJwt: IssueAccessJwt
+}
 interface RefreshModule {
   rotateRefresh(deps: Dependencies, token: unknown): Promise<Tokens>
-  rotateRefreshForTest(deps: Dependencies, token: unknown, entropy: (size: number) => Buffer): Promise<Tokens>
+  rotateRefreshForTest(
+    deps: Dependencies,
+    token: unknown,
+    entropy: (size: number) => Buffer
+  ): Promise<Tokens>
 }
-export const load = () => import(new URL('../src/auth/refresh/index.js', import.meta.url).href) as Promise<RefreshModule>
+export const load = () =>
+  import(new URL('../src/auth/refresh/index.js', import.meta.url).href) as Promise<RefreshModule>
 
 export function fixture() {
   const bytes = randomBytes(32)
   const raw = bytes.toString('base64url')
   const user = { id: randomUUID() }
   const session = {
-    id: randomUUID(), userId: user.id, createdAt: time, lastActiveAt: time,
-    revokedAt: null as Date | null, revokedReason: null as string | null,
+    id: randomUUID(),
+    userId: user.id,
+    createdAt: time,
+    lastActiveAt: time,
+    revokedAt: null as Date | null,
+    revokedReason: null as string | null
   }
-  const token = { tokenHash: digest(bytes), sessionId: session.id, issuedAt: time, consumedAt: null as Date | null }
+  const token = {
+    tokenHash: digest(bytes),
+    sessionId: session.id,
+    issuedAt: time,
+    consumedAt: null as Date | null
+  }
   const events: string[] = []
   const inserted: Record<string, unknown>[] = []
   const state = {
-    userMissing: false, sessionMissing: false, tokenMissing: false, hintMissing: false,
-    freshTime: time, beforeCommit: async () => {}, beforeLockedRead: () => {},
-    beforeInsert: () => {},
+    userMissing: false,
+    sessionMissing: false,
+    tokenMissing: false,
+    hintMissing: false,
+    freshTime: time,
+    beforeCommit: async () => {},
+    beforeLockedRead: () => {},
+    beforeInsert: () => {}
   }
   const users = {
     findOne: async (query: { where: unknown; lock: unknown }) => {
@@ -45,7 +67,7 @@ export function fixture() {
       assert.deepEqual(query, { where: { id: user.id }, lock: { mode: 'pessimistic_write' } })
       state.beforeLockedRead()
       return state.userMissing ? null : { ...user }
-    },
+    }
   }
   const sessions = {
     findOneBy: async (where: unknown) => {
@@ -62,7 +84,7 @@ export function fixture() {
       assert.deepEqual(where, { id: session.id })
       assert.deepEqual(values, { revokedAt: state.freshTime, revokedReason: 'refresh_reuse' })
       Object.assign(session, values)
-    },
+    }
   }
   const refresh = {
     findOneBy: async (where: unknown) => {
@@ -72,7 +94,10 @@ export function fixture() {
     },
     findOne: async (query: unknown) => {
       events.push('refresh-lock')
-      assert.deepEqual(query, { where: { tokenHash: digest(bytes) }, lock: { mode: 'pessimistic_write' } })
+      assert.deepEqual(query, {
+        where: { tokenHash: digest(bytes) },
+        lock: { mode: 'pessimistic_write' }
+      })
       return state.tokenMissing ? null : { ...token }
     },
     update: async (where: unknown, values: { consumedAt: Date }) => {
@@ -84,12 +109,16 @@ export function fixture() {
       events.push('insert')
       state.beforeInsert()
       inserted.push(value)
-    },
+    }
   }
   const manager = {
     getRepository: (schema: unknown) => {
-      if (schema === UserSchema) return users
-      if (schema === AuthSessionSchema) return sessions
+      if (schema === UserSchema) {
+        return users
+      }
+      if (schema === AuthSessionSchema) {
+        return sessions
+      }
       assert.equal(schema, AuthRefreshTokenSchema)
       return refresh
     },
@@ -97,7 +126,7 @@ export function fixture() {
       assert.equal(sql, 'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now')
       events.push('fresh-time')
       return [{ now: state.freshTime }]
-    },
+    }
   } as unknown as EntityManager
   const deps: Dependencies = {
     dataSource: {
@@ -117,17 +146,22 @@ export function fixture() {
           events.push('rollback')
           throw error
         }
-      },
+      }
     } as unknown as DataSource,
     issueAccessJwt: async (input) => {
       events.push('sign')
       assert.deepEqual(input, {
-        userId: user.id, sessionId: session.id, issuedAt: state.freshTime.getTime() / 1000,
-        idleDeadline: session.lastActiveAt.getTime() / 1000 + idleSeconds,
+        userId: user.id,
+        sessionId: session.id,
+        issuedAt: state.freshTime.getTime() / 1000,
+        idleDeadline: session.lastActiveAt.getTime() / 1000 + idleSeconds
       })
-      return { accessToken: 'test-access-placeholder', issuedAt: input.issuedAt,
-        expiresAt: Math.min(input.issuedAt + 900, input.idleDeadline) }
-    },
+      return {
+        accessToken: 'test-access-placeholder',
+        issuedAt: input.issuedAt,
+        expiresAt: Math.min(input.issuedAt + 900, input.idleDeadline)
+      }
+    }
   }
   return { deps, state, user, session, token, bytes, raw, events, inserted }
 }

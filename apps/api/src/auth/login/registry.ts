@@ -29,7 +29,7 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
     snapshot.version,
     snapshot.providerClientId,
     snapshot.providerSecretRef,
-    snapshot.returnTarget.id,
+    snapshot.returnTarget.id
   ]
   if (!requiredValues.every((value) => typeof value === 'string' && value.trim().length > 0)) {
     throw new Error()
@@ -52,8 +52,18 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
   // 3. 앱 복귀 URL은 host/path가 있는 등록 protocol이어야 한다.
   const target = exactUrl(snapshot.returnTarget.url)
   const disallowedProtocols = [
-    'http:', 'https:', 'file:', 'data:', 'javascript:', 'about:',
-    'blob:', 'ftp:', 'ws:', 'wss:', 'mailto:', 'tel:',
+    'http:',
+    'https:',
+    'file:',
+    'data:',
+    'javascript:',
+    'about:',
+    'blob:',
+    'ftp:',
+    'ws:',
+    'wss:',
+    'mailto:',
+    'tel:'
   ]
   if (
     !target.hostname ||
@@ -100,9 +110,11 @@ export class LoginRegistry {
       const activeVersions = Object.entries(this.#active)
       if (
         activeVersions.length === 0 ||
-        activeVersions.some(([provider, version]) =>
-          (provider !== 'google' && provider !== 'discord') ||
-          !this.#snapshots.has(this.registrationKey(provider, version)))
+        activeVersions.some(
+          ([provider, version]) =>
+            (provider !== 'google' && provider !== 'discord') ||
+            !this.#snapshots.has(this.registrationKey(provider, version))
+        )
       ) {
         throw new Error()
       }
@@ -128,7 +140,7 @@ export class LoginRegistry {
 
   /** 진행 중인 요청은 저장된 version과 복귀 대상을 그대로 사용한다. */
   resolve(
-    request: Pick<AuthLoginRequest, 'provider' | 'providerConfigVersion' | 'returnTargetId'>,
+    request: Pick<AuthLoginRequest, 'provider' | 'providerConfigVersion' | 'returnTargetId'>
   ): ProviderRegistration {
     const key = this.registrationKey(request.provider, request.providerConfigVersion)
     const snapshot = this.#snapshots.get(key)

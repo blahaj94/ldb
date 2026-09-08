@@ -24,7 +24,7 @@ export function parseCreation(value: unknown): LoginCreation {
     'provider',
     'clientId',
     'codeChallenge',
-    'codeChallengeMethod',
+    'codeChallengeMethod'
   ])
 
   if (
@@ -73,11 +73,7 @@ export function parseCallback(query: URLSearchParams): LoginCallbackInput {
     const errors = query.getAll('error')
 
     // OAuth의 다른 query는 허용하되 state 하나와 code/error 중 하나만 받는다.
-    if (
-      states.length !== 1 ||
-      codes.length + errors.length !== 1 ||
-      !(codes[0] ?? errors[0])
-    ) {
+    if (states.length !== 1 || codes.length + errors.length !== 1 || !(codes[0] ?? errors[0])) {
       throw new Error()
     }
 

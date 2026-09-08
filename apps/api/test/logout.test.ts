@@ -7,7 +7,9 @@ import { checkedAt, logoutFixture } from './logout.fixtures.js'
 async function expectUnavailable(operation: Promise<void>): Promise<void> {
   await assert.rejects(operation, (error: unknown) => {
     const isErrorObject = error != null && typeof error === 'object'
-    if (!isErrorObject) return false
+    if (!isErrorObject) {
+      return false
+    }
     assert('code' in error)
     assert.equal(error.code, 'AUTH_UNAVAILABLE')
     assert.equal('cause' in error, false)
@@ -21,7 +23,9 @@ async function expectUnavailable(operation: Promise<void>): Promise<void> {
 async function expectInvalidRequest(operation: Promise<void>): Promise<void> {
   await assert.rejects(operation, (error: unknown) => {
     const isErrorObject = error != null && typeof error === 'object'
-    if (!isErrorObject) return false
+    if (!isErrorObject) {
+      return false
+    }
     assert('code' in error)
     assert.equal(error.code, 'INVALID_AUTH_REQUEST')
     return true
@@ -52,7 +56,7 @@ test('logout rejects noncanonical refresh strings before database work', async (
     randomBytes(31).toString('base64url'),
     randomBytes(33).toString('base64url'),
     '+'.repeat(43),
-    '/'.repeat(43),
+    '/'.repeat(43)
   ]) {
     const fixture = logoutFixture()
     await expectInvalidRequest(logoutSession(fixture.dataSource, rawToken))
@@ -93,7 +97,7 @@ test('logout locks a known current or consumed token session and resolves after 
       'refresh-lock',
       'fresh-time',
       'revoke',
-      'commit',
+      'commit'
     ])
   }
 })
@@ -109,7 +113,7 @@ test('logout leaves ended, missing and stale ownership sessions unchanged', asyn
     'tokenOwnerChanged',
     'tokenHashChanged',
     'alreadyRevoked',
-    'idleExpired',
+    'idleExpired'
   ] as const
 
   for (const scenario of scenarios) {
@@ -119,10 +123,13 @@ test('logout leaves ended, missing and stale ownership sessions unchanged', asyn
     const shouldChangeTokenHash = scenario === 'tokenHashChanged'
     const shouldMarkAlreadyRevoked = scenario === 'alreadyRevoked'
     const shouldMarkIdleExpired = scenario === 'idleExpired'
-    if (shouldChangeSessionOwner) fixture.session.userId = randomUUID()
-    else if (shouldChangeTokenOwner) fixture.token.sessionId = randomUUID()
-    else if (shouldChangeTokenHash) fixture.token.tokenHash = randomBytes(32)
-    else if (shouldMarkAlreadyRevoked) {
+    if (shouldChangeSessionOwner) {
+      fixture.session.userId = randomUUID()
+    } else if (shouldChangeTokenOwner) {
+      fixture.token.sessionId = randomUUID()
+    } else if (shouldChangeTokenHash) {
+      fixture.token.tokenHash = randomBytes(32)
+    } else if (shouldMarkAlreadyRevoked) {
       fixture.session.revokedAt = checkedAt
       fixture.session.revokedReason = 'refresh_reuse'
     } else if (shouldMarkIdleExpired) {
@@ -143,8 +150,11 @@ test('logout sanitizes database and commit uncertainty without retry', async () 
     const fixture = logoutFixture()
     const rawError = new Error('private credential SQL detail')
     const isTransactionFailure = failurePoint === 'transaction'
-    if (isTransactionFailure) fixture.state.transactionFailure = rawError
-    else fixture.state.commitFailure = rawError
+    if (isTransactionFailure) {
+      fixture.state.transactionFailure = rawError
+    } else {
+      fixture.state.commitFailure = rawError
+    }
 
     await expectUnavailable(logoutSession(fixture.dataSource, fixture.rawToken))
     assert.equal(fixture.events.filter((event) => event === 'begin').length, 1)

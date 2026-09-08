@@ -42,7 +42,9 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
 
     function accept(snapshot: AuthSnapshot, expected: number): void {
       const isActiveEpoch = isCurrent(expected)
-      if (!isActiveEpoch) return
+      if (!isActiveEpoch) {
+        return
+      }
       const previous = current
       const hasCurrent = previous != null
       const hasChangedRun = hasCurrent && previous.runId !== snapshot.runId
@@ -51,12 +53,16 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
         return
       }
       const isNewer = !hasCurrent || snapshot.revision > previous.revision
-      if (!isNewer) return
+      if (!isNewer) {
+        return
+      }
       const wasSignedIn = hasCurrent && previous.phase === 'signedIn'
       const isSignedIn = snapshot.phase === 'signedIn'
       const hasLeftSignedIn = wasSignedIn && !isSignedIn
       // React가 여러 auth event를 한 render로 합쳐도 이전 home을 재사용하지 않는다.
-      if (hasLeftSignedIn) presentationEpochRef.current += 1
+      if (hasLeftSignedIn) {
+        presentationEpochRef.current += 1
+      }
       current = snapshot
       setState({
         source: api,
@@ -71,16 +77,24 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       try {
         const snapshot = await api.getAuthState()
         const isActiveEpoch = isCurrent(expected)
-        if (!isActiveEpoch) return
-        if (establish) baselineReady = true
+        if (!isActiveEpoch) {
+          return
+        }
+        if (establish) {
+          baselineReady = true
+        }
         accept(snapshot, expected)
         const buffered = queued
         queued = null
         const hasBuffered = buffered != null
-        if (hasBuffered) accept(buffered, expected)
+        if (hasBuffered) {
+          accept(buffered, expected)
+        }
       } catch {
         const isActiveEpoch = isCurrent(expected)
-        if (!isActiveEpoch) return
+        if (!isActiveEpoch) {
+          return
+        }
         current = null
         setState({
           source: api,
@@ -101,7 +115,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       pending = false
       baselineReady = false
       queued = null
-      if (isReconnect)
+      if (isReconnect) {
         setState({
           source: api,
           presentationEpoch: presentationEpochRef.current,
@@ -109,10 +123,13 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
           commandPending: false,
           connectionFailed: false
         })
+      }
       try {
         unsubscribe = api.onAuthStateChanged((snapshot) => {
           const isActiveEpoch = isCurrent(expected)
-          if (!isActiveEpoch) return
+          if (!isActiveEpoch) {
+            return
+          }
           if (baselineReady) {
             accept(snapshot, expected)
             return
@@ -121,7 +138,9 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
           const hasQueued = buffered != null
           const hasSameRun = hasQueued && buffered.runId === snapshot.runId
           const isOlder = hasSameRun && snapshot.revision <= buffered.revision
-          if (!isOlder) queued = snapshot
+          if (!isOlder) {
+            queued = snapshot
+          }
         })
         void query(expected, true)
       } catch {
@@ -137,7 +156,9 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
 
     async function command(intent: AuthIntent): Promise<void> {
       const cannotDispatch = !active || pending || current == null
-      if (cannotDispatch) return
+      if (cannotDispatch) {
+        return
+      }
       const expected = epoch
       pending = true
       setState((previous) => ({ ...previous, commandPending: true }))
@@ -158,7 +179,9 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       } catch {
         // Mutation은 다시 보내지 않는다. 현재 main snapshot만 조회한다.
         const isActiveEpoch = isCurrent(expected)
-        if (isActiveEpoch) await query(expected)
+        if (isActiveEpoch) {
+          await query(expected)
+        }
       } finally {
         const isActiveEpoch = isCurrent(expected)
         if (isActiveEpoch) {

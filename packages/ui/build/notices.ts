@@ -24,7 +24,7 @@ export function uiNotices() {
       const changes: string[] = []
       for (const source of provenance.files) {
         const isModifiedSource = source.localChanges.length > 0
-        if (!isModifiedSource) continue
+        if (!isModifiedSource) {continue}
         changes.push(`${source.local}:\n${JSON.stringify(source.localChanges, null, 2)}`)
       }
       this.emitFile({
@@ -37,7 +37,7 @@ export function uiNotices() {
         const isJavaScript = chunk.type === 'chunk'
         const hasCode = typeof chunk.code === 'string'
         const shouldMarkSource = isJavaScript && hasCode
-        if (!shouldMarkSource) continue
+        if (!shouldMarkSource) {continue}
         generatedJavaScriptFiles.push(fileName)
         chunk.code = '/*! LDB modified SEED source: see notices/LDB-MODIFICATIONS.txt and notices/seed-provenance.json. */\n' + chunk.code
       }
@@ -63,14 +63,14 @@ export function uiNotices() {
       const packages = new Map<string, { name: string; version: string; license: string; modules: string[] }>()
       for (const moduleId of this.getModuleIds()) {
         const isDependency = moduleId.includes('/node_modules/')
-        if (!isDependency) continue
+        if (!isDependency) {continue}
         const sourcePath = moduleId.split('?')[0]
         let directory = dirname(sourcePath)
         let hasManifest = existsSync(join(directory, 'package.json'))
         while (!hasManifest) {
           const parent = dirname(directory)
           const isFilesystemRoot = parent === directory
-          if (isFilesystemRoot) throw new Error('Bundled dependency has no package manifest')
+          if (isFilesystemRoot) {throw new Error('Bundled dependency has no package manifest')}
           directory = parent
           hasManifest = existsSync(join(directory, 'package.json'))
         }

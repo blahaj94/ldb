@@ -41,7 +41,9 @@ function isTrustedFrame(window: BrowserWindow | null, frame: WebFrameMain | null
   const isRegisteredWindow = window != null && window === captureWindow
   const isWindowAlive =
     isRegisteredWindow && !window.isDestroyed() && !window.webContents.isDestroyed()
-  if (!isWindowAlive) return false
+  if (!isWindowAlive) {
+    return false
+  }
   const isMainFrame = frame != null && frame === window.webContents.mainFrame
   const hasExactDocument = isMainFrame && !frame.isDestroyed() && frame.url === documentUrl
   return hasExactDocument
@@ -51,7 +53,9 @@ function requireSender(event: IpcMainInvokeEvent, expected = captureWindow): voi
   const isTrusted = isTrustedFrame(expected, event.senderFrame)
   const isSender = event.sender === expected?.webContents
   const isAllowed = isTrusted && isSender
-  if (!isAllowed) throw new Error('Capture source access denied')
+  if (!isAllowed) {
+    throw new Error('Capture source access denied')
+  }
 }
 
 function requireSearchSender(event: IpcMainInvokeEvent): void {
@@ -66,7 +70,9 @@ function requireSearchSender(event: IpcMainInvokeEvent): void {
 function requireCaptureGeneration(): number {
   const generation = auth?.captureGeneration()
   const hasPermission = generation != null
-  if (!hasPermission) throw new Error('Capture source access denied')
+  if (!hasPermission) {
+    throw new Error('Capture source access denied')
+  }
   return generation
 }
 
@@ -121,7 +127,9 @@ function registerCaptureIpc(
   clearSource()
   unsubscribe = auth?.subscribe(() => {
     const isUnauthorized = auth?.captureGeneration() == null
-    if (isUnauthorized) clearSource()
+    if (isUnauthorized) {
+      clearSource()
+    }
   })
 
   addHandler('listCaptureSources', async (event) => {
@@ -132,7 +140,9 @@ function registerCaptureIpc(
     const sources = await getWindowSources()
     requireSender(event, window)
     const isCurrent = isCurrentCapture(generation, startedWindowGeneration)
-    if (!isCurrent) throw new Error('Capture source access denied')
+    if (!isCurrent) {
+      throw new Error('Capture source access denied')
+    }
     return sources.map(({ id, name }) => ({ id, name }))
   })
 
@@ -141,7 +151,9 @@ function registerCaptureIpc(
     const startedWindowGeneration = windowGeneration
     requireSender(event, window)
     const isSourceIdString = typeof sourceId === 'string'
-    if (!isSourceIdString) throw new Error('Capture source selection denied')
+    if (!isSourceIdString) {
+      throw new Error('Capture source selection denied')
+    }
     const isCleanup = sourceId.length === 0
     if (isCleanup) {
       clearSource()
@@ -155,16 +167,24 @@ function registerCaptureIpc(
       const source = findSelectedSource(await getWindowSources(), sourceId)
       requireSender(event, window)
       const isCurrent = isCurrentCapture(generation, startedWindowGeneration)
-      if (!isCurrent) throw new Error('Capture source selection denied')
+      if (!isCurrent) {
+        throw new Error('Capture source selection denied')
+      }
       const isLatestSelection = selectionGeneration === sourceSelectionGeneration
-      if (!isLatestSelection) return null
+      if (!isLatestSelection) {
+        return null
+      }
       const hasSource = source != null
-      if (!hasSource) throw new Error('Selected capture source is no longer available')
+      if (!hasSource) {
+        throw new Error('Selected capture source is no longer available')
+      }
       selectedSourceId = source.id
       return { id: source.id, name: source.name }
     } finally {
       const isLatestSelection = selectionGeneration === sourceSelectionGeneration
-      if (isLatestSelection) selectingSource = false
+      if (isLatestSelection) {
+        selectingSource = false
+      }
     }
   })
 
@@ -172,15 +192,23 @@ function registerCaptureIpc(
     requireSearchSender(event)
     const control = parseSearchControl(args)
     const hasValidControl = control != null
-    if (!hasValidControl) return lifetime.result('INVALID_SEARCH_COMMAND')
+    if (!hasValidControl) {
+      return lifetime.result('INVALID_SEARCH_COMMAND')
+    }
     const isRead = control.action === 'read'
-    if (isRead) return lifetime.result()
+    if (isRead) {
+      return lifetime.result()
+    }
     const isEnd = control.action === 'end'
-    if (isEnd) return lifetime.end(control.captureId)
+    if (isEnd) {
+      return lifetime.end(control.captureId)
+    }
 
     const generation = auth?.captureGeneration()
     const hasPermission = generation != null
-    if (!hasPermission) return lifetime.result('SEARCH_NOT_ALLOWED')
+    if (!hasPermission) {
+      return lifetime.result('SEARCH_NOT_ALLOWED')
+    }
     const isClear = control.action === 'clear'
     if (isClear) {
       return lifetime.clear(control)
@@ -193,12 +221,18 @@ function registerCaptureIpc(
     const hasSameRun = control.authRunId === snapshot.runId
     const hasSameRevision = control.authRevision === snapshot.revision
     const hasCurrentAuth = hasSameRun && hasSameRevision
-    if (!hasCurrentAuth) return lifetime.result('STALE_SEARCH')
+    if (!hasCurrentAuth) {
+      return lifetime.result('STALE_SEARCH')
+    }
     const hasCapture = lifetime.current != null
     const isBusy = selectingSource || hasCapture
-    if (isBusy) return lifetime.result('SEARCH_BUSY')
+    if (isBusy) {
+      return lifetime.result('SEARCH_BUSY')
+    }
     const hasSource = selectedSourceId != null
-    if (!hasSource) return lifetime.result('SEARCH_NOT_ALLOWED')
+    if (!hasSource) {
+      return lifetime.result('SEARCH_NOT_ALLOWED')
+    }
     return lifetime.begin({
       authGeneration: generation,
       windowGeneration,
@@ -242,13 +276,17 @@ function registerCaptureWindow(window: BrowserWindow, rendererDocumentUrl: strin
   window.webContents.on('did-start-navigation', (_event, _url, _isInPlace, isMainFrame) => {
     const isCurrentWindow = captureWindow === window
     const shouldInvalidate = isCurrentWindow && isMainFrame
-    if (!shouldInvalidate) return
+    if (!shouldInvalidate) {
+      return
+    }
     windowGeneration += 1
     clearSource()
   })
   window.webContents.on('destroyed', () => {
     const isCurrentWindow = captureWindow === window
-    if (!isCurrentWindow) return
+    if (!isCurrentWindow) {
+      return
+    }
     windowGeneration += 1
     clearSource()
   })
@@ -262,7 +300,9 @@ function registerCaptureWindow(window: BrowserWindow, rendererDocumentUrl: strin
   })
   window.on('closed', () => {
     const isCurrentWindow = captureWindow === window
-    if (!isCurrentWindow) return
+    if (!isCurrentWindow) {
+      return
+    }
     captureWindow = null
     documentUrl = null
     windowGeneration += 1
@@ -320,7 +360,9 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
         const canAllow = isCurrent && isStillTrusted && hasSameSelection && hasSameCapture
         const source = canAllow ? findSelectedSource(sources, sourceId) : null
         const hasSource = source != null
-        if (!hasSource) search?.end(captureId)
+        if (!hasSource) {
+          search?.end(captureId)
+        }
         deliverMediaResult(callback, hasSource ? { video: source } : null)
       })
       .catch(() => {

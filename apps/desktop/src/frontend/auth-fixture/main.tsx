@@ -6,7 +6,9 @@ import { Fixture } from './Fixture'
 
 const root = document.getElementById('root')
 const hasRoot = root != null
-if (!hasRoot) throw new Error('Auth fixture root missing')
+if (!hasRoot) {
+  throw new Error('Auth fixture root missing')
+}
 createRoot(root).render(
   <StrictMode>
     <Fixture />

@@ -7,7 +7,7 @@ import type { ProviderPkceKeys } from '../auth/login/crypto.js'
 import type { AuthLoginRequest } from '../database/schemas/auth-login-requests.js'
 import type { RefreshTokens } from '../auth/refresh/types.js'
 
-export type LoginErrorDefinition = typeof LOGIN_ERRORS[keyof typeof LOGIN_ERRORS]
+export type LoginErrorDefinition = (typeof LOGIN_ERRORS)[keyof typeof LOGIN_ERRORS]
 
 export interface LoginCreation {
   provider: AuthProvider
@@ -114,7 +114,7 @@ export interface LoginHttpService {
   callback(
     provider: AuthProvider,
     query: URLSearchParams,
-    cookieHeader: string,
+    cookieHeader: string
   ): Promise<CompletedLoginCallback>
   exchange(input: unknown): Promise<LoginTokens>
 }

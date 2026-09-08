@@ -4,12 +4,21 @@ import { CLEARED_LOGIN_FIELDS, LOGIN, LOGIN_ERRORS } from '../../constants/login
 import { LoginFailure, loginFailure } from '../../errors/login.js'
 import type { AuthProvider, VerifiedIdentity } from '../../types/auth.js'
 import type {
-  ClaimedLogin, CompletedLoginCallback, LoginCallbackInput, LoginDependencies, ProviderRegistration,
+  ClaimedLogin,
+  CompletedLoginCallback,
+  LoginCallbackInput,
+  LoginDependencies,
+  ProviderRegistration
 } from '../../types/login.js'
 import { newOpaque, opaqueHash } from './crypto.js'
 import { parseCallback } from './input.js'
 import {
-  browserCookie, cookieMatches, freshTime, loginTransaction, markLoginRequestFailed, requestExpired,
+  browserCookie,
+  cookieMatches,
+  freshTime,
+  loginTransaction,
+  markLoginRequestFailed,
+  requestExpired
 } from './state.js'
 
 interface ClaimedProviderLogin extends ClaimedLogin {
@@ -22,8 +31,7 @@ interface VerifiedProviderLogin {
 }
 
 type CallbackClaimResult =
-  | { status: 'claimed'; claim: ClaimedProviderLogin }
-  | { status: 'rejected'; error: LoginFailure }
+  { status: 'claimed'; claim: ClaimedProviderLogin } | { status: 'rejected'; error: LoginFailure }
 
 type CallbackCommitResult =
   | { status: 'completed'; completion: CompletedLoginCallback }
@@ -33,7 +41,7 @@ export async function completeLoginCallback(
   deps: LoginDependencies,
   provider: AuthProvider,
   query: URLSearchParams,
-  cookieHeader: string,
+  cookieHeader: string
 ): Promise<CompletedLoginCallback> {
   const input = parseCallback(query)
 
@@ -57,7 +65,7 @@ async function claimCallback(
   deps: LoginDependencies,
   provider: AuthProvider,
   input: LoginCallbackInput,
-  cookieHeader: string,
+  cookieHeader: string
 ): Promise<ClaimedProviderLogin> {
   try {
     const committed = await deps.dataSource.transaction<CallbackClaimResult>(
@@ -66,7 +74,7 @@ async function claimCallback(
         const requests = manager.getRepository(AuthLoginRequestSchema)
         const request = await requests.findOne({
           where: { stateHash: opaqueHash(input.state) },
-          lock: { mode: 'pessimistic_write' },
+          lock: { mode: 'pessimistic_write' }
         })
         const checkedAt = await freshTime(manager)
 
@@ -92,9 +100,8 @@ async function claimCallback(
 
         if (input.error !== undefined) {
           await markLoginRequestFailed(manager, request.id)
-          const failure = input.error === 'access_denied'
-            ? LOGIN_ERRORS.CANCELLED
-            : LOGIN_ERRORS.PROVIDER
+          const failure =
+            input.error === 'access_denied' ? LOGIN_ERRORS.CANCELLED : LOGIN_ERRORS.PROVIDER
           return { status: 'rejected', error: new LoginFailure(failure) }
         }
 
@@ -116,10 +123,10 @@ async function claimCallback(
             // Commit·release 지연도 provider의 단일 deadline에 포함한다.
             startedAt: performance.now(),
             // Error callback은 위에서 정리했으므로 code가 있는 입력만 남는다.
-            providerCode: input.code,
-          },
+            providerCode: input.code
+          }
         }
-      },
+      }
     )
 
     if (committed.status === 'rejected') {
@@ -135,7 +142,7 @@ async function failClaim(deps: LoginDependencies, requestId: string): Promise<vo
   await loginTransaction(deps.dataSource, async (manager) => {
     const request = await manager.getRepository(AuthLoginRequestSchema).findOne({
       where: { id: requestId },
-      lock: { mode: 'pessimistic_write' },
+      lock: { mode: 'pessimistic_write' }
     })
     if (request?.status === 'processing') {
       await markLoginRequestFailed(manager, request.id)
@@ -145,7 +152,7 @@ async function failClaim(deps: LoginDependencies, requestId: string): Promise<vo
 
 async function verifyProviderLogin(
   deps: LoginDependencies,
-  claimed: ClaimedProviderLogin,
+  claimed: ClaimedProviderLogin
 ): Promise<VerifiedProviderLogin> {
   const controller = new AbortController()
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined
@@ -158,13 +165,15 @@ async function verifyProviderLogin(
     }
 
     // Provider 호출과 timeout은 같은 deadline을 공유하며 retry하지 않는다.
-    const verification = Promise.resolve().then(() => deps.verifyProvider({
-      snapshot: claimed.snapshot,
-      code: claimed.providerCode,
-      providerVerifier: claimed.providerVerifier,
-      nonceHash: claimed.row.oidcNonceHash,
-      signal: controller.signal,
-    }))
+    const verification = Promise.resolve().then(() =>
+      deps.verifyProvider({
+        snapshot: claimed.snapshot,
+        code: claimed.providerCode,
+        providerVerifier: claimed.providerVerifier,
+        nonceHash: claimed.row.oidcNonceHash,
+        signal: controller.signal
+      })
+    )
     const timeout = new Promise<never>((_, reject) => {
       deadlineTimer = setTimeout(() => {
         controller.abort()
@@ -186,7 +195,7 @@ async function verifyProviderLogin(
     // 완료 transaction의 DB 잠금 대기가 code TTL을 연장하지 않도록 먼저 시각을 고정한다.
     return {
       identity: { provider: identity.provider, subject: identity.subject },
-      completedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+      completedAt: new Date(Math.floor(Date.now() / 1000) * 1000)
     }
   } catch {
     throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
@@ -201,7 +210,7 @@ async function verifyProviderLogin(
 async function prepareExchangeCode(
   deps: LoginDependencies,
   claimed: ClaimedProviderLogin,
-  verified: VerifiedProviderLogin,
+  verified: VerifiedProviderLogin
 ): Promise<CompletedLoginCallback> {
   try {
     const committed = await deps.dataSource.transaction<CallbackCommitResult>(
@@ -210,7 +219,7 @@ async function prepareExchangeCode(
         const requests = manager.getRepository(AuthLoginRequestSchema)
         const request = await requests.findOne({
           where: { id: claimed.row.id },
-          lock: { mode: 'pessimistic_write' },
+          lock: { mode: 'pessimistic_write' }
         })
         const checkedAt = await freshTime(manager)
 
@@ -233,24 +242,27 @@ async function prepareExchangeCode(
         }
 
         const code = newOpaque()
-        await requests.update({ id: request.id }, {
-          ...CLEARED_LOGIN_FIELDS,
-          status: 'exchange_ready',
-          codeChallenge: request.codeChallenge,
-          method: request.method,
-          verifiedSubject: verified.identity.subject,
-          exchangeCodeHash: opaqueHash(code),
-          codeExpiresAt,
-        })
+        await requests.update(
+          { id: request.id },
+          {
+            ...CLEARED_LOGIN_FIELDS,
+            status: 'exchange_ready',
+            codeChallenge: request.codeChallenge,
+            method: request.method,
+            verifiedSubject: verified.identity.subject,
+            exchangeCodeHash: opaqueHash(code),
+            codeExpiresAt
+          }
+        )
 
         return {
           status: 'completed',
           completion: {
             returnUrl: `${claimed.snapshot.returnTarget.url}?code=${code}`,
-            cookie: browserCookie(request.id, '', 0),
-          },
+            cookie: browserCookie(request.id, '', 0)
+          }
         }
-      },
+      }
     )
 
     // 정리 또는 exchange-ready 저장의 commit·release 뒤에만 HTTP 결과를 전달한다.

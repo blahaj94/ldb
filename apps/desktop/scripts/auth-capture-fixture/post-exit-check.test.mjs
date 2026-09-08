@@ -54,7 +54,9 @@ it('60초 이후 내부 실행과 정리를 마친 정상 child를 outer timeout
   vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
     const isInspection = signal === 0
     if (isInspection) {
-      if (hasExited) throw Object.assign(new Error('Gone'), { code: 'ESRCH' })
+      if (hasExited) {
+        throw Object.assign(new Error('Gone'), { code: 'ESRCH' })
+      }
       return true
     }
     hasExited = true

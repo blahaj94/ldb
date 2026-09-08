@@ -13,11 +13,11 @@ test('app S256 and opaque code hashes have distinct exact inputs', () => {
   const value = opaque()
   assert.equal(
     crypto.challenge(value),
-    createHash('sha256').update(value, 'ascii').digest('base64url'),
+    createHash('sha256').update(value, 'ascii').digest('base64url')
   )
   assert.deepEqual(
     crypto.opaqueHash(value),
-    createHash('sha256').update(Buffer.from(value, 'base64url')).digest(),
+    createHash('sha256').update(Buffer.from(value, 'base64url')).digest()
   )
   assert.notDeepEqual(crypto.opaqueHash(value), createHash('sha256').update(value).digest())
   const noncanonical = 'A'.repeat(42) + 'B'
@@ -29,7 +29,7 @@ test('app S256 and opaque code hashes have distinct exact inputs', () => {
     ' ' + value,
     value.slice(1),
     noncanonical,
-    '+'.repeat(43),
+    '+'.repeat(43)
   ]) {
     assert.throws(() => crypto.decodeOpaque(bad), { code: 'INVALID_AUTH_REQUEST' })
   }
@@ -47,7 +47,7 @@ test('strict creation/exchange shapes reject injected identity, redirect and non
     { ...body, provider: 'other' },
     { ...body, clientId: 'web' },
     { ...body, codeChallengeMethod: 'plain' },
-    { ...body, codeChallenge: 'A'.repeat(42) + 'B' },
+    { ...body, codeChallenge: 'A'.repeat(42) + 'B' }
   ]) {
     assert.throws(() => parseCreation(bad), { code: 'INVALID_AUTH_REQUEST' })
   }
@@ -55,7 +55,7 @@ test('strict creation/exchange shapes reject injected identity, redirect and non
     requestId: randomUUID(),
     clientId: 'desktop',
     code: opaque(),
-    codeVerifier: verifier,
+    codeVerifier: verifier
   }
   assert.deepEqual(parseExchange(exchange), exchange)
   // String client 불일치는 구조 오류가 아니라 service의 LOGIN_EXCHANGE_INVALID다.
@@ -65,7 +65,7 @@ test('strict creation/exchange shapes reject injected identity, redirect and non
     { ...exchange, clientId: 1 },
     { ...exchange, requestId: 'not-uuid' },
     { ...exchange, code: 'A'.repeat(42) + 'B' },
-    { ...exchange, codeVerifier: verifier + '=' },
+    { ...exchange, codeVerifier: verifier + '=' }
   ]) {
     assert.throws(() => parseExchange(bad), { code: 'INVALID_AUTH_REQUEST' })
   }
@@ -75,7 +75,7 @@ test('callback rejects duplicate/conflicting required fields but ignores standar
   const state = opaque()
   assert.deepEqual(
     parseCallback(new URLSearchParams({ state, code: 'provider-code', scope: 'openid profile' })),
-    { state, code: 'provider-code', error: undefined },
+    { state, code: 'provider-code', error: undefined }
   )
   for (const query of [
     `state=${state}&state=${state}&code=x`,
@@ -84,10 +84,10 @@ test('callback rejects duplicate/conflicting required fields but ignores standar
     `state=${state}&code=x&error=access_denied`,
     'code=x',
     `state=${state}`,
-    `state=${state}&code=`,
+    `state=${state}&code=`
   ]) {
     assert.throws(() => parseCallback(new URLSearchParams(query)), {
-      code: 'LOGIN_REQUEST_INVALID',
+      code: 'LOGIN_REQUEST_INVALID'
     })
   }
 })
@@ -100,24 +100,24 @@ test('registry validates exact trusted URLs and freezes historical snapshot sema
   const row = {
     provider: 'google',
     providerConfigVersion: 'test-v1',
-    returnTargetId: 'test-return-test-v1',
+    returnTargetId: 'test-return-test-v1'
   }
   assert.equal(registry.resolve(row).version, 'test-v1')
   assert.equal(registry.active('google').version, 'test-v2')
   config.registrations[0].providerClientId = 'mutated'
   assert.equal(registry.resolve(row).providerClientId, 'google-test-client')
   assert.throws(() => registry.resolve({ ...row, returnTargetId: 'different' }), {
-    code: 'AUTH_INTERNAL_ERROR',
+    code: 'AUTH_INTERNAL_ERROR'
   })
   assert.throws(() => registry.resolve({ ...row, providerConfigVersion: 'removed' }), {
-    code: 'AUTH_INTERNAL_ERROR',
+    code: 'AUTH_INTERNAL_ERROR'
   })
   for (const callbackUrl of [
     'http://api.test.invalid/auth/callback/google',
     'https://u:p@api.test.invalid/auth/callback/google',
     'https://api.test.invalid/auth/callback/google#fragment',
     'https://api.test.invalid/auth/callback/google?x=1',
-    'https://api.test.invalid/auth/callback/discord',
+    'https://api.test.invalid/auth/callback/discord'
   ]) {
     const bad = registryConfiguration()
     bad.registrations[0].callbackUrl = callbackUrl
@@ -128,7 +128,7 @@ test('registry validates exact trusted URLs and freezes historical snapshot sema
     'ldb-test://u:p@login/complete',
     'ldb-test://login/complete?code=old',
     'ldb-test://login/complete#fragment',
-    'ldb-test://*/complete',
+    'ldb-test://*/complete'
   ]) {
     const bad = registryConfiguration()
     bad.registrations[0].returnTarget.url = url
@@ -143,15 +143,15 @@ test('provider PKCE encryption binds request/provider/purpose and supports retai
     activeKeyId: 'new',
     keys: [
       { id: 'old', key: oldKey },
-      { id: 'new', key },
-    ],
+      { id: 'new', key }
+    ]
   })
   const context = { id: randomUUID(), provider: 'google', purpose: 'login' }
   const verifier = opaque()
   const sealed = keys.encrypt(verifier, context)
   const historical = new crypto.ProviderPkceKeys({
     activeKeyId: 'old',
-    keys: [{ id: 'old', key: oldKey }],
+    keys: [{ id: 'old', key: oldKey }]
   }).encrypt(verifier, context)
   assert.equal(keys.decrypt({ ...context, ...historical }), verifier)
   assert.equal(sealed.providerPkceIv.length, 12)
@@ -164,18 +164,18 @@ test('provider PKCE encryption binds request/provider/purpose and supports retai
     { provider: 'discord' },
     { purpose: 'other' },
     { providerPkceTag: randomBytes(16) },
-    { providerPkceKeyId: 'missing' },
+    { providerPkceKeyId: 'missing' }
   ]) {
     assert.throws(() => keys.decrypt({ ...context, ...sealed, ...patch }), {
-      code: 'AUTH_INTERNAL_ERROR',
+      code: 'AUTH_INTERNAL_ERROR'
     })
   }
   assert.throws(() => new crypto.ProviderPkceKeys({ activeKeyId: 'x', keys: [] }), {
-    code: 'AUTH_INTERNAL_ERROR',
+    code: 'AUTH_INTERNAL_ERROR'
   })
   assert.throws(
     () =>
       new crypto.ProviderPkceKeys({ activeKeyId: 'x', keys: [{ id: 'x', key: randomBytes(16) }] }),
-    { code: 'AUTH_INTERNAL_ERROR' },
+    { code: 'AUTH_INTERNAL_ERROR' }
   )
 })

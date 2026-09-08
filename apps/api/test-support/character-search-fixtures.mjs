@@ -10,20 +10,31 @@ import { accountFixture, snapshot } from './account-http-fixtures.mjs'
 
 export { accountFixture as searchFixture, snapshot }
 
-const unusedLogin = Object.fromEntries(['create', 'authorize', 'callback', 'exchange'].map((name) => [
-  name, async () => { throw new Error('unrelated login route called') },
-]))
+const unusedLogin = Object.fromEntries(
+  ['create', 'authorize', 'callback', 'exchange'].map((name) => [
+    name,
+    async () => {
+      throw new Error('unrelated login route called')
+    }
+  ])
+)
 
 export async function isolatedNeople() {
   const calls = []
   const sockets = new Set()
-  const upstream = { status: 200, body: { rows: [] }, respond: undefined, start: undefined, failure: undefined }
+  const upstream = {
+    status: 200,
+    body: { rows: [] },
+    respond: undefined,
+    start: undefined,
+    failure: undefined
+  }
   const server = createServer((request, response) => {
     const url = new URL(request.url, 'http://loopback.invalid')
     calls.push({
       path: url.pathname,
       query: Object.fromEntries(url.searchParams),
-      hasExpectedKey: request.headers.apikey === 'synthetic-search-key',
+      hasExpectedKey: request.headers.apikey === 'synthetic-search-key'
     })
     const hasCustomResponse = upstream.respond != null
     if (hasCustomResponse) {
@@ -43,15 +54,24 @@ export async function isolatedNeople() {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address()
   return {
-    origin: `http://127.0.0.1:${port}`, calls, upstream,
+    origin: `http://127.0.0.1:${port}`,
+    calls,
+    upstream,
     close: async () => {
-      for (const socket of sockets) socket.destroy()
-      await new Promise((resolve, reject) => server.close((error) => {
-        const hasError = error != null
-        if (hasError) reject(error)
-        else resolve()
-      }))
-    },
+      for (const socket of sockets) {
+        socket.destroy()
+      }
+      await new Promise((resolve, reject) =>
+        server.close((error) => {
+          const hasError = error != null
+          if (hasError) {
+            reject(error)
+          } else {
+            resolve()
+          }
+        })
+      )
+    }
   }
 }
 
@@ -59,17 +79,26 @@ export async function withSearchApp(f, operation, overrides = {}) {
   const neople = await isolatedNeople()
   const { calls, upstream } = neople
   const adapter = createNeopleCharacterSearchForTest('synthetic-search-key', {
-    fetch, origin: neople.origin,
+    fetch,
+    origin: neople.origin
   })
   const searchCharacters = (input) => {
     upstream.start?.()
     return adapter(input)
   }
   const deps = {
-    dataSource: f.deps.dataSource, verifyAccessJwt: f.verifyJwt,
-    apiKey: 'synthetic-search-key', searchCharacters, ...overrides,
+    dataSource: f.deps.dataSource,
+    verifyAccessJwt: f.verifyJwt,
+    apiKey: 'synthetic-search-key',
+    searchCharacters,
+    ...overrides
   }
-  const app = await createLoginHttpApp(unusedLogin, createSessionHttpService(f.deps), undefined, deps)
+  const app = await createLoginHttpApp(
+    unusedLogin,
+    createSessionHttpService(f.deps),
+    undefined,
+    deps
+  )
   try {
     await app.listen(0, '127.0.0.1')
     const result = await operation({ base: await app.getUrl(), calls, upstream, deps, app })
@@ -83,7 +112,8 @@ export async function withSearchApp(f, operation, overrides = {}) {
 
 export function searchRequest(base, f, query = 'characterName=ab', options = {}) {
   return fetch(`${base}/characters?${query}`, {
-    headers: { authorization: `Bearer ${f.token.accessToken}` }, ...options,
+    headers: { authorization: `Bearer ${f.token.accessToken}` },
+    ...options
   })
 }
 
@@ -124,7 +154,9 @@ export function observeSearchRunners(hooks = {}) {
 
 export function barrier() {
   let resolve
-  const promise = new Promise((complete) => { resolve = complete })
+  const promise = new Promise((complete) => {
+    resolve = complete
+  })
   return { promise, resolve }
 }
 
@@ -132,7 +164,9 @@ export async function waitFor(check, message = 'search observation did not arriv
   const deadline = Date.now() + 5000
   while (Date.now() < deadline) {
     const ready = await check()
-    if (ready) return
+    if (ready) {
+      return
+    }
     await delay(10)
   }
   assert.fail(message)
@@ -140,7 +174,10 @@ export async function waitFor(check, message = 'search observation did not arriv
 
 export async function assertBackendGone(source, pid) {
   await waitFor(async () => {
-    const [row] = await source.query('SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1', [pid])
+    const [row] = await source.query(
+      'SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1',
+      [pid]
+    )
     return row.count === 0
   }, 'search backend remained after cancellation')
 }

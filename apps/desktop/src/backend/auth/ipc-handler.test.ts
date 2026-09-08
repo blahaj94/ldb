@@ -52,7 +52,9 @@ async function setup(): Promise<IpcFixture> {
   function invoke(channel: string, args: unknown[] = [], sender = event): Promise<unknown> {
     const handler = handlers.get(channel)
     const hasHandler = handler != null
-    if (!hasHandler) throw new Error('Expected registered auth handler')
+    if (!hasHandler) {
+      throw new Error('Expected registered auth handler')
+    }
     return Promise.resolve().then(() => handler(sender, ...args))
   }
   return {
@@ -96,22 +98,37 @@ describe('auth IPC trust boundary', () => {
     const fixture = await setup()
     const invalidEvent = { ...fixture.event }
     const isOtherSender = kind === 'other-sender'
-    if (isOtherSender) invalidEvent.sender = {} as IpcMainInvokeEvent['sender']
+    if (isOtherSender) {
+      invalidEvent.sender = {} as IpcMainInvokeEvent['sender']
+    }
     const isSubframe = kind === 'subframe'
-    if (isSubframe)
+    if (isSubframe) {
       invalidEvent.senderFrame = { ...fixture.frame } as IpcMainInvokeEvent['senderFrame']
+    }
     const isNullFrame = kind === 'null-frame'
-    if (isNullFrame) invalidEvent.senderFrame = null
+    if (isNullFrame) {
+      invalidEvent.senderFrame = null
+    }
     const isDetached = kind === 'detached'
-    if (isDetached) fixture.frame.detached = true
+    if (isDetached) {
+      fixture.frame.detached = true
+    }
     const isDestroyed = kind === 'destroyed'
-    if (isDestroyed) fixture.contents.isDestroyed.mockReturnValue(true)
+    if (isDestroyed) {
+      fixture.contents.isDestroyed.mockReturnValue(true)
+    }
     const hasNoWindow = kind === 'no-window'
-    if (hasNoWindow) fixture.replaceWindow()
+    if (hasNoWindow) {
+      fixture.replaceWindow()
+    }
     const isNavigation = kind === 'navigation'
-    if (isNavigation) fixture.frame.url = 'about:blank'
+    if (isNavigation) {
+      fixture.frame.url = 'about:blank'
+    }
     const isPrefixUrl = kind === 'prefix-url'
-    if (isPrefixUrl) fixture.frame.url = `${DOCUMENT_URL}.untrusted`
+    if (isPrefixUrl) {
+      fixture.frame.url = `${DOCUMENT_URL}.untrusted`
+    }
     const initial = fixture.coordinator.getSnapshot()
 
     for (const channel of CHANNELS) {
@@ -202,10 +219,13 @@ describe('auth IPC trust boundary', () => {
         'user'
       ])
       const hasLogin = snapshot.login != null
-      if (hasLogin)
+      if (hasLogin) {
         expect(Object.keys(snapshot.login!).sort()).toEqual(['attemptId', 'expiresAt', 'provider'])
+      }
       const hasUser = snapshot.user != null
-      if (hasUser) expect(Object.keys(snapshot.user!)).toEqual(['nickname'])
+      if (hasUser) {
+        expect(Object.keys(snapshot.user!)).toEqual(['nickname'])
+      }
     }
     expect(fixture.contents.send).toHaveBeenCalled()
   })

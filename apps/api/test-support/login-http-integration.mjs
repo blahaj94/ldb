@@ -17,7 +17,7 @@ export async function assertLoginHttpIntegration(source, mark) {
       fetch(`${base}${path}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body)
       })
     const assertHeadPreservesRequest = async (path, requestId, cookie = '') => {
       const beforeRequest = await row(source, requestId)
@@ -27,7 +27,7 @@ export async function assertLoginHttpIntegration(source, mark) {
       const response = await fetch(`${base}${path}`, {
         method: 'HEAD',
         headers: { cookie },
-        redirect: 'manual',
+        redirect: 'manual'
       })
 
       // 회원 수만 확인하면 transient ticket/state의 소비를 놓치므로 row 전체를 비교한다.
@@ -52,7 +52,7 @@ export async function assertLoginHttpIntegration(source, mark) {
       const launchPath = `${launchUrl.pathname}${launchUrl.search}`
       await assertHeadPreservesRequest(launchPath, request.requestId)
       const launch = await fetch(`${base}${launchPath}`, {
-        redirect: 'manual',
+        redirect: 'manual'
       })
       assert.equal(launch.status, 303)
       assert.equal(launch.headers.get('cache-control'), 'no-store')
@@ -63,16 +63,16 @@ export async function assertLoginHttpIntegration(source, mark) {
       await assertHeadPreservesRequest(
         `${callbackPath}&error=access_denied`,
         request.requestId,
-        cookie,
+        cookie
       )
       await assertHeadPreservesRequest(
         `${callbackPath}&code=fixture-provider-code`,
         request.requestId,
-        cookie,
+        cookie
       )
       const callback = await fetch(`${base}${callbackPath}&code=fixture-provider-code`, {
         headers: { cookie },
-        redirect: 'manual',
+        redirect: 'manual'
       })
       assert.equal(callback.status, 200)
       assert.equal(callback.headers.get('cache-control'), 'no-store')
@@ -82,7 +82,7 @@ export async function assertLoginHttpIntegration(source, mark) {
       assert(code)
       assert.doesNotMatch(
         html,
-        /fixture-provider-code|accessToken|refreshToken|providerVerifier|<script/,
+        /fixture-provider-code|accessToken|refreshToken|providerVerifier|<script/
       )
       assert.deepEqual(await counts(source), initialCounts)
       return {
@@ -91,8 +91,8 @@ export async function assertLoginHttpIntegration(source, mark) {
           requestId: request.requestId,
           clientId: 'desktop',
           code,
-          codeVerifier: verifier,
-        },
+          codeVerifier: verifier
+        }
       }
     }
 
@@ -109,14 +109,14 @@ export async function assertLoginHttpIntegration(source, mark) {
         await commit()
         committed.resolve()
         await release.promise
-      },
+      }
     })
     let delivered = false
     const pending = settled(
       post('/auth/exchange', flow.exchange).then((response) => {
         delivered = true
         return response
-      }),
+      })
     )
     try {
       await bounded(committed.promise)
@@ -138,14 +138,14 @@ export async function assertLoginHttpIntegration(source, mark) {
       'refreshToken',
       'sessionExpiresAt',
       'tokenType',
-      'user',
+      'user'
     ])
     assert.deepEqual(Object.keys(tokens.user).sort(), ['id', 'nickname'])
     const principal = await f.verifyJwt(tokens.accessToken, Math.floor(Date.now() / 1000))
     assert.equal(principal.userId, tokens.user.id)
     const [refresh] = await source.query(
       'SELECT token_hash FROM auth_refresh_tokens WHERE session_id=$1',
-      [principal.sessionId],
+      [principal.sessionId]
     )
     assert.deepEqual(refresh.token_hash, digest(tokens.refreshToken))
     assert.equal((await post('/auth/exchange', flow.exchange)).status, 400)
@@ -156,7 +156,7 @@ export async function assertLoginHttpIntegration(source, mark) {
       commit: async (_runner, commit) => {
         await commit()
         throw new Error('fixture-secret SQL detail')
-      },
+      }
     })
     let unavailable
     try {

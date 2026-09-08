@@ -18,6 +18,10 @@ export interface AuthenticatedSearchDependencies {
 }
 
 export interface AuthenticatedSearchHttpService {
-  search(rawHeaders: readonly string[], originalUrl: string, signal?: AbortSignal): Promise<CharacterSearchResult>
+  search(
+    rawHeaders: readonly string[],
+    originalUrl: string,
+    signal?: AbortSignal
+  ): Promise<CharacterSearchResult>
   onModuleDestroy(): Promise<void>
 }

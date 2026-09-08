@@ -5,7 +5,7 @@ import { clearTimeout, setTimeout } from 'node:timers'
 export const settled = (operation) =>
   operation.then(
     (value) => ({ value }),
-    (error) => ({ error }),
+    (error) => ({ error })
   )
 
 export async function bounded(promise) {
@@ -15,7 +15,7 @@ export async function bounded(promise) {
       promise,
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error('login test barrier timed out')), 5000)
-      }),
+      })
     ])
   } finally {
     clearTimeout(timer)
@@ -36,7 +36,7 @@ export function instrument(source, hooks) {
             sql,
             parameters,
             query,
-            run: () => query(sql, parameters, ...rest),
+            run: () => query(sql, parameters, ...rest)
           })
         : query(sql, parameters, ...rest)
     runner.commitTransaction = () => (hooks.commit ? hooks.commit(runner, commit) : commit())
@@ -52,7 +52,9 @@ export async function blockedBy(source, waiter, blocker) {
   const expected = Array.isArray(blocker) ? blocker : [blocker]
   while (Date.now() < deadline) {
     const [state] = await source.query('SELECT pg_blocking_pids($1::int) AS blockers', [waiter])
-    if (expected.some((pid) => state.blockers.includes(pid))) return
+    if (expected.some((pid) => state.blockers.includes(pid))) {
+      return
+    }
     await delay(10)
   }
   assert.fail('expected actual PostgreSQL lock contention')
@@ -68,7 +70,9 @@ export async function locked(source, table, id, operation) {
     await runner.query(`SELECT id FROM ${table} WHERE id=$1 FOR UPDATE`, [id])
     await operation({ runner, pid, unlock: () => runner.commitTransaction() })
   } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction()
+    if (runner.isTransactionActive) {
+      await runner.rollbackTransaction()
+    }
     await runner.release()
   }
 }
@@ -82,7 +86,9 @@ export async function databaseNow(source) {
 export async function waitUntil(source, time) {
   const deadline = Date.now() + 5000
   while (Date.now() < deadline) {
-    if ((await databaseNow(source)) >= time) return
+    if ((await databaseNow(source)) >= time) {
+      return
+    }
     await delay(20)
   }
   assert.fail('database clock did not reach test deadline')
@@ -98,7 +104,7 @@ export async function atExactTime(source, time, operation) {
         return [{ now: time }]
       }
       return result
-    },
+    }
   })
   try {
     await operation()

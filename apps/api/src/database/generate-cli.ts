@@ -6,7 +6,7 @@ try {
   const result = await generateMigration(
     process.argv[2] ?? '',
     () => createDatabaseDataSource(readDatabaseConfiguration(process.env)),
-    fileURLToPath(new URL('../../src/database/migrations/', import.meta.url)),
+    fileURLToPath(new URL('../../src/database/migrations/', import.meta.url))
   )
   process.stdout.write(`${result}\n`)
 } catch {

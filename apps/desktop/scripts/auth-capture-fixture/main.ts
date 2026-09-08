@@ -98,7 +98,9 @@ if (canStart) {
         target.webContents.on('will-navigate', (event) => event.preventDefault())
         target.webContents.on('console-message', (_event, _level, message) => {
           const includesCanary = canaries.some((canary) => message.includes(canary))
-          if (includesCanary) hasCanary = true
+          if (includesCanary) {
+            hasCanary = true
+          }
         })
       }
       const completeLogin = async (): Promise<void> => {
@@ -160,7 +162,9 @@ if (canStart) {
           } else {
             await smoke(window, coordinator, completeLogin, captureObservation.counts)
           }
-          if (hasCanary) throw new Error('Capture fixture canary detected')
+          if (hasCanary) {
+            throw new Error('Capture fixture canary detected')
+          }
           const passedMessage = isSearchSmoke
             ? 'Capture fixture search smoke PASS'
             : isOcr
