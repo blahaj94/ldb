@@ -52,10 +52,9 @@ async function fixture(t, sessions) {
           }
         : 'vscode'
     })
-    await writeFile(
-      join(directory, 'nested', `${id}.jsonl`),
-      [meta, ...events].map((event) => JSON.stringify(event)).join('\n') + '\n'
-    )
+    const sessionLogPath = join(directory, 'nested', `${id}.jsonl`)
+    const sessionLogBody = [meta, ...events].map((event) => JSON.stringify(event)).join('\n') + '\n'
+    await writeFile(sessionLogPath, sessionLogBody)
   }
   return directory
 }

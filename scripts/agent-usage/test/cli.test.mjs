@@ -63,10 +63,9 @@ async function setup(t) {
       )
     )
   }
-  await writeFile(
-    join(sessions, 'root.jsonl'),
-    events.map((row) => JSON.stringify(row)).join('\n') + '\n'
-  )
+  const sessionLogPath = join(sessions, 'root.jsonl')
+  const sessionLogBody = events.map((row) => JSON.stringify(row)).join('\n') + '\n'
+  await writeFile(sessionLogPath, sessionLogBody)
   const output = []
   const options = {
     cwd: directory,
