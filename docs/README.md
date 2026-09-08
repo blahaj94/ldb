@@ -96,6 +96,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/design-system.md`](rules/design-system.md): SEED 재사용·고정 source·기본값·override 금지·중립 Example·향후 검증 matrix
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
+- [`rules/convention-migration.md`](rules/convention-migration.md): 승인된 기존 convention의 동작 보존 이행 기준(사용자 merge 전 code 이행 불가)과 후속 Execution Issue routing
 - [`rules/agent-execution.md`](rules/agent-execution.md): 수행 모드, Worker roster, context, 상태와 통합 계약
 - [`rules/agent-runner.md`](rules/agent-runner.md): 실행 전담의 입력·job owner·완료 evidence·취소·retry·보고 계약
 - [`rules/agent-efficiency-proposal.md`](rules/agent-efficiency-proposal.md): PR #106에서 승인·canonical 반영된 제안 이력과 active Rule pointer. 별도 실행 authority 없음
