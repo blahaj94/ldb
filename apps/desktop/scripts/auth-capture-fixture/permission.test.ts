@@ -14,6 +14,7 @@ const fixture = vi.hoisted(() => ({
   windows: [] as WindowDouble[],
   generation: null as number | null,
   documentUrl: '',
+  capture: vi.fn(() => vi.fn()),
   check: vi.fn(),
   request: vi.fn(),
   ready: undefined as Promise<void> | undefined
@@ -79,7 +80,7 @@ vi.mock('../../src/backend/auth/ipc-handler', () => ({
   }
 }))
 vi.mock('../../src/backend/capture/ipc-handler', () => ({
-  registerCaptureIpc: () => vi.fn(),
+  registerCaptureIpc: fixture.capture,
   registerCaptureWindow: vi.fn()
 }))
 
@@ -200,4 +201,27 @@ it('명시적 deny-media 모드는 승인된 정상 요청도 거절한다', asy
   } finally {
     process.argv = originalArgv
   }
+})
+
+it('main fixture는 동일 coordinator와 clock 및 외부 네트워크 없는 고정 검색 transport를 연결한다', async () => {
+  expect(fixture.capture).toHaveBeenCalledOnce()
+  const args = fixture.capture.mock.calls[0] as unknown as [
+    { captureGeneration: () => number | null },
+    { apiOrigin: string; clock: { read: () => { monotonicMs: number } }; fetch: typeof fetch }
+  ]
+  const [coordinator, runtime] = args
+  expect(coordinator.captureGeneration()).toBe(0)
+  expect(runtime, 'main 검색 runtime 구성').toBeDefined()
+  expect(runtime.apiOrigin).toBe('https://api.example.test')
+  expect(runtime.clock.read().monotonicMs).toBeGreaterThanOrEqual(0)
+  expect(runtime.fetch).toBeTypeOf('function')
+  expect(runtime.fetch).not.toBe(globalThis.fetch)
+  const response = await runtime.fetch(
+    new Request('https://api.example.test/characters?characterName=ALICE', {
+      headers: { authorization: 'Bearer synthetic.payload.signature' }
+    })
+  )
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({ rows: expect.any(Array) })
+  await expect(runtime.fetch(new Request('https://outside.example.test/'))).rejects.toThrow()
 })
