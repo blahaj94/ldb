@@ -30,6 +30,7 @@ export function useCaptureSourceSelection(setStatus: (status: string) => void): 
     return () => {
       cancelled = true
       selectionGenerationRef.current += 1
+      void window.api.selectCaptureSource('').catch(() => undefined)
     }
   }, [setStatus])
 

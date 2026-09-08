@@ -1,13 +1,18 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, BrowserWindow, session } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { validateDevRendererUrl } from './renderer-document'
 import { registerCaptureIpc, registerCaptureWindow } from './capture/ipc-handler'
 
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
-  // Create the browser window.
+  const devUrl = process.env['ELECTRON_RENDERER_URL']
+  const hasDevUrl = is.dev && devUrl != null
+  const entry = join(__dirname, '../frontend/index.html')
+  const rendererDocumentUrl = hasDevUrl ? validateDevRendererUrl(devUrl) : pathToFileURL(entry).href
   const window = new BrowserWindow({
     width: 900,
     height: 670,
@@ -17,12 +22,14 @@ function createWindow(): void {
     webPreferences: {
       backgroundThrottling: false,
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
     }
   })
 
   mainWindow = window
-  registerCaptureWindow(window)
+  registerCaptureWindow(window, rendererDocumentUrl)
 
   window.on('closed', () => {
     if (mainWindow === window) {
@@ -34,17 +41,13 @@ function createWindow(): void {
     window.show()
   })
 
-  window.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  window.webContents.on('will-navigate', (event) => event.preventDefault())
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    window.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (hasDevUrl) {
+    void window.loadURL(rendererDocumentUrl)
   } else {
-    window.loadFile(join(__dirname, '../frontend/index.html'))
+    void window.loadFile(entry)
   }
 }
 
@@ -62,6 +65,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  session.defaultSession.setPermissionCheckHandler(() => false)
+  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
+    callback(false)
+  )
   registerCaptureIpc()
 
   createWindow()

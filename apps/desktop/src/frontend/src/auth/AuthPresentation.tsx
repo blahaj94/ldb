@@ -25,6 +25,7 @@ const providerLabels = { google: 'Google로 계속하기', discord: 'Discord로 
 
 function SignedIn({
   snapshot,
+  home,
   commandPending = false,
   onIntent
 }: AuthPresentationProps): React.JSX.Element {
@@ -49,7 +50,7 @@ function SignedIn({
       ) : (
         <>
           <ExampleSection title="화면 캡처">
-            <SupportingText>화면 캡처 기능은 준비 중입니다.</SupportingText>
+            {home ?? <SupportingText>화면 캡처 기능은 준비 중입니다.</SupportingText>}
           </ExampleSection>
           <ActionButton
             type="button"
@@ -66,6 +67,7 @@ function SignedIn({
 
 function PhaseContent({
   snapshot,
+  home,
   commandPending = false,
   onIntent
 }: AuthPresentationProps): React.JSX.Element {
@@ -74,7 +76,14 @@ function PhaseContent({
   const hasUser = snapshot.user != null
   const canShowAccount = isSignedIn && hasUser
   if (canShowAccount)
-    return <SignedIn snapshot={snapshot} commandPending={commandPending} onIntent={onIntent} />
+    return (
+      <SignedIn
+        snapshot={snapshot}
+        home={home}
+        commandPending={commandPending}
+        onIntent={onIntent}
+      />
+    )
 
   const isSignedOut = phase === 'signedOut'
   if (isSignedOut) {

@@ -12,10 +12,10 @@ last-reviewed: 2026-09-07
 `apps/desktop/src/frontend/src/auth/AuthPresentation.tsx`는 `presentation.ts`의 renderer-local input을 표시하고 `onIntent` callback으로 의도를 전달한다. 원본 contract는 [`Desktop Authentication`](../rules/desktop-auth.md)과 [`lifecycle`](../rules/desktop-auth-lifecycle.md)다. Local type은 실제 IPC public type이나 runtime DTO validator가 아니다.
 
 - `snapshot`이 표시할 phase·provider·계정·entry·고정 notice를 결정한다. Command callback 자체로 signedIn을 만들지 않는다.
-- `commandPending`은 후속 adapter가 전달할 버튼 대기 상태다. Invocation 결과를 기다리거나 snapshot을 재동기화하는 동안 true를 유지한다. 취소 완료 snapshot 전 새 provider 선택을 만들지 않는다.
+- `commandPending`은 AuthBridge가 전달하는 버튼 대기 상태다. Invocation 결과를 기다리거나 snapshot을 재동기화하는 동안 true를 유지한다. 취소 완료 snapshot 전 새 provider 선택을 만들지 않는다.
 - `SignedIn`의 welcome dismissal만 React mount에 남는다. 같은 mount의 입력 갱신은 dismissal을 유지하고 signedIn 이탈·전체 unmount는 초기화한다. `시작하기`는 local navigation이며 auth intent를 보내지 않는다.
-- Home에는 계정·후속 화면 캡처 안내와 logout이 있다. 실제 capture hook·media·OCR는 mount하지 않는다.
-- 후속 adapter가 승인된 DTO allowlist, 실제 subscribe/getAuthState 순서·runId/revision, IPC 결과 재동기화, bootstrap과 capture 인증 경계를 맡는다. 현재 `App.tsx`와 main/preload는 연결하지 않았다.
+- Home에는 계정·주입된 `home` content와 logout이 있다. Content를 주입하지 않는 presentation-only fixture에는 화면 캡처 안내가 남고, 제품 App은 기존 PartyCapture를 주입한다.
+- [AuthBridge](desktop-auth-bridge.md)가 subscribe/getAuthState·runId/revision과 IPC 결과 재동기화를 맡는다. 제품 entry·preload 및 capture 수명의 후속 연결은 [Auth Capture](desktop-auth-capture.md)를 따른다. 아래 과거 presentation-only fixture 관측을 실제 capture 검증으로 해석하지 않는다.
 
 ## 공용 표현
 

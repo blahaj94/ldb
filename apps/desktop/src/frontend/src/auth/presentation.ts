@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 // Renderer-local input. 실제 DTO adapter·구독·revision 처리는 후속 연결에서 맡는다.
 export type AuthProvider = 'google' | 'discord'
 export type AuthPhase =
@@ -42,6 +44,7 @@ export type AuthIntent =
 
 export interface AuthPresentationProps {
   snapshot: AuthPresentationInput
+  home?: ReactNode
   commandPending?: boolean
   onIntent: (intent: AuthIntent) => void
 }

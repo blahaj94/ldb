@@ -18,7 +18,11 @@ type Options = {
   isSelectedSourceRegistered: () => boolean
   intervalSecondsRef: React.RefObject<number>
   setStatus: (status: string) => void
-  recognizePartyNicknames: (video: HTMLVideoElement, worker: Worker) => Promise<void>
+  recognizePartyNicknames: (
+    video: HTMLVideoElement,
+    worker: Worker,
+    signal: AbortSignal
+  ) => Promise<void>
   resetRecognition: () => void
 }
 
@@ -101,7 +105,7 @@ export function usePartyCaptureSession({
       void runSerialLoop({
         signal,
         getIntervalMs: () => intervalSecondsRef.current * 1000,
-        runCycle: () => recognizePartyNicknames(video, worker)
+        runCycle: () => recognizePartyNicknames(video, worker, signal)
       }).catch((error: unknown) => {
         if (!signal.aborted) {
           stopCapture(error instanceof Error ? error.message : 'Party OCR failed.')

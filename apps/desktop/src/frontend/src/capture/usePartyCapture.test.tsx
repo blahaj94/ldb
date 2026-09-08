@@ -221,6 +221,47 @@ describe('usePartyCapture', () => {
     expect(worker.terminate).toHaveBeenCalledOnce()
   })
 
+  it.each(['unmount', 'new capture'] as const)(
+    '%s 뒤 이전 OCR은 안정화 통지를 보내지 않는다',
+    async (mode) => {
+      const { stream, worker } = captureResources()
+      const crop = document.createElement('canvas')
+      const pendingRecognition = Promise.withResolvers<{ data: { text: string } }>()
+      let loopOptions: LoopOptions | undefined
+      getDisplayMedia.mockResolvedValue(stream)
+      moduleMocks.createPartyOcrWorker.mockResolvedValue(worker)
+      moduleMocks.capturePartyNicknameCrops.mockReturnValue([crop, null, null, null])
+      moduleMocks.runSerialLoop.mockImplementation((options: LoopOptions) => {
+        loopOptions = options
+        return new Promise<void>(() => undefined)
+      })
+      const hook = await renderPartyCaptureHook()
+      act(() => hook.getCurrent().selectSource('game'))
+      await flushPromises()
+      await act(async () => hook.getCurrent().startCapture())
+      await act(async () => loopOptions?.runCycle())
+      worker.recognize.mockReturnValueOnce(pendingRecognition.promise)
+      const lateCycle = loopOptions?.runCycle()
+      await hook.unmount()
+      const shouldRestart = mode === 'new capture'
+      const nextHook = shouldRestart ? await renderPartyCaptureHook() : null
+      if (nextHook != null) {
+        act(() => nextHook.getCurrent().selectSource('game'))
+        await flushPromises()
+        await act(async () => nextHook.getCurrent().startCapture())
+      }
+      pendingRecognition.resolve({ data: { text: 'Alice' } })
+      await act(async () => lateCycle)
+      expect(api.notifyStableNicknameDetected).not.toHaveBeenCalled()
+      if (nextHook != null) {
+        expect(nextHook.getCurrent().stableNicknames).toEqual([null, null, null, null])
+        expect(nextHook.getCurrent().status).toBe('Capture ready at 1920×1080.')
+        await nextHook.unmount()
+      }
+      expect(api.selectCaptureSource).toHaveBeenLastCalledWith('')
+    }
+  )
+
   it('stops a stream that resolves after capture was cancelled', async () => {
     const { track, stream } = captureResources()
     const pendingStream = Promise.withResolvers<MediaStream>()

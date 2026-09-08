@@ -1,8 +1,8 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
-
 declare global {
   interface Window {
-    electron: ElectronAPI
     api: typeof import('./api/capture')
+    auth: typeof import('./api/auth')
   }
 }
+
+export {}

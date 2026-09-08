@@ -1,60 +1,8 @@
-import { ActionButton } from '@ldb/ui'
-import { usePartyCapture } from './capture/usePartyCapture'
+import { AuthBridge } from './auth/AuthBridge'
+import PartyCapture from './capture/PartyCapture'
 
 function App(): React.JSX.Element {
-  const {
-    sources,
-    selectedSourceId,
-    sourceRegistered,
-    intervalSeconds,
-    stableNicknames,
-    status,
-    selectSource,
-    setIntervalSeconds,
-    startCapture,
-    stopCapture
-  } = usePartyCapture()
-
-  return (
-    <main>
-      <label>
-        Game window
-        <select value={selectedSourceId} onChange={(event) => selectSource(event.target.value)}>
-          <option value="">Select a window</option>
-          {sources.map((source) => (
-            <option key={source.id} value={source.id}>
-              {source.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        OCR interval
-        <select
-          value={intervalSeconds}
-          onChange={(event) => setIntervalSeconds(Number(event.target.value))}
-        >
-          <option value={1}>1 second</option>
-          <option value={3}>3 seconds</option>
-          <option value={5}>5 seconds</option>
-        </select>
-      </label>
-      <ActionButton disabled={!sourceRegistered} type="button" onClick={() => void startCapture()}>
-        Start
-      </ActionButton>
-      <ActionButton type="button" onClick={() => stopCapture()}>
-        Stop
-      </ActionButton>
-      <pre>
-        {[
-          status,
-          ...stableNicknames.map((nickname, slot) => nickname && `Slot ${slot + 1}: ${nickname}`)
-        ]
-          .filter(Boolean)
-          .join('\n')}
-      </pre>
-    </main>
-  )
+  return <AuthBridge api={window.auth} home={<PartyCapture />} />
 }
 
 export default App
