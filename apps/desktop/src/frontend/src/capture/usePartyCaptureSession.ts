@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPartyOcrWorker } from './ocr'
 import { runSerialLoop } from './recognition'
 
@@ -15,6 +15,8 @@ type CaptureSession = {
 }
 
 type Options = {
+  beginSearch: (signal: AbortSignal) => Promise<string | null>
+  endSearch: () => void
   isSelectedSourceRegistered: () => boolean
   intervalSecondsRef: React.RefObject<number>
   setStatus: (status: string) => void
@@ -28,19 +30,27 @@ type Options = {
 
 export function usePartyCaptureSession({
   isSelectedSourceRegistered,
+  beginSearch,
+  endSearch,
   intervalSecondsRef,
   setStatus,
   recognizePartyNicknames,
   resetRecognition
 }: Options): {
+  starting: boolean
   startCapture: () => Promise<void>
   stopCapture: (nextStatus?: string) => void
 } {
+  const [starting, setStarting] = useState(false)
+  const startingRef = useRef(false)
   const sessionRef = useRef<CaptureSession | null>(null)
 
   function stopCapture(nextStatus = 'Capture stopped.'): void {
     releaseSession(sessionRef.current)
     sessionRef.current = null
+    startingRef.current = false
+    setStarting(false)
+    endSearch()
     resetRecognition()
     setStatus(nextStatus)
   }
@@ -49,10 +59,14 @@ export function usePartyCaptureSession({
     return () => {
       releaseSession(sessionRef.current)
       sessionRef.current = null
+      endSearch()
     }
-  }, [])
+  }, [endSearch])
 
   async function startCapture(): Promise<void> {
+    if (startingRef.current) {
+      return
+    }
     if (!isSelectedSourceRegistered()) {
       setStatus('Wait until the selected window is registered.')
       return
@@ -66,8 +80,17 @@ export function usePartyCaptureSession({
       worker: null
     }
     sessionRef.current = session
+    startingRef.current = true
+    setStarting(true)
     const { signal } = session.controller
     try {
+      const captureId = await beginSearch(signal)
+      signal.throwIfAborted()
+      const hasCapture = captureId != null
+      if (!hasCapture) {
+        throw new Error('검색을 시작하지 못했습니다. 창을 다시 선택해 주세요.')
+      }
+      startingRef.current = false
       const stream = await navigator.mediaDevices.getDisplayMedia({
         audio: false,
         video: {
@@ -79,7 +102,10 @@ export function usePartyCaptureSession({
       session.stream = stream
       signal.throwIfAborted()
       const track = stream.getVideoTracks()[0]
-      if (!track) throw new Error('The selected window did not provide a video track.')
+      const hasTrack = track != null
+      if (!hasTrack) {
+        throw new Error('The selected window did not provide a video track.')
+      }
 
       track.addEventListener('ended', () => stopCapture('Capture ended.'), { once: true, signal })
 
@@ -111,6 +137,8 @@ export function usePartyCaptureSession({
           stopCapture(error instanceof Error ? error.message : 'Party OCR failed.')
         }
       })
+      startingRef.current = false
+      setStarting(false)
       setStatus(`Capture ready at ${video.videoWidth}×${video.videoHeight}.`)
     } catch (error) {
       if (signal.aborted) {
@@ -122,18 +150,22 @@ export function usePartyCaptureSession({
     }
   }
 
-  return { startCapture, stopCapture }
+  return { starting, startCapture, stopCapture }
 }
 
 function releaseSession(session: CaptureSession | null): void {
-  if (!session) return
+  const hasSession = session != null
+  if (!hasSession) {
+    return
+  }
   const { controller, stream, video, worker } = session
   session.stream = null
   session.video = null
   session.worker = null
   controller.abort()
   stream?.getTracks().forEach((track) => track.stop())
-  if (video) {
+  const hasVideo = video != null
+  if (hasVideo) {
     video.pause()
     video.srcObject = null
   }

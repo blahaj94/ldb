@@ -54,3 +54,5 @@ export const installObservation = `(() => {
   window.captureObservation = () => ({ ...counts, ended: tracks.every(track => track.readyState === 'ended') });
   return true;
 })()`
+
+export { inspectSearch } from './search-observation'

@@ -6,8 +6,9 @@ import { createAuthCoordinator } from '../../src/backend/auth/coordinator'
 import { registerAuthIpc } from '../../src/backend/auth/ipc-handler'
 import { registerObservedCapture } from './capture-observation'
 import { canaries, createFixtureEffects, syntheticCode } from '../auth-bridge-fixture/effects'
-import { smoke, smokeStandaloneOcr } from './smoke'
+import { smoke, smokeStandaloneOcr, smokeCharacterSearch } from './smoke'
 import { registerFixtureMediaPermissions } from './permissions'
+import { createFixtureSearch, searchScenarios, type SearchScenario } from './search-effects'
 
 const profile = process.env.LDB_AUTH_CAPTURE_PROFILE
 const launcherPid = process.env.LDB_AUTH_CAPTURE_LAUNCHER_PID
@@ -18,6 +19,7 @@ const hasOwnedName =
 const isLauncherChild = launcherPid === String(process.ppid)
 const canStart = hasExpectedDirectory && hasOwnedName && isLauncherChild
 const isAuto = process.argv.includes('--smoke')
+const isSearchSmoke = process.argv.includes('--search-smoke')
 const isOcr = process.argv.includes('--ocr')
 const isDenyMedia = process.argv.includes('--deny-media')
 if (canStart) {
@@ -30,6 +32,7 @@ if (canStart) {
     .then(async () => {
       const effects = createFixtureEffects()
       const coordinator = createAuthCoordinator(effects.dependencies)
+      const search = createFixtureSearch(effects.dependencies)
       await coordinator.start()
       const window = new BrowserWindow({
         title: 'LDB Auth Capture fixture',
@@ -77,7 +80,12 @@ if (canStart) {
         getWindow: () => currentWindow,
         documentUrl
       })
-      const captureObservation = registerObservedCapture(coordinator, window, documentUrl)
+      const captureObservation = registerObservedCapture(
+        coordinator,
+        window,
+        documentUrl,
+        search.runtime
+      )
       window.on('closed', () => {
         currentWindow = null
         disposeAuth()
@@ -109,6 +117,10 @@ if (canStart) {
                   void completeLogin()
                 }
               },
+              ...Object.entries(searchScenarios).map(([scenario, label]) => ({
+                label,
+                click: () => search.selectScenario(scenario as SearchScenario)
+              })),
               { label: 'Show capture app', click: () => window.show() },
               { label: 'Show synthetic source', click: () => source.show() },
               { label: 'Quit LDB Auth Capture fixture', click: () => app.quit() }
@@ -125,17 +137,36 @@ if (canStart) {
       console.log(
         `Capture fixture screen permission: ${systemPreferences.getMediaAccessStatus('screen')}`
       )
-      const runsAutomatically = isAuto || isOcr || isDenyMedia
+      const runsAutomatically = isAuto || isOcr || isDenyMedia || isSearchSmoke
       if (runsAutomatically) {
-        const deadline = setTimeout(() => {
-          console.error('Capture fixture timeout FAIL')
-          app.exit(1)
-        }, 90_000)
+        const deadline = setTimeout(
+          () => {
+            console.error('Capture fixture timeout FAIL')
+            app.exit(1)
+          },
+          isSearchSmoke ? 180_000 : 90_000
+        )
         try {
-          if (isOcr) await smokeStandaloneOcr(window)
-          else await smoke(window, coordinator, completeLogin, captureObservation.counts)
+          if (isSearchSmoke) {
+            await smokeCharacterSearch(
+              window,
+              coordinator,
+              completeLogin,
+              captureObservation.counts,
+              search
+            )
+          } else if (isOcr) {
+            await smokeStandaloneOcr(window)
+          } else {
+            await smoke(window, coordinator, completeLogin, captureObservation.counts)
+          }
           if (hasCanary) throw new Error('Capture fixture canary detected')
-          console.log(isOcr ? 'Capture fixture standalone OCR PASS' : 'Capture fixture smoke PASS')
+          const passedMessage = isSearchSmoke
+            ? 'Capture fixture search smoke PASS'
+            : isOcr
+              ? 'Capture fixture standalone OCR PASS'
+              : 'Capture fixture smoke PASS'
+          console.log(passedMessage)
           app.quit()
         } catch {
           const observation = await window.webContents
@@ -143,9 +174,11 @@ if (canStart) {
             .catch(() => null)
           console.log(`Capture fixture counters: ${JSON.stringify(observation)}`)
           console.error(
-            isOcr
-              ? 'Capture fixture standalone OCR FAIL'
-              : 'Capture fixture media BLOCKED / smoke FAIL'
+            isSearchSmoke
+              ? 'Capture fixture search smoke FAIL'
+              : isOcr
+                ? 'Capture fixture standalone OCR FAIL'
+                : 'Capture fixture media BLOCKED / smoke FAIL'
           )
           app.exit(1)
         } finally {

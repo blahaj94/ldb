@@ -1,4 +1,5 @@
 import { ActionButton } from '@ldb/ui'
+import { SearchResults } from '../search/SearchResults'
 import { usePartyCapture } from './usePartyCapture'
 
 function PartyCapture(): React.JSX.Element {
@@ -6,6 +7,9 @@ function PartyCapture(): React.JSX.Element {
     sources,
     selectedSourceId,
     sourceRegistered,
+    starting,
+    search,
+    retrySearch,
     intervalSeconds,
     stableNicknames,
     status,
@@ -39,7 +43,12 @@ function PartyCapture(): React.JSX.Element {
           <option value={5}>5 seconds</option>
         </select>
       </label>
-      <ActionButton disabled={!sourceRegistered} type="button" onClick={() => void startCapture()}>
+      <ActionButton
+        disabled={!sourceRegistered || starting || !search.ready}
+        loading={starting}
+        type="button"
+        onClick={() => void startCapture()}
+      >
         Start
       </ActionButton>
       <ActionButton type="button" onClick={() => stopCapture()}>
@@ -53,6 +62,7 @@ function PartyCapture(): React.JSX.Element {
           .filter(Boolean)
           .join('\n')}
       </pre>
+      <SearchResults view={search} retry={retrySearch} />
     </main>
   )
 }

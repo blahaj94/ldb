@@ -17,9 +17,9 @@ last-reviewed: 2026-09-08
 | `apps/desktop/src/backend/capture/ipc-handler.ts` | 실제 coordinator를 등록하고 source 열거·선택·media 완료의 auth/window/document 수명을 확인한다. 선택 무효화, trusted 빈 선택 cleanup, 안정화 통지의 현재 main 권한과 raw log 제거를 담당한다. |
 | `apps/desktop/src/backend/renderer-document.ts` | 개발 URL은 HTTP(S)의 exact `localhost`, `127.0.0.1`, `[::1]`과 canonical 입력만 허용한다. Credential·공백·control·backslash·host alias를 거절하고 Electron Vite가 제공하는 slash 없는 bare origin만 정규화한다. |
 | `apps/desktop/src/backend/main.ts` | 검증한 renderer URL, sandbox·contextIsolation 활성화, nodeIntegration 비활성화와 navigation/popup 차단을 구성한다. 실제 auth owner를 만들지 않으며 permission check/request도 명시적으로 거절해 legacy media 경로를 차단한다. |
-| `apps/desktop/src/preload/index.ts`, `index.d.ts` | 기존 auth/capture feature API만 노출한다. 범용 `window.electron`과 isolation-off fallback은 없다. |
+| `apps/desktop/src/preload/index.ts`, `index.d.ts` | auth/capture와 검색 feature API만 노출한다. 범용 `window.electron`과 isolation-off fallback은 없다. |
 | `apps/desktop/src/frontend/src/App.tsx`, `auth/AuthBridge.tsx`, `auth/AuthPresentation.tsx` | 실제 제품 App이 AuthBridge의 home content로 기존 PartyCapture를 전달한다. Welcome·인증 처리·연결 실패 화면에서는 capture를 mount하지 않는다. |
-| `apps/desktop/src/frontend/src/capture/PartyCapture.tsx` | 기존 capture App의 source/interval·Start/Stop·인식값 UI를 재사용한다. 공용 UI 외형을 변경하지 않는다. |
+| `apps/desktop/src/frontend/src/capture/PartyCapture.tsx` | 기존 source/interval·Start/Stop·인식값 UI와 네 슬롯 검색 결과를 표시한다. 공용 UI 외형을 변경하지 않는다. |
 | `apps/desktop/src/frontend/src/capture/usePartyCaptureSession.ts`, `usePartyRecognition.ts`, `useCaptureSourceSelection.ts` | 현재 capture의 AbortSignal을 OCR에 전달하고 종료 뒤 결과·통지를 버린다. Unmount에서 stream·video·worker·loop와 main 선택을 정리한다. |
 
 Capture generation은 main 내부 값이며 snapshot/IPC payload로 추가하지 않는다. Renderer의 revision이나 snapshot은 권한 근거가 아니다. 기존 [auth bridge](desktop-auth-bridge.md)의 구독 순서·snapshot allowlist·credential 비노출을 유지한다. Auth API 오류는 기존 고정 UI로 처리하며 명령을 자동 재전송하지 않는다.
@@ -32,7 +32,7 @@ Renderer는 accepted signedIn 이탈을 별도 presentation epoch로 기록하�
 
 Main은 auth 이탈 알림에서 선택을 직접 지우며 trusted renderer의 빈 source 선택은 인증 phase와 무관하게 허용한다. 다른 window/frame/document의 cleanup 요청은 거절한다. 재로그인은 source와 Start를 다시 요구한다. Capture의 이전 AbortSignal이 취소되면 늦은 OCR은 새 instance의 상태를 변경하거나 안정화 통지를 보내지 않는다. IPC 발송 뒤 main 권한이 이탈해 생긴 통지 거절도 raw error log 없이 회수한다.
 
-`notifyStableNicknameDetected`는 현재 main 권한·기존 입력 검사를 통과해도 아직 검색/HTTP를 실행하지 않는다. Raw OCR nickname을 log에 남기지 않으며 이 연결을 인증 검색 완료로 표현하지 않는다. 검색·slot 후보·profile과 [남은 restore/native 정책](desktop-auth-core.md)은 별도 작업이다.
+`notifyStableNicknameDetected`는 captureId·slot·observationRevision·nickname을 받아 현재 수명의 검색으로 연결한다. Main의 HTTP/전체 응답 검증과 renderer의 네 슬롯 후보·retry 구현은 [캐릭터 검색](desktop-character-search.md)을 참고한다. Raw OCR nickname은 log에 남기지 않는다. Profile과 [남은 restore/native 정책](desktop-auth-core.md)은 별도 작업이다.
 
 ## 격리 Electron fixture
 
@@ -50,9 +50,9 @@ Build는 기존 OCR assets 준비, fixture 전용 TypeScript 검사와 Electron 
 
 수동 실행은 Google/Discord 버튼→앱 메뉴의 **Complete login**→**시작하기**→source 목록의 **LDB Synthetic Capture Source**→**Start** 순서다. 로그아웃 후 인식값과 capture UI가 사라지는지, 재로그인 뒤 source와 Start가 다시 필요한지 확인한다. 앱 메뉴의 **Quit LDB Auth Capture fixture**로 child를 종료하면 Node launcher가 process group 종료와 profile 최종 삭제를 확인한다. 삭제 또는 삭제 확인에 실패하면 고정된 cleanup FAIL과 exit 1로 종료하며 raw filesystem 오류를 출력하지 않는다. 기존 다른 Electron instance를 종료하지 않는다.
 
-통합 smoke는 실제 버튼·feature preload·main IPC·media·OCR를 검증한다. Renderer 관측 wrapper는 native `getDisplayMedia`, Worker 생성/종료·OCR 요청, video와 track stop을 그대로 호출한다. Main 관측 wrapper도 실제 제품 display/안정화 통지 handler를 그대로 호출하고 counter와 slot별 합성 기대값 일치 bitmask만 수집한다. 원문 통지 payload나 nickname은 보관하지 않는다. MediaStream이나 OCR 결과를 test double로 대체하지 않는다. 실제 video에서 제품 crop 함수를 호출해 기존 frame 크기와 네 slot mana 영역 일치를 확인하고 native track 크기는 별도로 기록한다. 성공 판정에는 실제 stream과 worker 초기화, 네 slot 각각의 정확한 synthetic 표시값과 실제 main handler 통과 뒤 기대값 통지가 모두 필요하다. 표시와 통지의 bitmask가 각각 `15`여야 하며 crop/mana 존재나 같은 slot의 중복 통지로 이를 대체하지 않는다. Logout 뒤 track/worker/video 정리와 재로그인 시 자동 capture 0도 확인한다. Raw nickname·credential·URL을 진단 출력으로 반환하지 않는다.
+통합 smoke는 실제 버튼·feature preload·main IPC·media·OCR를 검증한다. Renderer 관측 wrapper는 native `getDisplayMedia`, Worker 생성/종료·OCR 요청, video와 track stop을 그대로 호출한다. Main 관측 wrapper도 실제 제품 display/안정화 통지 handler를 그대로 호출하고 counter와 slot별 합성 기대값 일치 bitmask만 수집한다. 원문 통지 payload나 nickname은 보관하지 않는다. MediaStream이나 OCR 결과를 test double로 대체하지 않는다. 실제 video에서 제품 crop 함수를 호출해 기존 frame 크기와 네 slot mana 영역 일치를 확인하고 native track 크기는 별도로 기록한다. 성공 판정에는 실제 stream과 worker 초기화, 네 slot 각각의 정확한 synthetic 표시값과 실제 main handler 통과 뒤 기대값 통지가 모두 필요하다. 통지 접수는 `ok:true`와 응답 snapshot의 capture/slot/nickname/observationRevision이 입력과 정확히 일치하는 경우만 센다. 더 오래되거나 새로운 관측의 snapshot과 정상 resolve된 거절은 접수 증거가 아니다. 표시와 통지의 bitmask가 각각 `15`여야 하며 crop/mana 존재나 같은 slot의 중복 통지로 이를 대체하지 않는다. Logout 뒤 track/worker/video 정리와 재로그인 시 자동 capture 0도 확인한다. Raw nickname·credential·URL을 진단 출력으로 반환하지 않는다.
 
-Fixture constructor는 `sandbox:true`, `contextIsolation:true`, `nodeIntegration:false`를 고정한다. Product와 fixture의 preload는 동일 source의 CJS bundle이며 byte 동등성을 비교할 수 있다. Fixture의 `.cjs` 이름은 output 격리용이며 sandbox에서 다른 구현을 사용하는 우회가 아니다. CSP는 제품 entry와 같은 경계를 사용하고 webSecurity를 끄지 않는다. Network·native credential·provider·OS protocol은 사용하지 않는다.
+Fixture constructor는 `sandbox:true`, `contextIsolation:true`, `nodeIntegration:false`를 고정한다. Product와 fixture의 preload는 동일 source의 CJS bundle이며 byte 동등성을 비교할 수 있다. Fixture의 `.cjs` 이름은 output 격리용이며 sandbox에서 다른 구현을 사용하는 우회가 아니다. CSP는 제품 entry와 같은 경계를 사용하고 webSecurity를 끄지 않는다. 실제 network·native credential·provider·OS protocol은 사용하지 않는다. 검색도 main에 주입한 고정 합성 transport만 사용하며 응답별 수동 확인 방법은 [검색 fixture 절차](desktop-character-search.md#격리-미디어와-화면-검증)를 따른다.
 
 ## 실제 UI 관측
 

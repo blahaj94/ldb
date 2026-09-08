@@ -18,6 +18,8 @@ review-after: 최초 Desktop 인증 구현 및 packaged platform validation 시
 
 [저장 확정 뒤 복원 안내 제안](#저장-확정-뒤-복원-안내-제안)은 별도의 `proposed` 변경이다. 기존 notice allowlist의 승인이나 제품 구현 완료로 간주하지 않는다.
 
+[인증 준비 미완료 검색 종료 제안](#인증-준비-미완료-검색-종료-제안)은 현재 인증을 유지한 검색 실패의 계약이며 PR #149에서 승인된 `active` Rule이다.
+
 서버의 [API](auth-api.md), [OAuth](auth-oauth.md), [session](auth-session.md), [활동](auth-activity.md), [runtime gate](auth-runtime.md)를 전제로 한다. Endpoint, TTL, JWT/refresh/session 정책, provider 설정과 DB를 변경하지 않는다. `clientId:"desktop"`은 public 등록 선택값이다. 실제 운영 URL·app identity·protocol 값은 platform 문서의 미확인 gate다.
 
 ## Process 책임과 권한
@@ -214,3 +216,26 @@ Renderer는 event를 먼저 구독한 뒤 `read`하고 같은 runId에서 더 �
 - 재시도 허용 code는 `SEARCH_AUTH_RETRY_REQUIRED`, `SEARCH_NETWORK_ERROR`, `SEARCH_TIMEOUT`, `SEARCH_RESPONSE_INVALID`, `INTERNAL_SERVER_ERROR`, `NEOPLE_API_ERROR`, `NEOPLE_UNAVAILABLE`, `NEOPLE_TIMEOUT`이다. `SEARCH_RATE_LIMITED`는 유효 Retry-After의 main monotonic 만료 후에만 허용하고, header가 누락·invalid여서 null이면 수동 재시도를 즉시 허용한다. `INVALID_SEARCH_QUERY`, failure가 아닌 현재 상태와 아직 대기 중인 429의 retry는 `SEARCH_RETRY_NOT_READY`·HTTP 0회다. `AUTHENTICATION_REQUIRED`는 위 401 처리로만 사용하고 retry 가능한 failure로 발행하지 않는다. Shape·권한·현재 capture/requestId 검사가 우선이며 각각 기존 `INVALID_SEARCH_COMMAND`, `SEARCH_NOT_ALLOWED`, `STALE_SEARCH`로 거절한다.
 - 429는 실패로 표시하며 `Retry-After`의 유효한 양의 십진 정수 초를 정제해 안내한다. Main은 수신 시각부터 monotonic 대기를 지키고 그동안 해당 slot의 retry를 거절한다. 만료 시 같은 failure의 `retryAfterSeconds:0` 전이를 발행해 버튼만 활성화한다. 누락·형식 오류·safe integer 범위 초과는 null과 일반 제한 안내로 처리하며 임의 대기시간을 만들지 않는다. Countdown은 안내이며 main의 검사와 서버의 다음 판정을 대신하지 않는다.
 - 429 뒤 새 안정화 입력은 독립된 새 검색으로 처리하되 이전 429를 자동 재전송하거나 quota가 풀리기를 기다리는 queue는 만들지 않는다. 수동 재시도도 서버 제한을 다시 적용받는다. 이전 계정·slot의 대기 timer와 오류는 수명 무효화 때 폐기한다.
+
+## 인증 준비 미완료 검색 종료 제안
+
+```yaml
+status: active
+enforcement: approval-required
+rationale: 현재 인증을 유지한 authorization unavailable을 검색 실패로 종료하고 완료된 401 회복의 재시도 이력과 구분한다.
+evidence: "https://github.com/blahaj94/ldb/issues/144#issuecomment-5579779382 ; PR #149 사용자 승인: https://github.com/blahaj94/ldb/pull/149#issuecomment-5579941130"
+exceptions: 기존 인증·credential 수명, 검색 취소·15초·401·429 정책과 초기 restore·restorePaused의 별도 계약은 유지한다.
+review-after: 승인 후 전송 전·401 회복 중 unavailable과 수동 재시도의 최초 검색 검증 시
+```
+
+Authorization 또는 검색 401 회복 작업이 끝났지만 사용 가능한 access가 없고, 현재 credential과 `signedIn`을 보존한 경우에 적용한다. [기존 authorization](../reference/desktop-auth-core.md#lifecycle-entry)의 refresh 저장 확정 뒤 access 만료·clock 불연속에 따른 `unavailable`을 포함한다.
+
+- 검색 signal이 취소됐거나 [현재 auth generation·capture·관측 등 수명 검사](#취소와-완료의-최종-판정)에 실패하면 기존 결과 폐기·cleanup을 따르고 이 실패를 발행하지 않는다. 현재 요청의 완료 판정 시각이 deadline 이상이면 기존 `SEARCH_TIMEOUT`을 우선한다.
+- 위 수명이 유효하고 signal이 취소되지 않았으며 deadline 전이면 해당 requestId를 즉시 `failure`, `rows:[]`, `error:{code:"SEARCH_AUTH_NOT_READY",retryAfterSeconds:null}`로 종료한다. `SEARCH_AUTH_NOT_READY`를 위 Desktop 검색 error code와 일반 수동 재시도 허용 code에 추가한다.
+- 고정 안내는 “검색에 필요한 로그인 상태 확인을 마치지 못했습니다. 다시 시도해 주세요.”다. 해당 slot에 “다시 시도” 버튼을 제공하며, 이 사유를 network·응답 검증 실패나 인증 상실로 표시하지 않는다.
+- 안전한 access 없이 `GET /characters`를 보내지 않는다. 이 결과를 이유로 같은 검색 호출에서 추가 refresh·GET·logout·clear·marker 변경·credential 교체를 하지 않는다. 기존 작업이 저장 확정한 현재 credential과 `signedIn`을 보존하고, 다른 caller의 공유 refresh·credential writer를 중단하지 않는다.
+- 사용자 재시도는 기존 retry IPC의 현재 auth/capture/slot/requestId 검사를 거쳐 새 requestId와 새 15,000ms 예산으로 수행한다. 현재 credential의 기존 authorization을 호출하며, 다시 같은 결과면 그 시점에 저장 확정된 credential을 보존한 동일 failure와 다음 수동 재시도를 제공한다. 자동 재시도나 `retryAuth` 호출은 추가하지 않는다.
+- 전송 전 authorization과 검색 401 회복 도중의 `unavailable` 모두 이 code를 사용한다. 이 실패는 완료된 401 회복 뒤의 최종 401 재시도 이력을 갖거나 승계하지 않는다. 따라서 이 실패를 수동 재시도한 요청의 첫 401은 기존 일반 회복을 따른다. 인증 사용 준비가 완료돼 `SEARCH_AUTH_RETRY_REQUIRED`로 끝난 실패의 재시도가 현재 최신 access에서 다시 401을 받았을 때만 기존 최종 401 처리를 적용한다.
+- 새 안정화 입력은 기존 독립 검색 정책을 따르며 이 실패나 이전 401 회복의 이력을 승계하지 않는다. 같은 nickname의 revision 승격은 기존대로 새 검색·자동 재시도를 만들지 않는다.
+
+이 절은 [PR #131에서 이미 승인된 검색 계약](https://github.com/blahaj94/ldb/pull/131#issuecomment-5572388337)에 없는 위 경우만 보완한다. 기존 승인 정책을 다시 승인 대상으로 만들지 않으며, 이 새 mapping은 [PR #149의 명시적 승인](https://github.com/blahaj94/ldb/pull/149#issuecomment-5579941130)을 반영한 active Rule이다. 대안·상황별 기대 결과는 Issue/PR에 둔다.

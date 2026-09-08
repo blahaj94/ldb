@@ -76,3 +76,91 @@ it('60초 이후 내부 실행과 정리를 마친 정상 child를 outer timeout
     maxRetries: 3
   })
 })
+
+const searchEvidence = {
+  emptyMask: 15,
+  candidateMask: 15,
+  independentRetry: true,
+  timeout: true,
+  rateWait: true,
+  rateNoAutoGet: true,
+  pendingCleanup: true,
+  relogin: true,
+  newCapture: true,
+  displayRequests: 4,
+  displayAllowed: 4,
+  searchRequests: 20,
+  pendingAborts: 5
+}
+
+/** @returns {Promise<void>} */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
+async function runSearchChild({ evidence = searchEvidence, completionMs = 1 } = {}) {
+  vi.spyOn(process, 'argv', 'get').mockReturnValue(['node', 'post-exit-check.mjs', '--search'])
+  let stopped = false
+  const child = Object.assign(new EventEmitter(), {
+    pid: 424242,
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter()
+  })
+  fixture.spawn.mockImplementation(() => {
+    setTimeout(() => {
+      const hasEvidence = evidence != null
+      if (hasEvidence) {
+        child.stdout.emit('data', `Capture fixture search evidence: ${JSON.stringify(evidence)}\n`)
+      }
+      child.stdout.emit('data', 'Capture fixture search smoke PASS\nCapture fixture cleanup PASS\n')
+      stopped = true
+      child.emit('close', 0)
+    }, completionMs)
+    return child
+  })
+  vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+    const isInspection = signal === 0
+    if (isInspection) {
+      if (stopped) {
+        throw Object.assign(new Error('Gone'), { code: 'ESRCH' })
+      }
+      return true
+    }
+    stopped = true
+    child.emit('close', 1)
+    return true
+  })
+  const execution = import('./post-exit-check.mjs')
+  await vi.waitFor(() => expect(fixture.spawn).toHaveBeenCalledOnce())
+  await vi.advanceTimersByTimeAsync(completionMs)
+  await execution
+}
+
+it('검색 전용 mode는 검증된 검색 evidence와 child/group/profile 종료를 함께 요구한다', async () => {
+  await runSearchChild()
+  expect(fixture.spawn.mock.calls[0][1]).toEqual(['capture:fixture:search'])
+  expect(console.log).toHaveBeenCalledWith('Capture fixture post-exit check PASS')
+  expect(process.exitCode).toBe(0)
+  expect(fixture.read).toHaveBeenCalledOnce()
+  expect(fixture.remove).toHaveBeenCalledOnce()
+})
+
+it('새 검색 mode의 긴 실행을 기존 media 150초 상한으로 조기 종료하지 않는다', async () => {
+  await runSearchChild({ completionMs: 155_000 })
+  expect(process.kill).not.toHaveBeenCalledWith(-424242, 'SIGTERM')
+  expect(console.log).toHaveBeenCalledWith('Capture fixture post-exit check PASS')
+  expect(process.exitCode).toBe(0)
+})
+
+it.each([
+  { name: 'missing evidence', evidence: null },
+  { name: 'failed rate limit check', evidence: { ...searchEvidence, rateNoAutoGet: false } },
+  { name: 'unexpected field', evidence: { ...searchEvidence, raw: 'synthetic-private-value' } },
+  { name: 'missing native stream evidence', evidence: { ...searchEvidence, displayAllowed: 0 } }
+])('$name은 child 성공 문구만으로 검색 검증을 통과시키지 않는다', async ({ evidence }) => {
+  await runSearchChild({ evidence })
+  expect(process.exitCode).toBe(1)
+  expect(console.error).toHaveBeenCalledWith('Capture fixture post-exit check FAIL')
+  const logged = JSON.stringify([
+    ...vi.mocked(console.log).mock.calls,
+    ...vi.mocked(console.error).mock.calls
+  ])
+  expect(logged.includes('synthetic-private-value')).toBe(false)
+})

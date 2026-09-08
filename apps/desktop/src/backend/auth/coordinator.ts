@@ -1,4 +1,5 @@
 import { AuthState } from './auth-state'
+import { waitForAuthorization } from './authorization-waiter'
 import { UserVerification, verificationFailureNotice } from './user-verification'
 import { selectCredentialRecoveryStep, selectStoreRecoveryStep } from './recovery-plan'
 import type { StorageRecoveryPurpose } from './recovery-plan'
@@ -20,7 +21,8 @@ import type {
   AuthSnapshot,
   AuthTokens,
   CredentialTransitionKind,
-  LoginExchangeResponse
+  LoginExchangeResponse,
+  RejectedAuthorization
 } from './types'
 
 const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
@@ -768,30 +770,72 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return {
         status: 'available',
         accessToken: refreshedCredential.accessToken,
-        generation: operationGeneration
+        generation: operationGeneration,
+        accessGeneration: refreshedCredential.accessGeneration
       }
     })
   }
 
-  function authorization(): Promise<AuthAuthorization> {
+  function currentAuthorization(): AuthAuthorization {
     const currentCredential = session.current
+    const hasCredential = currentCredential != null
     const isSignedIn = state.phase === 'signedIn'
-    if (!isSignedIn || currentCredential == null) {
-      return Promise.resolve({ status: 'unavailable' })
+    const canReadCredential = isSignedIn && hasCredential
+    if (!canReadCredential) {
+      return { status: 'unavailable' }
     }
     const checkedAt = dependencies.clock.read()
     const isClockUsable = !checkedAt.discontinuous
     const isAccessCurrent = checkedAt.wallMs < currentCredential.accessTokenExpiresAtMs
     const canUseAccess = isClockUsable && isAccessCurrent
     if (canUseAccess) {
-      return Promise.resolve({
+      return {
         status: 'available',
         accessToken: currentCredential.accessToken,
-        generation
-      })
+        generation,
+        accessGeneration: currentCredential.accessGeneration
+      }
     }
+    return { status: 'unavailable' }
+  }
 
-    return refreshAuthorization()
+  function authorization(signal?: AbortSignal): Promise<AuthAuthorization> {
+    return waitForAuthorization(() => {
+      const isSignedIn = state.phase === 'signedIn'
+      if (!isSignedIn) return Promise.resolve({ status: 'unavailable' })
+      const refreshing = session.currentRefresh(generation)
+      const hasRefresh = refreshing != null
+      if (hasRefresh) return refreshing
+      const current = currentAuthorization()
+      const canUseAccess = current.status === 'available'
+      return canUseAccess ? Promise.resolve(current) : refreshAuthorization()
+    }, signal)
+  }
+
+  function recoverAuthorization(
+    rejected: RejectedAuthorization,
+    signal?: AbortSignal
+  ): Promise<AuthAuthorization> {
+    return waitForAuthorization(() => {
+      const credential = session.current
+      const hasCredential = credential != null
+      const isSignedIn = state.phase === 'signedIn'
+      const hasSameGeneration = rejected.generation === generation
+      const canRecover = hasCredential && isSignedIn && hasSameGeneration
+      if (!canRecover) return Promise.resolve({ status: 'unavailable' })
+      const hasNewerAccess = credential.accessGeneration > rejected.accessGeneration
+      if (hasNewerAccess) {
+        const refreshing = session.currentRefresh(generation)
+        return refreshing ?? Promise.resolve(currentAuthorization())
+      }
+      const isCurrentAccess = credential.accessGeneration === rejected.accessGeneration
+      if (!isCurrentAccess) return Promise.resolve({ status: 'unavailable' })
+      if (rejected.finalRejection) {
+        // 기존 logout reservation이 진행 writer를 기다리고 같은 session을 한 번 정리한다.
+        return logout('REAUTH_REQUIRED').then(() => ({ status: 'unavailable' }))
+      }
+      return refreshAuthorization()
+    }, signal)
   }
 
   async function retry(): Promise<AuthCommandResult> {
@@ -892,7 +936,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return state.success()
   }
 
-  async function performLogout(): Promise<AuthCommandResult> {
+  async function performLogout(notice: AuthNotice | null): Promise<AuthCommandResult> {
     const value = pending
     generation += 1
     const logoutGeneration = generation
@@ -914,11 +958,12 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return state.success()
     }
 
-    state.signedOut(serverConfirmed ? null : 'LOGOUT_SERVER_UNCONFIRMED')
+    const logoutNotice = notice ?? (serverConfirmed ? null : 'LOGOUT_SERVER_UNCONFIRMED')
+    state.signedOut(logoutNotice)
     return state.success()
   }
 
-  function logout(): Promise<AuthCommandResult> {
+  function logout(notice: AuthNotice | null = null): Promise<AuthCommandResult> {
     if (logoutFlight != null) {
       return logoutFlight
     }
@@ -945,7 +990,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
     }
     void operation.then(clearLogout, clearLogout)
-    void performLogout().then(resolveLogout, rejectLogout)
+    void performLogout(notice).then(resolveLogout, rejectLogout)
     return operation
   }
 
@@ -964,6 +1009,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     retryAuth: retry,
     captureGeneration,
     authorization,
+    recoverAuthorization,
     logout
   }
 }

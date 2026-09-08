@@ -27,6 +27,7 @@
     "auth:fixture:smoke": "electron out/auth-bridge-fixture/main/main.cjs --smoke",
     "capture:fixture:build": "npm run prepare:ocr-assets && tsc --noEmit -p scripts/auth-capture-fixture/tsconfig.json --composite false && electron-vite build --config scripts/auth-capture-fixture.config.ts",
     "capture:fixture": "node scripts/auth-capture-fixture.mjs",
+    "capture:fixture:search": "node scripts/auth-capture-fixture.mjs --search-smoke",
     "capture:fixture:smoke": "node scripts/auth-capture-fixture.mjs --smoke",
     "capture:fixture:ocr": "node scripts/auth-capture-fixture.mjs --ocr",
     "capture:fixture:deny": "node scripts/auth-capture-fixture.mjs --deny-media"

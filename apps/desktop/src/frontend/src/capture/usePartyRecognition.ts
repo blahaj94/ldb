@@ -3,7 +3,9 @@ import type { Worker } from 'tesseract.js'
 import { capturePartyNicknameCrops, PARTY_SLOTS } from './party'
 import { normalizeNickname, type SlotStability, updateSlotStability } from './recognition'
 
-export function usePartyRecognition(): {
+export function usePartyRecognition(
+  observe: (input: { slot: number; nickname: string | null }) => void
+): {
   stableNicknames: (string | null)[]
   recognizePartyNicknames: (
     video: HTMLVideoElement,
@@ -29,30 +31,40 @@ export function usePartyRecognition(): {
     worker: Worker,
     signal: AbortSignal
   ): Promise<void> {
-    if (signal.aborted) return
+    if (signal.aborted) {
+      return
+    }
     const crops = capturePartyNicknameCrops(video)
     const nextStableNicknames = stableNicknamesRef.current.slice()
     for (const [slot, crop] of crops.entries()) {
       const nickname = crop ? normalizeNickname((await worker.recognize(crop)).data.text) : null
-      if (signal.aborted) return
+      if (signal.aborted) {
+        return
+      }
       const stability = updateSlotStability(slotStabilityRef.current[slot], nickname || null)
       slotStabilityRef.current[slot] = stability
-      if (!stability.stableNickname) {
+      const hasStableNickname = stability.stableNickname != null
+      if (!hasStableNickname) {
+        const hadReportedNickname = reportedNicknamesRef.current[slot] != null
+        if (hadReportedNickname) {
+          observe({ slot, nickname: null })
+        }
         reportedNicknamesRef.current[slot] = null
         nextStableNicknames[slot] = null
         continue
       }
       nextStableNicknames[slot] = stability.stableNickname
-      if (reportedNicknamesRef.current[slot] !== stability.stableNickname) {
-        void window.api
-          .notifyStableNicknameDetected({ nickname: stability.stableNickname, slot })
-          .catch(() => undefined)
+      const isNewStableNickname = reportedNicknamesRef.current[slot] !== stability.stableNickname
+      if (isNewStableNickname) {
+        observe({ nickname: stability.stableNickname, slot })
         reportedNicknamesRef.current[slot] = stability.stableNickname
       }
     }
-    if (
-      nextStableNicknames.some((nickname, slot) => nickname !== stableNicknamesRef.current[slot])
-    ) {
+    const hasChangedNicknames = nextStableNicknames.some((nickname, slot) => {
+      const hasChanged = nickname !== stableNicknamesRef.current[slot]
+      return hasChanged
+    })
+    if (hasChangedNicknames) {
       stableNicknamesRef.current = nextStableNicknames
       setStableNicknames(nextStableNicknames)
     }

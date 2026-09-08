@@ -56,8 +56,19 @@ export type AuthCommandResult =
     }>
 
 export type AuthAuthorization =
-  | Readonly<{ status: 'available'; accessToken: string; generation: number }>
+  | Readonly<{
+      status: 'available'
+      accessToken: string
+      generation: number
+      accessGeneration: number
+    }>
   | Readonly<{ status: 'unavailable' }>
+
+export type RejectedAuthorization = Readonly<{
+  generation: number
+  accessGeneration: number
+  finalRejection: boolean
+}>
 
 export type AuthTokens = Readonly<{
   tokenType: 'Bearer'
@@ -165,6 +176,10 @@ export interface AuthCoordinator {
   handleReturnUrl(raw: unknown): Promise<void>
   retryAuth(): Promise<AuthCommandResult>
   captureGeneration(): number | null
-  authorization(): Promise<AuthAuthorization>
+  authorization(signal?: AbortSignal): Promise<AuthAuthorization>
+  recoverAuthorization(
+    rejected: RejectedAuthorization,
+    signal?: AbortSignal
+  ): Promise<AuthAuthorization>
   logout(): Promise<AuthCommandResult>
 }
