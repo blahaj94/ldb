@@ -80,7 +80,9 @@ try {
   const expectedCode = expectsSuccess ? 0 : 1
   const expectedMessage = isOcr
     ? 'Capture fixture standalone OCR PASS'
-    : 'Capture fixture media BLOCKED / smoke FAIL'
+    : isMedia
+      ? 'Capture fixture smoke PASS'
+      : 'Capture fixture media BLOCKED / smoke FAIL'
   assert.equal(code, expectedCode, 'Child result did not match the requested check')
   assert.equal(output.includes(expectedMessage), true)
   const remaining = (await readdir(testRoot)).filter((name) => {
