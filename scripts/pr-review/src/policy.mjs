@@ -12,31 +12,8 @@ const IMPLEMENTATION_COMMIT = /^(?:feat|fix|refactor)(?:\([^)]*\))?!?:/i;
 const TEST_COMMIT = /^test(?:\([^)]*\))?!?:/i;
 
 function isRuleFile(filename) {
-  const isRootAgentsFile = filename === RULE_PATHS[0];
-  const isRootConventionFile =
-    !isRootAgentsFile && filename === RULE_PATHS[1];
-  const isRulesDirectoryFile =
-    !isRootAgentsFile &&
-    !isRootConventionFile &&
-    filename.startsWith(RULE_PATHS[2]);
-  const isArchitectureDirectoryFile =
-    !isRootAgentsFile &&
-    !isRootConventionFile &&
-    !isRulesDirectoryFile &&
-    filename.startsWith(RULE_PATHS[3]);
-  const isDomainDirectoryFile =
-    !isRootAgentsFile &&
-    !isRootConventionFile &&
-    !isRulesDirectoryFile &&
-    !isArchitectureDirectoryFile &&
-    filename.startsWith(RULE_PATHS[4]);
-
-  return (
-    isRootAgentsFile ||
-    isRootConventionFile ||
-    isRulesDirectoryFile ||
-    isArchitectureDirectoryFile ||
-    isDomainDirectoryFile
+  return RULE_PATHS.some((path) =>
+    path.endsWith("/") ? filename.startsWith(path) : filename === path,
   );
 }
 
@@ -114,9 +91,9 @@ function testEvidenceCheck(files, commits) {
   });
   const hasRedTestCommit = testIndex >= 0;
   const hasImplementationCommit = implementationIndex >= 0;
-  const redTestPrecedesImplementation =
-    !hasImplementationCommit || testIndex < implementationIndex;
-  const hasValidTestEvidence = hasRedTestCommit && redTestPrecedesImplementation;
+  const redTestPrecedesImplementation = testIndex < implementationIndex;
+  const hasValidTestEvidence =
+    hasRedTestCommit && (!hasImplementationCommit || redTestPrecedesImplementation);
   return {
     name: "test_evidence",
     status: hasValidTestEvidence ? "pass" : "warning",

@@ -9,7 +9,8 @@ export function validateReviewResult(result) {
 
   const isHeadShaString = typeof result.headSha === "string";
   const isHeadShaEmpty = isHeadShaString && result.headSha.length === 0;
-  if (!isHeadShaString || isHeadShaEmpty) {
+  const isHeadShaInvalid = !isHeadShaString || isHeadShaEmpty;
+  if (isHeadShaInvalid) {
     errors.push("headSha must be a non-empty string");
   }
   const isSummaryString = typeof result.summary === "string";
@@ -26,17 +27,22 @@ export function validateReviewResult(result) {
         errors.push(`findings[${index}].severity is invalid`);
       }
       const isConfidenceNumber = typeof finding?.confidence === "number";
-      const isConfidenceOutOfRange =
+      const isConfidenceBelowMinimum =
+        isConfidenceNumber && finding.confidence < 0;
+      const isConfidenceAboveMaximum =
+        isConfidenceNumber && !isConfidenceBelowMinimum && finding.confidence > 1;
+      const isConfidenceInvalid =
         !isConfidenceNumber ||
-        finding.confidence < 0 ||
-        finding.confidence > 1;
-      if (isConfidenceOutOfRange) {
+        isConfidenceBelowMinimum ||
+        isConfidenceAboveMaximum;
+      if (isConfidenceInvalid) {
         errors.push(`findings[${index}].confidence must be between 0 and 1`);
       }
       for (const field of ["path", "evidence", "impact", "suggestedAction"]) {
         const isFieldString = typeof finding?.[field] === "string";
         const isFieldEmpty = isFieldString && finding[field].length === 0;
-        if (!isFieldString || isFieldEmpty) {
+        const isFieldInvalid = !isFieldString || isFieldEmpty;
+        if (isFieldInvalid) {
           errors.push(`findings[${index}].${field} must be a non-empty string`);
         }
       }
