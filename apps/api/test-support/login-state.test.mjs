@@ -12,7 +12,8 @@ const { LOGIN } = await import('../dist/constants/login.js')
 
 for (const outcome of ['success', 'rejection', 'invalid identity', 'timeout']) {
   test(`provider proof references are released before the next DB wait: ${outcome}`, async (t) => {
-    if (outcome === 'timeout') {
+    const isTimeoutOutcome = outcome === 'timeout'
+    if (isTimeoutOutcome) {
       t.mock.timers.enable({ apis: ['setTimeout'] })
     }
 
@@ -51,12 +52,14 @@ for (const outcome of ['success', 'rejection', 'invalid identity', 'timeout']) {
       pkceKeys: { decrypt: () => verifier },
       dataSource: {
         transaction: async (_isolation, operation) => {
-          if (++transactions === 2) {
+          const isSecondTransaction = ++transactions === 2
+          if (isSecondTransaction) {
             databaseEntered.resolve()
             await releaseDatabase.promise
           }
           const result = await operation(manager)
-          if (result?.status === 'claimed') {
+          const isClaimedResult = result?.status === 'claimed'
+          if (isClaimedResult) {
             claim = result.claim
           }
           return result
@@ -69,7 +72,8 @@ for (const outcome of ['success', 'rejection', 'invalid identity', 'timeout']) {
         signal = input.signal
         providerEntered.resolve()
         await finishVerification.promise
-        if (outcome === 'rejection') {
+        const isRejectionOutcome = outcome === 'rejection'
+        if (isRejectionOutcome) {
           throw new Error('fixture provider failure')
         }
         return {

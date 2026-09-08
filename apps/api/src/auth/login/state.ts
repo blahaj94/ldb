@@ -26,15 +26,18 @@ export async function freshTime(manager: EntityManager): Promise<Date> {
 }
 
 export function requestExpired(request: AuthLoginRequest, checkedAt: Date): boolean {
-  return checkedAt.getTime() >= request.expiresAt.getTime()
+  const isPastRequestExpiry = checkedAt.getTime() >= request.expiresAt.getTime()
+  return isPastRequestExpiry
 }
 
 export function exchangeExpired(request: AuthLoginRequest, checkedAt: Date): boolean {
-  return (
-    requestExpired(request, checkedAt) ||
-    request.codeExpiresAt === null ||
-    checkedAt.getTime() >= request.codeExpiresAt.getTime()
-  )
+  const isRequestExpired = requestExpired(request, checkedAt)
+  const codeExpiresAt = request.codeExpiresAt
+  const hasNoCodeExpiry = codeExpiresAt === null
+  const isPastCodeExpiry = !hasNoCodeExpiry && checkedAt.getTime() >= codeExpiresAt.getTime()
+  const isExchangeExpired = isRequestExpired || hasNoCodeExpiry || isPastCodeExpiry
+
+  return isExchangeExpired
 }
 
 export async function markLoginRequestFailed(
@@ -71,7 +74,8 @@ export function cookieMatches(request: AuthLoginRequest, header: string): boolea
       .filter((part) => part.split('=')[0] === cookieName)
 
     // 중복된 요청 cookie는 어느 값을 선택하지 않고 binding 실패로 처리한다.
-    if (matches.length !== 1) {
+    const hasSingleCookieMatch = matches.length === 1
+    if (!hasSingleCookieMatch) {
       return false
     }
     const value = matches[0].slice(cookieName.length + 1)

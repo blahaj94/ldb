@@ -5,14 +5,20 @@ import type { LoginCallbackInput, LoginCreation, LoginExchange } from '../../typ
 import { decodeOpaque } from './crypto.js'
 
 function requireExactFields(value: unknown, fields: readonly string[]): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  const isValueTruthy = Boolean(value)
+  const isValueObject = isValueTruthy && typeof value === 'object'
+  const isValueArray = isValueObject && Array.isArray(value)
+
+  if (!isValueTruthy || !isValueObject || isValueArray) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
-  if (
-    Object.keys(value).length !== fields.length ||
-    !fields.every((field) => Object.hasOwn(value, field))
-  ) {
+  const objectValue = value as Record<string, unknown>
+  const hasExpectedFieldCount = Object.keys(objectValue).length === fields.length
+  const hasExpectedFields = fields.every((field) => Object.hasOwn(objectValue, field))
+  const hasExactFields = hasExpectedFieldCount && hasExpectedFields
+
+  if (!hasExactFields) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -27,11 +33,12 @@ export function parseCreation(value: unknown): LoginCreation {
     'codeChallengeMethod'
   ])
 
-  if (
-    (body.provider !== 'google' && body.provider !== 'discord') ||
-    body.clientId !== 'desktop' ||
-    body.codeChallengeMethod !== 'S256'
-  ) {
+  const isSupportedProvider = body.provider === 'google' || body.provider === 'discord'
+  const isDesktopClient = body.clientId === 'desktop'
+  const isS256CodeChallenge = body.codeChallengeMethod === 'S256'
+  const isCreationRequestInvalid = !isSupportedProvider || !isDesktopClient || !isS256CodeChallenge
+
+  if (isCreationRequestInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -43,11 +50,13 @@ export function parseExchange(value: unknown): LoginExchange {
   const body = requireExactFields(value, ['requestId', 'clientId', 'code', 'codeVerifier'])
 
   // Client의 string 형식만 확인한다. 실제 client binding은 exchange transaction에서 확인한다.
-  if (
-    typeof body.requestId !== 'string' ||
-    !UUID_PATTERN.test(body.requestId) ||
-    typeof body.clientId !== 'string'
-  ) {
+  const requestId = body.requestId
+  const isRequestIdString = typeof requestId === 'string'
+  const isRequestIdValid = isRequestIdString && UUID_PATTERN.test(requestId)
+  const isClientIdString = typeof body.clientId === 'string'
+  const isExchangeRequestInvalid = !isRequestIdValid || !isClientIdString
+
+  if (isExchangeRequestInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -73,7 +82,13 @@ export function parseCallback(query: URLSearchParams): LoginCallbackInput {
     const errors = query.getAll('error')
 
     // OAuth의 다른 query는 허용하되 state 하나와 code/error 중 하나만 받는다.
-    if (states.length !== 1 || codes.length + errors.length !== 1 || !(codes[0] ?? errors[0])) {
+    const hasSingleState = states.length === 1
+    const hasSingleOutcome = codes.length + errors.length === 1
+    const outcome = codes[0] ?? errors[0]
+    const hasOutcomeValue = Boolean(outcome)
+    const isCallbackQueryInvalid = !hasSingleState || !hasSingleOutcome || !hasOutcomeValue
+
+    if (isCallbackQueryInvalid) {
       throw new Error()
     }
 
