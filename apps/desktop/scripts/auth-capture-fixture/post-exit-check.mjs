@@ -85,6 +85,11 @@ try {
       : 'Capture fixture media BLOCKED / smoke FAIL'
   assert.equal(code, expectedCode, 'Child result did not match the requested check')
   assert.equal(output.includes(expectedMessage), true)
+  if (isMedia) {
+    assert.equal(output.includes('Video was requested, but no video stream was provided'), false)
+    assert.equal(output.includes('UnhandledPromiseRejectionWarning'), false)
+    console.log('Capture fixture native denial warnings: 0')
+  }
   const remaining = (await readdir(testRoot)).filter((name) => {
     const isCaptureProfile = name.startsWith('ldb-auth-capture-fixture-')
     return isCaptureProfile
