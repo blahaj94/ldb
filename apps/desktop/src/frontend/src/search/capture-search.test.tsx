@@ -237,3 +237,21 @@ it('재로그인 뒤 source 선택과 Start 없이 이전 capture와 OCR를 재�
   expect(fixture.button('Start').disabled).toBe(true)
   expect(fixture.getDisplayMedia).toHaveBeenCalledOnce()
 })
+
+it('빈 OCR 문자열은 기존 stable 값을 clear 한 번으로 무효화하고 빈 frame마다 전송하지 않는다', async () => {
+  const fixture = createRendererFixture()
+  await fixture.mount()
+  await fixture.start()
+  media.crops.mockReturnValue([document.createElement('canvas'), null, null, null])
+  await fixture.cycle(2)
+  fixture.resources.worker.recognize.mockResolvedValue({ data: { text: '' } })
+  await fixture.cycle(3)
+  const clears = fixture.search.controlCharacterSearch.mock.calls.filter(([command]) => {
+    const isClear = command.action === 'clear'
+    return isClear
+  })
+  expect(clears).toEqual([
+    [{ action: 'clear', captureId: CAPTURE_ID, slot: 0, observationRevision: 2 }]
+  ])
+  expect(fixture.capture.notifyStableNicknameDetected).toHaveBeenCalledOnce()
+})

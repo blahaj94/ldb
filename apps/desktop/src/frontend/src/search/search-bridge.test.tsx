@@ -209,3 +209,41 @@ it('새 success event 뒤 늦은 notify invoke의 pending snapshot은 표시를 
   expect(fixture.container.textContent).toContain(searchRow.characterId)
   expect(fixture.container.textContent).not.toContain('검색 중')
 })
+
+it('clear 응답 유실은 read만 수행하며 조회가 옛 관측이면 지운 후보를 복구하지 않는다', async () => {
+  const fixture = await recognizedFixture()
+  const previous = state(fixture, searchSlot({ state: 'success', rows: [searchRow] }), 10)
+  await fixture.emit(previous)
+  expect(fixture.container.textContent).toContain(searchRow.characterId)
+  fixture.search.controlCharacterSearch
+    .mockRejectedValueOnce(new Error('Synthetic clear response loss'))
+    .mockResolvedValueOnce({ ok: true, snapshot: { ...previous, revision: 11 } })
+  const before = fixture.search.controlCharacterSearch.mock.calls.length
+  media.crops.mockReturnValue([null, null, null, null])
+  await fixture.cycle(3)
+  expect(fixture.search.controlCharacterSearch.mock.calls.slice(before)).toEqual([
+    [{ action: 'clear', captureId: CAPTURE_ID, slot: 0, observationRevision: 2 }],
+    [{ action: 'read' }]
+  ])
+  expect(fixture.container.textContent).not.toContain(searchRow.characterId)
+})
+
+it('begin 응답 유실은 read로 확인하고 같은 Start 명령을 자동 재전송하지 않는다', async () => {
+  const fixture = createRendererFixture()
+  await fixture.mount()
+  fixture.search.controlCharacterSearch
+    .mockRejectedValueOnce(new Error('Synthetic begin response loss'))
+    .mockResolvedValueOnce({ ok: true, snapshot: searchSnapshot() })
+  const before = fixture.search.controlCharacterSearch.mock.calls.length
+  await fixture.start()
+  const commands = fixture.search.controlCharacterSearch.mock.calls
+    .slice(before)
+    .map(([command]) => command.action)
+  expect(commands.slice(0, 2)).toEqual(['begin', 'read'])
+  expect(
+    commands.filter((action) => {
+      const isBegin = action === 'begin'
+      return isBegin
+    })
+  ).toHaveLength(1)
+})
