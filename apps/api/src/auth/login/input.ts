@@ -8,8 +8,9 @@ function requireExactFields(value: unknown, fields: readonly string[]): Record<s
   const isValueTruthy = Boolean(value)
   const isValueObject = isValueTruthy && typeof value === 'object'
   const isValueArray = isValueObject && Array.isArray(value)
+  const isValueInvalid = !isValueTruthy || !isValueObject || isValueArray
 
-  if (!isValueTruthy || !isValueObject || isValueArray) {
+  if (isValueInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -99,10 +100,9 @@ export function parseCallback(query: URLSearchParams): LoginCallbackInput {
 
     // OAuth의 다른 query는 허용하되 state 하나와 code/error 중 하나만 받는다.
     const hasSingleState = states.length === 1
-    const hasSingleOutcome = codes.length + errors.length === 1
-    const outcome = codes[0] ?? errors[0]
-    const hasOutcomeValue = Boolean(outcome)
-    const isCallbackQueryInvalid = !hasSingleState || !hasSingleOutcome || !hasOutcomeValue
+    const hasSingleOutcome = hasSingleState && codes.length + errors.length === 1
+    const hasTruthyOutcome = hasSingleOutcome && Boolean(codes[0] ?? errors[0])
+    const isCallbackQueryInvalid = !hasSingleState || !hasSingleOutcome || !hasTruthyOutcome
 
     if (isCallbackQueryInvalid) {
       throw new Error()

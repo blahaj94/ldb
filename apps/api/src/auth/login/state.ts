@@ -36,13 +36,13 @@ export function exchangeExpired(request: AuthLoginRequest, checkedAt: Date): boo
     return true
   }
 
-  const codeExpiresAt = request.codeExpiresAt
-  const hasNoCodeExpiry = codeExpiresAt === null
+  const hasNoCodeExpiry = request.codeExpiresAt === null
   if (hasNoCodeExpiry) {
     return true
   }
 
-  const isPastCodeExpiry = !hasNoCodeExpiry && checkedAt.getTime() >= codeExpiresAt.getTime()
+  // Null 검사 뒤에도 시간 조회 다음에 property를 다시 읽는 기존 순서를 유지한다.
+  const isPastCodeExpiry = checkedAt.getTime() >= (request.codeExpiresAt as Date).getTime()
   const isExchangeExpired = isPastCodeExpiry
 
   return isExchangeExpired
