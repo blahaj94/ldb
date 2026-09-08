@@ -37,6 +37,8 @@ return filePath
 
 두 줄 이상의 문자열은 `return`이나 호출 인자에 바로 넣지 않고 역할을 설명하는 변수에 담는다. 독립적인 템플릿 생성 작업은 재사용 여부와 관계없이 이름 있는 함수로 분리한다. 변수로 결과의 의미를, 함수로 생성 책임을 드러낸다.
 
+여러 줄 string literal은 변수 선언의 `=`까지 한 줄에 쓰고, 여는 백틱은 다음 줄의 첫 칸에서 시작한다. 첫 내용은 여는 백틱 바로 뒤에 두며, 문자열 내부의 기존 내용·개행·들여쓰기는 유지한다. 짧은 단일 줄 문자열은 같은 줄에 둘 수 있다.
+
 ```ts
 type MigrationSourceInput = {
   className: string
@@ -52,7 +54,8 @@ function renderMigrationSource({
   const upBody = upQueries.join('\n')
   const downBody = downQueries.join('\n')
 
-  const source = `export class ${className} {
+  const source =
+`export class ${className} {
   async up() {
 ${upBody}
   }
@@ -79,7 +82,8 @@ const queryBody = queries
   .join('\n')
 const body = hasQueries ? queryBody : '// No queries'
 
-const source = `async up() {
+const source =
+`async up() {
 ${body}
 }`
 ```
@@ -143,7 +147,7 @@ validateNickname(nickname)
 ## 제안 검토 항목
 
 - 같은 작업을 묶고 다음 처리 단계에서 빈 줄로 구분했는가?
-- 두 줄 이상의 문자열에 이름을 붙이고 독립적인 템플릿 생성 책임을 함수로 드러냈는가?
+- 두 줄 이상의 문자열에 이름을 붙이고 여는 백틱과 첫 내용을 `=` 다음 줄의 첫 칸에서 시작하며 문자열 내부를 보존했는가? 독립적인 템플릿 생성 책임을 함수로 드러냈는가?
 - 문자열 내부의 중첩 분기·변환을 분리하면서 단순 삽입·호출은 허용했는가?
 - 짧은 `return`·`throw`와 `try/catch`를 중괄호·줄바꿈으로 읽을 수 있는가?
 - 두 번 이상 이어지는 메서드 호출을 줄로 구분하고 속성 접근은 붙여 두었는가?
