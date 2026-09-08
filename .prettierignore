@@ -15,6 +15,8 @@ packages/ui/notices/**
 **/yarn.lock
 **/LICENSE*
 **/NOTICE*
+# 직접 관리하는 generator source는 notice 산출물과 구분한다.
+!packages/ui/build/notices.ts
 # Keep the Desktop formatter's existing tsconfig boundary.
 apps/desktop/tsconfig.json
 apps/desktop/tsconfig.*.json
