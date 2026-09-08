@@ -14,6 +14,7 @@ export default defineConfig({
   },
   preload: {
     build: {
+      externalizeDeps: false,
       lib: { entry: resolve('src/preload/index.ts'), formats: ['cjs'] },
       outDir: 'out/auth-capture-fixture/preload',
       rollupOptions: { output: { entryFileNames: 'preload.cjs' } }

@@ -13,7 +13,7 @@ export default defineConfig({
       outDir: 'out/backend'
     }
   },
-  preload: {},
+  preload: { build: { externalizeDeps: false } },
   renderer: {
     root: resolve('src/frontend'),
     build: {
