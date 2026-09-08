@@ -84,6 +84,8 @@ function mainEnvironment(): {
     Request,
     Response,
     AbortController,
+    TextEncoder,
+    TextDecoder,
     performance,
     setTimeout,
     clearTimeout,
