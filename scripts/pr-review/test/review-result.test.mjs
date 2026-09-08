@@ -33,7 +33,8 @@ test("rejects malformed findings before publication", () => {
   });
 
   assert.equal(result.valid, false);
-  assert.ok(result.errors.length >= 2);
+  const hasMultipleValidationErrors = result.errors.length >= 2;
+  assert.ok(hasMultipleValidationErrors);
 });
 
 test("preserves repeated line reads before accepting a boundary value", () => {
@@ -48,7 +49,8 @@ test("preserves repeated line reads before accepting a boundary value", () => {
     suggestedAction: "Action",
     get line() {
       lineReads += 1;
-      return lineReads === 1 ? 1 : Number.NaN;
+      const isFirstLineRead = lineReads === 1;
+      return isFirstLineRead ? 1 : Number.NaN;
     },
   };
 

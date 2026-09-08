@@ -12,17 +12,45 @@ const IMPLEMENTATION_COMMIT = /^(?:feat|fix|refactor)(?:\([^)]*\))?!?:/i;
 const TEST_COMMIT = /^test(?:\([^)]*\))?!?:/i;
 
 function isRuleFile(filename) {
-  return RULE_PATHS.some((path) =>
-    path.endsWith("/") ? filename.startsWith(path) : filename === path,
+  const isRootAgentsFile = filename === RULE_PATHS[0];
+  const isRootConventionFile =
+    !isRootAgentsFile && filename === RULE_PATHS[1];
+  const isRulesDirectoryFile =
+    !isRootAgentsFile &&
+    !isRootConventionFile &&
+    filename.startsWith(RULE_PATHS[2]);
+  const isArchitectureDirectoryFile =
+    !isRootAgentsFile &&
+    !isRootConventionFile &&
+    !isRulesDirectoryFile &&
+    filename.startsWith(RULE_PATHS[3]);
+  const isDomainDirectoryFile =
+    !isRootAgentsFile &&
+    !isRootConventionFile &&
+    !isRulesDirectoryFile &&
+    !isArchitectureDirectoryFile &&
+    filename.startsWith(RULE_PATHS[4]);
+
+  return (
+    isRootAgentsFile ||
+    isRootConventionFile ||
+    isRulesDirectoryFile ||
+    isArchitectureDirectoryFile ||
+    isDomainDirectoryFile
   );
 }
 
 function isLogicFile(filename) {
-  return LOGIC_EXTENSION.test(filename) && !NON_LOGIC_PATH.test(filename);
+  const hasLogicExtension = LOGIC_EXTENSION.test(filename);
+  const isNonLogicPath =
+    hasLogicExtension && NON_LOGIC_PATH.test(filename);
+  const isLogicPath = hasLogicExtension && !isNonLogicPath;
+  return isLogicPath;
 }
 
 function subject(commit) {
-  return commit.commit?.message?.split("\n", 1)[0]?.trim() ?? "";
+  const firstLine = commit.commit?.message?.split("\n", 1)[0];
+  return firstLine?.trim() ?? "";
 }
 
 function linkedIssueCheck(pullRequest) {
@@ -49,10 +77,12 @@ function approvalCheck(files, comments, repositoryOwner) {
     };
   }
 
-  const approved = comments.some(
-    (comment) =>
-      comment.user?.login === repositoryOwner && comment.body?.trim() === "승인",
-  );
+  const approved = comments.some((comment) => {
+    const isOwnerComment = comment.user?.login === repositoryOwner;
+    const hasApprovalText =
+      isOwnerComment && comment.body?.trim() === "승인";
+    return hasApprovalText;
+  });
   const approvalStatus = approved ? "pass" : "warning";
   const approvalDetail = approved
     ? "Repository owner 승인 확인"
@@ -74,10 +104,14 @@ function testEvidenceCheck(files, commits) {
     };
   }
 
-  const testIndex = commits.findIndex((commit) => TEST_COMMIT.test(subject(commit)));
-  const implementationIndex = commits.findIndex((commit) =>
-    IMPLEMENTATION_COMMIT.test(subject(commit)),
-  );
+  const testIndex = commits.findIndex((commit) => {
+    const isTestCommit = TEST_COMMIT.test(subject(commit));
+    return isTestCommit;
+  });
+  const implementationIndex = commits.findIndex((commit) => {
+    const isImplementationCommit = IMPLEMENTATION_COMMIT.test(subject(commit));
+    return isImplementationCommit;
+  });
   const hasRedTestCommit = testIndex >= 0;
   const hasImplementationCommit = implementationIndex >= 0;
   const redTestPrecedesImplementation =
@@ -101,7 +135,10 @@ function logicLines(files) {
 }
 
 function logicBudgetCheck(files, commitFiles) {
-  const hasCommitFileGroups = commitFiles?.length;
+  const commitFileCount = commitFiles?.length;
+  const hasCommitFileCount = commitFileCount != null;
+  const hasCommitFileGroups =
+    hasCommitFileCount && Boolean(commitFileCount);
   const changes = hasCommitFileGroups
     ? commitFiles
     : [{ sha: "whole PR fallback", files }];

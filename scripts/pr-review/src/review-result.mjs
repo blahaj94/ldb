@@ -40,9 +40,10 @@ export function validateReviewResult(result) {
           errors.push(`findings[${index}].${field} must be a non-empty string`);
         }
       }
-      const isPositiveIntegerLine =
-        Number.isInteger(finding?.line) && finding.line >= 1;
-      if (!isPositiveIntegerLine) {
+      const isLineInteger = Number.isInteger(finding?.line);
+      const isLineBelowMinimum = isLineInteger && finding.line < 1;
+      const isLineInvalid = !isLineInteger || isLineBelowMinimum;
+      if (isLineInvalid) {
         errors.push(`findings[${index}].line must be a positive integer`);
       }
     });
@@ -52,5 +53,6 @@ export function validateReviewResult(result) {
     errors.push("missingContext must be an array");
   }
 
-  return { valid: errors.length === 0, errors };
+  const isValid = errors.length === 0;
+  return { valid: isValid, errors };
 }
