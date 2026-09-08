@@ -282,3 +282,49 @@ it.each(['ended', 'other capture'] as const)(
     })
   }
 )
+
+it.each(['older end', 'newer same capture'] as const)(
+  '%s snapshot은 유효한 begin의 media 시작을 잘못 취소하지 않는다',
+  async (transition) => {
+    const fixture = createRendererFixture()
+    await fixture.mount()
+    const begin = Promise.withResolvers<SearchCommandResult>()
+    fixture.search.controlCharacterSearch.mockReturnValueOnce(begin.promise)
+    await fixture.start()
+    const isOlderEnd = transition === 'older end'
+    await fixture.emit(
+      searchSnapshot({ captureId: isOlderEnd ? null : CAPTURE_ID, revision: isOlderEnd ? 1 : 3 })
+    )
+    begin.resolve({ ok: true, snapshot: searchSnapshot({ captureId: CAPTURE_ID, revision: 2 }) })
+    await act(async () => undefined)
+    expect(fixture.getDisplayMedia).toHaveBeenCalledOnce()
+    expect(media.worker).toHaveBeenCalledOnce()
+    expect(fixture.search.controlCharacterSearch).not.toHaveBeenCalledWith({
+      action: 'end',
+      captureId: CAPTURE_ID
+    })
+  }
+)
+
+it('취소된 Start의 begin 응답 유실 뒤 read가 새 capture를 찾아도 그 ID를 end하지 않는다', async () => {
+  const fixture = createRendererFixture()
+  await fixture.mount()
+  const previous = Promise.withResolvers<SearchCommandResult>()
+  fixture.search.controlCharacterSearch.mockReturnValueOnce(previous.promise)
+  await fixture.start()
+  await fixture.click('Stop')
+  const nextId = '00000000-0000-4000-8000-000000000099'
+  const nextSnapshot = searchSnapshot({ captureId: nextId, revision: 3 })
+  fixture.search.controlCharacterSearch.mockResolvedValueOnce({ ok: true, snapshot: nextSnapshot })
+  await fixture.click('Start')
+  await fixture.emit(nextSnapshot)
+  previous.reject(new Error('Synthetic old begin response loss'))
+  await act(async () => undefined)
+  expect(fixture.search.controlCharacterSearch).toHaveBeenLastCalledWith({ action: 'read' })
+  expect(fixture.search.controlCharacterSearch).not.toHaveBeenCalledWith({
+    action: 'end',
+    captureId: nextId
+  })
+  expect(fixture.getDisplayMedia).toHaveBeenCalledOnce()
+  expect(fixture.resources.track.stop).not.toHaveBeenCalled()
+})
