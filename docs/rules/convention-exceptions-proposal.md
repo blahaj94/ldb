@@ -1,18 +1,18 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: repository
 last-reviewed: 2026-09-08
 rationale: 이미 의미가 분명한 순회와 독립적인 순수 검사를 과하게 분해하지 않으면서 기존 가독성과 동작 보존 경계를 유지한다.
-evidence: "https://github.com/blahaj94/ldb/pull/159#discussion_r3955937537; https://github.com/blahaj94/ldb/pull/159#discussion_r3955954135"
+evidence: "https://github.com/blahaj94/ldb/pull/159#discussion_r3955937537; https://github.com/blahaj94/ldb/pull/159#discussion_r3955954135; https://github.com/blahaj94/ldb/pull/161#issuecomment-5582698349"
 exceptions: 승인 전에는 기존 convention과 convention-migration 기준을 적용하며, 이 문서의 조건을 벗어난 callback·검사·평가 시점 변경에는 적용하지 않는다.
 review-after: 사용자 승인·merge 후 서로 다른 code review 또는 migration PR 3건에서 적용 조건·동등성·검토 부담을 확인한다.
 ---
 
 # Convention Exceptions Proposal
 
-이 문서는 `convention.md`의 의미별 boolean 분해와 평가 시점 보존에 대한 두 가지 좁은 예외를 제안한다. 두 예외는 같은 승인·적용 lifecycle을 공유하지만 서로 다른 조건을 가진다. Draft PR에서 사용자가 명시적으로 `승인`하고 merge하기 전에는 현재 active Rule이 우선하며 제품 code에 적용하지 않는다.
+이 문서는 `convention.md`의 의미별 boolean 분해와 평가 시점 보존에 대한 두 가지 좁은 예외를 정의한다. 두 예외는 같은 승인·적용 lifecycle을 공유하지만 서로 다른 조건을 가진다. PR #161의 사용자 명시 승인과 merge로 이 문서는 active가 되었으며, 아래 조건을 충족하는 범위에서만 적용한다.
 
 ## 공통 경계
 

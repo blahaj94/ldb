@@ -30,6 +30,8 @@ Generated/vendor 코드는 산출물을 직접 고치지 않고 소유한 생성
 
 두 좁은 예외의 proposed 조건과 승인 lifecycle은 [`convention-exceptions-proposal.md`](docs/rules/convention-exceptions-proposal.md)를 따른다. 승인 전에는 이 문서의 §2·§3과 동작 보존 기준이 우선한다.
 
+기계적 표기·정적 검사를 기존 설정 범위의 도구에 맡기는 proposed 기준과 사람의 의미 판단 경계는 [`convention-tooling.md`](docs/rules/convention-tooling.md)를 따른다. 이 문서는 formatter·lint 설정이나 실행 권한을 만들지 않으며, 승인 전에는 기존 active Rule이 우선한다.
+
 ## 1. 처리 순서와 결과가 보이는 주 흐름
 
 - 진입 함수에서 입력 확인, 주요 처리 단계, 외부 호출, 상태 변경과 결과 반환을 찾을 수 있어야 한다. 작업에 없는 단계를 형식적으로 추가하지 않는다.

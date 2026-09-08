@@ -154,3 +154,5 @@ validateNickname(nickname)
 - 여러 입력의 역할을 객체 field로 드러내면서 명확한 단일 인자와 외부 signature를 유지했는가?
 
 위 항목은 [`convention.md`의 검토 기준](../../convention.md#review에서-확인할-것)과 함께 적용하며 각 기준의 예외와 동작 보존 조건을 유지한다.
+
+formatter 적용 범위에서 순수한 줄 배치가 이 문서의 수동 예시와 충돌하면 proposed [`convention-tooling.md`](convention-tooling.md)의 승인된 Prettier 출력 우선 기준을 따른다. 이는 §2의 문자열 위치와 §5의 method chain 배치를 formatter 출력에 맞추는 기준이며, 의미별 빈 줄·문자열 내용·생성 책임·평가 시점과 함수 입력 의미를 바꾸는 권한이 아니다.
