@@ -9,10 +9,12 @@ export async function prepareCredentialTransition(
   kind: CredentialTransitionKind
 ): Promise<TransitionPreparation> {
   const establishmentResult = await store.establishTransition(kind)
-  if (establishmentResult === 'confirmed') {
+  const isEstablishmentConfirmed = establishmentResult === 'confirmed'
+  if (isEstablishmentConfirmed) {
     return 'established'
   }
-  if (establishmentResult === 'failed') {
+  const isEstablishmentFailed = establishmentResult === 'failed'
+  if (isEstablishmentFailed) {
     return 'failed'
   }
 
@@ -26,10 +28,12 @@ export async function finalizeCredentialTransition(
   kind: CredentialTransitionKind
 ): Promise<CredentialCommit> {
   const removalResult = await store.removeTransition()
-  if (removalResult === 'confirmed') {
+  const isRemovalConfirmed = removalResult === 'confirmed'
+  if (isRemovalConfirmed) {
     return 'committed'
   }
-  if (removalResult === 'failed') {
+  const isRemovalFailed = removalResult === 'failed'
+  if (isRemovalFailed) {
     return 'save-failed'
   }
 
@@ -61,7 +65,8 @@ export async function finishCredentialClear(store: CredentialStore): Promise<Cre
     return 'cleared'
   }
 
-  if (removalResult === 'unknown') {
+  const isRemovalUnknown = removalResult === 'unknown'
+  if (isRemovalUnknown) {
     await store.reestablishTransition('clear')
   }
   return 'unconfirmed'
