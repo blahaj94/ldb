@@ -67,7 +67,8 @@ export function createAuthHttpClient(configuration: AuthHttpClientConfiguration)
     try {
       return await Promise.race([operation(controller.signal), aborted])
     } catch (error) {
-      if (error instanceof AuthHttpFailure) {
+      const isAuthHttpFailure = error instanceof AuthHttpFailure
+      if (isAuthHttpFailure) {
         throw error
       }
       throw new AuthHttpFailure('network')

@@ -8,16 +8,18 @@ export async function prepareCredentialTransition(
   store: CredentialStore,
   kind: CredentialTransitionKind
 ): Promise<TransitionPreparation> {
-  const established = await store.establishTransition(kind)
-  if (established === 'confirmed') {
+  const establishmentResult = await store.establishTransition(kind)
+  const isEstablishmentConfirmed = establishmentResult === 'confirmed'
+  if (isEstablishmentConfirmed) {
     return 'established'
   }
-  if (established === 'failed') {
+  const isEstablishmentFailed = establishmentResult === 'failed'
+  if (isEstablishmentFailed) {
     return 'failed'
   }
 
-  const reestablished = await store.reestablishTransition(kind)
-  const isReestablished = reestablished === 'confirmed'
+  const reestablishmentResult = await store.reestablishTransition(kind)
+  const isReestablished = reestablishmentResult === 'confirmed'
   return isReestablished ? 'established' : 'unconfirmed'
 }
 
@@ -25,16 +27,18 @@ export async function finalizeCredentialTransition(
   store: CredentialStore,
   kind: CredentialTransitionKind
 ): Promise<CredentialCommit> {
-  const removed = await store.removeTransition()
-  if (removed === 'confirmed') {
+  const removalResult = await store.removeTransition()
+  const isRemovalConfirmed = removalResult === 'confirmed'
+  if (isRemovalConfirmed) {
     return 'committed'
   }
-  if (removed === 'failed') {
+  const isRemovalFailed = removalResult === 'failed'
+  if (isRemovalFailed) {
     return 'save-failed'
   }
 
-  const reestablished = await store.reestablishTransition(kind)
-  const isAutomaticRestoreBlocked = reestablished === 'confirmed'
+  const reestablishmentResult = await store.reestablishTransition(kind)
+  const isAutomaticRestoreBlocked = reestablishmentResult === 'confirmed'
   return isAutomaticRestoreBlocked ? 'save-failed' : 'clear-unconfirmed'
 }
 
@@ -49,19 +53,20 @@ export async function clearCredential(store: CredentialStore): Promise<Credentia
 }
 
 export async function finishCredentialClear(store: CredentialStore): Promise<CredentialClear> {
-  const cleared = await store.clearCredential()
-  const isCredentialCleared = cleared === 'confirmed'
+  const clearResult = await store.clearCredential()
+  const isCredentialCleared = clearResult === 'confirmed'
   if (!isCredentialCleared) {
     return 'unconfirmed'
   }
 
-  const removed = await store.removeTransition()
-  const isClean = removed === 'confirmed'
+  const removalResult = await store.removeTransition()
+  const isClean = removalResult === 'confirmed'
   if (isClean) {
     return 'cleared'
   }
 
-  if (removed === 'unknown') {
+  const isRemovalUnknown = removalResult === 'unknown'
+  if (isRemovalUnknown) {
     await store.reestablishTransition('clear')
   }
   return 'unconfirmed'

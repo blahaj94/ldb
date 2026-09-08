@@ -118,7 +118,8 @@ export class PendingLogin {
       return
     }
     const checkedAt = this.clock.read()
-    if (this.isExpired(checkedAt)) {
+    const isExpiredAtCheckTime = this.isExpired(checkedAt)
+    if (isExpiredAtCheckTime) {
       this.onExpired(this)
       return
     }
@@ -134,7 +135,8 @@ export class PendingLogin {
         return
       }
       const firedAt = this.clock.read()
-      if (this.isExpired(firedAt)) {
+      const isExpiredAtCheckTime = this.isExpired(firedAt)
+      if (isExpiredAtCheckTime) {
         this.onExpired(this)
       } else {
         this.scheduleExpiry()
