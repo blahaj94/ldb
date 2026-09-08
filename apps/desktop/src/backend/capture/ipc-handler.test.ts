@@ -503,16 +503,48 @@ describe('capture main auth boundary', () => {
   )
 
   it.each(['signedOut', 'logout'])(
-    '%s에서 안정화 nickname 통지는 main 권한으로 거절한다',
+    '%s에서 trusted 관측의 권한 실패는 정제 결과와 현재 snapshot으로 응답한다',
     async (phase) => {
       const startsSignedIn = phase === 'logout'
       const fixture = await setup(startsSignedIn)
       vi.spyOn(console, 'info').mockImplementation(() => undefined)
-      if (startsSignedIn) await fixture.auth.logout()
+      if (startsSignedIn) {
+        await fixture.auth.logout()
+      }
       await expect(
-        fixture.invoke('notifyStableNicknameDetected', { slot: 0, nickname: 'SYNTHETIC_CANARY' })
-      ).rejects.toThrow()
+        fixture.invoke('notifyStableNicknameDetected', {
+          captureId: '00000000-0000-4000-8000-000000000001',
+          slot: 0,
+          observationRevision: 1,
+          nickname: '가나'
+        })
+      ).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'SEARCH_NOT_ALLOWED' },
+        snapshot: { captureId: null }
+      })
       expect(fixture.harness.http.refresh).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['notifyStableNicknameDetected', 'controlCharacterSearch'])(
+    '%s의 untrusted sender는 snapshot 없는 SEARCH_NOT_ALLOWED rejection을 받는다',
+    async (channel) => {
+      const fixture = await setup()
+      Object.assign(fixture.event, { sender: {} })
+      const isObservation = channel === 'notifyStableNicknameDetected'
+      const input = isObservation
+        ? {
+            captureId: '00000000-0000-4000-8000-000000000001',
+            slot: 0,
+            observationRevision: 1,
+            nickname: '가나'
+          }
+        : { action: 'read' }
+
+      await expect(fixture.invoke(channel, input)).rejects.toThrow(/^SEARCH_NOT_ALLOWED$/)
+      expect(fixture.harness.http.refresh).not.toHaveBeenCalled()
+      expect(electron.getSources).not.toHaveBeenCalled()
     }
   )
 
