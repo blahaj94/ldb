@@ -72,7 +72,7 @@ Issue #226에서 고정된 동시 PR 수 대신 실제 의존성과 자원 격�
 status: proposed
 enforcement: approval-required
 rationale: 독립적인 작업을 고정된 숫자로 대기시키지 않으면서 실제 충돌, host 자원 포화, 검토 누락을 배정 전에 제한한다.
-evidence: "Issue #226의 변경 요청과 Issue #151에 기록된 후속 작업의 의존성과 자원 계획"
+evidence: "Issue #226의 변경 요청과 기존 후속 작업에서 확인한 의존성과 자원 계획"
 exceptions: 소유권이나 격리를 증명하지 못하거나 가용한 실행, 검토 자원이 부족하면 병렬로 배정하지 않고 해당 작업을 대기시킨다.
 review-after: 새 기준으로 처음 배정한 기능 PR 묶음이 사용자 merge된 뒤 실제 충돌, 재작업, 자원 대기, 검토 부담을 확인한다.
 ```
@@ -82,16 +82,6 @@ review-after: 새 기준으로 처음 배정한 기능 PR 묶음이 사용자 me
 Planner는 작업별 file과 계약 소유권, generated source, artifact, fixture, snapshot, process와 port, database, native 권한과 장치, 사용량 수집 범위를 배정 전에 표로 기록한다. 각 항목에는 owner, 격리 방법, 필요한 실행과 검토 slot, 해제 조건을 둔다. Host의 CPU, memory, I/O와 실제로 사용할 수 있는 slot, 독립 review 가능 여부를 확인한 작업만 배정한다. 표가 비어 있거나 소유권과 격리 근거가 없거나 자원 포화로 안정적인 검증을 기대할 수 없으면 해당 작업을 대기시킨다. 실제 배정 수와 판단 근거는 각 Execution Issue의 착수 기록에 남긴다.
 
 같은 file이나 계약, generated output을 상충하게 변경하거나 producer와 consumer를 동시에 바꾸는 작업은 병렬로 배정하지 않는다. 같은 mutable database, fixture, snapshot, runtime state를 공유하는 작업도 같다. 같은 source를 읽기만 하거나 같은 검증 command를 격리된 checkout과 자원에서 실행하는 것은 그 사실만으로 의존 작업이 되지 않는다. 공용 계약이 고정됐고 각 owner가 서로 다른 내부 구현과 산출물을 변경한다면 한 기능이 다른 기능을 소비한다는 관계만으로 merge 선행 조건을 만들지 않는다.
-
-[Issue #151의 실행 그래프와 자원표](https://github.com/blahaj94/ldb/issues/151)는 아래 판단의 과거 사례다. 이 사례는 후속 backlog나 항상 유효한 의존 그래프를 Rule에 복제하지 않고, 실제 충돌과 단순 읽기 의존성을 구분하는 방법만 보여 준다.
-
-| 기능 묶음         | 충돌과 비충돌 판단 사례                                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API cleanup #229  | #228이 같은 cleanup helper와 caller를 변경하는 동안은 대기하고, 사용자 merge와 file owner 인계 후에는 고정된 계약을 읽는 #230과 file, DB 자원을 격리해 병렬 수행할 수 있다.                 |
-| API 검색 #230     | #228과 변경 file이 겹치지 않고 공용 fixture 계약을 바꾸지 않는 조건에서 독립적으로 시작할 수 있다. DB, process와 dynamic port는 run별로 소유하고 격리해야 한다.                             |
-| Desktop 인증 #231 | #228이 같은 auth helper와 caller를 수정하는 동안은 대기한다. 인계 후 #232, #233과 다른 file을 소유해도 같은 host의 native lane은 순차로 사용한다.                                           |
-| Desktop 캡처 #232 | #228과 file, 계약 변경이 겹치지 않으면 독립적으로 시작할 수 있다. 캡처 IPC 검색 route의 file owner를 고정해 #233의 동시 편집은 막고 native media, OCR 검증은 단일 lane에서 순차 실행한다.   |
-| Desktop 검색 #233 | #228의 shared helper 변경과는 충돌하므로 인계까지 대기한다. 인계 후에는 고정된 preload, IPC 계약을 읽는 것만으로 #231, #232의 merge를 대기하지 않지만, file owner와 native lane은 분리한다. |
 
 단일 Planner, Issue별 단일 통합 owner, 별도 integration branch, Worker branch, worktree, 공개 roster, 작은 Worker 범위는 유지한다. 승인된 model mapping, 같은 접근의 retry, 독립 review, 오래된 result의 semantic 확인, 최종 exact head 검증과 사용량 기록도 유지한다. 하나의 PR이 main에 merge되면 아직 merge되지 않은 관련 PR은 최신 main으로 rebase하고 의미를 대조한 뒤 전체 required validation을 다시 통과해야 ready, merge 대상이 된다. merge는 사용자만 수행한다.
 
