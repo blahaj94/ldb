@@ -82,8 +82,7 @@ export async function createAccessJwtIssuer(
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       const isExpirationAtOrBeforeIssue = expiresAt <= issuedAt
-      const hasInvalidExpiration = !hasValidExpiration || isExpirationAtOrBeforeIssue
-      if (hasInvalidExpiration) {
+      if (isExpirationAtOrBeforeIssue) {
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       try {
