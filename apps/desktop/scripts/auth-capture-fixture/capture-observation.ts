@@ -12,7 +12,13 @@ export type CaptureObservation = {
   nicknameMatchedSlots: number
 }
 
-function isAcceptedObservation(value: unknown, response: unknown): boolean {
+function isAcceptedObservation({
+  value,
+  response
+}: {
+  value: unknown
+  response: unknown
+}): boolean {
   const observation = parseSearchObservation([value])
   const result = parseSearchResult(response)
   const hasObservation = observation != null
@@ -26,7 +32,9 @@ function isAcceptedObservation(value: unknown, response: unknown): boolean {
   const hasSameSlot = slot.slot === observation.slot
   const hasSameRevision = slot.observationRevision === observation.observationRevision
   const hasSameNickname = slot.nickname === observation.nickname
-  const hasRequest = slot.requestId != null && slot.state !== 'idle'
+  const hasRequestId = slot.requestId != null
+  const isRequestActive = hasRequestId && slot.state !== 'idle'
+  const hasRequest = hasRequestId && isRequestActive
   const isAccepted =
     hasSameCapture && hasSameSlot && hasSameRevision && hasSameNickname && hasRequest
   return isAccepted
@@ -38,7 +46,8 @@ function syntheticSlotMask(value: unknown): number {
     return 0
   }
   const { slot, nickname } = value as { slot?: unknown; nickname?: unknown }
-  const isSlotInteger = typeof slot === 'number' && Number.isInteger(slot)
+  const isSlotNumber = typeof slot === 'number'
+  const isSlotInteger = isSlotNumber && Number.isInteger(slot)
   const isSlotInRange = isSlotInteger && slot >= 0 && slot < 4
   const isExpectedNickname = nickname === 'ALICE'
   const isExpectedSlot = isSlotInRange && isExpectedNickname
@@ -94,7 +103,7 @@ export function registerObservedCapture(
       counts.nicknameInvokes += 1
       const result = listener(event, ...args)
       return Promise.resolve(result).then((response: unknown) => {
-        const isAccepted = isAcceptedObservation(args[0], response)
+        const isAccepted = isAcceptedObservation({ value: args[0], response })
         if (isAccepted) {
           counts.nicknameAccepted += 1
           counts.nicknameMatchedSlots |= syntheticSlotMask(args[0])

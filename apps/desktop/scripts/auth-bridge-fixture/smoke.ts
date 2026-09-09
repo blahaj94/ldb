@@ -4,6 +4,17 @@ import type { BrowserWindow } from 'electron'
 import type { AuthCoordinator, AuthSnapshot } from '../../src/backend/auth/types'
 import { canaries, syntheticCode, createFixtureEffects } from './effects'
 
+function createClickSource(label: string): string {
+  const source = `(() => {
+      const button = [...document.querySelectorAll('button')].find(button => button.textContent === ${JSON.stringify(label)});
+      const hasButton = button != null;
+      const canClick = hasButton && !button.disabled;
+      if (!canClick) return false;
+      button.click(); return true;
+    })()`
+  return source
+}
+
 async function until(condition: () => Promise<boolean>): Promise<void> {
   const deadline = performance.now() + 5_000
   while (true) {
@@ -28,13 +39,8 @@ export async function smoke(
   const evaluate = (source: string): Promise<unknown> =>
     window.webContents.executeJavaScript(source)
   async function click(label: string): Promise<void> {
-    const clicked = await evaluate(`(() => {
-      const button = [...document.querySelectorAll('button')].find(button => button.textContent === ${JSON.stringify(label)});
-      const hasButton = button != null;
-      const canClick = hasButton && !button.disabled;
-      if (!canClick) return false;
-      button.click(); return true;
-    })()`)
+    const source = createClickSource(label)
+    const clicked = await evaluate(source)
     assert.equal(clicked, true)
   }
   async function textIncludes(text: string): Promise<boolean> {
@@ -47,7 +53,8 @@ export async function smoke(
   const noCanary = (value: unknown): void => {
     const encoded = JSON.stringify(value)
     for (const canary of canaries) {
-      assert.equal(encoded.includes(canary), false)
+      const hasCanary = encoded.includes(canary)
+      assert.equal(hasCanary, false)
     }
   }
 
@@ -73,7 +80,10 @@ export async function smoke(
   )
   console.log('Auth bridge fixture step: begin-cancel')
   await click('Google로 계속하기')
-  await until(async () => (await state()).phase === 'waitingBrowser')
+  await until(async () => {
+    const isWaitingBrowser = (await state()).phase === 'waitingBrowser'
+    return isWaitingBrowser
+  })
   await until(() => textIncludes('로그인 취소'))
   const waiting = await state()
   noCanary(waiting)
@@ -84,12 +94,18 @@ export async function smoke(
     noCanary(args)
   }
   await click('로그인 취소')
-  await until(async () => (await state()).phase === 'signedOut')
+  await until(async () => {
+    const isSignedOut = (await state()).phase === 'signedOut'
+    return isSignedOut
+  })
   await until(() => textIncludes('로그인을 취소했습니다'))
   await evaluate('window.fixtureOff(); window.fixtureEvents = []')
   console.log('Auth bridge fixture step: unsubscribe-reload')
   await click('Discord로 계속하기')
-  await until(async () => (await state()).phase === 'waitingBrowser')
+  await until(async () => {
+    const isWaitingBrowser = (await state()).phase === 'waitingBrowser'
+    return isWaitingBrowser
+  })
   assert.deepEqual(await evaluate('window.fixtureEvents'), [])
   const beforeReload = await state()
   await new Promise<void>((resolve) => {
@@ -104,7 +120,10 @@ export async function smoke(
   const exchange = coordinator.handleReturnUrl(
     `${effects.dependencies.returnTarget}?code=${syntheticCode}`
   )
-  await until(async () => effects.counts.commit === 1)
+  await until(async () => {
+    const hasStartedCommit = effects.counts.commit === 1
+    return hasStartedCommit
+  })
   assert.equal((await state()).phase, 'exchanging')
   assert.equal(await textIncludes('중립모험가'), false)
   effects.releaseCommit()

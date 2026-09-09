@@ -328,10 +328,11 @@ try {
       const hasSuccessfulExit = result.code === 0
       const hasSuccessfulResult = parsed?.ok === true
       const hasExpectedPhase = parsed?.phase === phase
-      const hasDecryptCount = Number.isSafeInteger(parsed?.decryptCalls) && parsed.decryptCalls >= 0
+      const isDecryptCountInteger = Number.isSafeInteger(parsed?.decryptCalls)
+      const hasDecryptCount = isDecryptCountInteger && parsed.decryptCalls >= 0
+      const isAvailabilityCountInteger = Number.isSafeInteger(parsed?.encryptionAvailabilityCalls)
       const hasAvailabilityCount =
-        Number.isSafeInteger(parsed?.encryptionAvailabilityCalls) &&
-        parsed.encryptionAvailabilityCalls >= 0
+        isAvailabilityCountInteger && parsed.encryptionAvailabilityCalls >= 0
       const succeeded =
         hasSuccessfulExit &&
         hasSuccessfulResult &&
@@ -347,7 +348,8 @@ try {
         decryptCalls: parsed.decryptCalls,
         encryptionAvailabilityCalls: parsed.encryptionAvailabilityCalls
       })
-      const shouldInjectFailure = failAfterWrite && phase === 'write'
+      const isWritePhase = phase === 'write'
+      const shouldInjectFailure = failAfterWrite && isWritePhase
       if (shouldInjectFailure) {
         injectedFailure = true
         throw new Error('Synthetic failure after native credential persistence.')
@@ -385,17 +387,18 @@ try {
 }
 
 const failed = failure != null
-process.stdout.write(
-  `${JSON.stringify({
-    ok: !failed,
-    mode: prepareOnly ? 'prepare-only' : 'native',
-    phases: phaseResults,
-    cleanupConfirmed,
-    profileRemoved,
-    bundleRemoved,
-    childGroupsStopped: ownedGroups.size === 0,
-    injectedFailure,
-    ...(failed ? { failedPhase, failure } : {})
-  })}\n`
-)
+const hasNoChildGroups = ownedGroups.size === 0
+const report = {
+  ok: !failed,
+  mode: prepareOnly ? 'prepare-only' : 'native',
+  phases: phaseResults,
+  cleanupConfirmed,
+  profileRemoved,
+  bundleRemoved,
+  childGroupsStopped: hasNoChildGroups,
+  injectedFailure,
+  ...(failed ? { failedPhase, failure } : {})
+}
+const output = `${JSON.stringify(report)}\n`
+process.stdout.write(output)
 process.exitCode = failed ? 1 : 0
