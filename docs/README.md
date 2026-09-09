@@ -70,6 +70,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 | 큰 작업 분해와 역할·Issue contract | `docs/rules/agent-workflow.md`                                                       |
 | Worker 배정·상태·handoff·통합   | `docs/rules/agent-execution.md`                                                       |
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
+| 공통 로직 재사용, 자체 구현 또는 공통 package 분리 판단 | [코드 재사용 기준 제안](rules/code-reuse.md). 승인 전에는 기존 `change-control.md`와 `code-quality.md`의 active Rule을 유지 |
 | 실행 command 또는 file 위치 확인 | `docs/reference/repository-map.md`                                                    |
 | API runtime·검색 작업 | `docs/rules/api-runtime.md`, `docs/rules/character-search.md` |
 | 인증·session·DB 작업 | 아래 Authentication contract routing에서 관련 topic 선택. 승인된 contract와 미결정 gate·구현 착수 조건을 함께 확인 |
@@ -96,6 +97,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/change-control.md`](rules/change-control.md): approval, Issue, branch, commit, PR, parallel 작업
 - [`rules/testing.md`](rules/testing.md): Red-Green workflow와 validation 기준
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
+- [`rules/code-reuse.md`](rules/code-reuse.md): 역할에 따른 재사용 탐색, 자체 구현 책임, 공통 package 분리와 결정 기록 기준 제안. 사용자 PR 승인 전에는 실행 권한 없음
 - [`rules/design-system.md`](rules/design-system.md): SEED 재사용·고정 source·기본값·override 금지·중립 Example·향후 검증 matrix
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/task-planning.md`](rules/task-planning.md): Discussion에서 목표별 Project와 실행 Issue로 이어지는 진입점, 분해와 완료 기준. PR #235의 사용자 승인 반영

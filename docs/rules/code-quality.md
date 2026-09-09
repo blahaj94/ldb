@@ -61,6 +61,8 @@ Logic budget을 넘으면 AI는 구현을 숨기거나 기계적으로 줄 수�
 - 큰 mock, fixture, generated file이 logic review를 가리지 않도록 분리한다.
 - Source 위치는 file path로 참조하며 line number를 durable context로 저장하지 않는다.
 
+위의 한 번만 사용하는 wrapper 회피 기준을 사용 횟수와 무관한 역할 판단으로 바꾸는 [코드 재사용 기준 제안](code-reuse.md)이 있습니다. 제안은 같은 책임의 중복과 서로 다른 책임의 강제 공통화를 함께 방지하며, 승인 전에는 위 active Rule을 유지합니다.
+
 ## Context budget
 
 - [`docs/README.md`](../README.md#역할별-시작점)의 역할별 route에서 시작해 task에 필요한 document와 module만 읽는다. 동일 revision의 재확인 조건은 [`AGENTS.md`](../../AGENTS.md#context)를 따른다.

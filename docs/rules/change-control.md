@@ -34,6 +34,8 @@ last-reviewed: 2026-09-08
 
 ## Dependency 선택과 비용
 
+공통 로직의 재사용 탐색, 자체 구현 판단과 결정 기록을 확장하는 [코드 재사용 기준 제안](code-reuse.md)이 있습니다. 제안은 예상 구현 부담 대신 역할을 기준으로 검토를 시작하도록 합니다. 명시적인 Draft PR 승인 전에는 아래 active Rule을 유지하며, 승인 절차 자체는 변경하지 않습니다.
+
 아래 정책과 다른 Rule의 연결 문구는 [PR #97의 사용자 승인](https://github.com/blahaj94/ldb/pull/97#issuecomment-5559626371)과 merge를 반영한 active Rule이다. 특정 library 선정·설치를 승인하지 않는다.
 
 ```yaml
