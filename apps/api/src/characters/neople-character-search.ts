@@ -28,10 +28,16 @@ const nativeDependencies: SearchDependencies = {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   const hasObjectType = typeof value === 'object'
-  const isNotNull = hasObjectType && value !== null
-  const isNonArrayObject = isNotNull && !Array.isArray(value)
+  if (!hasObjectType) {
+    return false
+  }
 
-  return isNonArrayObject
+  const isNotNull = value !== null
+  if (!isNotNull) {
+    return false
+  }
+
+  return !Array.isArray(value)
 }
 
 function projectResponse(body: unknown, status: number, ok: boolean): CharacterSearchResult {
@@ -60,34 +66,54 @@ function projectResponse(body: unknown, status: number, ok: boolean): CharacterS
 
     const { characterId, characterName, serverId } = candidate
     const isCharacterIdString = typeof characterId === 'string'
-    const isCharacterIdBlank = isCharacterIdString && characterId.trim() === ''
-    const isCharacterIdInvalid = !isCharacterIdString || isCharacterIdBlank
-    if (isCharacterIdInvalid) {
+    if (!isCharacterIdString) {
+      throw neopleSearchFailure('api')
+    }
+
+    const isCharacterIdBlank = characterId.trim() === ''
+    if (isCharacterIdBlank) {
       throw neopleSearchFailure('api')
     }
 
     const isCharacterNameString = typeof characterName === 'string'
-    const isCharacterNameBlank = isCharacterNameString && characterName.trim() === ''
-    const isCharacterNameInvalid = !isCharacterNameString || isCharacterNameBlank
-    if (isCharacterNameInvalid) {
+    if (!isCharacterNameString) {
+      throw neopleSearchFailure('api')
+    }
+
+    const isCharacterNameBlank = characterName.trim() === ''
+    if (isCharacterNameBlank) {
       throw neopleSearchFailure('api')
     }
 
     const isServerIdString = typeof serverId === 'string'
-    const isServerIdBlank = isServerIdString && serverId.trim() === ''
-    const isServerIdInvalid = !isServerIdString || isServerIdBlank
-    if (isServerIdInvalid) {
+    if (!isServerIdString) {
+      throw neopleSearchFailure('api')
+    }
+
+    const isServerIdBlank = serverId.trim() === ''
+    if (isServerIdBlank) {
       throw neopleSearchFailure('api')
     }
 
     const rawFame = candidate.fame
-    const isFameDefined = rawFame !== undefined
-    const isFameNotNull = isFameDefined && rawFame !== null
-    const hasFame = isFameDefined && isFameNotNull
-    const isFameNumber = hasFame && typeof rawFame === 'number'
-    const isFameFinite = isFameNumber && Number.isFinite(rawFame)
-    const isFameInvalid = hasFame && (!isFameNumber || !isFameFinite)
-    if (isFameInvalid) {
+    const isFameAbsent = rawFame == null
+    if (isFameAbsent) {
+      return {
+        characterId,
+        characterName,
+        serverId,
+        serverName: NEOPLE_SERVER_NAMES.get(serverId) ?? null,
+        fame: null
+      }
+    }
+
+    const isFameNumber = typeof rawFame === 'number'
+    if (!isFameNumber) {
+      throw neopleSearchFailure('api')
+    }
+
+    const isFameFinite = Number.isFinite(rawFame)
+    if (!isFameFinite) {
       throw neopleSearchFailure('api')
     }
 
@@ -129,11 +155,17 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
     }, NEOPLE_SEARCH_DEADLINE_MS)
     const deadlineReached = (): boolean => {
       const isTimerPending = !didTimeout
-      const isBeforeDeadline = isTimerPending && dependencies.now() < deadline
-      const canContinue = isTimerPending && isBeforeDeadline
-      if (canContinue) {
+      if (!isTimerPending) {
+        didTimeout = true
+        controller.abort()
+        return true
+      }
+
+      const isBeforeDeadline = dependencies.now() < deadline
+      if (isBeforeDeadline) {
         return false
       }
+
       didTimeout = true
       controller.abort()
       return true
