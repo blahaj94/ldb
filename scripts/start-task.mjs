@@ -5,6 +5,19 @@ import { pathToFileURL } from 'node:url'
 
 const PROJECTS = new Set(['api', 'desktop', 'web', 'ui', 'cross', 'repo'])
 
+function buildTaskContext({ issue, branch, destination, base }) {
+  const taskContext = [
+    `Issue #${issue.number}: ${issue.title}`,
+    issue.url,
+    `Branch: ${branch}`,
+    `Worktree: ${destination}`,
+    `Base: ${base}`,
+    '구현 전 Issue 본문과 docs/README.md를 읽고 docs/rules/change-control.md의 preflight·승인을 확인하세요.'
+  ].join('\n')
+
+  return taskContext
+}
+
 export function startTask(args, run = execFileSync) {
   const [project, issueNumber, description, worktreePath] = args
   const hasExpectedArgumentCount = args.length === 4
@@ -52,19 +65,15 @@ export function startTask(args, run = execFileSync) {
   const branch = `${project}-${issueNumber}-${description}`
   run('git', ['worktree', 'add', '-b', branch, destination, base], options)
 
-  const context = [
-    `Issue #${issue.number}: ${issue.title}`,
-    issue.url,
-    `Branch: ${branch}`,
-    `Worktree: ${destination}`,
-    `Base: ${base}`,
-    '구현 전 Issue 본문과 docs/README.md를 읽고 docs/rules/change-control.md의 preflight·승인을 확인하세요.'
-  ].join('\n')
+  const context = buildTaskContext({ issue, branch, destination, base })
 
   return context
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+const entryPath = process.argv[1]
+const hasEntryPath = entryPath != null && entryPath !== ''
+const isDirectRun = hasEntryPath && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+if (isDirectRun) {
   try {
     console.log(startTask(process.argv.slice(2)))
   } catch (error) {
