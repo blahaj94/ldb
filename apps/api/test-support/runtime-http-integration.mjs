@@ -23,7 +23,8 @@ function backendPids(runtime) {
 
 async function assertDisconnected(source, runtime) {
   const pids = backendPids(runtime)
-  assert(pids.length > 0, 'default entry must acquire an observable database connection')
+  const hasBackendConnections = pids.length > 0
+  assert(hasBackendConnections, 'default entry must acquire an observable database connection')
   for (const pid of pids) {
     await assertBackendGone(source, pid)
   }
@@ -115,9 +116,10 @@ function httpClient(port) {
   }
 }
 
-async function accountRequest(client, accessToken, nickname) {
+async function accountRequest({ client, accessToken, nickname }) {
   const isMutation = nickname !== undefined
-  return fetch(`${client.base}${isMutation ? '/me/nickname' : '/me'}`, {
+  const path = isMutation ? '/me/nickname' : '/me'
+  return fetch(`${client.base}${path}`, {
     method: isMutation ? 'PATCH' : 'GET',
     headers: {
       authorization: `Bearer ${accessToken}`,
@@ -133,7 +135,7 @@ async function search(client, accessToken) {
   })
 }
 
-async function assertSearchShutdown(source, runtime, client, tokens, principal, neople) {
+async function assertSearchShutdown({ source, runtime, client, tokens, principal, neople }) {
   const lock = source.createQueryRunner()
   let pending
   try {
@@ -146,10 +148,12 @@ async function assertSearchShutdown(source, runtime, client, tokens, principal, 
     )
     let blockedPid
     await waitFor(async () => {
-      const blocked = await source.query(`SELECT pid FROM pg_stat_activity
-        WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%auth_sessions%'`)
+      const blockedSessionQuery = `SELECT pid FROM pg_stat_activity
+        WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%auth_sessions%'`
+      const blocked = await source.query(blockedSessionQuery)
       blockedPid = blocked[0]?.pid
-      return blockedPid !== undefined
+      const hasBlockedPid = blockedPid !== undefined
+      return hasBlockedPid
     }, 'default entry search did not reach a real database lock wait')
     // 부모의 lock을 유지한 채 종료해 DB 연결 취소가 실제로 완료되는지 확인한다.
     await terminateRuntime(source, runtime)
@@ -232,15 +236,20 @@ export async function assertRuntimeHttpIntegration(configuration, mark = () => {
           [tokens.user.id]
         )
         assert.equal(storedUser.provider, 'google')
-        assert.equal(storedUser.provider_subject === google.subject, true)
+        const hasMatchingProviderSubject = storedUser.provider_subject === google.subject
+        assert.equal(hasMatchingProviderSubject, true)
         assert.equal(google.calls, 1)
         assert.equal(google.failed, false)
 
         mark('same app reads and updates the authenticated account, then searches through Neople')
-        const profile = await accountRequest(client, tokens.accessToken)
+        const profile = await accountRequest({ client, accessToken: tokens.accessToken })
         assert.equal(profile.status, 200)
         assert.deepEqual(await profile.json(), { user: tokens.user })
-        const changed = await accountRequest(client, tokens.accessToken, '기본 실행 사용자')
+        const changed = await accountRequest({
+          client,
+          accessToken: tokens.accessToken,
+          nickname: '기본 실행 사용자'
+        })
         assert.equal(changed.status, 200)
         assert.deepEqual(await changed.json(), {
           user: { id: tokens.user.id, nickname: '기본 실행 사용자' }
@@ -277,8 +286,20 @@ export async function assertRuntimeHttpIntegration(configuration, mark = () => {
           (await client.post('/auth/logout', { refreshToken: rotated.refreshToken })).status,
           204
         )
-        assert.equal((await accountRequest(client, rotated.accessToken)).status, 401)
-        assert.equal((await accountRequest(client, rotated.accessToken, '거절될 변경')).status, 401)
+        assert.equal(
+          (await accountRequest({ client, accessToken: rotated.accessToken })).status,
+          401
+        )
+        assert.equal(
+          (
+            await accountRequest({
+              client,
+              accessToken: rotated.accessToken,
+              nickname: '거절될 변경'
+            })
+          ).status,
+          401
+        )
         assert.equal((await search(client, rotated.accessToken)).status, 200)
         assert.equal(
           (await client.post('/auth/refresh', { refreshToken: rotated.refreshToken })).status,
@@ -295,7 +316,7 @@ export async function assertRuntimeHttpIntegration(configuration, mark = () => {
         mark(
           'SIGTERM cancels a real locked search before app and DB shutdown; upstream is not called'
         )
-        await assertSearchShutdown(source, runtime, client, rotated, principal, neople)
+        await assertSearchShutdown({ source, runtime, client, tokens: rotated, principal, neople })
         assert.equal(neople.upstream.failure, undefined)
       })
     })

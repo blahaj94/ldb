@@ -78,17 +78,22 @@ for (const [signal, repeat] of [
         const elapsed = performance.now() - startedAt
         clearInterval(repeatedSignals)
         assertStartupFailure(result)
-        assert(elapsed >= 900, 'the first startup signal must allow its cleanup grace')
-        assert(elapsed < 2000, 'later signals must not postpone startup termination')
+        const hasAllowedCleanupGrace = elapsed >= 900
+        assert(hasAllowedCleanupGrace, 'the first startup signal must allow its cleanup grace')
+        const hasTerminatedWithinDeadline = elapsed < 2000
+        assert(hasTerminatedWithinDeadline, 'later signals must not postpone startup termination')
         // Fixture가 peer/socket을 닫기 전에 child exit로 연결이 끝났는지 확인한다.
         await bounded(closed.promise)
         assert.equal(sockets.size, 0)
         await assertPortClosed(port)
         const events = runtime.events.map(({ event }) => event)
-        assert.equal(events.includes('db.initialize'), true)
-        assert.equal(events.includes('app.listen'), false)
+        const hasInitializedDatabase = events.includes('db.initialize')
+        assert.equal(hasInitializedDatabase, true)
+        const hasStartedListening = events.includes('app.listen')
+        assert.equal(hasStartedListening, false)
+        const hasDisconnectedDatabase = events.includes('db.disconnected')
         assert.equal(
-          events.includes('db.disconnected'),
+          hasDisconnectedDatabase,
           false,
           'native exit is not successful async DB cleanup'
         )
@@ -127,7 +132,8 @@ test('completed startup shutdown clears its timer while another test handle stay
       const result = await collectRuntimeExit(runtime, 2500)
       assert.deepEqual(result, { code: 0, signal: null, stdout: '', stderr: '' })
       const events = runtime.events.map(({ event }) => event)
-      assert.equal(events.includes('app.listen'), false)
+      const hasStartedListening = events.includes('app.listen')
+      assert.equal(hasStartedListening, false)
       assert.deepEqual(events.slice(-5), [
         'app.close',
         'app.closed',

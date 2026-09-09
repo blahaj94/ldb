@@ -45,7 +45,10 @@ DataSource.prototype.initialize = async function () {
   if (shouldFailPartially) {
     throw new Error('fixture-sensitive-partial-connect')
   }
-  const shouldWaitForSignal = fault === 'initialize-signal' || fault === 'initialize-signal-hold'
+  const shouldWaitDuringInitialization = fault === 'initialize-signal'
+  const shouldWaitAndHoldAfterCleanup =
+    !shouldWaitDuringInitialization && fault === 'initialize-signal-hold'
+  const shouldWaitForSignal = shouldWaitDuringInitialization || shouldWaitAndHoldAfterCleanup
   if (shouldWaitForSignal) {
     // 실제 connecting socket을 대신하는 ref를 유지해야 Node가 await 중 종료하지 않는다.
     const connectionHandle = setTimeout(() => {}, 5000)
@@ -153,13 +156,12 @@ globalThis.fetch = (input, options) => {
   const isKeysRequest = url.href === jwksUri
   const isGoogleRequest = isTokenRequest || isKeysRequest
   const isNeopleRequest = url.origin === 'https://api.neople.co.kr'
+  const isExpectedOutboundRequest = isGoogleRequest || isNeopleRequest
   // 정의하지 않은 외부 연결은 거절한다. Test transport만 loopback URL에 대응시킨다.
-  assert(isGoogleRequest || isNeopleRequest, 'unexpected outbound request in runtime test')
+  assert(isExpectedOutboundRequest, 'unexpected outbound request in runtime test')
   if (isGoogleRequest) {
-    return nativeFetch(
-      `${process.env.LDB_TEST_GOOGLE_ORIGIN}${isTokenRequest ? '/token' : '/certs'}`,
-      options
-    )
+    const path = isTokenRequest ? '/token' : '/certs'
+    return nativeFetch(`${process.env.LDB_TEST_GOOGLE_ORIGIN}${path}`, options)
   }
   return nativeFetch(`${process.env.LDB_TEST_NEOPLE_ORIGIN}${url.pathname}${url.search}`, options)
 }
