@@ -64,20 +64,20 @@ main이 전진하면 아직 merge되지 않은 모든 관련 PR을 다시 대조
 
 각 PR의 merge는 기존과 같이 사용자만 수행한다. AI는 merge하지 않으며 scheduler나 자동 merge를 추가하지 않는다. 동시에 진행한 첫 3개 PR이 merge된 뒤 기록된 결과로 효과와 동시 한도를 재검토하며, 자동 만료나 매 묶음 재승인 조건을 만들지 않는다. 그 전에는 범위를 넓히거나 다른 Rule을 중복 작성하지 않는다.
 
-## 의존성과 자원 격리 기반 병렬 실행 제안
+## 의존성과 자원 격리 기반 병렬 실행
 
-Issue #226에서 고정된 동시 PR 수 대신 실제 의존성과 자원 격리로 병렬 실행 수를 정하도록 요청했다. 다음은 승인 전 제안이다. Draft PR의 명시적인 `승인` comment와 사용자 merge가 모두 완료되기 전에는 위 active 기준과 최대 3개 제한을 그대로 적용한다.
+Issue #226에서 고정된 동시 PR 수 대신 실제 의존성과 자원 격리로 병렬 실행 수를 정하도록 요청했다. 다음 기준은 [PR #240의 사용자 승인](https://github.com/blahaj94/ldb/pull/240#issuecomment-5605496073)을 반영한다. 이 변경이 사용자 merge되기 전에는 위 active 기준과 최대 3개 제한을 그대로 적용한다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 독립적인 작업을 고정된 숫자로 대기시키지 않으면서 실제 충돌, host 자원 포화, 검토 누락을 배정 전에 제한한다.
-evidence: "Issue #226의 변경 요청과 기존 후속 작업에서 확인한 의존성과 자원 계획"
+evidence: "https://github.com/blahaj94/ldb/pull/240#issuecomment-5605496073"
 exceptions: 소유권이나 격리를 증명하지 못하거나 가용한 실행, 검토 자원이 부족하면 병렬로 배정하지 않고 해당 작업을 대기시킨다.
 review-after: 새 기준으로 처음 배정한 기능 PR 묶음이 사용자 merge된 뒤 실제 충돌, 재작업, 자원 대기, 검토 부담을 확인한다.
 ```
 
-승인과 사용자 merge 후에는 이 제안이 위 병렬 실행의 “동시에 열어 둘 구현 PR은 최대 3개로 한다”와 첫 3개 PR을 기준으로 한 재검토 문구를 대체한다. 아래 `작업 단위 재계획 제안`의 “동시 최대 3개” 참조도 이 기준으로 대체한다. 다른 proposed Rule의 승인 상태나 구현 착수 조건은 바꾸지 않는다.
+이 변경이 사용자 merge되면 이 기준이 위 병렬 실행의 “동시에 열어 둘 구현 PR은 최대 3개로 한다”와 첫 3개 PR을 기준으로 한 재검토 문구를 대체한다. 아래 `작업 단위 재계획 제안`의 “동시 최대 3개” 참조도 이 기준으로 대체한다. 다른 proposed Rule의 승인 상태나 구현 착수 조건은 바꾸지 않는다.
 
 Planner는 작업별 file과 계약 소유권, generated source, artifact, fixture, snapshot, process와 port, database, native 권한과 장치, 사용량 수집 범위를 배정 전에 표로 기록한다. 각 항목에는 owner, 격리 방법, 필요한 실행과 검토 slot, 해제 조건을 둔다. Host의 CPU, memory, I/O와 실제로 사용할 수 있는 slot, 독립 review 가능 여부를 확인한 작업만 배정한다. 표가 비어 있거나 소유권과 격리 근거가 없거나 자원 포화로 안정적인 검증을 기대할 수 없으면 해당 작업을 대기시킨다. 실제 배정 수와 판단 근거는 각 Execution Issue의 착수 기록에 남긴다.
 
@@ -85,7 +85,7 @@ Planner는 작업별 file과 계약 소유권, generated source, artifact, fixtu
 
 단일 Planner, Issue별 단일 통합 owner, 별도 integration branch, Worker branch, worktree, 공개 roster, 작은 Worker 범위는 유지한다. 승인된 model mapping, 같은 접근의 retry, 독립 review, 오래된 result의 semantic 확인, 최종 exact head 검증과 사용량 기록도 유지한다. 하나의 PR이 main에 merge되면 아직 merge되지 않은 관련 PR은 최신 main으로 rebase하고 의미를 대조한 뒤 전체 required validation을 다시 통과해야 ready, merge 대상이 된다. merge는 사용자만 수행한다.
 
-이 제안은 실행 slot이나 host 용량을 무제한으로 간주하지 않는다. 자동 scheduler, 새 사용량 collector, 추정 사용량 분배, checkout 공유, 검증 면제, 자동 merge를 추가하지 않는다. 제품 code, test, dependency, 관련 없는 Rule activation은 별도 승인과 실행 범위를 따른다.
+이 기준은 실행 slot이나 host 용량을 무제한으로 간주하지 않는다. 자동 scheduler, 새 사용량 collector, 추정 사용량 분배, checkout 공유, 검증 면제, 자동 merge를 추가하지 않는다. 제품 code, test, dependency, 관련 없는 Rule activation은 별도 승인과 실행 범위를 따른다.
 
 ## 작업 단위 재계획 제안
 
@@ -132,4 +132,4 @@ review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담�
 
 ## 승인 경계
 
-이 문서는 `change-control.md`의 approval evidence와 `testing.md`의 변경별 validation을 따른다. 병렬 실행 subsection은 PR #181의 사용자 승인·merge를 반영하지만, Rule 승인과 사용자 merge 권한은 기존 change-control 경계를 유지한다.
+이 문서는 `change-control.md`의 approval evidence와 `testing.md`의 변경별 validation을 따른다. 기존 `병렬 실행` subsection은 PR #181의 사용자 승인과 merge를 반영하며, `의존성과 자원 격리 기반 병렬 실행`은 PR #240의 사용자 승인을 반영한다. 새 기준의 적용은 해당 변경의 사용자 merge 후에 시작하며 Rule 승인과 사용자 merge 권한은 기존 change-control 경계를 유지한다.
