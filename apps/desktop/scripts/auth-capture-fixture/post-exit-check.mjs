@@ -38,6 +38,134 @@ const expectedSearchEvidence = {
   pendingAborts: 5
 }
 
+const searchDiagnosticDefinitions = {
+  'capture-start': {
+    actual: { started: 'boolean' },
+    expected: { started: true }
+  },
+  'mixed-state-ready': {
+    actual: {
+      regionMask: 'mask',
+      statusesMatched: 'boolean',
+      failureCount: 'slot-count',
+      pendingCount: 'slot-count',
+      limitedCount: 'slot-count'
+    },
+    expected: {
+      regionMask: 15,
+      statusesMatched: true,
+      failureCount: 2,
+      pendingCount: 1,
+      limitedCount: 1
+    }
+  },
+  'initial-rate-wait': {
+    actual: {
+      hasRetryWait: 'boolean',
+      hasPositiveWait: 'boolean',
+      retryDisabled: 'boolean'
+    },
+    expected: {
+      hasRetryWait: true,
+      hasPositiveWait: true,
+      retryDisabled: true
+    }
+  },
+  'scenario-selection-quiet': {
+    actual: { requestDelta: 'request-delta' },
+    expected: { requestDelta: 0 }
+  },
+  'first-retry-click': {
+    actual: { clicked: 'boolean' },
+    expected: { clicked: true }
+  },
+  'first-retry-ready': {
+    actual: { succeeded: 'boolean', statusMatched: 'boolean' },
+    expected: { succeeded: true, statusMatched: true }
+  },
+  'independent-retry': {
+    actual: { independent: 'boolean', requestDelta: 'request-delta' },
+    expected: { independent: true, requestDelta: 1 }
+  }
+}
+
+/** @returns {boolean} */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
+function isDiagnosticValue(value, type) {
+  if (type === 'boolean') {
+    return typeof value === 'boolean'
+  }
+  const isInteger = Number.isSafeInteger(value)
+  if (!isInteger) {
+    return false
+  }
+  if (type === 'mask') {
+    return value >= 0 && value <= 15
+  }
+  if (type === 'slot-count') {
+    return value >= 0 && value <= 4
+  }
+  return type === 'request-delta' && value >= -20 && value <= 20
+}
+
+/** @returns {Record<string, unknown> | null} */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
+function readSearchDiagnostic(output) {
+  const prefix = 'Capture fixture search diagnostic: '
+  const lines = output.split('\n').filter((line) => line.startsWith(prefix))
+  const hasOneRecord = lines.length === 1
+  if (!hasOneRecord) {
+    return null
+  }
+  try {
+    const value = JSON.parse(lines[0].slice(prefix.length))
+    const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
+    const keys = ['stage', 'check', 'kind', 'actual', 'expected', 'generatedMessage']
+    const hasExactKeys = isObject && Object.keys(value).length === keys.length
+    const hasKnownStage = hasExactKeys && value.stage === 'mixed'
+    const definition = hasKnownStage ? searchDiagnosticDefinitions[value.check] : null
+    const hasDefinition = definition != null
+    const hasKnownKind = value.kind === 'assertion' || value.kind === 'deadline'
+    const hasGeneratedMessage =
+      (value.kind === 'assertion' && typeof value.generatedMessage === 'boolean') ||
+      (value.kind === 'deadline' && value.generatedMessage === null)
+    if (!hasDefinition || !hasKnownKind || !hasGeneratedMessage) {
+      return null
+    }
+    const actualKeys = Object.keys(definition.actual)
+    const actualIsObject =
+      value.actual != null && typeof value.actual === 'object' && !Array.isArray(value.actual)
+    const hasExactActualKeys =
+      actualIsObject && Object.keys(value.actual).length === actualKeys.length
+    const hasValidActual =
+      hasExactActualKeys &&
+      actualKeys.every((key) => isDiagnosticValue(value.actual[key], definition.actual[key]))
+    const expectedKeys = Object.keys(definition.expected)
+    const expectedIsObject =
+      value.expected != null && typeof value.expected === 'object' && !Array.isArray(value.expected)
+    const hasExactExpectedKeys =
+      expectedIsObject && Object.keys(value.expected).length === expectedKeys.length
+    const hasExpectedValues =
+      hasExactExpectedKeys &&
+      expectedKeys.every((key) => value.expected[key] === definition.expected[key])
+    if (!hasValidActual || !hasExpectedValues) {
+      return null
+    }
+    const actual = Object.fromEntries(actualKeys.map((key) => [key, value.actual[key]]))
+    const expected = Object.fromEntries(expectedKeys.map((key) => [key, definition.expected[key]]))
+    return {
+      stage: 'mixed',
+      check: value.check,
+      kind: value.kind,
+      actual,
+      expected,
+      generatedMessage: value.generatedMessage
+    }
+  } catch {
+    return null
+  }
+}
+
 /** @returns {Record<string, boolean | number> | null} */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
 function readSearchEvidence(output) {
@@ -107,6 +235,11 @@ function reportSearchStages(output) {
     } catch {
       // 정제된 보조 관측만 전달하며 원문은 출력하지 않는다.
     }
+  }
+  const diagnostic = readSearchDiagnostic(output)
+  const hasDiagnostic = diagnostic != null
+  if (hasDiagnostic) {
+    console.log(`Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}`)
   }
 }
 

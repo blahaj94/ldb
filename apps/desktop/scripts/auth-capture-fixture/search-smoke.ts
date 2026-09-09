@@ -9,6 +9,43 @@ import { installObservation } from './observe'
 import { inspectSearch, type SearchUiObservation } from './search-observation'
 
 type Slot = SearchUiObservation['slots'][number]
+type SearchDiagnosticValue = boolean | number
+type SearchDiagnostic = {
+  stage: 'mixed'
+  check:
+    | 'capture-start'
+    | 'mixed-state-ready'
+    | 'initial-rate-wait'
+    | 'scenario-selection-quiet'
+    | 'first-retry-click'
+    | 'first-retry-ready'
+    | 'independent-retry'
+  actual: Record<string, SearchDiagnosticValue>
+  expected: Record<string, SearchDiagnosticValue>
+}
+
+function reportSearchDiagnostic(error: unknown, diagnostic: SearchDiagnostic | null): void {
+  const hasDiagnostic = diagnostic != null
+  if (!hasDiagnostic) {
+    return
+  }
+  const details = error as {
+    code?: unknown
+    message?: unknown
+    generatedMessage?: unknown
+  }
+  const isAssertion = details.code === 'ERR_ASSERTION'
+  const isDeadline = details.message === 'Capture fixture observation deadline exceeded'
+  if (!isAssertion && !isDeadline) {
+    return
+  }
+  const kind = isAssertion ? 'assertion' : 'deadline'
+  const generatedMessage =
+    isAssertion && typeof details.generatedMessage === 'boolean' ? details.generatedMessage : null
+  const record = { ...diagnostic, kind, generatedMessage }
+  console.error(`Capture fixture search diagnostic: ${JSON.stringify(record)}`)
+}
+
 function hasRetryWait(slot: Slot): slot is Slot & { retryAfterSeconds: number } {
   const hasWait = slot.retryAfterSeconds != null
   return hasWait
@@ -70,6 +107,7 @@ export async function smokeCharacterSearch(
     evaluate(inspectSearch) as Promise<SearchUiObservation>
   let previousCapture: string | null = null
   let stage = 'setup'
+  let diagnostic: SearchDiagnostic | null = null
   function enterStage(next: string): void {
     stage = next
     console.log(`Capture fixture search stage: ${stage}`)
@@ -128,13 +166,24 @@ export async function smokeCharacterSearch(
   }
   async function retry({
     slot,
-    allowDisabled = false
+    allowDisabled = false,
+    diagnosticCheck
   }: {
     slot: number
     allowDisabled?: boolean
+    diagnosticCheck?: 'first-retry-click'
   }): Promise<void> {
     const retryScript = createRetryScript({ slot, allowDisabled })
-    assert.equal(await evaluate(retryScript, true), true)
+    const clicked = await evaluate(retryScript, true)
+    if (diagnosticCheck != null) {
+      diagnostic = {
+        stage: 'mixed',
+        check: diagnosticCheck,
+        actual: { clicked: clicked === true },
+        expected: { clicked: true }
+      }
+    }
+    assert.equal(clicked, true)
   }
   try {
     const sandboxInspectionSource = `(() => {
@@ -160,16 +209,48 @@ export async function smokeCharacterSearch(
     await stop()
     enterStage('mixed')
     search.queueScenarios(['failure', 'failure', 'pending', 'rate-limit'])
+    diagnostic = {
+      stage: 'mixed',
+      check: 'capture-start',
+      actual: { started: false },
+      expected: { started: true }
+    }
     await start()
+    diagnostic = {
+      stage: 'mixed',
+      check: 'capture-start',
+      actual: { started: true },
+      expected: { started: true }
+    }
     const mixed = await waitFor((view) => {
       const failureCount = view.slots.filter((slot) => slot.code === 'INTERNAL_SERVER_ERROR').length
       const pendingCount = view.slots.filter((slot) => slot.state === 'pending').length
       const limitedCount = view.slots.filter((slot) => slot.code === 'SEARCH_RATE_LIMITED').length
-      const hasAllRegions = view.regionMask === 15
-      const matchesUi = hasAllRegions && view.slots.every((slot) => slot.statusMatched)
+      const regionMask = view.regionMask
+      const hasAllRegions = regionMask === 15
+      const statusesMatched = hasAllRegions && view.slots.every((slot) => slot.statusMatched)
+      const matchesUi = statusesMatched
       const hasExpectedFailures = matchesUi && failureCount === 2
       const hasExpectedPending = hasExpectedFailures && pendingCount === 1
       const hasExpectedLimited = hasExpectedPending && limitedCount === 1
+      diagnostic = {
+        stage: 'mixed',
+        check: 'mixed-state-ready',
+        actual: {
+          regionMask,
+          statusesMatched,
+          failureCount,
+          pendingCount,
+          limitedCount
+        },
+        expected: {
+          regionMask: 15,
+          statusesMatched: true,
+          failureCount: 2,
+          pendingCount: 1,
+          limitedCount: 1
+        }
+      }
       return hasExpectedLimited
     })
     // HTTP 도착 순서를 slot 번호로 가정하지 않고 실제 수용한 상태에서 역할을 찾는다.
@@ -181,15 +262,42 @@ export async function smokeCharacterSearch(
     const limitedBefore = mixed.slots[limitedSlot]
     const hasInitialRetryWait = hasRetryWait(limitedBefore)
     const hasPositiveWait = hasInitialRetryWait && limitedBefore.retryAfterSeconds > 0
-    const isRetryDisabledWhileWaiting = hasPositiveWait && limitedBefore.retryDisabled === true
+    const retryDisabled = hasPositiveWait && limitedBefore.retryDisabled === true
+    const isRetryDisabledWhileWaiting = retryDisabled
+    diagnostic = {
+      stage: 'mixed',
+      check: 'initial-rate-wait',
+      actual: {
+        hasRetryWait: hasInitialRetryWait,
+        hasPositiveWait,
+        retryDisabled
+      },
+      expected: { hasRetryWait: true, hasPositiveWait: true, retryDisabled: true }
+    }
     assert.equal(isRetryDisabledWhileWaiting, true)
     const mixedRequests = search.counts.requests
     search.selectScenario('success')
-    assert.equal(search.counts.requests, mixedRequests)
-    await retry({ slot: failures[0] })
+    const selectionRequestDelta = search.counts.requests - mixedRequests
+    diagnostic = {
+      stage: 'mixed',
+      check: 'scenario-selection-quiet',
+      actual: { requestDelta: selectionRequestDelta },
+      expected: { requestDelta: 0 }
+    }
+    assert.equal(selectionRequestDelta, 0)
+    await retry({ slot: failures[0], diagnosticCheck: 'first-retry-click' })
     const firstRetry = await waitFor((view) => {
       const hasSucceeded = view.slots[failures[0]].state === 'success'
       const hasMatchingStatus = hasSucceeded && view.slots[failures[0]].statusMatched
+      diagnostic = {
+        stage: 'mixed',
+        check: 'first-retry-ready',
+        actual: {
+          succeeded: hasSucceeded,
+          statusMatched: hasMatchingStatus
+        },
+        expected: { succeeded: true, statusMatched: true }
+      }
       return hasMatchingStatus
     })
     const hasIndependentSlots = mixed.slots.every((before, index) => {
@@ -203,7 +311,14 @@ export async function smokeCharacterSearch(
       const hasUnchangedState = hasSameRequest && before.state === after.state
       return hasUnchangedState
     })
-    const independentRetry = hasIndependentSlots && search.counts.requests === mixedRequests + 1
+    const retryRequestDelta = hasIndependentSlots ? search.counts.requests - mixedRequests : 0
+    const independentRetry = hasIndependentSlots && retryRequestDelta === 1
+    diagnostic = {
+      stage: 'mixed',
+      check: 'independent-retry',
+      actual: { independent: hasIndependentSlots, requestDelta: retryRequestDelta },
+      expected: { independent: true, requestDelta: 1 }
+    }
     assert.equal(independentRetry, true)
 
     enterStage('rate-wait')
@@ -335,9 +450,13 @@ export async function smokeCharacterSearch(
       pendingAborts: search.counts.pendingAborts
     }
     console.log(`Capture fixture search evidence: ${JSON.stringify(evidence)}`)
-  } catch {
+  } catch (error) {
+    const isMixedStage = stage === 'mixed'
+    if (isMixedStage) {
+      reportSearchDiagnostic(error, diagnostic)
+    }
     console.error(`Capture fixture search stage FAIL: ${stage}`)
-    throw new Error('Capture fixture search verification failed')
+    throw error
   }
 }
 

@@ -97,7 +97,12 @@ const searchEvidence = {
 
 /** @returns {Promise<void>} */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
-async function runSearchChild({ evidence = searchEvidence, completionMs = 1 } = {}) {
+async function runSearchChild({
+  evidence = searchEvidence,
+  diagnostic = null,
+  completionMs = 1,
+  exitCode = 0
+} = {}) {
   vi.spyOn(process, 'argv', 'get').mockReturnValue(['node', 'post-exit-check.mjs', '--search'])
   let stopped = false
   const child = Object.assign(new EventEmitter(), {
@@ -107,13 +112,24 @@ async function runSearchChild({ evidence = searchEvidence, completionMs = 1 } = 
   })
   fixture.spawn.mockImplementation(() => {
     setTimeout(() => {
+      const hasDiagnostic = diagnostic != null
+      if (hasDiagnostic) {
+        child.stderr.emit(
+          'data',
+          `Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}\n`
+        )
+      }
       const hasEvidence = evidence != null
       if (hasEvidence) {
         child.stdout.emit('data', `Capture fixture search evidence: ${JSON.stringify(evidence)}\n`)
       }
-      child.stdout.emit('data', 'Capture fixture search smoke PASS\nCapture fixture cleanup PASS\n')
+      const result = exitCode === 0 ? 'PASS' : 'FAIL'
+      child.stdout.emit(
+        'data',
+        `Capture fixture search smoke ${result}\nCapture fixture cleanup PASS\n`
+      )
       stopped = true
-      child.emit('close', 0)
+      child.emit('close', exitCode)
     }, completionMs)
     return child
   })
@@ -165,4 +181,113 @@ it.each([
     ...vi.mocked(console.error).mock.calls
   ])
   expect(logged.includes('synthetic-private-value')).toBe(false)
+})
+
+const mixedDeadlineDiagnostic = {
+  stage: 'mixed',
+  check: 'mixed-state-ready',
+  kind: 'deadline',
+  actual: {
+    regionMask: 15,
+    statusesMatched: false,
+    failureCount: 1,
+    pendingCount: 2,
+    limitedCount: 1
+  },
+  expected: {
+    regionMask: 15,
+    statusesMatched: true,
+    failureCount: 2,
+    pendingCount: 1,
+    limitedCount: 1
+  },
+  generatedMessage: null
+}
+
+it('검색 실패 child의 정제된 mixed deadline 진단을 한 record로 전달한다', async () => {
+  await runSearchChild({ evidence: null, diagnostic: mixedDeadlineDiagnostic, exitCode: 1 })
+
+  expect(console.log).toHaveBeenCalledWith(
+    `Capture fixture search diagnostic: ${JSON.stringify(mixedDeadlineDiagnostic)}`
+  )
+  expect(process.exitCode).toBe(1)
+})
+
+it('검색 실패 child의 정제된 mixed assertion 진단을 전달한다', async () => {
+  const diagnostic = {
+    stage: 'mixed',
+    check: 'initial-rate-wait',
+    kind: 'assertion',
+    actual: { hasRetryWait: true, hasPositiveWait: false, retryDisabled: false },
+    expected: { hasRetryWait: true, hasPositiveWait: true, retryDisabled: true },
+    generatedMessage: true
+  }
+
+  await runSearchChild({ evidence: null, diagnostic, exitCode: 1 })
+
+  expect(console.log).toHaveBeenCalledWith(
+    `Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}`
+  )
+  expect(process.exitCode).toBe(1)
+})
+
+it.each([
+  {
+    name: 'unexpected field',
+    diagnostic: { ...mixedDeadlineDiagnostic, raw: 'synthetic-private-value' }
+  },
+  {
+    name: 'nested private value',
+    diagnostic: {
+      ...mixedDeadlineDiagnostic,
+      actual: { ...mixedDeadlineDiagnostic.actual, requestId: 'synthetic-private-value' }
+    }
+  },
+  {
+    name: 'out-of-range count',
+    diagnostic: {
+      ...mixedDeadlineDiagnostic,
+      actual: { ...mixedDeadlineDiagnostic.actual, failureCount: 5 }
+    }
+  }
+])('$name 진단은 전달하지 않는다', async ({ diagnostic }) => {
+  await runSearchChild({ evidence: null, diagnostic, exitCode: 1 })
+
+  const logged = JSON.stringify(vi.mocked(console.log).mock.calls)
+  expect(logged.includes('Capture fixture search diagnostic:')).toBe(false)
+  expect(logged.includes('synthetic-private-value')).toBe(false)
+})
+
+it('중복된 진단 record는 전달하지 않는다', async () => {
+  vi.spyOn(process, 'argv', 'get').mockReturnValue(['node', 'post-exit-check.mjs', '--search'])
+  let stopped = false
+  const child = Object.assign(new EventEmitter(), {
+    pid: 424242,
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter()
+  })
+  fixture.spawn.mockImplementation(() => {
+    setTimeout(() => {
+      const line = `Capture fixture search diagnostic: ${JSON.stringify(mixedDeadlineDiagnostic)}\n`
+      child.stderr.emit('data', `${line}${line}`)
+      child.stderr.emit('data', 'Capture fixture search smoke FAIL\n')
+      stopped = true
+      child.emit('close', 1)
+    }, 1)
+    return child
+  })
+  vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+    if (signal === 0 && stopped) {
+      throw Object.assign(new Error('Gone'), { code: 'ESRCH' })
+    }
+    return true
+  })
+
+  const execution = import('./post-exit-check.mjs')
+  await vi.waitFor(() => expect(fixture.spawn).toHaveBeenCalledOnce())
+  await vi.advanceTimersByTimeAsync(1)
+  await execution
+
+  const logged = JSON.stringify(vi.mocked(console.log).mock.calls)
+  expect(logged.includes('Capture fixture search diagnostic:')).toBe(false)
 })
