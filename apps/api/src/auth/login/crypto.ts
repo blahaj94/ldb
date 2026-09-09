@@ -11,13 +11,19 @@ import type { AuthLoginRequest } from '../../database/schemas/auth-login-request
 import type { ProviderPkceConfiguration } from '../../types/login.js'
 
 export function decodeOpaque(value: unknown): Buffer {
-  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value)) {
+  const isValueString = typeof value === 'string'
+  const hasOpaqueFormat = isValueString && /^[A-Za-z0-9_-]{43}$/.test(value)
+  const isOpaqueInvalid = !isValueString || !hasOpaqueFormat
+  if (isOpaqueInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
   const bytes = Buffer.from(value, 'base64url')
   // Decode가 성공해도 같은 32 bytes의 canonical 표현인지 다시 확인한다.
-  if (bytes.length !== 32 || bytes.toString('base64url') !== value) {
+  const hasExpectedByteLength = bytes.length === 32
+  const isCanonicalEncoding = hasExpectedByteLength && bytes.toString('base64url') === value
+  const isDecodedOpaqueInvalid = !hasExpectedByteLength || !isCanonicalEncoding
+  if (isDecodedOpaqueInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
   return bytes
@@ -43,11 +49,10 @@ export function challenge(verifier: string): string {
 }
 
 export function equalHash(storedHash: Buffer | null, candidateHash: Buffer): boolean {
-  return (
-    storedHash !== null &&
-    storedHash.length === candidateHash.length &&
-    timingSafeEqual(storedHash, candidateHash)
-  )
+  const hasStoredHash = storedHash !== null
+  const hasSameLength = hasStoredHash && storedHash.length === candidateHash.length
+  const isHashEqual = hasSameLength && timingSafeEqual(storedHash, candidateHash)
+  return isHashEqual
 }
 
 type PkceContext = Pick<AuthLoginRequest, 'id' | 'provider' | 'purpose'>
@@ -55,6 +60,18 @@ type SealedPkce = Pick<
   AuthLoginRequest,
   'providerPkceCiphertext' | 'providerPkceIv' | 'providerPkceTag' | 'providerPkceKeyId'
 >
+
+function hasCompleteSealedPkce(row: SealedPkce): row is SealedPkce & {
+  providerPkceCiphertext: Buffer
+  providerPkceIv: Buffer
+  providerPkceTag: Buffer
+} {
+  const hasCiphertext = Boolean(row.providerPkceCiphertext)
+  const hasIv = hasCiphertext && Boolean(row.providerPkceIv)
+  const hasTag = hasIv && Boolean(row.providerPkceTag)
+  const isComplete = hasCiphertext && hasIv && hasTag
+  return isComplete
+}
 
 function encodePkceContext({ id, provider, purpose }: PkceContext): Buffer {
   // AAD가 ciphertext를 이 요청·provider·purpose에 묶는다. 배열 순서도 저장 형식이다.
@@ -69,14 +86,20 @@ export class ProviderPkceKeys {
     try {
       this.#activeKeyId = config.activeKeyId
       for (const { id, key } of config.keys) {
-        if (!id || this.#keys.has(id) || !Buffer.isBuffer(key) || key.length !== 32) {
+        const hasKeyId = Boolean(id)
+        const isDuplicateKey = hasKeyId && this.#keys.has(id)
+        const isKeyBuffer = hasKeyId && !isDuplicateKey && Buffer.isBuffer(key)
+        const hasExpectedKeyLength = isKeyBuffer && key.length === 32
+        const isKeyInvalid = !hasKeyId || isDuplicateKey || !isKeyBuffer || !hasExpectedKeyLength
+        if (isKeyInvalid) {
           throw new Error()
         }
         // 호출자가 원본 Buffer를 바꿔도 등록된 key는 바뀌지 않는다.
         this.#keys.set(id, Buffer.from(key))
       }
 
-      if (!this.#keys.has(this.#activeKeyId)) {
+      const hasActiveKey = this.#keys.has(this.#activeKeyId)
+      if (!hasActiveKey) {
         throw new Error()
       }
     } catch {
@@ -110,7 +133,10 @@ export class ProviderPkceKeys {
   decrypt(row: PkceContext & SealedPkce): string {
     try {
       const key = this.#keys.get(row.providerPkceKeyId!)
-      if (!key || !row.providerPkceCiphertext || !row.providerPkceIv || !row.providerPkceTag) {
+      const hasKey = key != null
+      const hasSealedFields = hasKey && hasCompleteSealedPkce(row)
+      const isSealedPkceInvalid = !hasKey || !hasSealedFields
+      if (isSealedPkceInvalid) {
         throw new Error()
       }
 

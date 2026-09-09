@@ -51,17 +51,18 @@ const forbidden = {
   failed: [...secretFields, 'consumed_at']
 }
 
-function row(status, overrides = {}) {
+function row({ status, overrides = {} }) {
   const request = loginRequest(status, randomUUID())
   for (const field of ['launch_ticket_hash', 'state_hash', 'exchange_code_hash']) {
-    if (request[field] !== null) {
+    const isHashNonNull = request[field] !== null
+    if (isHashNonNull) {
       request[field] = randomBytes(32)
     }
   }
   return { ...request, ...overrides }
 }
 
-async function accept(dataSource, request) {
+async function accept({ dataSource, request }) {
   const runner = dataSource.createQueryRunner()
   await runner.connect()
   await runner.startTransaction()
@@ -83,23 +84,27 @@ export async function assertLoginRequestStateMatrix(dataSource) {
   let rejected = 0
   for (const status of states) {
     for (const provider of ['google', 'discord']) {
-      await accept(dataSource, row(status, { provider }))
+      await accept({ dataSource, request: row({ status, overrides: { provider } }) })
       accepted++
     }
     for (const field of required[status]) {
-      const constraint =
-        providerPkce.includes(field) && status === 'processing' ? 'pkce_fields' : `${status}_fields`
+      const isProviderPkceField = providerPkce.includes(field)
+      const isProcessing = isProviderPkceField && status === 'processing'
+      const shouldUsePkceConstraint = isProviderPkceField && isProcessing
+      const constraint = shouldUsePkceConstraint ? 'pkce_fields' : `${status}_fields`
       await rejectConstraint(dataSource, `ck_auth_login_requests_${constraint}`, (runner) =>
-        insertLogin(runner, row(status, { [field]: null }))
+        insertLogin(runner, row({ status, overrides: { [field]: null } }))
       )
       rejected++
     }
     for (const field of forbidden[status]) {
-      const sample = { ...row('browser_started'), ...row('exchange_ready') }
+      const sample = { ...row({ status: 'browser_started' }), ...row({ status: 'exchange_ready' }) }
       // 각 nullable field를 하나씩 남겨 같은 실패 경계를 확인한다.
       const values = {
         ...sample,
-        ...Object.fromEntries(providerPkce.map((key) => [key, row('browser_started')[key]])),
+        ...Object.fromEntries(
+          providerPkce.map((key) => [key, row({ status: 'browser_started' })[key]])
+        ),
         state_hash: randomBytes(32),
         browser_binding_hash: randomBytes(32),
         oidc_nonce_hash: randomBytes(32),
@@ -108,7 +113,7 @@ export async function assertLoginRequestStateMatrix(dataSource) {
       }
       const suffix = `${status}_fields`
       await rejectConstraint(dataSource, `ck_auth_login_requests_${suffix}`, (runner) =>
-        insertLogin(runner, row(status, { [field]: values[field] }))
+        insertLogin(runner, row({ status, overrides: { [field]: values[field] } }))
       )
       rejected++
     }
@@ -116,18 +121,23 @@ export async function assertLoginRequestStateMatrix(dataSource) {
 
   for (const status of ['browser_started', 'processing']) {
     // 현재 정책: Google nonce 필수, Discord는 NULL과 잔존 모두 허용한다.
-    await accept(dataSource, row(status, { provider: 'discord', oidc_nonce_hash: null }))
+    await accept({
+      dataSource,
+      request: row({ status, overrides: { provider: 'discord', oidc_nonce_hash: null } })
+    })
     accepted++
   }
   // exchange_ready의 browser/provider proof 잔존은 기존 CHECK가 허용한다.
-  const retained = row('browser_started')
-  await accept(
+  const retained = row({ status: 'browser_started' })
+  await accept({
     dataSource,
-    row(
-      'exchange_ready',
-      Object.fromEntries([...browserContext, ...providerPkce].map((key) => [key, retained[key]]))
-    )
-  )
+    request: row({
+      status: 'exchange_ready',
+      overrides: Object.fromEntries(
+        [...browserContext, ...providerPkce].map((key) => [key, retained[key]])
+      )
+    })
+  })
   accepted++
 
   for (const [field, suffix] of [
@@ -138,14 +148,11 @@ export async function assertLoginRequestStateMatrix(dataSource) {
     ['exchange_code_hash', 'exchange_hash_length']
   ]) {
     for (const length of [31, 33]) {
-      await rejectConstraint(dataSource, `ck_auth_login_requests_${suffix}`, (runner) =>
-        insertLogin(
-          runner,
-          row(field === 'launch_ticket_hash' ? 'created' : 'exchange_ready', {
-            [field]: Buffer.alloc(length)
-          })
-        )
-      )
+      await rejectConstraint(dataSource, `ck_auth_login_requests_${suffix}`, (runner) => {
+        const isLaunchTicketHash = field === 'launch_ticket_hash'
+        const status = isLaunchTicketHash ? 'created' : 'exchange_ready'
+        return insertLogin(runner, row({ status, overrides: { [field]: Buffer.alloc(length) } }))
+      })
       rejected++
     }
   }
@@ -158,7 +165,7 @@ export async function assertLoginRequestStateMatrix(dataSource) {
     ['provider_pkce_key_id', '']
   ]) {
     await rejectConstraint(dataSource, 'ck_auth_login_requests_pkce_fields', (runner) =>
-      insertLogin(runner, row('browser_started', { [field]: value }))
+      insertLogin(runner, row({ status: 'browser_started', overrides: { [field]: value } }))
     )
     rejected++
   }
@@ -168,9 +175,9 @@ export async function assertLoginRequestStateMatrix(dataSource) {
     ['exchange_code_hash', 'exchange_ready', 'exchange_code_hash']
   ]) {
     await rejectConstraint(dataSource, `uq_auth_login_requests_${suffix}`, async (runner) => {
-      const first = row(status)
+      const first = row({ status })
       await insertLogin(runner, first)
-      await insertLogin(runner, row(status, { [field]: first[field] }))
+      await insertLogin(runner, row({ status, overrides: { [field]: first[field] } }))
     })
     rejected++
   }

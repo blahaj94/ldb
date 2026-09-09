@@ -25,7 +25,8 @@ function readHeaderValues(request: Request, name: string): string[] {
   // 중복 header도 확인할 수 있도록 rawHeaders의 name/value pair를 읽는다.
   return request.rawHeaders.flatMap((value, index, headers) => {
     const isHeaderName = index % 2 === 0
-    if (isHeaderName && value.toLowerCase() === name) {
+    const isMatchingHeader = isHeaderName && value.toLowerCase() === name
+    if (isMatchingHeader) {
       return [headers[index + 1]]
     }
     return []
@@ -61,23 +62,31 @@ export function loginJsonParser(request: Request, response: Response, next: Next
   }
 
   // 1. Media/encoding 오류를 크기·JSON 오류보다 먼저 거절한다.
-  if (
-    contentTypes.length !== 1 ||
-    !/^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(contentTypes[0]) ||
-    contentEncodings.length > 1 ||
-    (contentEncodings.length === 1 && !/^identity$/i.test(contentEncodings[0]))
-  ) {
+  const hasSingleContentType = contentTypes.length === 1
+  const isContentTypeSupported =
+    hasSingleContentType &&
+    /^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(contentTypes[0])
+  const hasDuplicateEncoding = isContentTypeSupported && contentEncodings.length > 1
+  const hasSingleEncoding =
+    isContentTypeSupported && !hasDuplicateEncoding && contentEncodings.length === 1
+  const isEncodingUnsupported = hasSingleEncoding && !/^identity$/i.test(contentEncodings[0])
+  const isMediaInvalid =
+    !hasSingleContentType ||
+    !isContentTypeSupported ||
+    hasDuplicateEncoding ||
+    isEncodingUnsupported
+  if (isMediaInvalid) {
     rejectPayloadAndClose(LOGIN_ERRORS.MEDIA)
     return
   }
 
   // 2. 선언 길이로 조기 거절할 수 있지만 실제 byte 상한 검사는 아래 stream에서 수행한다.
   const contentLengths = readHeaderValues(request, 'content-length')
-  if (
-    contentLengths.length === 1 &&
-    /^\d+$/.test(contentLengths[0]) &&
-    Number(contentLengths[0]) > LOGIN.jsonBytes
-  ) {
+  const hasSingleContentLength = contentLengths.length === 1
+  const isContentLengthDecimal = hasSingleContentLength && /^\d+$/.test(contentLengths[0])
+  const isDeclaredPayloadTooLarge =
+    isContentLengthDecimal && Number(contentLengths[0]) > LOGIN.jsonBytes
+  if (isDeclaredPayloadTooLarge) {
     rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
     return
   }
@@ -100,7 +109,8 @@ export function loginJsonParser(request: Request, response: Response, next: Next
 
     // 3. 초과 chunk는 저장하지 않고 body 종료 전에 연결을 닫는다.
     receivedBytes += chunk.length
-    if (receivedBytes > LOGIN.jsonBytes) {
+    const isPayloadTooLarge = receivedBytes > LOGIN.jsonBytes
+    if (isPayloadTooLarge) {
       clearPayload()
       rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
       return
@@ -134,7 +144,10 @@ export function loginJsonParser(request: Request, response: Response, next: Next
       return
     }
     clearPayload()
-    if (!response.headersSent && !response.destroyed) {
+    const hasSentHeaders = response.headersSent
+    const isResponseDestroyed = !hasSentHeaders && response.destroyed
+    const canSendError = !hasSentHeaders && !isResponseDestroyed
+    if (canSendError) {
       jsonError(response, LOGIN_ERRORS.INVALID_REQUEST)
     }
   })

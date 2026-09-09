@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 
 // 격리된 test 등록값이다. 제품 registry/환경변수/credential로 export하지 않는다.
 export function registration(provider = 'google', version = 'test-v1') {
+  const isGoogleProvider = provider === 'google'
   return {
     provider,
     version,
@@ -9,7 +10,7 @@ export function registration(provider = 'google', version = 'test-v1') {
     providerSecretRef: `${provider}-test-secret-reference`,
     callbackUrl: `https://api.test.invalid/auth/callback/${provider}`,
     authorizationEndpoint: `https://${provider}.test.invalid/authorize`,
-    expectedAudience: provider === 'google' ? 'google-test-client' : null,
+    expectedAudience: isGoogleProvider ? 'google-test-client' : null,
     returnTarget: { id: `test-return-${version}`, url: 'ldb-test://login/complete' }
   }
 }

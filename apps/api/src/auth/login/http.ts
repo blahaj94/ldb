@@ -49,9 +49,13 @@ function escapeHtml(value: string): string {
 
 function loginPage(message: string, returnUrl?: string): string {
   const messageHtml = `<p>${escapeHtml(message)}</p>`
-  const returnLink = returnUrl ? `<a href="${escapeHtml(returnUrl)}">앱으로 돌아가기</a>` : ''
+  const hasReturnUrl = returnUrl != null
+  const hasTruthyReturnUrl = hasReturnUrl && Boolean(returnUrl)
+  const returnLink = hasTruthyReturnUrl
+    ? `<a href="${escapeHtml(returnUrl)}">앱으로 돌아가기</a>`
+    : ''
 
-  return [
+  const pageHtml = [
     '<!doctype html>',
     '<html lang="ko">',
     '<meta charset="utf-8">',
@@ -62,6 +66,7 @@ function loginPage(message: string, returnUrl?: string): string {
     returnLink,
     '</body></html>'
   ].join('')
+  return pageHtml
 }
 
 function readOriginalQuery(request: Request): URLSearchParams {
@@ -162,12 +167,16 @@ class LoginController {
   @Get('login/authorize')
   async authorize(@Req() request: Request, @Res() response: Response): Promise<void> {
     // Express의 HEAD→GET fallback이 일회용 ticket을 소비하지 못하게 한다.
-    if (request.method !== 'GET') {
+    const isGet = request.method === 'GET'
+    if (!isGet) {
       throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
 
     const query = readOriginalQuery(request)
-    if (query.size !== 1 || query.getAll('ticket').length !== 1) {
+    const hasSingleQueryParameter = query.size === 1
+    const hasSingleTicket = hasSingleQueryParameter && query.getAll('ticket').length === 1
+    const isQueryInvalid = !hasSingleQueryParameter || !hasSingleTicket
+    if (isQueryInvalid) {
       throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
 
@@ -194,7 +203,8 @@ class LoginController {
     response: Response
   ): Promise<void> {
     // HEAD는 완료 HTML을 받지 못하므로 callback claim이나 provider 검증을 시작하지 않는다.
-    if (request.method !== 'GET') {
+    const isGet = request.method === 'GET'
+    if (!isGet) {
       throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
 
@@ -270,7 +280,8 @@ export async function createLoginHttpApp(
     app.use((request: Request, response: Response, next: () => void) => {
       response.setHeader('Cache-Control', 'no-store')
       response.removeHeader('X-Powered-By')
-      if (request.method === 'GET') {
+      const isGet = request.method === 'GET'
+      if (isGet) {
         response.setHeader('Referrer-Policy', 'no-referrer')
         response.setHeader('Content-Security-Policy', LOGIN.contentSecurityPolicy)
       }

@@ -62,10 +62,18 @@ export async function markLoginRequestFailed(
   )
 }
 
-export function browserCookie(id: string, value: string, seconds: number): string {
+export function browserCookie({
+  requestId,
+  bindingValue,
+  maxAgeSeconds
+}: {
+  requestId: string
+  bindingValue: string
+  maxAgeSeconds: number
+}): string {
   return [
-    `${LOGIN.cookiePrefix}${id}=${value}`,
-    `Max-Age=${seconds}`,
+    `${LOGIN.cookiePrefix}${requestId}=${bindingValue}`,
+    `Max-Age=${maxAgeSeconds}`,
     'Secure',
     'HttpOnly',
     'SameSite=Lax',

@@ -78,15 +78,22 @@ async function claimCallback(
         })
         const checkedAt = await freshTime(manager)
 
-        if (!request || request.provider !== provider || !cookieMatches(request, cookieHeader)) {
+        const hasRequest = request != null
+        const isRequestTruthy = hasRequest && Boolean(request)
+        const hasSameProvider = isRequestTruthy && request.provider === provider
+        const hasCookieBinding = hasSameProvider && cookieMatches(request, cookieHeader)
+        const isRequestInvalid = !hasRequest || !hasSameProvider || !hasCookieBinding
+        if (isRequestInvalid) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
         // Binding이 맞는 만료 요청은 processing 상태여도 정리를 commit한다.
-        if (requestExpired(request, checkedAt)) {
+        const isRequestExpired = requestExpired(request, checkedAt)
+        if (isRequestExpired) {
           await markLoginRequestFailed(manager, request.id)
           return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID) }
         }
-        if (request.status !== 'browser_started') {
+        const hasBrowserStarted = request.status === 'browser_started'
+        if (!hasBrowserStarted) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
 
@@ -98,10 +105,11 @@ async function claimCallback(
           return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.INTERNAL) }
         }
 
-        if (input.error !== undefined) {
+        const hasProviderError = input.error !== undefined
+        if (hasProviderError) {
           await markLoginRequestFailed(manager, request.id)
-          const failure =
-            input.error === 'access_denied' ? LOGIN_ERRORS.CANCELLED : LOGIN_ERRORS.PROVIDER
+          const isAccessDenied = input.error === 'access_denied'
+          const failure = isAccessDenied ? LOGIN_ERRORS.CANCELLED : LOGIN_ERRORS.PROVIDER
           return { status: 'rejected', error: new LoginFailure(failure) }
         }
 
@@ -129,7 +137,8 @@ async function claimCallback(
       }
     )
 
-    if (committed.status === 'rejected') {
+    const isRejected = committed.status === 'rejected'
+    if (isRejected) {
       throw committed.error
     }
     return committed.claim
@@ -144,7 +153,8 @@ async function failClaim(deps: LoginDependencies, requestId: string): Promise<vo
       where: { id: requestId },
       lock: { mode: 'pessimistic_write' }
     })
-    if (request?.status === 'processing') {
+    const isProcessing = request?.status === 'processing'
+    if (isProcessing) {
       await markLoginRequestFailed(manager, request.id)
     }
   })
@@ -160,7 +170,8 @@ async function verifyProviderLogin(
 
   try {
     const remainingMs = deadline - performance.now()
-    if (remainingMs <= 0) {
+    const isDeadlineElapsed = remainingMs <= 0
+    if (isDeadlineElapsed) {
       throw new Error()
     }
 
@@ -183,12 +194,14 @@ async function verifyProviderLogin(
     const identity = await Promise.race([verification, timeout])
 
     // Timer가 아직 실행되지 않았어도 deadline을 지난 결과는 수용하지 않는다.
-    if (
-      performance.now() >= deadline ||
-      identity?.provider !== claimed.snapshot.provider ||
-      typeof identity.subject !== 'string' ||
-      identity.subject.length === 0
-    ) {
+    const isVerificationExpired = performance.now() >= deadline
+    const hasSameProvider =
+      !isVerificationExpired && identity?.provider === claimed.snapshot.provider
+    const isSubjectString = hasSameProvider && typeof identity.subject === 'string'
+    const isSubjectEmpty = isSubjectString && identity.subject.length === 0
+    const isIdentityInvalid =
+      isVerificationExpired || !hasSameProvider || !isSubjectString || isSubjectEmpty
+    if (isIdentityInvalid) {
       throw new Error()
     }
 
@@ -224,19 +237,30 @@ async function prepareExchangeCode(
         const checkedAt = await freshTime(manager)
 
         // 외부 검증 중 상태 또는 등록 binding이 달라진 요청은 완료하지 않는다.
-        if (
-          !request ||
-          request.status !== 'processing' ||
-          request.provider !== claimed.snapshot.provider ||
-          request.providerConfigVersion !== claimed.snapshot.version ||
-          request.returnTargetId !== claimed.snapshot.returnTarget.id
-        ) {
+        const hasRequest = request != null
+        const isRequestTruthy = hasRequest && Boolean(request)
+        const isProcessing = isRequestTruthy && request.status === 'processing'
+        const hasSameProvider = isProcessing && request.provider === claimed.snapshot.provider
+        const hasSameVersion =
+          hasSameProvider && request.providerConfigVersion === claimed.snapshot.version
+        const hasSameReturnTarget =
+          hasSameVersion && request.returnTargetId === claimed.snapshot.returnTarget.id
+        const isRequestInvalid =
+          !hasRequest ||
+          !isProcessing ||
+          !hasSameProvider ||
+          !hasSameVersion ||
+          !hasSameReturnTarget
+        if (isRequestInvalid) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
 
         const codeDeadline = verified.completedAt.getTime() + LOGIN.codeSeconds * 1000
         const codeExpiresAt = new Date(Math.min(codeDeadline, request.expiresAt.getTime()))
-        if (requestExpired(request, checkedAt) || checkedAt.getTime() >= codeExpiresAt.getTime()) {
+        const isRequestExpired = requestExpired(request, checkedAt)
+        const isCodeExpired = !isRequestExpired && checkedAt.getTime() >= codeExpiresAt.getTime()
+        const isExchangeExpired = isRequestExpired || isCodeExpired
+        if (isExchangeExpired) {
           await markLoginRequestFailed(manager, request.id)
           return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID) }
         }
@@ -259,14 +283,15 @@ async function prepareExchangeCode(
           status: 'completed',
           completion: {
             returnUrl: `${claimed.snapshot.returnTarget.url}?code=${code}`,
-            cookie: browserCookie(request.id, '', 0)
+            cookie: browserCookie({ requestId: request.id, bindingValue: '', maxAgeSeconds: 0 })
           }
         }
       }
     )
 
     // 정리 또는 exchange-ready 저장의 commit·release 뒤에만 HTTP 결과를 전달한다.
-    if (committed.status === 'rejected') {
+    const isRejected = committed.status === 'rejected'
+    if (isRejected) {
       throw committed.error
     }
     return committed.completion

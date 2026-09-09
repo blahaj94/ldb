@@ -20,7 +20,8 @@ let calls = 0
 let failure
 const run = (result) => {
   calls++
-  if (failure) {
+  const hasInjectedFailure = failure != null
+  if (hasInjectedFailure) {
     throw failure
   }
   return result
@@ -91,10 +92,10 @@ for (const route of [
   { name: 'Discord callback', path: '/auth/callback/discord', successStatus: 200 }
 ]) {
   test(`HEAD ${route.name} rejects before the service and preserves the GET route`, async () => {
-    const query =
-      route.name === 'authorize'
-        ? new URLSearchParams({ ticket: opaque() })
-        : new URLSearchParams({ state: opaque(), code: 'fixture-provider-code' })
+    const isAuthorizeRoute = route.name === 'authorize'
+    const query = isAuthorizeRoute
+      ? new URLSearchParams({ ticket: opaque() })
+      : new URLSearchParams({ state: opaque(), code: 'fixture-provider-code' })
     const url = `${base}${route.path}?${query}`
     const headers = { cookie: '__Host-test=fixture-binding' }
     const beforeCalls = calls
@@ -157,7 +158,8 @@ test('actual chunked stream cap and parser error priority run before auth servic
       assert.equal(response.headers['cache-control'], 'no-store')
       assert.deepEqual(Object.keys(JSON.parse(response.body)), ['error'])
       assert.equal(JSON.parse(response.body).error.code, code)
-      if (status === 413) {
+      const isPayloadTooLarge = status === 413
+      if (isPayloadTooLarge) {
         assert.equal(response.headers.connection, 'close')
       }
     }
@@ -256,24 +258,29 @@ function rawHttp(wire) {
   })
 }
 
+function createOverflowRequest() {
+  const wire =
+    'POST /auth/exchange HTTP/1.1\r\nHost: test.invalid\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n' +
+    '2000\r\n' +
+    'x'.repeat(8192) +
+    '\r\n2001\r\n' +
+    'x'.repeat(8193) +
+    '\r\n'
+  return wire
+}
+
 test('stream overflow responds before body end; framing rejection is separate and sanitized', async () => {
   const baseline = calls
   // 종료 chunk를 보내지 않는다. 누적 상한에서 즉시 413과 close가 필요하다.
-  const overflow = await rawHttp(
-    'POST /auth/exchange HTTP/1.1\r\nHost: test.invalid\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n' +
-      '2000\r\n' +
-      'x'.repeat(8192) +
-      '\r\n2001\r\n' +
-      'x'.repeat(8193) +
-      '\r\n'
-  )
+  const overflowRequest = createOverflowRequest()
+  const overflow = await rawHttp(overflowRequest)
   assert.match(overflow, /^HTTP\/1\.1 413/)
   assert.match(overflow, /Cache-Control: no-store/i)
   assert.match(overflow, /Connection: close/i)
   assert.match(overflow, /REQUEST_TOO_LARGE/)
-  const framing = await rawHttp(
+  const framingRequest =
     'POST /auth/exchange HTTP/1.1\r\nHost: test.invalid\r\nContent-Type: application/json\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\ncredential-canary'
-  )
+  const framing = await rawHttp(framingRequest)
   assert.match(framing, /^HTTP\/1\.1 400/)
   assert.doesNotMatch(framing, /credential-canary|Parse Error|stack/)
   assert.equal(calls, baseline)

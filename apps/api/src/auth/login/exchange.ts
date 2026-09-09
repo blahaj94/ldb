@@ -34,12 +34,18 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
         })
         const checkedAt = await freshTime(manager)
 
-        if (!request || request.status === 'consumed' || request.status === 'failed') {
+        const hasRequest = request != null
+        const isRequestTruthy = hasRequest && Boolean(request)
+        const isConsumed = isRequestTruthy && request.status === 'consumed'
+        const isFailed = isRequestTruthy && !isConsumed && request.status === 'failed'
+        const isRequestInvalid = !hasRequest || !isRequestTruthy || isConsumed || isFailed
+        if (isRequestInvalid) {
           throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
         }
 
         // 전체 요청이 만료됐다면 proof 검사 전에 정리를 commit하고 거절한다.
-        if (requestExpired(request, checkedAt)) {
+        const isRequestExpired = requestExpired(request, checkedAt)
+        if (isRequestExpired) {
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
@@ -48,17 +54,25 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
         }
 
         // 2. 교환 자격을 확인한다. 잘못된 proof는 유효한 요청을 변경하지 않는다.
-        if (
-          request.status !== 'exchange_ready' ||
-          request.clientId !== body.clientId ||
-          request.method !== LOGIN.method ||
-          request.codeChallenge !== challenge(body.codeVerifier) ||
-          !equalHash(request.exchangeCodeHash, opaqueHash(body.code))
-        ) {
+        const isExchangeReady = request.status === 'exchange_ready'
+        const hasSameClient = isExchangeReady && request.clientId === body.clientId
+        const hasSameMethod = hasSameClient && request.method === LOGIN.method
+        const hasValidChallenge =
+          hasSameMethod && request.codeChallenge === challenge(body.codeVerifier)
+        const hasValidCode =
+          hasValidChallenge && equalHash(request.exchangeCodeHash, opaqueHash(body.code))
+        const isExchangeInvalid =
+          !isExchangeReady ||
+          !hasSameClient ||
+          !hasSameMethod ||
+          !hasValidChallenge ||
+          !hasValidCode
+        if (isExchangeInvalid) {
           throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
         }
 
-        if (exchangeExpired(request, checkedAt)) {
+        const isExchangeExpiredBeforeSession = exchangeExpired(request, checkedAt)
+        if (isExchangeExpiredBeforeSession) {
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
@@ -86,7 +100,11 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
 
         // 회원의 잠금을 기다리는 동안 만료됐으면 방금 생성한 내용도 rollback한다.
         const checkedAfterSessionCreationAt = await freshTime(manager)
-        if (exchangeExpired(request, checkedAfterSessionCreationAt)) {
+        const isExchangeExpiredAfterSession = exchangeExpired(
+          request,
+          checkedAfterSessionCreationAt
+        )
+        if (isExchangeExpiredAfterSession) {
           needsCleanupAfterRollback = true
           throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
         }
@@ -108,7 +126,8 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
 
         // 5. 서명 중 만료되지 않았는지 확인하고 code 소비와 민감 정보 정리를 저장한다.
         const consumedAt = await freshTime(manager)
-        if (exchangeExpired(request, consumedAt)) {
+        const isExchangeExpiredBeforeConsumption = exchangeExpired(request, consumedAt)
+        if (isExchangeExpiredBeforeConsumption) {
           needsCleanupAfterRollback = true
           throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
         }
@@ -138,7 +157,8 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
     )
 
     // transaction의 commit·release가 확인된 뒤에만 거절 또는 token 응답을 전달한다.
-    if (committed.status === 'rejected') {
+    const isRejected = committed.status === 'rejected'
+    if (isRejected) {
       throw committed.error
     }
     return committed.tokens
@@ -163,7 +183,9 @@ async function clearExpiredExchange(deps: LoginDependencies, id: string): Promis
     const checkedAt = await freshTime(manager)
 
     // rollback 후 다른 요청이 상태를 바꿨을 수 있으므로 현재 상태·만료를 다시 확인한다.
-    if (request?.status === 'exchange_ready' && exchangeExpired(request, checkedAt)) {
+    const isExchangeReady = request?.status === 'exchange_ready'
+    const shouldClearExchange = isExchangeReady && exchangeExpired(request, checkedAt)
+    if (shouldClearExchange) {
       await markLoginRequestFailed(manager, request.id)
     }
   })

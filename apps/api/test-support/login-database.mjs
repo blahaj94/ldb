@@ -9,10 +9,11 @@ export const digest = (value) =>
 export const proof = (value) => createHash('sha256').update(value, 'ascii').digest('base64url')
 
 export async function counts(source) {
-  const rows = await source.query(`SELECT
+  const identityCountsQuery = `SELECT
     (SELECT count(*)::int FROM users) AS users,
     (SELECT count(*)::int FROM auth_sessions) AS sessions,
-    (SELECT count(*)::int FROM auth_refresh_tokens) AS refresh`)
+    (SELECT count(*)::int FROM auth_refresh_tokens) AS refresh`
+  const rows = await source.query(identityCountsQuery)
   return rows[0]
 }
 
@@ -39,7 +40,9 @@ export function assertCleared(request, status) {
   ]) {
     assert.equal(request[field], null, field)
   }
-  assert.equal(request.consumed_at instanceof Date, status === 'consumed')
+  const hasConsumedAtDate = request.consumed_at instanceof Date
+  const isConsumed = status === 'consumed'
+  assert.equal(hasConsumedAtDate, isConsumed)
 }
 
 export async function failure(operation, code) {

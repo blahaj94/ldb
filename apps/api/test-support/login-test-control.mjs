@@ -29,8 +29,9 @@ export function instrument(source, hooks) {
     const runner = create.apply(this, args)
     const query = runner.query.bind(runner)
     const commit = runner.commitTransaction.bind(runner)
-    runner.query = (sql, parameters, ...rest) =>
-      hooks.query
+    runner.query = (sql, parameters, ...rest) => {
+      const shouldUseQueryHook = Boolean(hooks.query)
+      return shouldUseQueryHook
         ? hooks.query({
             runner,
             sql,
@@ -39,7 +40,11 @@ export function instrument(source, hooks) {
             run: () => query(sql, parameters, ...rest)
           })
         : query(sql, parameters, ...rest)
-    runner.commitTransaction = () => (hooks.commit ? hooks.commit(runner, commit) : commit())
+    }
+    runner.commitTransaction = () => {
+      const shouldUseCommitHook = Boolean(hooks.commit)
+      return shouldUseCommitHook ? hooks.commit(runner, commit) : commit()
+    }
     return runner
   }
   return () => {
@@ -49,10 +54,16 @@ export function instrument(source, hooks) {
 
 export async function blockedBy(source, waiter, blocker) {
   const deadline = Date.now() + 5000
-  const expected = Array.isArray(blocker) ? blocker : [blocker]
-  while (Date.now() < deadline) {
+  const isBlockerArray = Array.isArray(blocker)
+  const expected = isBlockerArray ? blocker : [blocker]
+  while (true) {
+    const canObserveBlockers = Date.now() < deadline
+    if (!canObserveBlockers) {
+      break
+    }
     const [state] = await source.query('SELECT pg_blocking_pids($1::int) AS blockers', [waiter])
-    if (expected.some((pid) => state.blockers.includes(pid))) {
+    const hasExpectedBlocker = expected.some((pid) => state.blockers.includes(pid))
+    if (hasExpectedBlocker) {
       return
     }
     await delay(10)
@@ -85,8 +96,13 @@ export async function databaseNow(source) {
 
 export async function waitUntil(source, time) {
   const deadline = Date.now() + 5000
-  while (Date.now() < deadline) {
-    if ((await databaseNow(source)) >= time) {
+  while (true) {
+    const canWaitForDatabaseTime = Date.now() < deadline
+    if (!canWaitForDatabaseTime) {
+      break
+    }
+    const hasReachedDatabaseTime = (await databaseNow(source)) >= time
+    if (hasReachedDatabaseTime) {
       return
     }
     await delay(20)
@@ -99,7 +115,9 @@ export async function atExactTime(source, time, operation) {
   const restore = instrument(source, {
     query: async ({ sql, run }) => {
       const result = await run()
-      if (sql === 'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now') {
+      const isClockQuery =
+        sql === 'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS now'
+      if (isClockQuery) {
         clocks++
         return [{ now: time }]
       }
