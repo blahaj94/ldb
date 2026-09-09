@@ -72,7 +72,8 @@ export async function blockedBy(source, waiter, blocker) {
 }
 
 export async function locked(source, table, id, operation) {
-  assert(['auth_login_requests', 'users'].includes(table))
+  const isSupportedLockTable = ['auth_login_requests', 'users'].includes(table)
+  assert(isSupportedLockTable)
   const runner = source.createQueryRunner()
   try {
     await runner.connect()
@@ -126,7 +127,8 @@ export async function atExactTime(source, time, operation) {
   })
   try {
     await operation()
-    assert(clocks > 0)
+    const hasObservedClockQuery = clocks > 0
+    assert(hasObservedClockQuery)
   } finally {
     restore()
   }

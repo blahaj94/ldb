@@ -16,7 +16,7 @@ function exactUrl(value: string): URL {
   const isUrlInvalid =
     !hasExactHref || hasUsername || hasPassword || hasSearch || hasHash || hasWildcard
   if (isUrlInvalid) {
-    throw new Error()
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
   return url
 }
@@ -27,7 +27,7 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
   const isDiscordProvider = !isGoogleProvider && snapshot.provider === 'discord'
   const isProviderInvalid = !isGoogleProvider && !isDiscordProvider
   if (isProviderInvalid) {
-    throw new Error()
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 
   const requiredValues = [
@@ -42,7 +42,7 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
     return hasNonblankValue
   })
   if (!hasRequiredValues) {
-    throw new Error()
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 
   // 2. Provider endpoint와 이 API의 exact callback에만 연결한다.
@@ -52,18 +52,18 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
     exactUrl(snapshot.callbackUrl).href === `${apiOrigin}/auth/callback/${snapshot.provider}`
   const isProviderEndpointInvalid = !isAuthorizationHttps || !hasExactCallback
   if (isProviderEndpointInvalid) {
-    throw new Error()
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
   const shouldCheckGoogleAudience = snapshot.provider === 'google'
   const isGoogleAudienceInvalid =
     shouldCheckGoogleAudience && snapshot.expectedAudience !== snapshot.providerClientId
   if (isGoogleAudienceInvalid) {
-    throw new Error()
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
   const shouldCheckDiscordAudience = snapshot.provider === 'discord'
   const isDiscordAudienceInvalid = shouldCheckDiscordAudience && snapshot.expectedAudience !== null
   if (isDiscordAudienceInvalid) {
-    throw new Error()
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 
   // 3. 앱 복귀 URL은 host/path가 있는 등록 protocol이어야 한다.
@@ -88,7 +88,7 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
   const isProtocolDisallowed = hasAbsolutePath && disallowedProtocols.includes(target.protocol)
   const isReturnTargetInvalid = !hasHostname || hasPort || !hasAbsolutePath || isProtocolDisallowed
   if (isReturnTargetInvalid) {
-    throw new Error()
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 }
 
@@ -109,7 +109,7 @@ export class LoginRegistry {
       const isOriginInvalid =
         !isOriginHttps || !hasExactOrigin || hasOriginUsername || hasOriginPassword
       if (isOriginInvalid) {
-        throw new Error()
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
       this.apiOrigin = config.apiOrigin
       this.#active = Object.freeze(config.activeVersions)
@@ -120,7 +120,7 @@ export class LoginRegistry {
         const key = this.registrationKey({ provider: snapshot.provider, version: snapshot.version })
         const isDuplicateRegistration = this.#snapshots.has(key)
         if (isDuplicateRegistration) {
-          throw new Error()
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
         }
         Object.freeze(snapshot.returnTarget)
         this.#snapshots.set(key, Object.freeze(snapshot))
@@ -139,7 +139,7 @@ export class LoginRegistry {
         })
       const areActiveVersionsInvalid = hasNoActiveVersions || hasInvalidActiveVersion
       if (areActiveVersionsInvalid) {
-        throw new Error()
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
       Object.freeze(this)
     } catch {

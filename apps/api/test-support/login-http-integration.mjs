@@ -78,7 +78,10 @@ export async function assertLoginHttpIntegration(source, mark) {
       assert.equal(callback.headers.get('referrer-policy'), 'no-referrer')
       const html = await callback.text()
       const code = /ldb-test:\/\/login\/complete\?code=([A-Za-z0-9_-]{43})/.exec(html)?.[1]
-      assert(code)
+      const hasCode = code != null
+      const isCodeEmpty = hasCode && code === ''
+      const hasExchangeCode = hasCode && !isCodeEmpty
+      assert(hasExchangeCode)
       assert.doesNotMatch(
         html,
         /fixture-provider-code|accessToken|refreshToken|providerVerifier|<script/

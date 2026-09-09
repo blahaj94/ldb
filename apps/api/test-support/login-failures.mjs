@@ -127,7 +127,8 @@ async function assertSnapshotsAndKeys(source) {
   )
   assert.equal(f.verifiedCalls.at(-1).snapshot.version, 'test-v1')
   assert.equal(f.verifiedCalls.at(-1).snapshot.providerClientId, 'google-test-client')
-  assert(completion.returnUrl.startsWith('ldb-test://login/complete?code='))
+  const hasOriginalReturnTarget = completion.returnUrl.startsWith('ldb-test://login/complete?code=')
+  assert(hasOriginalReturnTarget)
   await service.exchange({
     requestId: flow.request.requestId,
     clientId: 'desktop',

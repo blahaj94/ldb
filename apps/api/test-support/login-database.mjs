@@ -164,10 +164,12 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   )
   assert.match(browser.cookie, new RegExp(`^__Host-ldb-login-${request.requestId}=`))
   for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/']) {
-    assert(browser.cookie.includes(flag))
+    const hasCookieFlag = browser.cookie.includes(flag)
+    assert(hasCookieFlag)
   }
   assert.doesNotMatch(browser.cookie, /Domain=/i)
-  assert(Number(/Max-Age=(\d+)/.exec(browser.cookie)[1]) <= 600)
+  const isCookieLifetimeBounded = Number(/Max-Age=(\d+)/.exec(browser.cookie)[1]) <= 600
+  assert(isCookieLifetimeBounded)
   await failure(() => f.service.authorize(ticket), 'LOGIN_REQUEST_INVALID')
   assert.deepEqual(await counts(source), baseline)
 
@@ -196,8 +198,10 @@ export async function assertCommonLogin(source, mark = () => undefined) {
   assert.equal(exchangeReady.status, 'exchange_ready')
   assert.deepEqual(exchangeReady.exchange_code_hash, digest(code))
   assert.equal(exchangeReady.verified_subject, f.subject)
-  assert(exchangeReady.code_expires_at <= exchangeReady.expires_at)
-  assert(exchangeReady.code_expires_at - Date.now() <= 60_000)
+  const isCodeWithinRequestLifetime = exchangeReady.code_expires_at <= exchangeReady.expires_at
+  assert(isCodeWithinRequestLifetime)
+  const isCodeLifetimeBounded = exchangeReady.code_expires_at - Date.now() <= 60_000
+  assert(isCodeLifetimeBounded)
   assert.deepEqual(await counts(source), baseline)
   await failure(() => f.service.callback('google', params, cookie), 'LOGIN_REQUEST_INVALID')
 
