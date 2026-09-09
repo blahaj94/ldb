@@ -7,14 +7,23 @@ import { authorizeLogin, createLoginRequest } from './start.js'
 
 /** 실제 adapter·등록·key와 초기화된 DB가 준비된 server composition에서만 연결한다. */
 export function createLoginService(dependencies: LoginDependencies): LoginHttpService {
-  if (
-    !dependencies.dataSource?.isInitialized ||
-    dependencies.dataSource.options.logging !== false ||
-    !dependencies.registry ||
-    !dependencies.pkceKeys ||
-    typeof dependencies.verifyProvider !== 'function' ||
-    typeof dependencies.issueAccessJwt !== 'function'
-  ) {
+  const isDataSourceInitialized = Boolean(dependencies.dataSource?.isInitialized)
+  const isLoggingDisabled =
+    isDataSourceInitialized && dependencies.dataSource.options.logging === false
+  const hasRegistry = isLoggingDisabled && Boolean(dependencies.registry)
+  const hasPkceKeys = hasRegistry && Boolean(dependencies.pkceKeys)
+  const isProviderVerifierFunction =
+    hasPkceKeys && typeof dependencies.verifyProvider === 'function'
+  const isAccessJwtIssuerFunction =
+    isProviderVerifierFunction && typeof dependencies.issueAccessJwt === 'function'
+  const areDependenciesInvalid =
+    !isDataSourceInitialized ||
+    !isLoggingDisabled ||
+    !hasRegistry ||
+    !hasPkceKeys ||
+    !isProviderVerifierFunction ||
+    !isAccessJwtIssuerFunction
+  if (areDependenciesInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 

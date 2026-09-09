@@ -19,15 +19,15 @@ export function loginFailure(
   error: unknown,
   fallback: LoginErrorDefinition = LOGIN_ERRORS.INTERNAL
 ): LoginFailure {
-  if (error instanceof LoginFailure) {
+  const isLoginFailure = error instanceof LoginFailure
+  if (isLoginFailure) {
     return error
   }
 
-  if (error instanceof IdentitySessionFailure) {
-    const definition =
-      error.code === LOGIN_ERRORS.UNAVAILABLE.code
-        ? LOGIN_ERRORS.UNAVAILABLE
-        : LOGIN_ERRORS.INTERNAL
+  const isIdentitySessionFailure = error instanceof IdentitySessionFailure
+  if (isIdentitySessionFailure) {
+    const isUnavailable = error.code === LOGIN_ERRORS.UNAVAILABLE.code
+    const definition = isUnavailable ? LOGIN_ERRORS.UNAVAILABLE : LOGIN_ERRORS.INTERNAL
     return new LoginFailure(definition)
   }
 
