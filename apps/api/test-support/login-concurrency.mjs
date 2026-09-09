@@ -61,7 +61,11 @@ async function assertCallbackClaim(source) {
   }
   const result = await pending
   assert.equal(result.error, undefined)
-  assert(new URL(result.value.returnUrl).searchParams.get('code'))
+  const code = new URL(result.value.returnUrl).searchParams.get('code')
+  const hasCode = code != null
+  const isCodeEmpty = hasCode && code === ''
+  const hasNonEmptyCode = hasCode && !isCodeEmpty
+  assert(hasNonEmptyCode)
   assert.equal((await row(source, flow.request.requestId)).status, 'exchange_ready')
 }
 
@@ -225,8 +229,10 @@ async function assertCallbackDeadline(source) {
   assert.equal(response.error?.code, 'AUTH_PROVIDER_ERROR')
   assert.equal(calls, 1)
   assert.equal(signal.aborted, true)
-  assert(Date.now() - startedAt >= 9900)
-  assert(Date.now() - startedAt < 13_000)
+  const hasReachedProviderDeadline = Date.now() - startedAt >= 9900
+  assert(hasReachedProviderDeadline)
+  const isResponseWithinDeadlineBound = Date.now() - startedAt < 13_000
+  assert(isResponseWithinDeadlineBound)
   assertCleared(await row(source, flow.request.requestId), 'failed')
   release.resolve()
   await delay(0)
@@ -307,8 +313,10 @@ async function assertCompletionLockTime(source) {
       await unlock()
       assert.equal((await pending).error, undefined)
       const expiry = (await row(source, flow.request.requestId)).code_expires_at.getTime()
-      assert(expiry >= earliest + 60_000)
-      assert(expiry <= latest + 60_000)
+      const isExpiryAfterEarliestCompletion = expiry >= earliest + 60_000
+      assert(isExpiryAfterEarliestCompletion)
+      const isExpiryBeforeLatestCompletion = expiry <= latest + 60_000
+      assert(isExpiryBeforeLatestCompletion)
     } finally {
       restore()
     }
@@ -357,7 +365,11 @@ async function assertTwoIdentityExchanges(source) {
     await blockedBy(source, pids[1], pids[0])
     release.resolve()
     const results = await Promise.all([first, second])
-    assert(results.every((result) => result.value))
+    const haveBothExchangesSucceeded = results.every((result) => {
+      const hasSuccessfulResult = Boolean(result.value)
+      return hasSuccessfulResult
+    })
+    assert(haveBothExchangesSucceeded)
     assert.equal(results[0].value.user.id, results[1].value.user.id)
     assert.equal(results.filter((result) => result.value.isNewUser).length, 1)
     assert.notEqual(results[0].value.refreshToken, results[1].value.refreshToken)
