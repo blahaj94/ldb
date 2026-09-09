@@ -28,8 +28,8 @@ const callbackQuery = (flow) =>
   new URLSearchParams({ state: flow.state, code: 'fixture-provider-code' })
 
 async function assertCallbackClaim(source) {
-  const entered = Promise.withResolvers(),
-    release = Promise.withResolvers()
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
   let calls = 0
   const subject = randomUUID()
   const f = await fixture(source, {
@@ -65,10 +65,12 @@ async function assertCallbackClaim(source) {
   assert.equal((await row(source, flow.request.requestId)).status, 'exchange_ready')
 }
 
-async function assertSingleConsumer(source, kind) {
+async function assertSingleConsumer({ source, kind }) {
   const f = await fixture(source)
-  let operation, id
-  if (kind === 'exchange') {
+  let operation
+  let id
+  const isExchange = kind === 'exchange'
+  if (isExchange) {
     const flow = await ready(f.service)
     id = flow.request.requestId
     operation = () => f.service.exchange(flow.exchange)
@@ -79,13 +81,17 @@ async function assertSingleConsumer(source, kind) {
   }
   const before = await counts(source)
   await locked(source, 'auth_login_requests', id, async ({ pid, unlock }) => {
-    const pids = [],
-      observed = Promise.withResolvers()
+    const pids = []
+    const observed = Promise.withResolvers()
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
-        if (/auth_login_requests/.test(sql) && /FOR UPDATE/.test(sql)) {
+        const isLoginRequestQuery = /auth_login_requests/.test(sql)
+        const hasUpdateLock = isLoginRequestQuery && /FOR UPDATE/.test(sql)
+        const isLoginRequestLock = isLoginRequestQuery && hasUpdateLock
+        if (isLoginRequestLock) {
           pids.push((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
-          if (pids.length === 2) {
+          const haveBothConsumersEntered = pids.length === 2
+          if (haveBothConsumersEntered) {
             observed.resolve()
           }
         }
@@ -101,13 +107,19 @@ async function assertSingleConsumer(source, kind) {
       }
       await unlock()
       const results = await Promise.all(attempts)
-      assert.equal(results.filter((result) => result.value).length, 1)
       assert.equal(
-        results.filter(
-          (result) =>
-            result.error?.code ===
-            (kind === 'exchange' ? 'LOGIN_EXCHANGE_INVALID' : 'LOGIN_REQUEST_INVALID')
-        ).length,
+        results.filter((result) => {
+          const hasSuccessfulResult = Boolean(result.value)
+          return hasSuccessfulResult
+        }).length,
+        1
+      )
+      assert.equal(
+        results.filter((result) => {
+          const isExpectedFailure =
+            result.error?.code === (isExchange ? 'LOGIN_EXCHANGE_INVALID' : 'LOGIN_REQUEST_INVALID')
+          return isExpectedFailure
+        }).length,
         1
       )
     } finally {
@@ -115,14 +127,15 @@ async function assertSingleConsumer(source, kind) {
     }
   })
   const after = await counts(source)
-  assert.equal(after.sessions - before.sessions, kind === 'exchange' ? 1 : 0)
-  assert.equal(after.refresh - before.refresh, kind === 'exchange' ? 1 : 0)
+  assert.equal(after.sessions - before.sessions, isExchange ? 1 : 0)
+  assert.equal(after.refresh - before.refresh, isExchange ? 1 : 0)
 }
 
-async function assertFreshAfterWait(source, table) {
+async function assertFreshAfterWait({ source, table }) {
   const f = await fixture(source)
   let userId
-  if (table === 'users') {
+  const isUserTable = table === 'users'
+  if (isUserTable) {
     const first = await ready(f.service)
     userId = (await f.service.exchange(first.exchange)).user.id
   }
@@ -137,7 +150,10 @@ async function assertFreshAfterWait(source, table) {
     const observed = Promise.withResolvers()
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
-        if (sql.includes(`"${table}"`) && sql.includes('FOR UPDATE')) {
+        const isTargetTableQuery = sql.includes(`"${table}"`)
+        const hasUpdateLock = isTargetTableQuery && sql.includes('FOR UPDATE')
+        const isTargetTableLock = isTargetTableQuery && hasUpdateLock
+        if (isTargetTableLock) {
           observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
         }
         return run()
@@ -188,11 +204,11 @@ async function assertExactExpiration(source) {
 }
 
 async function assertCallbackDeadline(source) {
-  const startedAt = Date.now(),
-    entered = Promise.withResolvers(),
-    release = Promise.withResolvers()
-  let signal,
-    calls = 0
+  const startedAt = Date.now()
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
+  let signal
+  let calls = 0
   const f = await fixture(source, {
     verifyProvider: async (input) => {
       calls++
@@ -218,8 +234,8 @@ async function assertCallbackDeadline(source) {
 }
 
 async function assertCallbackExpiryAndCompletionTime(source) {
-  const entered = Promise.withResolvers(),
-    release = Promise.withResolvers()
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
   const f = await fixture(source, {
     verifyProvider: async () => {
       entered.resolve()
@@ -257,8 +273,8 @@ async function assertCallbackExpiryAndCompletionTime(source) {
 }
 
 async function assertCompletionLockTime(source) {
-  const entered = Promise.withResolvers(),
-    release = Promise.withResolvers()
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
   const f = await fixture(source, {
     verifyProvider: async () => {
       entered.resolve()
@@ -273,7 +289,10 @@ async function assertCompletionLockTime(source) {
     const observed = Promise.withResolvers()
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
-        if (sql.includes('"auth_login_requests"') && sql.includes('FOR UPDATE')) {
+        const isLoginRequestQuery = sql.includes('"auth_login_requests"')
+        const hasUpdateLock = isLoginRequestQuery && sql.includes('FOR UPDATE')
+        const isLoginRequestLock = isLoginRequestQuery && hasUpdateLock
+        if (isLoginRequestLock) {
           observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
         }
         return run()
@@ -297,14 +316,15 @@ async function assertCompletionLockTime(source) {
 }
 
 async function assertTwoIdentityExchanges(source) {
-  const entered = Promise.withResolvers(),
-    release = Promise.withResolvers(),
-    secondInsert = Promise.withResolvers()
-  let signer,
-    signCalls = 0
+  const entered = Promise.withResolvers()
+  const release = Promise.withResolvers()
+  const secondInsert = Promise.withResolvers()
+  let signer
+  let signCalls = 0
   const f = await fixture(source, {
     issueAccessJwt: async (input) => {
-      if (++signCalls === 1) {
+      const isFirstSigningCall = ++signCalls === 1
+      if (isFirstSigningCall) {
         entered.resolve()
         await release.promise
       }
@@ -317,9 +337,11 @@ async function assertTwoIdentityExchanges(source) {
   const pids = []
   const restore = instrument(source, {
     query: async ({ sql, query, run }) => {
-      if (sql.startsWith('INSERT INTO "users"')) {
+      const isUserInsert = sql.startsWith('INSERT INTO "users"')
+      if (isUserInsert) {
         pids.push((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
-        if (pids.length === 2) {
+        const haveBothInsertsEntered = pids.length === 2
+        if (haveBothInsertsEntered) {
           secondInsert.resolve()
         }
       }
@@ -354,13 +376,13 @@ async function assertTwoIdentityExchanges(source) {
 export async function assertLoginConcurrency(source, mark) {
   const cases = [
     ['callback single claim and no provider-time lock', () => assertCallbackClaim(source)],
-    ['concurrent ticket consumers', () => assertSingleConsumer(source, 'ticket')],
-    ['concurrent exchange consumers', () => assertSingleConsumer(source, 'exchange')],
+    ['concurrent ticket consumers', () => assertSingleConsumer({ source, kind: 'ticket' })],
+    ['concurrent exchange consumers', () => assertSingleConsumer({ source, kind: 'exchange' })],
     [
       'OAuth row wait crosses code deadline',
-      () => assertFreshAfterWait(source, 'auth_login_requests')
+      () => assertFreshAfterWait({ source, table: 'auth_login_requests' })
     ],
-    ['user row wait crosses code deadline', () => assertFreshAfterWait(source, 'users')],
+    ['user row wait crosses code deadline', () => assertFreshAfterWait({ source, table: 'users' })],
     ['exact request and code expiration', () => assertExactExpiration(source)],
     [
       'callback request expiry and capped code TTL',
