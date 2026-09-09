@@ -114,7 +114,7 @@ review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담�
 
 ## 누적 조건 변수의 재점검 제안
 
-이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이며, 적용되는 표현 기준은 [`convention.md`의 개별 검사와 누적 판단의 구분 제안](../../convention.md#개별-검사와-누적-판단의-구분-제안) 한 곳에서 관리한다. 코드 교정은 Issue #248의 실행 계약에 따라 진행하며 기존 Rule과 이행의 소유권·검증·사용자 merge 조건은 유지한다.
+이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이며, 적용되는 표현 기준은 [`convention.md`의 개별 검사와 누적 판단의 구분 제안](../../convention.md#개별-검사와-누적-판단의-구분-제안) 한 곳에서 관리한다. 적용과 이 기준을 전제로 한 코드 교정은 Rule 변경 PR의 사용자 명시적 `승인` 댓글과 사용자 merge를 모두 확인한 뒤 시작한다. 둘 중 하나만 확인된 동안에는 기존 기준을 유지한다. 코드 교정은 Issue #248의 실행 계약에 따라 진행하며 기존 Rule과 이행의 소유권·검증·사용자 merge 조건은 유지한다.
 
 ```yaml
 status: active

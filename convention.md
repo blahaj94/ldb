@@ -90,7 +90,7 @@ function sameSnapshot(expected: Snapshot, actual: Snapshot): boolean {
 
 ### 개별 검사와 누적 판단의 구분 제안
 
-이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이다. §2의 개별 명명과 §3의 평가 보호 방식을 구체화하며, 아래 기존 nullish·응답 검증 예시보다 이 절의 guard 방식이 우선한다.
+이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이다. 적용과 이 기준을 전제로 한 코드 교정은 Rule 변경 PR의 사용자 명시적 `승인` 댓글과 사용자 merge를 모두 확인한 뒤 시작한다. 둘 중 하나만 확인된 동안에는 기존 기준을 유지한다. §2의 개별 명명과 §3의 평가 보호 방식을 구체화하며, 아래 기존 nullish·응답 검증 예시보다 이 절의 guard 방식이 우선한다.
 
 ```yaml
 status: active
