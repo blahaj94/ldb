@@ -14,7 +14,8 @@ const { values } = parseArgs({
 const packageNamePattern = /^@ldb\/([a-z0-9]+(?:-[a-z0-9]+)*)$/
 const packageNameMatch = packageNamePattern.exec(values.name ?? '')
 
-if (!packageNameMatch) {
+const hasPackageNameMatch = packageNameMatch != null
+if (!hasPackageNameMatch) {
   console.error('사용법: pnpm create-app --name @ldb/api')
   process.exit(1)
 }
@@ -29,7 +30,8 @@ await mkdir(appsDirectory, { recursive: true })
 try {
   await mkdir(appDirectory)
 } catch (error) {
-  if (error.code === 'EEXIST') {
+  const isExistingApp = error.code === 'EEXIST'
+  if (isExistingApp) {
     console.error(`이미 존재하는 앱입니다: apps/${directoryName}`)
     process.exit(1)
   }
@@ -53,6 +55,8 @@ const packageJson = {
   }
 }
 
-await writeFile(join(appDirectory, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`)
+const packageJsonPath = join(appDirectory, 'package.json')
+const packageJsonContent = `${JSON.stringify(packageJson, null, 2)}\n`
+await writeFile(packageJsonPath, packageJsonContent)
 
 console.log(`생성 완료: apps/${directoryName}`)

@@ -20,12 +20,13 @@ export function buildProviderTriggerComment({ provider, headSha }) {
     throw new Error(`Unsupported review provider: ${provider}`)
   }
 
-  return [
+  const triggerCommentBody = [
     providerMarker(provider, headSha),
     '@codex review',
     '',
     `_Automated advisory review request for \`${headSha}\`._`
   ].join('\n')
+  return triggerCommentBody
 }
 
 export function findCommentByMarker(comments, marker) {
@@ -42,7 +43,7 @@ export function buildPolicySummary({ headSha, checks }) {
       `| ${cell(name)} | ${STATUS_ICON[status] ?? '❔'} ${cell(status)} | ${cell(detail)} |`
   )
 
-  return [
+  const policySummaryBody = [
     POLICY_MARKER,
     '## AI review policy check — Advisory',
     '',
@@ -54,4 +55,5 @@ export function buildPolicySummary({ headSha, checks }) {
     '',
     'Warnings do not block merge. The repository owner makes the final decision.'
   ].join('\n')
+  return policySummaryBody
 }
