@@ -20,8 +20,10 @@ async function startLoopback(
     server.listen(0, '127.0.0.1', resolve)
   })
   const address = server.address()
-  assert(address && typeof address !== 'string')
-  return { origin: `http://127.0.0.1:${address.port}`, server }
+  const hasAddress = Boolean(address)
+  const isAddressObject = hasAddress && typeof address !== 'string'
+  assert(isAddressObject)
+  return { origin: `http://127.0.0.1:${(address as { port: number }).port}`, server }
 }
 
 async function closeLoopback(server: Server): Promise<void> {
@@ -75,16 +77,18 @@ test('native fetch safely encodes the fixed endpoint and sends one header-authen
     assert.equal(result.rows[0]?.characterName, '가 나+&/?')
     assert.equal(requests.length, 1)
     const request = requests[0]
-    assert(request?.url)
-    const url = new URL(request.url, loopback.origin)
+    const hasRequestUrl = Boolean(request?.url)
+    assert(hasRequestUrl)
+    const validatedRequest = request as IncomingMessage
+    const url = new URL(validatedRequest.url as string, loopback.origin)
     assert.equal(url.pathname, '/df/servers/cain/characters')
     assert.equal(url.searchParams.get('characterName'), '가 나+&/?')
     assert.equal(url.searchParams.get('limit'), '200')
     assert.equal(url.searchParams.get('wordType'), 'full')
     assert.equal(url.searchParams.size, 3)
-    assert.equal(request.method, 'GET')
-    assert.equal(request.headers.apikey, 'obvious-placeholder-key')
-    assert.equal(request.url.includes('obvious-placeholder-key'), false)
+    assert.equal(validatedRequest.method, 'GET')
+    assert.equal(validatedRequest.headers.apikey, 'obvious-placeholder-key')
+    assert.equal((validatedRequest.url as string).includes('obvious-placeholder-key'), false)
   } finally {
     await closeLoopback(loopback.server)
   }
@@ -211,8 +215,9 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
           text: async () => {
             const body = response.text()
             now = 5_000
-            assert(deadlineCallback)
-            deadlineCallback()
+            const hasDeadlineCallback = Boolean(deadlineCallback)
+            assert(hasDeadlineCallback)
+            deadlineCallback!()
             return body
           }
         } as Response
