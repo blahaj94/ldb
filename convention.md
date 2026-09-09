@@ -88,6 +88,58 @@ function sameSnapshot(expected: Snapshot, actual: Snapshot): boolean {
 }
 ```
 
+### 개별 검사와 누적 판단의 구분 제안
+
+다음은 Issue #248의 변경안이다. Draft PR의 사용자 `승인` 전에는 기존 active 기준을 유지하고 새 기준을 전제로 코드를 수정하지 않는다. 승인 후 이 절은 §2의 개별 명명과 §3의 평가 보호 방식을 구체화하며, 아래 기존 nullish·응답 검증 예시보다 이 절의 guard 방식이 우선한다.
+
+```yaml
+status: proposed
+enforcement: warning
+rationale: 개별 조건의 이름에 앞선 조건의 실패를 누적해 debugger와 코드 독해에서 검사 결과를 오해하지 않도록 한다.
+evidence: "Issue #248 사용자 요청; apps/api/src/auth/google/index.ts의 sameSnapshot"
+exceptions: 독립 순수 검사 이외에는 단락 평가를 유지하며 실제 업무 의미를 가진 중간 합성과 하나의 의미를 이루는 원시 조건은 허용한다.
+review-after: 교정 PR 3개를 사용자 merge한 뒤 독립 검사 관찰성, guard 과잉과 동작 보존 근거를 확인한다.
+```
+
+- 개별 검사 변수는 그 이름이 설명하는 조건 자체의 결과를 담는다. `A && B && C`를 명명할 때 `a = A`, `b = B`, `c = C`와 최종 합성을 기본형으로 한다. `b = a && B`, `c = b && C`처럼 단지 이전 평가 결과를 전달하는 누적 변수를 만들지 않는다. `||`를 분해할 때도 같다.
+- 독립 변수의 선행 계산은 [독립 순수 검사 예외 B](docs/rules/convention-exceptions-proposal.md#예외-b-독립-순수-검사의-평가-분리)의 근거가 있는 경우에만 적용한다. `readonly`나 비교식이라는 이유만으로 property 접근의 순수성을 추정하지 않는다.
+- 선행 존재·type 검사나 부수 효과 때문에 뒤 평가를 건너뛰어야 하면 원래 분기 결과의 guard clause 또는 필요한 분기 안에서 뒤 검사를 계산한다. 검사가 실행되지 않은 경로를 해당 검사의 `false` 결과인 것처럼 변수에 저장하지 않는다. 이 경우 모든 결과를 한 scope에서 관찰하거나 최종 합성 하나에 모으는 형식을 강제하지 않는다.
+- Guard로 현재 함수의 나머지 처리를 건너뛰면 안 되는 경우에는 필요한 분기 범위를 유지한다. 지연 평가 helper는 실제 검증 책임과 평가 위치를 드러낼 때만 사용하며, 조건마다 기계적인 함수 wrapper를 만들지 않는다. 호출 순서, 오류 우선순위, getter·Proxy, 비용 제한, 상태와 async 순서는 §3·§6을 따른다.
+- `canEdit = isOwner || isAdministrator`처럼 실제 업무 의미를 가진 중간 합성은 허용한다. 해당 이름의 의미와 실제 재사용 또는 분기 책임을 확인하고, 누적 단계의 이름만 바꿔 준수로 분류하지 않는다. Null 여부와 object type처럼 원래 하나의 의미를 구성하는 원시 조건도 그대로 묶을 수 있다.
+
+다음은 이미 확보한 primitive 입력 `status`, `role`, `count`, `limit`에 대한 독립 순수 검사다. 피해야 할 표현은 다음과 같다.
+
+```ts
+const isActive = status === 'active'
+const hasPermission = isActive && role === 'editor'
+const isWithinLimit = hasPermission && count < limit
+```
+
+개별 검사와 최종 판단을 다음처럼 구분한다.
+
+```ts
+const isActive = status === 'active'
+const hasPermission = role === 'editor'
+const isWithinLimit = count < limit
+const canProceed = isActive && hasPermission && isWithinLimit
+```
+
+존재 확인이 필요한 nullable string은 먼저 guard하고 길이 검사를 수행한다. §2의 기존 `hasNonEmptyText` 예시는 승인 후 다음 형태를 따른다.
+
+```ts
+function hasNonEmptyText(value: string | null | undefined): boolean {
+  const hasText = value != null
+  if (!hasText) {
+    return false
+  }
+
+  const isTextNonEmpty = value.length > 0
+  return isTextNonEmpty
+}
+```
+
+Review에서는 개별 검사 이름이 앞선 조건의 누적 성공을 숨기는지, 선행 평가를 분리할 근거가 있는지, 필요한 guard와 업무 합성을 구분했는지 확인한다. 기존 코드의 조사·교정은 [이행 기준](docs/rules/convention-migration.md#누적-조건-변수의-재점검-제안)을 따른다.
+
 ### Nullish와 boolean 조건의 구분
 
 - JavaScript/TypeScript에서 결측은 `value == null`, 존재는 `value != null`로 확인한다. 이 비교는 `null`과 `undefined`를 함께 다루려는 의도를 명시한다.
