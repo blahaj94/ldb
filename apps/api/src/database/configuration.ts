@@ -9,7 +9,10 @@ export interface DatabaseConfiguration {
 const configurationError = 'Invalid database configuration'
 
 function required(value: string | undefined): string {
-  if (value === undefined || value.length === 0) {
+  const isValueMissing = value === undefined
+  const isValueEmpty = !isValueMissing && value.length === 0
+  const isValueInvalid = isValueMissing || isValueEmpty
+  if (isValueInvalid) {
     throw new Error(configurationError)
   }
   return value
@@ -17,11 +20,16 @@ function required(value: string | undefined): string {
 
 export function readDatabaseConfiguration(env: NodeJS.ProcessEnv): DatabaseConfiguration {
   const portText = required(env.DB_PORT)
-  if (!/^[0-9]+$/.test(portText)) {
+  const isPortDecimal = /^[0-9]+$/.test(portText)
+  if (!isPortDecimal) {
     throw new Error(configurationError)
   }
   const port = Number(portText)
-  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+  const isPortSafeInteger = Number.isSafeInteger(port)
+  const isPortBelowMinimum = port < 1
+  const isPortAboveMaximum = port > 65_535
+  const isPortInvalid = !isPortSafeInteger || isPortBelowMinimum || isPortAboveMaximum
+  if (isPortInvalid) {
     throw new Error(configurationError)
   }
 

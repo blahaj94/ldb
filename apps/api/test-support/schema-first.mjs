@@ -35,13 +35,14 @@ async function compileGenerated(directory) {
 }
 
 async function constraintDefinitions(dataSource) {
-  return await dataSource.query(`
+  const constraintDefinitionsSql = `
     SELECT t.relname, c.conname, pg_get_constraintdef(c.oid) AS definition
     FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
     JOIN pg_namespace n ON n.oid = t.relnamespace
     WHERE n.nspname = 'public' AND t.relname <> 'typeorm_migrations' AND c.contype IN ('p','u','f','c')
     ORDER BY t.relname, c.conname
-  `)
+  `
+  return await dataSource.query(constraintDefinitionsSql)
 }
 
 async function assertOrmRoundTrip(dataSource) {
@@ -183,7 +184,9 @@ export async function assertSchemaFirst(configuration, mark) {
       assert.deepEqual((await source.driver.createSchemaBuilder().log()).upQueries, [])
       await source.query('SELECT migration_probe FROM users')
       await source.undoLastMigration()
-      assert((await source.driver.createSchemaBuilder().log()).upQueries.length > 0)
+      const hasPendingSchemaChanges =
+        (await source.driver.createSchemaBuilder().log()).upQueries.length > 0
+      assert(hasPendingSchemaChanges)
       await assertSchema(source, mark, [new Initial().name])
       await source.undoLastMigration()
       assert.deepEqual(

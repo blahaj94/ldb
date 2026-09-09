@@ -8,11 +8,16 @@ import {
 const command = process.argv[2]
 
 function isMigrationCommand(value: string | undefined): value is 'up' | 'down' | 'show' {
-  return value === 'up' || value === 'down' || value === 'show'
+  const isUpCommand = value === 'up'
+  const isDownCommand = value === 'down'
+  const isShowCommand = value === 'show'
+  const isSupportedCommand = isUpCommand || isDownCommand || isShowCommand
+  return isSupportedCommand
 }
 
 try {
-  if (!isMigrationCommand(command)) {
+  const isCommandSupported = isMigrationCommand(command)
+  if (!isCommandSupported) {
     throw new Error('Database migration failed')
   }
   const result = await runMigrationCommand(command, (): DataSource => {

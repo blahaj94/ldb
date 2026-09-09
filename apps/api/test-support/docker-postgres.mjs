@@ -34,7 +34,10 @@ function safeDockerEnvironment() {
     'DOCKER_CERT_PATH'
   ]
   return Object.fromEntries(
-    names.flatMap((name) => (process.env[name] === undefined ? [] : [[name, process.env[name]]]))
+    names.flatMap((name) => {
+      const isVariableMissing = process.env[name] === undefined
+      return isVariableMissing ? [] : [[name, process.env[name]]]
+    })
   )
 }
 
@@ -54,16 +57,21 @@ export function command(program, args, options = {}) {
       timedOut = true
       child.kill('SIGKILL')
     }, options.timeoutMs ?? 30_000)
-    const collect = (target, chunk) => {
-      const next = target + chunk
-      if (Buffer.byteLength(next) > maxOutputBytes) {
+    const collect = ({ output, chunk }) => {
+      const next = output + chunk
+      const exceedsOutputLimit = Buffer.byteLength(next) > maxOutputBytes
+      if (exceedsOutputLimit) {
         outputExceeded = true
         child.kill('SIGKILL')
       }
       return next
     }
-    child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout = collect(stdout, chunk)))
-    child.stderr.setEncoding('utf8').on('data', (chunk) => (stderr = collect(stderr, chunk)))
+    child.stdout
+      .setEncoding('utf8')
+      .on('data', (chunk) => (stdout = collect({ output: stdout, chunk })))
+    child.stderr
+      .setEncoding('utf8')
+      .on('data', (chunk) => (stderr = collect({ output: stderr, chunk })))
     child.once('error', () => {
       startFailed = true
     })
@@ -88,20 +96,27 @@ export function command(program, args, options = {}) {
 
 export async function docker(args, options = {}) {
   const result = await command('docker', args, { timeoutMs: options.timeoutMs })
-  if (!options.allowFailure && (result.code !== 0 || result.signal !== null)) {
+  const shouldRejectFailure = !options.allowFailure
+  const hasFailedExit = shouldRejectFailure && result.code !== 0
+  const hasExitSignal = shouldRejectFailure && !hasFailedExit && result.signal !== null
+  const shouldThrow = shouldRejectFailure && (hasFailedExit || hasExitSignal)
+  if (shouldThrow) {
     throw new Error(`Docker command failed: ${args[0] ?? 'unknown'}`)
   }
   return result
 }
 
-function normalizeNativePlatform(os, architecture) {
-  if (os !== 'linux') {
+function normalizeNativePlatform({ os, architecture }) {
+  const isLinux = os === 'linux'
+  if (!isLinux) {
     throw new Error('Unsupported Docker operating system')
   }
-  if (architecture === 'aarch64' || architecture === 'arm64') {
+  const isArm64Architecture = architecture === 'aarch64' || architecture === 'arm64'
+  if (isArm64Architecture) {
     return 'linux/arm64/v8'
   }
-  if (architecture === 'x86_64' || architecture === 'amd64') {
+  const isAmd64Architecture = architecture === 'x86_64' || architecture === 'amd64'
+  if (isAmd64Architecture) {
     return 'linux/amd64'
   }
   throw new Error('Unsupported Docker architecture')
@@ -114,12 +129,14 @@ export async function verifyApprovedImage() {
     '{{json .OSType}} {{json .Architecture}} {{json .ServerVersion}}'
   ])
   const match = info.stdout.trim().match(/^"([^"]+)" "([^"]+)" "([^"]+)"$/)
-  if (!match) {
+  const hasPlatformMetadata = match != null
+  if (!hasPlatformMetadata) {
     throw new Error('Docker platform could not be determined')
   }
-  const platform = normalizeNativePlatform(match[1], match[2])
+  const platform = normalizeNativePlatform({ os: match[1], architecture: match[2] })
   const expectedChildDigest = POSTGRES_CHILD_DIGESTS[platform]
-  assert(expectedChildDigest, 'native platform is not approved')
+  const hasApprovedChildDigest = expectedChildDigest != null && expectedChildDigest !== ''
+  assert(hasApprovedChildDigest, 'native platform is not approved')
 
   const manifestResult = await docker(
     ['buildx', 'imagetools', 'inspect', POSTGRES_IMAGE, '--format', '{{json .Manifest}}'],
@@ -128,12 +145,16 @@ export async function verifyApprovedImage() {
   const manifest = JSON.parse(manifestResult.stdout)
   assert.equal(manifest.mediaType, 'application/vnd.oci.image.index.v1+json')
   assert.equal(manifest.digest, POSTGRES_INDEX_DIGEST)
-  const child = manifest.manifests.find(
-    (entry) =>
-      entry.platform?.os === platform.split('/')[0] &&
-      entry.platform?.architecture === platform.split('/')[1] &&
-      (platform !== 'linux/arm64/v8' || entry.platform?.variant === 'v8')
-  )
+  const child = manifest.manifests.find((entry) => {
+    const hasMatchingOs = entry.platform?.os === platform.split('/')[0]
+    const hasMatchingArchitecture =
+      hasMatchingOs && entry.platform?.architecture === platform.split('/')[1]
+    const requiresArm64Variant = hasMatchingArchitecture && platform === 'linux/arm64/v8'
+    const hasArm64Variant = requiresArm64Variant && entry.platform?.variant === 'v8'
+    const hasMatchingVariant = !requiresArm64Variant || hasArm64Variant
+    const isMatchingPlatform = hasMatchingOs && hasMatchingArchitecture && hasMatchingVariant
+    return isMatchingPlatform
+  })
   assert.equal(child?.digest, expectedChildDigest)
 
   const childManifestResult = await docker(
@@ -162,14 +183,20 @@ export async function verifyApprovedImage() {
   const imageMatch = imageResult.stdout
     .trim()
     .match(/^(\[[^\n]+\]) "([^"]+)" "([^"]+)" (\{[^\n]+\}) "([^"]+)"$/)
-  if (!imageMatch) {
+  const hasImageMetadata = imageMatch != null
+  if (!hasImageMetadata) {
     throw new Error('Docker image metadata could not be determined')
   }
   const repoDigests = JSON.parse(imageMatch[1])
   const volumes = JSON.parse(imageMatch[4])
-  assert(repoDigests.some((digest) => digest.endsWith(`@${POSTGRES_INDEX_DIGEST}`)))
+  const hasApprovedIndexDigest = repoDigests.some((digest) =>
+    digest.endsWith(`@${POSTGRES_INDEX_DIGEST}`)
+  )
+  assert(hasApprovedIndexDigest)
   assert.equal(imageMatch[2], 'linux')
-  assert.equal(imageMatch[3], platform.includes('arm64') ? 'arm64' : 'amd64')
+  const imageArchitecture = imageMatch[3]
+  const isArm64Platform = platform.includes('arm64')
+  assert.equal(imageArchitecture, isArm64Platform ? 'arm64' : 'amd64')
   assert.deepEqual(Object.keys(volumes), [POSTGRES_DATA.volumeTarget])
 
   const savedConfigDigest = await savedImageConfigDigest()
@@ -195,24 +222,33 @@ async function savedImageConfigDigest() {
       const header = Buffer.alloc(512)
       while (true) {
         const { bytesRead } = await archive.read(header, 0, header.length, offset)
-        if (bytesRead !== header.length || header.every((byte) => byte === 0)) {
+        const isHeaderIncomplete = bytesRead !== header.length
+        const isEndOfArchive = !isHeaderIncomplete && header.every((byte) => byte === 0)
+        const shouldStopReading = isHeaderIncomplete || isEndOfArchive
+        if (shouldStopReading) {
           break
         }
         const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '')
         const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim()
         const size = Number.parseInt(sizeText, 8)
-        if (!Number.isSafeInteger(size) || size < 0) {
+        const isSizeSafeInteger = Number.isSafeInteger(size)
+        const isSizeNegative = isSizeSafeInteger && size < 0
+        const isSizeInvalid = !isSizeSafeInteger || isSizeNegative
+        if (isSizeInvalid) {
           throw new Error('Saved image archive is invalid')
         }
-        if (name === 'manifest.json') {
+        const isManifestEntry = name === 'manifest.json'
+        if (isManifestEntry) {
           const content = Buffer.alloc(size)
           const result = await archive.read(content, 0, size, offset + 512)
-          if (result.bytesRead !== size) {
+          const isManifestIncomplete = result.bytesRead !== size
+          if (isManifestIncomplete) {
             throw new Error('Saved image manifest is incomplete')
           }
           const manifest = JSON.parse(content.toString('utf8'))
           const configPath = manifest[0]?.Config
-          if (typeof configPath !== 'string') {
+          const isConfigPathString = typeof configPath === 'string'
+          if (!isConfigPathString) {
             throw new Error('Saved image config is missing')
           }
           return archiveConfigDigest(configPath)
@@ -229,7 +265,8 @@ async function savedImageConfigDigest() {
 }
 
 function validateRunId(runId) {
-  if (!/^[a-z0-9]{8,80}$/.test(runId)) {
+  const isRunIdValid = /^[a-z0-9]{8,80}$/.test(runId)
+  if (!isRunIdValid) {
     throw new Error('Invalid database test run ID')
   }
 }
@@ -261,15 +298,19 @@ export async function createPostgres(runId, verifiedImage, hooks = {}) {
   const database = 'ldb_auth_test'
   const label = `${ownershipLabel}=${runId}`
 
-  if ((await inspectOwnership('container', containerName)) !== undefined) {
+  const hasExistingContainer =
+    (await inspectOwnership({ kind: 'container', name: containerName })) !== undefined
+  if (hasExistingContainer) {
     throw new Error('Database test container already exists')
   }
-  if ((await inspectOwnership('volume', volumeName)) !== undefined) {
+  const hasExistingVolume =
+    (await inspectOwnership({ kind: 'volume', name: volumeName })) !== undefined
+  if (hasExistingVolume) {
     throw new Error('Database test volume already exists')
   }
   try {
     await docker(['volume', 'create', '--label', label, volumeName])
-    assert.equal(await inspectOwnership('volume', volumeName), runId)
+    assert.equal(await inspectOwnership({ kind: 'volume', name: volumeName }), runId)
     await hooks.afterVolumeCreated?.()
     await docker([
       'run',
@@ -294,7 +335,7 @@ export async function createPostgres(runId, verifiedImage, hooks = {}) {
       `type=volume,source=${volumeName},target=${POSTGRES_DATA.volumeTarget}`,
       POSTGRES_IMAGE
     ])
-    assert.equal(await inspectOwnership('container', containerName), runId)
+    assert.equal(await inspectOwnership({ kind: 'container', name: containerName }), runId)
     await hooks.afterContainerCreated?.()
     const containerMetadata = await docker([
       'container',
@@ -306,26 +347,30 @@ export async function createPostgres(runId, verifiedImage, hooks = {}) {
     const metadataMatch = containerMetadata.stdout
       .trim()
       .match(/^("[^"]+") ("[^"]+") (\[[^\n]+\])$/)
-    if (!metadataMatch) {
+    const hasContainerMetadata = metadataMatch != null
+    if (!hasContainerMetadata) {
       throw new Error('Database container metadata could not be determined')
     }
     assertContainerImageId(JSON.parse(metadataMatch[1]), verifiedImage)
     assert.equal(JSON.parse(metadataMatch[2]), 'linux')
     const mounts = JSON.parse(metadataMatch[3])
-    assert.equal(
-      mounts.some(
-        (mount) =>
-          mount.Type === 'volume' &&
-          mount.Name === volumeName &&
-          mount.Destination === POSTGRES_DATA.volumeTarget
-      ),
-      true
-    )
+    const hasOwnedDataVolume = mounts.some((mount) => {
+      const isVolumeMount = mount.Type === 'volume'
+      const hasMatchingName = isVolumeMount && mount.Name === volumeName
+      const hasMatchingDestination =
+        hasMatchingName && mount.Destination === POSTGRES_DATA.volumeTarget
+      const isOwnedDataVolume = isVolumeMount && hasMatchingName && hasMatchingDestination
+      return isOwnedDataVolume
+    })
+    assert.equal(hasOwnedDataVolume, true)
     const architecture = await docker(['exec', containerName, 'uname', '-m'])
-    assert.equal(architecture.stdout.trim(), platform.includes('arm64') ? 'aarch64' : 'x86_64')
+    const containerArchitecture = architecture.stdout.trim()
+    const isArm64Platform = platform.includes('arm64')
+    assert.equal(containerArchitecture, isArm64Platform ? 'aarch64' : 'x86_64')
     const portResult = await docker(['port', containerName, '5432/tcp'])
     const portMatch = portResult.stdout.trim().match(/^127\.0\.0\.1:(\d+)$/)
-    if (!portMatch) {
+    const hasLoopbackPort = portMatch != null
+    if (!hasLoopbackPort) {
       throw new Error('PostgreSQL loopback port could not be determined')
     }
     return {
@@ -346,43 +391,47 @@ export async function createPostgres(runId, verifiedImage, hooks = {}) {
   }
 }
 
-async function inspectOwnership(kind, name) {
-  const listArgs =
-    kind === 'container'
-      ? ['container', 'ls', '--all', '--filter', `name=^/${name}$`, '--format', '{{.Names}}']
-      : ['volume', 'ls', '--filter', `name=^${name}$`, '--format', '{{.Name}}']
+async function inspectOwnership({ kind, name }) {
+  const isContainerListing = kind === 'container'
+  const listArgs = isContainerListing
+    ? ['container', 'ls', '--all', '--filter', `name=^/${name}$`, '--format', '{{.Names}}']
+    : ['volume', 'ls', '--filter', `name=^${name}$`, '--format', '{{.Name}}']
   const listed = await docker(listArgs)
-  if (listed.stdout.trim() === '') {
+  const isResourceAbsent = listed.stdout.trim() === ''
+  if (isResourceAbsent) {
     return undefined
   }
   assert.equal(listed.stdout.trim(), name)
 
-  const inspectArgs =
-    kind === 'container'
-      ? ['container', 'inspect', name, '--format', `{{ index .Config.Labels "${ownershipLabel}" }}`]
-      : ['volume', 'inspect', name, '--format', `{{ index .Labels "${ownershipLabel}" }}`]
+  const isContainerInspection = kind === 'container'
+  const inspectArgs = isContainerInspection
+    ? ['container', 'inspect', name, '--format', `{{ index .Config.Labels "${ownershipLabel}" }}`]
+    : ['volume', 'inspect', name, '--format', `{{ index .Labels "${ownershipLabel}" }}`]
   const inspected = await docker(inspectArgs)
   return inspected.stdout.trim()
 }
 
-async function removeOwnedResource(kind, name, runId) {
-  const actualRunId = await inspectOwnership(kind, name)
-  if (actualRunId === undefined) {
+async function removeOwnedResource({ kind, name, runId }) {
+  const actualRunId = await inspectOwnership({ kind, name })
+  const isResourceAbsent = actualRunId === undefined
+  if (isResourceAbsent) {
     return
   }
-  if (actualRunId !== runId) {
+  const hasOwnershipMismatch = actualRunId !== runId
+  if (hasOwnershipMismatch) {
     throw new Error('Database test resource ownership mismatch')
   }
-  if (kind === 'container') {
+  const isContainer = kind === 'container'
+  if (isContainer) {
     await docker(['rm', '--force', name])
   } else {
     await docker(['volume', 'rm', '--force', name])
   }
-  assert.equal(await inspectOwnership(kind, name), undefined)
+  assert.equal(await inspectOwnership({ kind, name }), undefined)
 }
 
 export async function removeOwnedVolume(name, runId) {
-  await removeOwnedResource('volume', name, runId)
+  await removeOwnedResource({ kind: 'volume', name, runId })
 }
 
 export async function teardownPostgres(resources) {
@@ -392,12 +441,13 @@ export async function teardownPostgres(resources) {
     ['volume', resources.volumeName]
   ]) {
     try {
-      await removeOwnedResource(kind, name, resources.runId)
+      await removeOwnedResource({ kind, name, runId: resources.runId })
     } catch (error) {
       errors.push(error)
     }
   }
-  if (errors.length > 0) {
+  const hasTeardownErrors = errors.length > 0
+  if (hasTeardownErrors) {
     throw new AggregateError(errors, 'Database test teardown failed')
   }
 }
@@ -405,6 +455,6 @@ export async function teardownPostgres(resources) {
 export async function assertResourcesAbsent(runId) {
   validateRunId(runId)
   const suffix = runId.slice(0, 48)
-  assert.equal(await inspectOwnership('container', `ldb-db-${suffix}`), undefined)
-  assert.equal(await inspectOwnership('volume', `ldb-db-${suffix}`), undefined)
+  assert.equal(await inspectOwnership({ kind: 'container', name: `ldb-db-${suffix}` }), undefined)
+  assert.equal(await inspectOwnership({ kind: 'volume', name: `ldb-db-${suffix}` }), undefined)
 }
