@@ -31,8 +31,8 @@ function googleProvider(input: ReturnType<typeof parseAuthenticationInput>) {
   const secrets = new Map<string, string>()
   for (const entry of input.google.secrets) {
     const snapshot = snapshots.get(entry.version)
-    const hasSnapshot = snapshot !== undefined
-    const hasMatchingReference = hasSnapshot && snapshot.providerSecretRef === entry.reference
+    const snapshotReference = snapshot?.providerSecretRef
+    const hasMatchingReference = snapshotReference === entry.reference
     // 구분자나 object property로 합치지 않아 version/reference tuple의 의미를 보존한다.
     const binding = JSON.stringify([entry.version, entry.reference])
     const isDuplicate = secrets.has(binding)
@@ -70,16 +70,23 @@ export async function readRuntimeConfiguration(environment: NodeJS.ProcessEnv) {
     const database = readDatabaseConfiguration(environment)
     const apiKey = environment.NEOPLE_API_KEY
     const isApiKeyDefined = apiKey !== undefined
-    const hasApiKeyContent = isApiKeyDefined && apiKey.length > 0
-    const hasApiKey = isApiKeyDefined && hasApiKeyContent
-    if (!hasApiKey) {
+    if (!isApiKeyDefined) {
+      throw new Error(invalidConfiguration)
+    }
+    const hasApiKeyContent = apiKey.length > 0
+    if (!hasApiKeyContent) {
       throw new Error(invalidConfiguration)
     }
     const path = environment.AUTH_CONFIG_FILE
     const isPathDefined = path !== undefined
-    const hasPathContent = isPathDefined && path.length > 0
-    const hasPath = isPathDefined && hasPathContent
-    const hasAbsolutePath = hasPath && isAbsolute(path)
+    if (!isPathDefined) {
+      throw new Error(invalidConfiguration)
+    }
+    const hasPathContent = path.length > 0
+    if (!hasPathContent) {
+      throw new Error(invalidConfiguration)
+    }
+    const hasAbsolutePath = isAbsolute(path)
     if (!hasAbsolutePath) {
       throw new Error(invalidConfiguration)
     }
