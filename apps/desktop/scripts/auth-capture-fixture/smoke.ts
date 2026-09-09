@@ -6,6 +6,19 @@ import { installObservation } from './observe'
 import type { CaptureObservation } from './capture-observation'
 import { createCaptureActions, until, type Observation } from './actions'
 
+function createDisplayInspectionSource(): string {
+  const displayInspectionSource = `(() => {
+      const lines = document.querySelector('pre')?.textContent?.split('\\n') ?? [];
+      let matchedSlots = 0;
+      for (let slot = 0; slot < 4; slot += 1) {
+        const isExpectedDisplay = lines.includes('Slot ' + (slot + 1) + ': ALICE');
+        if (isExpectedDisplay) matchedSlots |= 1 << slot;
+      }
+      return matchedSlots;
+    })()`
+  return displayInspectionSource
+}
+
 export async function smoke(
   window: BrowserWindow,
   coordinator: AuthCoordinator,
@@ -43,18 +56,12 @@ export async function smoke(
   console.log('Capture fixture actual OCR worker ready')
   let displayMatchedSlots = 0
   await until(async () => {
-    displayMatchedSlots = (await evaluate(`(() => {
-      const lines = document.querySelector('pre')?.textContent?.split('\\n') ?? [];
-      let matchedSlots = 0;
-      for (let slot = 0; slot < 4; slot += 1) {
-        const isExpectedDisplay = lines.includes('Slot ' + (slot + 1) + ': ALICE');
-        if (isExpectedDisplay) matchedSlots |= 1 << slot;
-      }
-      return matchedSlots;
-    })()`)) as number
+    const displayInspectionSource = createDisplayInspectionSource()
+    displayMatchedSlots = (await evaluate(displayInspectionSource)) as number
     const hasAllDisplays = displayMatchedSlots === 0b1111
     const hasAllNotifications = mainObservation.nicknameMatchedSlots === 0b1111
-    return hasAllDisplays && hasAllNotifications
+    const hasAllSyntheticMatches = hasAllDisplays && hasAllNotifications
+    return hasAllSyntheticMatches
   }, 30_000)
   const active = await observe()
   assert.equal(mainObservation.displayRequests, 1)
@@ -81,9 +88,11 @@ export async function smoke(
   await until(() => hasText('Google로 계속하기'))
   await until(async () => {
     const state = await observe()
-    const hasStopped = state.stops === 1 && state.ended
+    const hasOneStop = state.stops === 1
+    const hasStopped = hasOneStop && state.ended
     const hasTerminated = state.terminated === 1
-    return hasStopped && hasTerminated
+    const hasCompletedCleanup = hasStopped && hasTerminated
+    return hasCompletedCleanup
   })
   assert.equal((await observe()).clearedVideos, 1)
   assert.equal(await hasText('Slot 1:'), false)
