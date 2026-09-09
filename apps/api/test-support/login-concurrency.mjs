@@ -113,7 +113,7 @@ async function assertSingleConsumer({ source, kind }) {
       const results = await Promise.all(attempts)
       assert.equal(
         results.filter((result) => {
-          const hasSuccessfulResult = Boolean(result.value)
+          const hasSuccessfulResult = result.value != null
           return hasSuccessfulResult
         }).length,
         1
@@ -366,7 +366,7 @@ async function assertTwoIdentityExchanges(source) {
     release.resolve()
     const results = await Promise.all([first, second])
     const haveBothExchangesSucceeded = results.every((result) => {
-      const hasSuccessfulResult = Boolean(result.value)
+      const hasSuccessfulResult = result.value != null
       return hasSuccessfulResult
     })
     assert(haveBothExchangesSucceeded)
