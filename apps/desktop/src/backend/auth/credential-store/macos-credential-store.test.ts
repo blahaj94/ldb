@@ -105,7 +105,8 @@ describe('macOS CredentialStore의 파일 protocol', () => {
     const temporaryOpens = fixture.opens.filter((entry) => entry.path.endsWith('.tmp'))
     expect(temporaryOpens).toHaveLength(2)
     for (const entry of temporaryOpens) {
-      expect(entry.path.startsWith(`${fixture.directory}/`)).toBe(true)
+      const isWithinCredentialDirectory = entry.path.startsWith(`${fixture.directory}/`)
+      expect(isWithinCredentialDirectory).toBe(true)
       expect(entry.mode).toBe(0o600)
       expect(Number(entry.flags) & constants.O_EXCL).toBe(constants.O_EXCL)
       expect(Number(entry.flags) & constants.O_NOFOLLOW).toBe(constants.O_NOFOLLOW)
@@ -411,7 +412,8 @@ describe('macOS CredentialStore의 파일 protocol', () => {
       fixture.failures.set(event, ['before'])
 
       const cleared = await fixture.store.clearCredential()
-      const removed = cleared === 'confirmed' ? await fixture.store.removeTransition() : cleared
+      const isClearConfirmed = cleared === 'confirmed'
+      const removed = isClearConfirmed ? await fixture.store.removeTransition() : cleared
       expect(removed).not.toBe('confirmed')
       expect(await fixture.createStore().inspect()).toEqual({ status: 'recovery-required' })
     }

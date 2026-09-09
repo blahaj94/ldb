@@ -45,7 +45,12 @@ afterEach(async () => {
   container.remove()
 })
 
-async function render(input: AuthPresentationInput, commandPending = false): Promise<void> {
+type RenderInput = Readonly<{
+  input: AuthPresentationInput
+  commandPending?: boolean
+}>
+
+async function render({ input, commandPending = false }: RenderInput): Promise<void> {
   await act(async () =>
     root.render(
       <AuthPresentation snapshot={input} commandPending={commandPending} onIntent={onIntent} />
@@ -67,7 +72,7 @@ async function click(label: string): Promise<void> {
 }
 
 it('shows only enabled providers and emits their exact intent without granting access', async () => {
-  await render(snapshot('signedOut', { providers: ['discord'] }))
+  await render({ input: snapshot('signedOut', { providers: ['discord'] }) })
 
   expect(labels()).toEqual(['Discord로 계속하기'])
   expect(container.textContent).toContain('같은 이메일')
@@ -77,7 +82,7 @@ it('shows only enabled providers and emits their exact intent without granting a
 })
 
 it('shows a fixed unavailable notice when no provider is enabled', async () => {
-  await render(snapshot('signedOut', { providers: [] }))
+  await render({ input: snapshot('signedOut', { providers: [] }) })
 
   expect(container.textContent).toContain('사용 가능한 로그인 방법이 없습니다')
   expect(labels()).toEqual([])
@@ -86,13 +91,13 @@ it('shows a fixed unavailable notice when no provider is enabled', async () => {
 it.each(['startingLogin', 'waitingBrowser', 'exchanging'] as const)(
   '%s cancels only the currently rendered attempt and never offers a provider',
   async (phase) => {
-    await render(pending(phase))
+    await render({ input: pending(phase) })
     expect(labels()).toContain('로그인 취소')
     expect(labels()).not.toContain('Google로 계속하기')
     await click('로그인 취소')
     expect(onIntent).toHaveBeenLastCalledWith({ type: 'cancelLogin', attemptId: 'fixture-attempt' })
 
-    await render(pending(phase, 'replacement-attempt'))
+    await render({ input: pending(phase, 'replacement-attempt') })
     await click('로그인 취소')
     expect(onIntent).toHaveBeenLastCalledWith({
       type: 'cancelLogin',
@@ -103,7 +108,7 @@ it.each(['startingLogin', 'waitingBrowser', 'exchanging'] as const)(
 )
 
 it('describes waiting expiry and the limits of cancellation', async () => {
-  await render(pending('waitingBrowser'))
+  await render({ input: pending('waitingBrowser') })
 
   expect(container.textContent).toContain('브라우저')
   expect(container.textContent).toContain('만료')
@@ -113,7 +118,7 @@ it('describes waiting expiry and the limits of cancellation', async () => {
 
 it('invalid return 새 로그인 cancels then waits for signedOut instead of beginning login', async () => {
   const input = { ...pending('waitingBrowser'), notice: 'LOGIN_RETURN_INVALID' as const }
-  await render(input)
+  await render({ input })
   await click('새 로그인')
 
   expect(onIntent).toHaveBeenCalledExactlyOnceWith({
@@ -121,11 +126,11 @@ it('invalid return 새 로그인 cancels then waits for signedOut instead of beg
     attemptId: 'fixture-attempt'
   })
   expect(labels()).not.toContain('Google로 계속하기')
-  await render(input, true)
+  await render({ input, commandPending: true })
   await click('새 로그인')
   expect(onIntent).toHaveBeenCalledTimes(1)
 
-  await render(snapshot('signedOut', { notice: 'LOGIN_CANCELLED' }))
+  await render({ input: snapshot('signedOut', { notice: 'LOGIN_CANCELLED' }) })
   await click('Google로 계속하기')
   expect(onIntent).toHaveBeenLastCalledWith({ type: 'beginLogin', provider: 'google' })
 })
@@ -133,7 +138,7 @@ it('invalid return 새 로그인 cancels then waits for signedOut instead of beg
 it.each(['restoring', 'signingOut'] as const)(
   '%s hides account and blocks activation',
   async (phase) => {
-    await render(snapshot(phase, { user: { nickname }, entry: 'home' }))
+    await render({ input: snapshot(phase, { user: { nickname }, entry: 'home' }) })
 
     const isRestoring = phase === 'restoring'
     expect(container.textContent).toContain(isRestoring ? '복원 중' : '로그아웃 중')
@@ -148,7 +153,7 @@ it.each(['restoring', 'signingOut'] as const)(
 )
 
 it('restorePaused exposes only safe retry and device logout', async () => {
-  await render(snapshot('restorePaused', { notice: 'NETWORK_UNAVAILABLE' }))
+  await render({ input: snapshot('restorePaused', { notice: 'NETWORK_UNAVAILABLE' }) })
 
   expect(labels()).toEqual(['다시 시도', '이 기기 로그아웃'])
   expect(container.textContent).toContain('연결')
@@ -160,7 +165,9 @@ it('restorePaused exposes only safe retry and device logout', async () => {
 it.each(['SECURE_STORAGE_UNAVAILABLE', 'TOKEN_SAVE_FAILED', 'LOCAL_CLEAR_UNCONFIRMED'] as const)(
   'storageBlocked/%s permits retry only and hides injected protected data',
   async (notice) => {
-    await render(snapshot('storageBlocked', { notice, user: { nickname }, entry: 'home' }))
+    await render({
+      input: snapshot('storageBlocked', { notice, user: { nickname }, entry: 'home' })
+    })
 
     expect(labels()).toEqual(['다시 시도'])
     expect(container.textContent).not.toContain(nickname)
@@ -171,14 +178,14 @@ it.each(['SECURE_STORAGE_UNAVAILABLE', 'TOKEN_SAVE_FAILED', 'LOCAL_CLEAR_UNCONFI
 )
 
 it('discloses unconfirmed local deletion and server logout without claiming restart safety', async () => {
-  await render(snapshot('storageBlocked', { notice: 'LOCAL_CLEAR_UNCONFIRMED' }))
+  await render({ input: snapshot('storageBlocked', { notice: 'LOCAL_CLEAR_UNCONFIRMED' }) })
 
   expect(container.textContent).toContain('서버 로그아웃도 확인하지 못했습니다')
   expect(container.textContent).toContain('재시작 후 안전한 차단을 보장할 수 없습니다')
 })
 
 it('preserves the explicit server-unconfirmed logout notice', async () => {
-  await render(snapshot('signedOut', { notice: 'LOGOUT_SERVER_UNCONFIRMED' }))
+  await render({ input: snapshot('signedOut', { notice: 'LOGOUT_SERVER_UNCONFIRMED' }) })
 
   expect(container.textContent).toContain(
     '이 기기 정보는 지웠지만 서버 로그아웃은 확인하지 못했습니다'
@@ -187,7 +194,7 @@ it('preserves the explicit server-unconfirmed logout notice', async () => {
 
 it('renders nickname as text; welcome dismissal lasts only for the mounted signed-in view', async () => {
   const welcome = snapshot('signedIn', { user: { nickname }, entry: 'welcome' })
-  await render(welcome)
+  await render({ input: welcome })
 
   expect(container.textContent).toContain(nickname)
   expect(container.querySelector('img')).toBeNull()
@@ -195,21 +202,21 @@ it('renders nickname as text; welcome dismissal lasts only for the mounted signe
   await click('시작하기')
   expect(container.textContent).toContain('화면 캡처')
   expect(onIntent).not.toHaveBeenCalled()
-  await render({ ...welcome })
+  await render({ input: { ...welcome } })
   expect(labels()).not.toContain('시작하기')
 
-  await render(snapshot('signingOut'))
+  await render({ input: snapshot('signingOut') })
   expect(container.textContent).not.toContain(nickname)
-  await render(welcome)
+  await render({ input: welcome })
   expect(labels()).toContain('시작하기')
   await act(async () => root.unmount())
   root = createRoot(container)
-  await render(welcome)
+  await render({ input: welcome })
   expect(labels()).toContain('시작하기')
 })
 
 it('existing home displays account and capture placeholder, and logout does not fabricate a snapshot', async () => {
-  await render(snapshot('signedIn', { user: { nickname }, entry: 'home' }))
+  await render({ input: snapshot('signedIn', { user: { nickname }, entry: 'home' }) })
 
   expect(container.textContent).toContain(nickname)
   expect(container.textContent).toContain('화면 캡처')
@@ -228,7 +235,7 @@ it.each([
   snapshot('storageBlocked'),
   snapshot('signedIn', { user: { nickname }, entry: 'home' })
 ])('commandPending disables every action in $phase', async (input) => {
-  await render(input, true)
+  await render({ input, commandPending: true })
 
   const buttons = Array.from(container.querySelectorAll('button'))
   expect(buttons.length).toBeGreaterThan(0)

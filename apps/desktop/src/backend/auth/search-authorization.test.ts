@@ -37,12 +37,19 @@ async function usedAccess(auth: AuthCoordinator): Promise<AvailableAccess> {
   return result as AvailableAccess
 }
 
-function rejectAccess(
-  auth: AuthCoordinator,
-  access: AvailableAccess,
-  finalRejection = false,
+type RejectAccessInput = Readonly<{
+  auth: AuthCoordinator
+  access: AvailableAccess
+  finalRejection?: boolean
   signal?: AbortSignal
-): Promise<AuthAuthorization> {
+}>
+
+function rejectAccess({
+  auth,
+  access,
+  finalRejection = false,
+  signal
+}: RejectAccessInput): Promise<AuthAuthorization> {
   expect(auth.recoverAuthorization, '검색 401은 main core의 회복 경계를 사용한다').toBeTypeOf(
     'function'
   )
@@ -152,8 +159,8 @@ describe('검색의 main authorization 소비 경계', () => {
     harness.http.refresh.mockReturnValueOnce(refresh.promise)
     harness.store.commitWaits.push(commit.promise)
 
-    const first = rejectAccess(auth, access)
-    const second = rejectAccess(auth, access)
+    const first = rejectAccess({ auth, access })
+    const second = rejectAccess({ auth, access })
     let ordinaryResult: AuthAuthorization | undefined
     const ordinary = auth.authorization().then((result) => {
       ordinaryResult = result
@@ -199,7 +206,7 @@ describe('검색의 main authorization 소비 경계', () => {
     const current = await usedAccess(auth)
     harness.http.refresh.mockClear()
 
-    expect(await rejectAccess(auth, previous)).toEqual(current)
+    expect(await rejectAccess({ auth, access: previous })).toEqual(current)
     expect(harness.http.refresh).not.toHaveBeenCalled()
     expect(harness.http.me).not.toHaveBeenCalled()
   })
@@ -214,7 +221,9 @@ describe('검색의 main authorization 소비 경계', () => {
         harness.http.logout.mockRejectedValueOnce(new AuthHttpFailure('unavailable'))
       }
 
-      expect(await rejectAccess(auth, access, true)).toEqual({ status: 'unavailable' })
+      expect(await rejectAccess({ auth, access, finalRejection: true })).toEqual({
+        status: 'unavailable'
+      })
       expect(auth.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: 'REAUTH_REQUIRED' })
       expect(auth.captureGeneration()).toBeNull()
       expect(harness.store.inspection).toEqual({ status: 'empty' })
@@ -270,7 +279,7 @@ describe('검색의 main authorization 소비 경계', () => {
 
       try {
         await vi.waitFor(() => expect(blockedEffect).toHaveBeenCalledTimes(1))
-        final = rejectAccess(auth, access, true)
+        final = rejectAccess({ auth, access, finalRejection: true })
         logout = auth.logout()
 
         expect(auth.captureGeneration()).toBeNull()
@@ -313,7 +322,9 @@ describe('검색의 main authorization 소비 경계', () => {
     try {
       await vi.waitFor(() => expect(harness.store.clearCredential).toHaveBeenCalledTimes(1))
 
-      expect(await rejectAccess(auth, access, true)).toEqual({ status: 'unavailable' })
+      expect(await rejectAccess({ auth, access, finalRejection: true })).toEqual({
+        status: 'unavailable'
+      })
       expect(auth.getSnapshot().phase).toBe('signingOut')
       expect(auth.captureGeneration()).toBeNull()
       expect(harness.store.establishTransition.mock.calls).toEqual([['clear']])
@@ -340,7 +351,9 @@ describe('검색의 main authorization 소비 경계', () => {
     const current = auth.getSnapshot()
     harness.http.logout.mockClear()
 
-    expect(await rejectAccess(auth, previous, true)).toEqual({ status: 'unavailable' })
+    expect(await rejectAccess({ auth, access: previous, finalRejection: true })).toEqual({
+      status: 'unavailable'
+    })
     expect(auth.getSnapshot()).toEqual(current)
     expect(harness.http.refresh).not.toHaveBeenCalled()
     expect(harness.http.logout).not.toHaveBeenCalled()
@@ -351,7 +364,7 @@ describe('검색의 main authorization 소비 경계', () => {
     const access = await usedAccess(auth)
     harness.http.refresh.mockRejectedValueOnce(new AuthHttpFailure('authentication-required'))
 
-    expect(await rejectAccess(auth, access)).toEqual({ status: 'unavailable' })
+    expect(await rejectAccess({ auth, access })).toEqual({ status: 'unavailable' })
     expect(auth.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: 'REAUTH_REQUIRED' })
     expect(harness.store.inspection).toEqual({ status: 'empty' })
     expect(harness.http.refresh).toHaveBeenCalledTimes(1)

@@ -12,6 +12,10 @@ type AuthBridge = BridgeState & {
   onIntent: (intent: AuthIntent) => void
   resynchronize: () => void
 }
+type QueryInput = Readonly<{
+  expected: number
+  establishBaseline?: boolean
+}>
 
 export function useAuthBridge(api: AuthApi): AuthBridge {
   const presentationEpochRef = useRef(0)
@@ -73,14 +77,14 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       })
     }
 
-    async function query(expected: number, establish = false): Promise<void> {
+    async function query({ expected, establishBaseline = false }: QueryInput): Promise<void> {
       try {
         const snapshot = await api.getAuthState()
         const isActiveEpoch = isCurrent(expected)
         if (!isActiveEpoch) {
           return
         }
-        if (establish) {
+        if (establishBaseline) {
           baselineReady = true
         }
         accept(snapshot, expected)
@@ -142,7 +146,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
             queued = snapshot
           }
         })
-        void query(expected, true)
+        void query({ expected, establishBaseline: true })
       } catch {
         setState({
           source: api,
@@ -155,7 +159,10 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
     }
 
     async function command(intent: AuthIntent): Promise<void> {
-      const cannotDispatch = !active || pending || current == null
+      const isInactive = !active
+      const hasPendingCommand = pending
+      const hasCurrentSnapshot = current != null
+      const cannotDispatch = isInactive || hasPendingCommand || !hasCurrentSnapshot
       if (cannotDispatch) {
         return
       }
@@ -180,7 +187,7 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
         // Mutation은 다시 보내지 않는다. 현재 main snapshot만 조회한다.
         const isActiveEpoch = isCurrent(expected)
         if (isActiveEpoch) {
-          await query(expected)
+          await query({ expected })
         }
       } finally {
         const isActiveEpoch = isCurrent(expected)

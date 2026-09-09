@@ -520,7 +520,8 @@ describe('Desktop AuthCoordinator login', () => {
 
       const returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
       await vi.waitFor(() => expect(harness.store.commitCredential).toHaveBeenCalledTimes(1))
-      if (reason === 'expired') {
+      const isExpired = reason === 'expired'
+      if (isExpired) {
         harness.clock.elapseWithoutTimers(600_000)
       } else {
         harness.clock.discontinuous = true
@@ -1190,9 +1191,13 @@ describe('Desktop AuthCoordinator login', () => {
       login: { attemptId: NEXT_ATTEMPT_ID, provider: 'discord' }
     })
     expect(harness.browser.open).toHaveBeenCalledTimes(1)
-    expect(revisions.every((value, index) => index === 0 || value > revisions[index - 1])).toBe(
-      true
-    )
+    const revisionsIncrease = revisions.every((value, index) => {
+      const isFirstRevision = index === 0
+      const isGreaterThanPrevious = isFirstRevision || value > revisions[index - 1]
+
+      return isGreaterThanPrevious
+    })
+    expect(revisionsIncrease).toBe(true)
   })
 
   it('beginLogin의 이전 recovery clear가 끝나기 전에는 취소 뒤 새 writer를 시작하지 않는다', async () => {
@@ -1778,11 +1783,11 @@ describe('Desktop AuthCoordinator login', () => {
       expect(coordinator.getSnapshot()).toMatchObject({ phase: 'storageBlocked', notice })
       expect(harness.http.logout).toHaveBeenCalledWith(REFRESH_1, expect.any(AbortSignal))
       expect(harness.store.reestablishTransition).toHaveBeenCalledWith('exchange')
-      expect(harness.store.inspection).toEqual(
-        reestablished === 'confirmed'
-          ? { status: 'recovery-required' }
-          : { status: 'ready', refreshToken: REFRESH_1 }
-      )
+      const isReestablished = reestablished === 'confirmed'
+      const expectedInspection = isReestablished
+        ? { status: 'recovery-required' as const }
+        : { status: 'ready' as const, refreshToken: REFRESH_1 }
+      expect(harness.store.inspection).toEqual(expectedInspection)
     }
   })
 
