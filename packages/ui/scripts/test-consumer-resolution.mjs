@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import { rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, test } from 'node:test'
+import { stopOwnedProcessGroup } from './consumer-process-lifecycle.mjs'
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
 
@@ -85,6 +86,7 @@ for (const { name, executable, args, cwd, entries } of [
     child.stderr.on('data', appendOutput)
     const exited = once(child, 'exit')
     let timeout
+    let inspectionFailure = {}
 
     try {
       const origin = await Promise.race([
@@ -113,15 +115,12 @@ for (const { name, executable, args, cwd, entries } of [
         assert.equal(response.status, 200, `${entry}\n${output}`)
         assert.match(source, /import /, `Expected transformed module: ${entry}`)
       }
+    } catch (error) {
+      inspectionFailure = { originalError: error }
+      throw error
     } finally {
       clearTimeout(timeout)
-      const hasNoExitCode = child.exitCode == null
-      const hasNoSignalCode = child.signalCode == null
-      const isRunning = hasNoExitCode && hasNoSignalCode
-      if (isRunning) {
-        process.kill(-child.pid, 'SIGTERM')
-      }
-      await exited
+      await stopOwnedProcessGroup({ child, exited, ...inspectionFailure })
     }
   })
 }
