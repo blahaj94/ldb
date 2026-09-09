@@ -79,10 +79,12 @@ async function claimCallback(
         const checkedAt = await freshTime(manager)
 
         const hasRequest = request != null
-        const isRequestTruthy = hasRequest && Boolean(request)
-        const hasSameProvider = isRequestTruthy && request.provider === provider
+        if (!hasRequest) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const hasSameProvider = request.provider === provider
         const hasCookieBinding = hasSameProvider && cookieMatches(request, cookieHeader)
-        const isRequestInvalid = !hasRequest || !hasSameProvider || !hasCookieBinding
+        const isRequestInvalid = !hasSameProvider || !hasCookieBinding
         if (isRequestInvalid) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
@@ -195,12 +197,19 @@ async function verifyProviderLogin(
 
     // Timer가 아직 실행되지 않았어도 deadline을 지난 결과는 수용하지 않는다.
     const isVerificationExpired = performance.now() >= deadline
-    const hasSameProvider =
-      !isVerificationExpired && identity?.provider === claimed.snapshot.provider
-    const isSubjectString = hasSameProvider && typeof identity.subject === 'string'
-    const isSubjectEmpty = isSubjectString && identity.subject.length === 0
-    const isIdentityInvalid =
-      isVerificationExpired || !hasSameProvider || !isSubjectString || isSubjectEmpty
+    if (isVerificationExpired) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    const hasSameProvider = identity?.provider === claimed.snapshot.provider
+    let isSubjectString = false
+    let isSubjectEmpty = false
+    if (hasSameProvider) {
+      isSubjectString = typeof identity.subject === 'string'
+      if (isSubjectString) {
+        isSubjectEmpty = identity.subject.length === 0
+      }
+    }
+    const isIdentityInvalid = !hasSameProvider || !isSubjectString || isSubjectEmpty
     if (isIdentityInvalid) {
       throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
@@ -238,20 +247,23 @@ async function prepareExchangeCode(
 
         // 외부 검증 중 상태 또는 등록 binding이 달라진 요청은 완료하지 않는다.
         const hasRequest = request != null
-        const isRequestTruthy = hasRequest && Boolean(request)
-        const isProcessing = isRequestTruthy && request.status === 'processing'
-        const hasSameProvider = isProcessing && request.provider === claimed.snapshot.provider
-        const hasSameVersion =
-          hasSameProvider && request.providerConfigVersion === claimed.snapshot.version
-        const hasSameReturnTarget =
-          hasSameVersion && request.returnTargetId === claimed.snapshot.returnTarget.id
-        const isRequestInvalid =
-          !hasRequest ||
-          !isProcessing ||
-          !hasSameProvider ||
-          !hasSameVersion ||
-          !hasSameReturnTarget
-        if (isRequestInvalid) {
+        if (!hasRequest) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const isProcessing = request.status === 'processing'
+        if (!isProcessing) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const hasSameProvider = request.provider === claimed.snapshot.provider
+        if (!hasSameProvider) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const hasSameVersion = request.providerConfigVersion === claimed.snapshot.version
+        if (!hasSameVersion) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const hasSameReturnTarget = request.returnTargetId === claimed.snapshot.returnTarget.id
+        if (!hasSameReturnTarget) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
 
