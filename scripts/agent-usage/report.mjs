@@ -243,7 +243,10 @@ export function validateSnapshot(value) {
     const tuples = new Set()
     const agents = value.agents.map((agent) => {
       const isAgentObject = isObject(agent)
-      const hasAgentKeys = isAgentObject && hasKeys(agent, AGENT_KEYS)
+      if (!isAgentObject) {
+        fail()
+      }
+      const hasAgentKeys = hasKeys(agent, AGENT_KEYS)
       if (!hasAgentKeys) {
         fail()
       }
@@ -423,7 +426,10 @@ export function parseSnapshotComment(body) {
   enforceCommentLimit(body)
   try {
     const isBodyString = typeof body === 'string'
-    const hasSnapshotMarker = isBodyString && body.includes(SNAPSHOT_MARKER)
+    if (!isBodyString) {
+      fail()
+    }
+    const hasSnapshotMarker = body.includes(SNAPSHOT_MARKER)
     if (!hasSnapshotMarker) {
       fail()
     }
