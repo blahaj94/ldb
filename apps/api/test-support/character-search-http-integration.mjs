@@ -56,7 +56,8 @@ async function authenticatedSearch(source) {
     ])
   })
   const after = await snapshot(source, f)
-  assert(after.session.last_active_at > before.session.last_active_at)
+  const didActivityAdvance = after.session.last_active_at > before.session.last_active_at
+  assert(didActivityAdvance)
   assert.equal(after.session.last_active_at.getMilliseconds(), 0)
   assert.deepEqual(after.user, before.user)
   assert.deepEqual(after.tokens, before.tokens)

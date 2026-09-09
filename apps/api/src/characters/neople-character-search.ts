@@ -27,42 +27,67 @@ const nativeDependencies: SearchDependencies = {
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  const hasObjectType = typeof value === 'object'
+  const isNotNull = hasObjectType && value !== null
+  const isNonArrayObject = isNotNull && !Array.isArray(value)
+
+  return isNonArrayObject
 }
 
 function projectResponse(body: unknown, status: number, ok: boolean): CharacterSearchResult {
   const upstreamFailure = classifyNeopleUpstreamFailure(body, status, ok)
-  if (upstreamFailure !== undefined) {
+  const hasUpstreamFailure = upstreamFailure !== undefined
+  if (hasUpstreamFailure) {
     throw upstreamFailure
   }
 
-  if (!isObject(body) || !Array.isArray(body.rows)) {
+  const isBodyObject = isObject(body)
+  if (!isBodyObject) {
     throw neopleSearchFailure('api')
   }
 
-  const rows = body.rows.map((candidate): CharacterCandidate => {
-    if (!isObject(candidate)) {
+  const hasRowsArray = Array.isArray(body.rows)
+  if (!hasRowsArray) {
+    throw neopleSearchFailure('api')
+  }
+
+  const upstreamRows = body.rows as unknown[]
+  const rows = upstreamRows.map((candidate): CharacterCandidate => {
+    const isCandidateObject = isObject(candidate)
+    if (!isCandidateObject) {
       throw neopleSearchFailure('api')
     }
 
     const { characterId, characterName, serverId } = candidate
-    if (
-      typeof characterId !== 'string' ||
-      characterId.trim() === '' ||
-      typeof characterName !== 'string' ||
-      characterName.trim() === '' ||
-      typeof serverId !== 'string' ||
-      serverId.trim() === ''
-    ) {
+    const isCharacterIdString = typeof characterId === 'string'
+    const isCharacterIdBlank = isCharacterIdString && characterId.trim() === ''
+    const isCharacterIdInvalid = !isCharacterIdString || isCharacterIdBlank
+    if (isCharacterIdInvalid) {
+      throw neopleSearchFailure('api')
+    }
+
+    const isCharacterNameString = typeof characterName === 'string'
+    const isCharacterNameBlank = isCharacterNameString && characterName.trim() === ''
+    const isCharacterNameInvalid = !isCharacterNameString || isCharacterNameBlank
+    if (isCharacterNameInvalid) {
+      throw neopleSearchFailure('api')
+    }
+
+    const isServerIdString = typeof serverId === 'string'
+    const isServerIdBlank = isServerIdString && serverId.trim() === ''
+    const isServerIdInvalid = !isServerIdString || isServerIdBlank
+    if (isServerIdInvalid) {
       throw neopleSearchFailure('api')
     }
 
     const rawFame = candidate.fame
-    if (
-      rawFame !== undefined &&
-      rawFame !== null &&
-      (typeof rawFame !== 'number' || !Number.isFinite(rawFame))
-    ) {
+    const isFameDefined = rawFame !== undefined
+    const isFameNotNull = isFameDefined && rawFame !== null
+    const hasFame = isFameDefined && isFameNotNull
+    const isFameNumber = hasFame && typeof rawFame === 'number'
+    const isFameFinite = isFameNumber && Number.isFinite(rawFame)
+    const isFameInvalid = hasFame && (!isFameNumber || !isFameFinite)
+    if (isFameInvalid) {
       throw neopleSearchFailure('api')
     }
 
@@ -103,7 +128,10 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
       rejectTimeout(neopleSearchFailure('timeout'))
     }, NEOPLE_SEARCH_DEADLINE_MS)
     const deadlineReached = (): boolean => {
-      if (!didTimeout && dependencies.now() < deadline) {
+      const isTimerPending = !didTimeout
+      const isBeforeDeadline = isTimerPending && dependencies.now() < deadline
+      const canContinue = isTimerPending && isBeforeDeadline
+      if (canContinue) {
         return false
       }
       didTimeout = true
@@ -121,10 +149,15 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
           signal: controller.signal
         })
       } catch {
-        throw deadlineReached() ? neopleSearchFailure('timeout') : neopleSearchFailure('api')
+        const didReachDeadline = deadlineReached()
+        const failure = didReachDeadline
+          ? neopleSearchFailure('timeout')
+          : neopleSearchFailure('api')
+        throw failure
       }
 
-      if (deadlineReached()) {
+      const didReachDeadlineAfterHeaders = deadlineReached()
+      if (didReachDeadlineAfterHeaders) {
         throw neopleSearchFailure('timeout')
       }
 
@@ -132,10 +165,15 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
       try {
         rawBody = await response.text()
       } catch {
-        throw deadlineReached() ? neopleSearchFailure('timeout') : neopleSearchFailure('api')
+        const didReachDeadline = deadlineReached()
+        const failure = didReachDeadline
+          ? neopleSearchFailure('timeout')
+          : neopleSearchFailure('api')
+        throw failure
       }
 
-      if (deadlineReached()) {
+      const didReachDeadlineAfterBody = deadlineReached()
+      if (didReachDeadlineAfterBody) {
         throw neopleSearchFailure('timeout')
       }
 
@@ -143,22 +181,27 @@ function makeSearch(apiKey: string, dependencies: SearchDependencies): SearchCha
       try {
         body = JSON.parse(rawBody) as unknown
       } catch {
-        throw deadlineReached()
+        const didReachDeadline = deadlineReached()
+        throw didReachDeadline
           ? neopleSearchFailure('timeout')
           : neopleStatusFailure(response.status)
       }
 
       try {
         const result = projectResponse(body, response.status, response.ok)
-        if (deadlineReached()) {
+        const didReachDeadlineAfterProjection = deadlineReached()
+        if (didReachDeadlineAfterProjection) {
           throw neopleSearchFailure('timeout')
         }
         return result
       } catch (error) {
-        if (deadlineReached()) {
+        const didReachDeadline = deadlineReached()
+        if (didReachDeadline) {
           throw neopleSearchFailure('timeout')
         }
-        throw error instanceof NeopleSearchFailure ? error : neopleSearchFailure('api')
+        const isSearchFailure = error instanceof NeopleSearchFailure
+        const failure = isSearchFailure ? error : neopleSearchFailure('api')
+        throw failure
       }
     }
 

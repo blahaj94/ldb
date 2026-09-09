@@ -53,12 +53,17 @@ async function concurrentQuota(source) {
       upstream.respond = (_request, response) => {
         responses.push(response)
       }
-      const requests = Array.from({ length: 11 }, (_, index) =>
-        searchRequest(base, index % 2 === 0 ? f : device, `characterName=ab&limit=${index + 1}`)
-      )
+      const requests = Array.from({ length: 11 }, (_, index) => {
+        const usesPrimarySession = index % 2 === 0
+        const fixture = usesPrimarySession ? f : device
+        return searchRequest(base, fixture, `characterName=ab&limit=${index + 1}`)
+      })
       try {
         // 외부 응답을 모두 보류해도 같은 계정의 admission 10개와 초과 429는 완료되어야 한다.
-        await waitFor(() => calls.length === 10)
+        await waitFor(() => {
+          const hasAllAccountCalls = calls.length === 10
+          return hasAllAccountCalls
+        })
         const rejected = await Promise.race(requests)
         await expectSearchError(rejected, 429, 'SEARCH_RATE_LIMITED')
         assert.match(rejected.headers.get('retry-after'), /^(59|60)$/)
@@ -70,7 +75,10 @@ async function concurrentQuota(source) {
         )
         assert.equal(commits, 10)
         const independent = searchRequest(base, other)
-        await waitFor(() => calls.length === 11)
+        await waitFor(() => {
+          const hasIndependentCall = calls.length === 11
+          return hasIndependentCall
+        })
         assert.equal(commits, 11)
         for (const response of responses) {
           response.end('{"rows":[]}')
@@ -88,10 +96,14 @@ async function concurrentQuota(source) {
     },
     { createQueryRunner }
   )
-  assert((await snapshot(source, f)).session.last_active_at > before.session.last_active_at)
-  assert(
-    (await snapshot(source, device)).session.last_active_at > beforeDevice.session.last_active_at
-  )
+  const afterPrimary = await snapshot(source, f)
+  const didPrimaryActivityAdvance =
+    afterPrimary.session.last_active_at > before.session.last_active_at
+  assert(didPrimaryActivityAdvance)
+  const afterDevice = await snapshot(source, device)
+  const didDeviceActivityAdvance =
+    afterDevice.session.last_active_at > beforeDevice.session.last_active_at
+  assert(didDeviceActivityAdvance)
 }
 
 async function finalReservationClock(source) {

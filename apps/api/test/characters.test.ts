@@ -26,7 +26,8 @@ async function expectFailure(
   try {
     await promise
   } catch (error) {
-    assert(error instanceof NeopleSearchFailure)
+    const isSearchFailure = error instanceof NeopleSearchFailure
+    assert(isSearchFailure)
     assert.equal(error.status, status)
     assert.deepEqual(error.body, { error: { code, message } })
     return error
@@ -296,14 +297,11 @@ test('unknown, non-exact, missing codes and HTTP failures use status fallback', 
       const search = createNeopleCharacterSearchForTest('fake-key', {
         fetch: async () => jsonResponse(body, upstreamStatus)
       })
-      await expectFailure(
-        search(input),
-        status,
-        code,
-        code === 'NEOPLE_UNAVAILABLE'
-          ? '현재 캐릭터 검색을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
-          : '캐릭터 검색 중 오류가 발생했습니다.'
-      )
+      const isUnavailable = code === 'NEOPLE_UNAVAILABLE'
+      const expectedMessage = isUnavailable
+        ? '현재 캐릭터 검색을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+        : '캐릭터 검색 중 오류가 발생했습니다.'
+      await expectFailure(search(input), status, code, expectedMessage)
     })
   }
 })
@@ -474,8 +472,9 @@ test('deadline aborts the request, wins over a late known code, and performs no 
 
   const pending = search(input)
   await Promise.resolve()
-  assert(callback)
-  callback()
+  const hasDeadlineCallback = Boolean(callback)
+  assert(hasDeadlineCallback)
+  callback!()
 
   await expectFailure(
     pending,
@@ -493,7 +492,8 @@ test('concurrent searches keep controller, timer, and result state independent',
     fetch: async (request, init) => {
       calls += 1
       const name = new URL(request).searchParams.get('characterName')
-      if (name === '빠른검색') {
+      const isFastSearch = name === '빠른검색'
+      if (isFastSearch) {
         return jsonResponse({
           rows: [{ characterId: 'fast', characterName: name, serverId: 'cain', fame: 0 }]
         })
