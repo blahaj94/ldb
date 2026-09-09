@@ -31,8 +31,11 @@ function googleProvider(input: ReturnType<typeof parseAuthenticationInput>) {
   const secrets = new Map<string, string>()
   for (const entry of input.google.secrets) {
     const snapshot = snapshots.get(entry.version)
-    const snapshotReference = snapshot?.providerSecretRef
-    const hasMatchingReference = snapshotReference === entry.reference
+    const hasSnapshot = snapshot !== undefined
+    if (!hasSnapshot) {
+      throw new Error(invalidConfiguration)
+    }
+    const hasMatchingReference = snapshot.providerSecretRef === entry.reference
     // 구분자나 object property로 합치지 않아 version/reference tuple의 의미를 보존한다.
     const binding = JSON.stringify([entry.version, entry.reference])
     const isDuplicate = secrets.has(binding)
