@@ -40,13 +40,16 @@ export function isPartySlotPresent(rgba: Uint8ClampedArray): boolean {
   let matches = 0
 
   for (let index = 0; index < rgba.length; index += 4) {
-    if (
-      Math.abs(rgba[index] - PARTY_MANA_COLOR[0]) <= MANA_COLOR_TOLERANCE &&
-      Math.abs(rgba[index + 1] - PARTY_MANA_COLOR[1]) <= MANA_COLOR_TOLERANCE &&
-      Math.abs(rgba[index + 2] - PARTY_MANA_COLOR[2]) <= MANA_COLOR_TOLERANCE
-    ) {
+    const hasMatchingRed = Math.abs(rgba[index] - PARTY_MANA_COLOR[0]) <= MANA_COLOR_TOLERANCE
+    const hasMatchingGreen =
+      hasMatchingRed && Math.abs(rgba[index + 1] - PARTY_MANA_COLOR[1]) <= MANA_COLOR_TOLERANCE
+    const hasMatchingBlue =
+      hasMatchingGreen && Math.abs(rgba[index + 2] - PARTY_MANA_COLOR[2]) <= MANA_COLOR_TOLERANCE
+    const hasManaColor = hasMatchingRed && hasMatchingGreen && hasMatchingBlue
+    if (hasManaColor) {
       matches += 1
-      if (matches >= MINIMUM_MANA_PIXELS) {
+      const hasMinimumManaPixels = matches >= MINIMUM_MANA_PIXELS
+      if (hasMinimumManaPixels) {
         return true
       }
     }
@@ -60,7 +63,8 @@ export function capturePartyNicknameCrops(video: HTMLVideoElement): (HTMLCanvasE
   frame.width = video.videoWidth
   frame.height = video.videoHeight
   const frameContext = frame.getContext('2d')
-  if (!frameContext) {
+  const hasFrameContext = frameContext != null
+  if (!hasFrameContext) {
     throw new Error('Could not create a party capture canvas.')
   }
 
@@ -73,7 +77,8 @@ export function capturePartyNicknameCrops(video: HTMLVideoElement): (HTMLCanvasE
       slot.mana.width,
       slot.mana.height
     )
-    if (!isPartySlotPresent(mana.data)) {
+    const isSlotPresent = isPartySlotPresent(mana.data)
+    if (!isSlotPresent) {
       return null
     }
 
@@ -81,7 +86,8 @@ export function capturePartyNicknameCrops(video: HTMLVideoElement): (HTMLCanvasE
     crop.width = slot.nickname.width * OCR_SCALE
     crop.height = slot.nickname.height * OCR_SCALE
     const cropContext = crop.getContext('2d')
-    if (!cropContext) {
+    const hasCropContext = cropContext != null
+    if (!hasCropContext) {
       throw new Error('Could not create a party nickname canvas.')
     }
 

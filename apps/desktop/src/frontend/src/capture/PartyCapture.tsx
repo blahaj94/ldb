@@ -18,6 +18,28 @@ function PartyCapture(): React.JSX.Element {
     startCapture,
     stopCapture
   } = usePartyCapture()
+  const isSourceRegistered = sourceRegistered
+  const isSearchReady = search.ready
+  const cannotStartCapture = !isSourceRegistered || starting || !isSearchReady
+  const displayLines = [
+    status,
+    ...stableNicknames.map((nickname, slot) => {
+      const hasNickname = nickname != null
+      const isNicknameEmpty = hasNickname && nickname.length === 0
+      const shouldDisplayNickname = hasNickname && !isNicknameEmpty
+
+      return shouldDisplayNickname ? `Slot ${slot + 1}: ${nickname}` : null
+    })
+  ]
+  const statusText = displayLines
+    .filter((line): line is string => {
+      const hasLine = line != null
+      const isLineEmpty = hasLine && line.length === 0
+      const shouldDisplayLine = hasLine && !isLineEmpty
+
+      return shouldDisplayLine
+    })
+    .join('\n')
 
   return (
     <main>
@@ -44,7 +66,7 @@ function PartyCapture(): React.JSX.Element {
         </select>
       </label>
       <ActionButton
-        disabled={!sourceRegistered || starting || !search.ready}
+        disabled={cannotStartCapture}
         loading={starting}
         type="button"
         onClick={() => void startCapture()}
@@ -54,14 +76,7 @@ function PartyCapture(): React.JSX.Element {
       <ActionButton type="button" onClick={() => stopCapture()}>
         Stop
       </ActionButton>
-      <pre>
-        {[
-          status,
-          ...stableNicknames.map((nickname, slot) => nickname && `Slot ${slot + 1}: ${nickname}`)
-        ]
-          .filter(Boolean)
-          .join('\n')}
-      </pre>
+      <pre>{statusText}</pre>
       <SearchResults view={search} retry={retrySearch} />
     </main>
   )

@@ -84,10 +84,12 @@ async function renderPartyCaptureHook(): Promise<{
 
   return {
     getCurrent: () => {
-      if (!current) {
+      const value = current
+      const hasCurrent = value != null
+      if (!hasCurrent) {
         throw new Error('Hook did not render.')
       }
-      return current
+      return value
     },
     unmount: async () => {
       await act(async () => root.unmount())
@@ -138,7 +140,8 @@ beforeEach(() => {
   search.controlCharacterSearch.mockImplementation(async (control: SearchControl) => {
     const isBegin = control.action === 'begin'
     const isEnd = control.action === 'end'
-    if (isBegin || isEnd) {
+    const shouldChangeCapture = isBegin || isEnd
+    if (shouldChangeCapture) {
       currentSearch = searchSnapshot({
         captureId: isBegin ? CAPTURE_ID : null,
         revision: currentSearch.revision + 1
@@ -180,9 +183,11 @@ describe('usePartyCapture', () => {
     ])
     const oldSelection = Promise.withResolvers<null>()
     const newSelection = Promise.withResolvers<null>()
-    api.selectCaptureSource.mockImplementation((sourceId: string) =>
-      sourceId === 'old' ? oldSelection.promise : newSelection.promise
-    )
+    api.selectCaptureSource.mockImplementation((sourceId: string) => {
+      const isOldSource = sourceId === 'old'
+
+      return isOldSource ? oldSelection.promise : newSelection.promise
+    })
 
     const hook = await renderPartyCaptureHook()
     await flushPromises()
@@ -292,7 +297,8 @@ describe('usePartyCapture', () => {
       await hook.unmount()
       const shouldRestart = mode === 'new capture'
       const nextHook = shouldRestart ? await renderPartyCaptureHook() : null
-      if (nextHook != null) {
+      const hasNextHook = nextHook != null
+      if (hasNextHook) {
         act(() => nextHook.getCurrent().selectSource('game'))
         await flushPromises()
         await act(async () => nextHook.getCurrent().startCapture())
@@ -300,7 +306,7 @@ describe('usePartyCapture', () => {
       pendingRecognition.resolve({ data: { text: 'Alice' } })
       await act(async () => lateCycle)
       expect(api.notifyStableNicknameDetected).not.toHaveBeenCalled()
-      if (nextHook != null) {
+      if (hasNextHook) {
         expect(nextHook.getCurrent().stableNicknames).toEqual([null, null, null, null])
         expect(nextHook.getCurrent().status).toBe('Capture ready at 1920×1080.')
         await nextHook.unmount()
@@ -348,8 +354,9 @@ describe('usePartyCapture', () => {
       await act(async () => hook.getCurrent().startCapture())
       const video = vi.mocked(HTMLMediaElement.prototype.play).mock.contexts[0] as HTMLMediaElement
       const { signal } = moduleMocks.runSerialLoop.mock.calls[0][0] as LoopOptions
+      const isTrackEnded = reason === 'track ended'
 
-      if (reason === 'track ended') {
+      if (isTrackEnded) {
         act(() => track.dispatchEvent(new Event('ended')))
       } else {
         await act(async () => loop.reject(new Error('Party OCR failed.')))
@@ -360,9 +367,7 @@ describe('usePartyCapture', () => {
       expect(video.pause).toHaveBeenCalledOnce()
       expect(video.srcObject).toBeNull()
       expect(worker.terminate).toHaveBeenCalledOnce()
-      expect(hook.getCurrent().status).toBe(
-        reason === 'track ended' ? 'Capture ended.' : 'Party OCR failed.'
-      )
+      expect(hook.getCurrent().status).toBe(isTrackEnded ? 'Capture ended.' : 'Party OCR failed.')
       await hook.unmount()
       expect(track.stop).toHaveBeenCalledOnce()
       expect(worker.terminate).toHaveBeenCalledOnce()
@@ -391,7 +396,8 @@ describe('usePartyCapture', () => {
       })
       await flushPromises()
       const video = vi.mocked(HTMLMediaElement.prototype.play).mock.contexts[0] as HTMLMediaElement
-      if (action === 'stop') {
+      const shouldStop = action === 'stop'
+      if (shouldStop) {
         act(() => hook.getCurrent().stopCapture('Capture cancelled.'))
       } else {
         await hook.unmount()
@@ -404,7 +410,7 @@ describe('usePartyCapture', () => {
       await act(async () => start)
       expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
       expect(moduleMocks.runSerialLoop).not.toHaveBeenCalled()
-      if (action === 'stop') {
+      if (shouldStop) {
         expect(hook.getCurrent().status).toBe('Capture cancelled.')
         await hook.unmount()
       }
@@ -494,7 +500,8 @@ describe('usePartyCapture', () => {
       await flushPromises()
       expect(moduleMocks.createPartyOcrWorker).toHaveBeenCalledOnce()
       await act(async () => hook.getCurrent().startCapture())
-      if (outcome === 'resolve') {
+      const shouldResolve = outcome === 'resolve'
+      if (shouldResolve) {
         pendingWorker.resolve(previous.worker)
       } else {
         pendingWorker.reject(new Error('Old worker failed.'))
@@ -502,7 +509,7 @@ describe('usePartyCapture', () => {
       await act(async () => firstStart)
 
       expect(previous.track.stop).toHaveBeenCalledOnce()
-      expect(previous.worker.terminate).toHaveBeenCalledTimes(outcome === 'resolve' ? 1 : 0)
+      expect(previous.worker.terminate).toHaveBeenCalledTimes(shouldResolve ? 1 : 0)
       expect(previous.worker.recognize).not.toHaveBeenCalled()
       expect(current.track.stop).not.toHaveBeenCalled()
       expect(current.worker.terminate).not.toHaveBeenCalled()

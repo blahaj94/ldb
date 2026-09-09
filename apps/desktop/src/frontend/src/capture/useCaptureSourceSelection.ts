@@ -27,7 +27,8 @@ export function useCaptureSourceSelection(setStatus: (status: string) => void): 
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : 'Could not list windows.')
+          const isError = error instanceof Error
+          setStatus(isError ? error.message : 'Could not list windows.')
         }
       })
     return () => {
@@ -46,24 +47,28 @@ export function useCaptureSourceSelection(setStatus: (status: string) => void): 
     void window.api
       .selectCaptureSource(sourceId)
       .then(() => {
-        if (
-          sourceId &&
-          selectionGeneration === selectionGenerationRef.current &&
-          selectedSourceIdRef.current === sourceId
-        ) {
+        const hasSourceId = sourceId.length > 0
+        const hasCurrentGeneration =
+          hasSourceId && selectionGeneration === selectionGenerationRef.current
+        const hasCurrentSelection = hasCurrentGeneration && selectedSourceIdRef.current === sourceId
+        if (hasCurrentSelection) {
           registeredSourceIdRef.current = sourceId
           setSourceRegistered(true)
         }
       })
       .catch((error: unknown) => {
-        if (selectionGeneration === selectionGenerationRef.current) {
-          setStatus(error instanceof Error ? error.message : 'Could not select the window.')
+        const hasCurrentGeneration = selectionGeneration === selectionGenerationRef.current
+        if (hasCurrentGeneration) {
+          const isError = error instanceof Error
+          setStatus(isError ? error.message : 'Could not select the window.')
         }
       })
   }
 
   function isSelectedSourceRegistered(): boolean {
-    return selectedSourceIdRef.current === registeredSourceIdRef.current
+    const isRegistered = selectedSourceIdRef.current === registeredSourceIdRef.current
+
+    return isRegistered
   }
 
   return {
