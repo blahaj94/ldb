@@ -21,7 +21,12 @@ function isMissing(error: unknown): boolean {
   return isNotFound
 }
 
-function assertPrivate(stat: Stats, directory: boolean): void {
+type AssertPrivateInput = Readonly<{
+  stat: Stats
+  directory: boolean
+}>
+
+function assertPrivate({ stat, directory }: AssertPrivateInput): void {
   const isExpectedType = directory ? stat.isDirectory() : stat.isFile()
   const hasExpectedOwner = stat.uid === process.getuid?.()
   const expectedMode = directory ? 0o700 : 0o600
@@ -47,7 +52,7 @@ export class MacOsCredentialFiles {
     for (const path of [this.userDataPath, join(this.userDataPath, 'auth'), this.directory]) {
       let created = false
       try {
-        assertPrivate(await this.files.lstat(path), true)
+        assertPrivate({ stat: await this.files.lstat(path), directory: true })
       } catch (error) {
         const wasMissing = isMissing(error)
         if (!wasMissing) {
@@ -57,16 +62,16 @@ export class MacOsCredentialFiles {
         created = true
       }
       if (created) {
-        await this.syncDirectory(path)
+        await this.syncDirectory({ path })
         // 새 directory 자체와 그 이름을 담은 parent entry를 모두 flush한다.
-        await this.syncDirectory(dirname(path), false)
+        await this.syncDirectory({ path: dirname(path), requirePrivate: false })
       }
     }
   }
 
   async present(name: string): Promise<boolean> {
     try {
-      assertPrivate(await this.files.lstat(join(this.directory, name)), false)
+      assertPrivate({ stat: await this.files.lstat(join(this.directory, name)), directory: false })
       return true
     } catch (error) {
       const wasMissing = isMissing(error)
@@ -97,7 +102,7 @@ export class MacOsCredentialFiles {
       constants.O_RDONLY | constants.O_NOFOLLOW
     )
     try {
-      assertPrivate(await handle.stat(), false)
+      assertPrivate({ stat: await handle.stat(), directory: false })
       const buffer = Buffer.alloc(MAX_RECORD_BYTES + 1)
       let offset = 0
       while (true) {
@@ -127,7 +132,7 @@ export class MacOsCredentialFiles {
       const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW
       const handle = await this.files.open(temporary, flags, 0o600)
       try {
-        assertPrivate(await handle.stat(), false)
+        assertPrivate({ stat: await handle.stat(), directory: false })
         await handle.writeFile(data)
         await handle.sync()
       } finally {
@@ -206,14 +211,17 @@ export class MacOsCredentialFiles {
     }
   }
 
-  private async syncDirectory(path = this.directory, requirePrivate = true): Promise<void> {
+  private async syncDirectory({
+    path = this.directory,
+    requirePrivate = true
+  }: Readonly<{ path?: string; requirePrivate?: boolean }> = {}): Promise<void> {
     const handle = await this.files.open(
       path,
       constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
     )
     try {
       if (requirePrivate) {
-        assertPrivate(await handle.stat(), true)
+        assertPrivate({ stat: await handle.stat(), directory: true })
       }
       await handle.sync()
     } finally {

@@ -55,7 +55,9 @@ function parseExactUrl(raw: unknown): URL {
 export function validateApiOrigin(apiOrigin: string): string {
   const url = parseExactUrl(apiOrigin)
   const isHttps = url.protocol === 'https:'
-  const hasNoCredentials = url.username.length === 0 && url.password.length === 0
+  const hasNoUsername = url.username.length === 0
+  const hasNoPassword = hasNoUsername && url.password.length === 0
+  const hasNoCredentials = hasNoUsername && hasNoPassword
   const hasRootPath = url.pathname === '/'
   const hasNoQuery = url.search.length === 0
   const hasNoFragment = url.hash.length === 0
@@ -73,7 +75,9 @@ export function validateReturnTarget(returnTarget: string): string {
   const url = parseExactUrl(returnTarget)
   // 실제 owned scheme 값은 bootstrap이 주입한다. Browser/network가 이미 소유한 built-in만 제외한다.
   const isPrivateScheme = !INCOMPATIBLE_APP_PROTOCOLS.has(url.protocol)
-  const hasNoCredentials = url.username.length === 0 && url.password.length === 0
+  const hasNoUsername = url.username.length === 0
+  const hasNoPassword = hasNoUsername && url.password.length === 0
+  const hasNoCredentials = hasNoUsername && hasNoPassword
   const hasNoPort = url.port.length === 0
   const hasNoQuery = !returnTarget.includes('?')
   const hasNoFragment = !returnTarget.includes('#')
@@ -96,14 +100,18 @@ export function validateBrowserLaunchUrl(raw: unknown, apiOrigin: string): strin
   const trustedOrigin = validateApiOrigin(apiOrigin)
   const url = parseExactUrl(raw)
   const tickets = url.searchParams.getAll('ticket')
-  const hasOneQuery = url.searchParams.size === 1 && tickets.length === 1
+  const hasOneQueryParameter = url.searchParams.size === 1
+  const hasOneTicket = hasOneQueryParameter && tickets.length === 1
+  const hasOneQuery = hasOneQueryParameter && hasOneTicket
   const ticket = tickets[0]
   const isCanonicalTicket = isCanonicalOpaque(ticket)
   const expected = isCanonicalTicket
     ? `${trustedOrigin}/auth/login/authorize?ticket=${ticket}`
     : null
-  const isExactLaunchUrl = expected != null && raw === expected
-  if (!hasOneQuery || !isCanonicalTicket || !isExactLaunchUrl) {
+  const hasExpectedLaunchUrl = expected != null
+  const isExactLaunchUrl = hasExpectedLaunchUrl && raw === expected
+  const isValidLaunchUrl = hasOneQuery && isCanonicalTicket && isExactLaunchUrl
+  if (!isValidLaunchUrl) {
     throw new AuthProtocolFailure()
   }
 
@@ -114,12 +122,16 @@ export function parseReturnUrl(raw: unknown, returnTarget: string): Readonly<{ c
   const trustedTarget = validateReturnTarget(returnTarget)
   const url = parseExactUrl(raw)
   const codes = url.searchParams.getAll('code')
-  const hasOneQuery = url.searchParams.size === 1 && codes.length === 1
+  const hasOneQueryParameter = url.searchParams.size === 1
+  const hasOneCode = hasOneQueryParameter && codes.length === 1
+  const hasOneQuery = hasOneQueryParameter && hasOneCode
   const code = codes[0]
   const isCanonicalCode = isCanonicalOpaque(code)
   const expected = isCanonicalCode ? `${trustedTarget}?code=${code}` : null
-  const isExactReturnUrl = expected != null && raw === expected
-  if (!hasOneQuery || !isCanonicalCode || !isExactReturnUrl) {
+  const hasExpectedReturnUrl = expected != null
+  const isExactReturnUrl = hasExpectedReturnUrl && raw === expected
+  const isValidReturnUrl = hasOneQuery && isCanonicalCode && isExactReturnUrl
+  if (!isValidReturnUrl) {
     throw new AuthProtocolFailure()
   }
 

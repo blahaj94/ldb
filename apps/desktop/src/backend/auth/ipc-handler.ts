@@ -31,12 +31,17 @@ function publicSnapshot(snapshot: AuthSnapshot): AuthSnapshot {
 function exactField(args: unknown[], key: string): unknown {
   const hasOneArgument = args.length === 1
   const value = args[0]
-  const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
-  if (!hasOneArgument || !isObject) {
+  const hasValue = value != null
+  const hasObjectType = hasValue && typeof value === 'object'
+  const isObject = hasObjectType && !Array.isArray(value)
+  const hasValidArgumentShape = hasOneArgument && isObject
+  if (!hasValidArgumentShape) {
     return undefined
   }
   const keys = Reflect.ownKeys(value)
-  const hasExactKey = keys.length === 1 && keys[0] === key
+  const hasOneKey = keys.length === 1
+  const hasExpectedKey = hasOneKey && keys[0] === key
+  const hasExactKey = hasOneKey && hasExpectedKey
   if (!hasExactKey) {
     return undefined
   }
@@ -56,8 +61,9 @@ function validArguments(channel: Mutation, args: unknown[]): boolean {
   if (isCancel) {
     const attemptId = exactField(args, 'attemptId')
     const isString = typeof attemptId === 'string'
-    const isUuid =
+    const hasUuidShape =
       isString && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(attemptId)
+    const isUuid = isString && hasUuidShape
     return isUuid
   }
   const hasNoArguments = args.length === 0
@@ -69,7 +75,9 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
 
   function allowedWindow(window: BrowserWindow | null): window is BrowserWindow {
     const hasWindow = window != null
-    if (!hasWindow || disposed) {
+    const isRegistered = !disposed
+    const canInspectWindow = hasWindow && isRegistered
+    if (!canInspectWindow) {
       return false
     }
     const isWindowDestroyed = window.isDestroyed()
@@ -83,7 +91,9 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
     }
     const frame = contents.mainFrame
     const hasFrame = frame != null
-    const isCurrentDocument = hasFrame && !frame.detached && frame.url === documentUrl
+    const isFrameAttached = hasFrame && !frame.detached
+    const hasCurrentUrl = isFrameAttached && frame.url === documentUrl
+    const isCurrentDocument = hasFrame && isFrameAttached && hasCurrentUrl
     return isCurrentDocument
   }
 

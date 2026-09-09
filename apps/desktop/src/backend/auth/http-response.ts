@@ -28,6 +28,11 @@ export class AuthHttpFailure extends Error {
   }
 }
 
+type ErrorDefinitionShape = Readonly<{
+  code: string
+  message: string
+}>
+
 const ERROR_DEFINITIONS = [
   { code: 'INVALID_AUTH_REQUEST', message: '인증 요청을 확인해 주세요.' },
   {
@@ -40,7 +45,7 @@ const ERROR_DEFINITIONS = [
     code: 'AUTH_UNAVAILABLE',
     message: '현재 계정 기능을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.'
   }
-] as const
+] as const satisfies readonly ErrorDefinitionShape[]
 
 type ErrorCode = (typeof ERROR_DEFINITIONS)[number]['code']
 
@@ -71,7 +76,11 @@ const tokenSchema = z.strictObject({
 })
 const userSchema = z.strictObject({
   id: z.guid(),
-  nickname: z.string().refine((value) => value.isWellFormed())
+  nickname: z.string().refine((value) => {
+    const isWellFormed = value.isWellFormed()
+
+    return isWellFormed
+  })
 })
 const loginRequestSchema = z.strictObject({
   requestId: z.guid(),
@@ -132,15 +141,18 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
   const mediaType = contentTypeParts[0]
   const parameters = contentTypeParts.slice(1)
   const hasJsonMediaType = mediaType === 'application/json'
-  const hasSupportedParameters =
-    parameters.length === 0 || (parameters.length === 1 && parameters[0] === 'charset=utf-8')
+  const hasNoParameters = parameters.length === 0
+  const hasOneParameter = !hasNoParameters && parameters.length === 1
+  const hasUtf8Charset = hasOneParameter && parameters[0] === 'charset=utf-8'
+  const hasSupportedParameters = hasNoParameters || hasUtf8Charset
   const hasSupportedContentType = hasJsonMediaType && hasSupportedParameters
   if (!hasSupportedContentType) {
     throw new AuthHttpFailure('invalid-response')
   }
 
   const declaredLength = response.headers.get('content-length')
-  const declaredBytes = declaredLength == null ? null : Number(declaredLength)
+  const hasDeclaredLength = declaredLength != null
+  const declaredBytes = hasDeclaredLength ? Number(declaredLength) : null
   const hasOversizeDeclaration =
     declaredBytes != null &&
     Number.isFinite(declaredBytes) &&
@@ -169,7 +181,8 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
   try {
     while (true) {
       const chunk = await reader.read()
-      if (chunk.done) {
+      const reachedEnd = chunk.done
+      if (reachedEnd) {
         break
       }
       bytesRead += chunk.value.byteLength
@@ -210,9 +223,9 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
 }
 
 function classifyError(status: number, code: ErrorCode): AuthHttpFailure {
-  const isUnavailable =
-    (status === 500 && code === 'AUTH_INTERNAL_ERROR') ||
-    (status === 503 && code === 'AUTH_UNAVAILABLE')
+  const isInternalError = status === 500 && code === 'AUTH_INTERNAL_ERROR'
+  const isServiceUnavailable = status === 503 && code === 'AUTH_UNAVAILABLE'
+  const isUnavailable = isInternalError || isServiceUnavailable
   if (isUnavailable) {
     return new AuthHttpFailure('unavailable')
   }
@@ -256,7 +269,8 @@ export async function requireLogoutResponse(
 ): Promise<void> {
   const isNoContent = response.status === 204
   const hasNoBody = response.body == null
-  if (isNoContent && hasNoBody) {
+  const isValidNoContentResponse = isNoContent && hasNoBody
+  if (isValidNoContentResponse) {
     return
   }
   if (isNoContent) {
