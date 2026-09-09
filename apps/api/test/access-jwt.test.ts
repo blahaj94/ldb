@@ -119,6 +119,38 @@ test('발급 입력은 UUID와 UTC 정수 초를 요구하고 만료된 session�
   }
 })
 
+test('issuedAt 재조회 값의 NaN 비교는 서명 실패와 coercion 순서를 유지한다', async () => {
+  const issue = await createAccessJwtIssuer(configuration())
+  const issuanceInput = input()
+  const events: string[] = []
+  let issuedAtReads = 0
+  const subsequentIssuedAt = {
+    [Symbol.toPrimitive](hint: string) {
+      events.push(hint)
+      const isDefaultHint = hint === 'default'
+      if (isDefaultHint) {
+        return now
+      }
+      const isNumberHint = hint === 'number'
+      if (isNumberHint) {
+        return NaN
+      }
+      return 'invalid duration'
+    }
+  }
+  Object.defineProperty(issuanceInput, 'issuedAt', {
+    get() {
+      events.push('issuedAt')
+      issuedAtReads += 1
+      const isFirstRead = issuedAtReads === 1
+      return isFirstRead ? now : subsequentIssuedAt
+    }
+  })
+
+  await assert.rejects(issue(issuanceInput), { code: 'ACCESS_JWT_SIGNING_FAILED' })
+  assert.deepEqual(events, ['issuedAt', 'issuedAt', 'default', 'number'])
+})
+
 test('token 변조·다른 key 서명·malformed compact 입력을 거절한다', async () => {
   const verify = await createAccessJwtVerifier(configuration())
   const token = await signed()
