@@ -25,15 +25,15 @@ review-after: 목표별 Project 2개에서 작업 착수와 완료 판정의 누
 
 Discussion과 Project는 계획과 진입점이다. Rule 승인과 실제 구현의 권한은 기존 canonical Rule을 따른다. 목표의 현재 계약은 Project README, 내부 작업의 현재 계약은 해당 항목 본문, 실행 계약은 Issue 본문에서 각각 관리한다. 결정이 바뀌면 영향받는 계약과 링크를 함께 갱신하고 이전 근거를 남긴다. 원문을 여러 위치에 복제하지 않는다.
 
-## 제품 계획 이관의 보완 제안
+## 제품 계획 이관의 보완 기준
 
-이 절과 아래의 전체 현황판, 목표 정의와 실행 준비, 원본별 이관 검증 변경은 [Issue #236](https://github.com/blahaj94/ldb/issues/236)의 제안이다. PR #235에서 승인된 나머지 기준은 유지한다. 변경 부분은 Draft PR 승인 댓글 확인 후 적용하며, 제품 정책과 구현 착수 허용을 새로 만들지 않는다.
+이 절과 아래의 전체 현황판, 목표 정의와 실행 준비, 원본별 이관 검증 기준은 [PR #237의 사용자 승인](https://github.com/blahaj94/ldb/pull/237#issuecomment-5603930669)을 반영한다. PR #235에서 승인된 나머지 기준은 유지한다. 제품 정책과 구현 착수 허용을 새로 만들지 않는다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 이미 계획된 제품 개발을 미정 사항 때문에 누락하거나 전체 작업판을 성급하게 이력으로 취급하지 않는다.
-evidence: "https://github.com/blahaj94/ldb/issues/236"
+evidence: "https://github.com/blahaj94/ldb/pull/237#issuecomment-5603930669"
 exceptions: 목표 자체의 필요성이나 결과가 불명확한 아이디어는 Discussion에 둔다.
 review-after: 기존 제품 계획의 첫 이관과 후속 목표 2개에서 누락 및 과도한 착수 보류를 확인한다.
 ```
