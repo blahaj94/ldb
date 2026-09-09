@@ -132,7 +132,8 @@ async function transactionFailure(source, cleanup, outcome) {
   assert.equal((await stored(source, ordered[0].initial.session.id)).session, undefined)
   const remaining = await stored(source, ordered[1].initial.session.id)
   const wasCommitted = outcome === 'committed'
-  assert.equal(remaining.session == null, wasCommitted)
+  const isSessionMissing = remaining.session == null
+  assert.equal(isSessionMissing, wasCommitted)
   await cleanup(source)
   for (const f of fixtures) {
     assert.deepEqual(await stored(source, f.initial.session.id), { session: undefined, tokens: [] })

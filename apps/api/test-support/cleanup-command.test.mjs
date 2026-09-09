@@ -29,7 +29,8 @@ for (const stage of [
         calls.push('initialize')
         const hasPartialFailure = stage === 'partial initialize' || stage === 'partial disconnect'
         const hasInitializeFailure = stage === 'initialize'
-        if (hasPartialFailure || hasInitializeFailure) {
+        const hasInitializationFailure = hasPartialFailure || hasInitializeFailure
+        if (hasInitializationFailure) {
           fail()
         }
         source.isInitialized = true

@@ -34,7 +34,8 @@ async function activityFirst(source, cleanup) {
       const pending = settled(searchRequest(base, f))
       try {
         const pid = await bounded(committing.promise)
-        assert(activityAt < deadline)
+        const isActivityBeforeDeadline = activityAt < deadline
+        assert(isActivityBeforeDeadline)
         // 후보 조회 시에는 아직 commit되지 않은 활동을 볼 수 없어 만료된 옛 row가 선택된다.
         await waitUntil(source, deadline)
         await cleanupWaitingOn({

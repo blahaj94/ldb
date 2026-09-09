@@ -13,13 +13,11 @@ import {
 import { cleanupWaitingOn, withCleanupDeletionHeld } from './cleanup-database-control.mjs'
 
 async function setRequestDeadline(source, id, deadline) {
-  await source.query(
-    `UPDATE auth_login_requests
+  const updateRequestDeadlineSql = `UPDATE auth_login_requests
     SET created_at=$2::timestamptz-interval '600 seconds', expires_at=$2,
         code_expires_at=CASE WHEN code_expires_at IS NULL THEN NULL ELSE $2 END
-    WHERE id=$1`,
-    [id, deadline]
-  )
+    WHERE id=$1`
+  await source.query(updateRequestDeadlineSql, [id, deadline])
 }
 
 function callback(f, flow) {
