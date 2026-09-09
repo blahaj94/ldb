@@ -14,7 +14,7 @@ review-after: Execution Issue 10개 적용 후
 
 ## 목적
 
-큰 개발 요청을 Planner, Worker, Reviewer가 원래 대화 없이 이어받을 수 있는 작은 task로 바꾼다. GitHub Issue와 Pull Request가 durable coordination artifact이며 conversation history는 source of truth가 아니다.
+큰 개발 요청을 Planner, Worker, Reviewer가 원래 대화 없이 이어받을 수 있는 작은 task로 바꾼다. 계획에서 실행으로 넘어가는 기록별 책임은 [`목표별 계획과 작업 착수`](task-planning.md)의 승인 상태와 기준을 따른다. 실행 단계에서는 GitHub Issue와 Pull Request가 durable coordination artifact이며 conversation history는 source of truth가 아니다.
 
 이 문서는 역할, Issue contract와 model tier를 정의한다. 배정·상태·handoff·통합 계약은 [`agent-execution.md`](agent-execution.md), approval·branch·worktree·commit·merge 절차는 [`change-control.md`](change-control.md), test evidence는 [`testing.md`](testing.md), context와 logic budget은 [`code-quality.md`](code-quality.md)를 따른다.
 
@@ -143,11 +143,15 @@ review-after: "5개 Issue에 적용한 뒤 분류 모호성과 누락을 검토�
 
 ### Design / RFC Issue
 
+새 목표의 논의와 기존 설계 기록 전환은 [`기존 기록의 전환`](task-planning.md#기존-기록의-전환)의 승인 후 적용한다. Rule 변경안 작성처럼 실행할 설계 작업은 여전히 Issue와 Draft PR로 관리한다.
+
 Workflow, Rule, architecture의 대안, trade-off, open question, decision history를 기록한다. 재사용 가치가 있는 Proposal Revision, Decision, Rejected Alternative만 comment로 남기고 모든 reasoning step을 복사하지 않는다.
 
 설계안 작성 자체를 Worker에게 배정하려면 아래 Execution contract의 범위·acceptance criteria·실행 조건을 갖춘 bounded Design task로 구체화한다. 설계 완료와 Rule 승인·구현 허용은 별개다.
 
 ### 부모 추적 Issue
+
+새 목표의 기본 추적 위치는 승인된 [`Project 기준`](task-planning.md#project의-크기와-범위)을 따른다. 기존 부모 추적 Issue는 원래 기록과 남은 책임을 보존한다.
 
 여러 자식 작업의 결과와 dependency를 추적한다. 제목의 type이 `feat`, `design` 등 무엇이든 부모 전체를 Worker에게 배정하지 않는다. 부모·자식 관계는 실행 순서를 뜻하지 않으며 선행 dependency를 별도로 확인한다. 부모의 완료는 등록된 자식 수가 아니라 부모 자체의 acceptance criteria로 판단한다.
 
@@ -158,7 +162,7 @@ Workflow, Rule, architecture의 대안, trade-off, open question, decision histo
 - Goal과 user-visible behavior
 - Test 가능한 acceptance criteria
 - In scope와 out of scope
-- 관련 Rule과 context pointer
+- 관련 Rule과 context pointer. 승인된 Project 흐름으로 착수한 작업은 원래 Project와 내부 작업, 관련 Discussion 결정 및 사용자 실행 지시의 범위도 연결한다. 내부 대화 ID나 원문은 게시하지 않는다.
 - Complexity, uncertainty, risk: `low | medium | high`
 - Worker model tier: `low | standard | high`
 - `worker_count`: 현재 배정 계획의 Worker roster slot 수인 양의 정수

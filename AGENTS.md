@@ -6,7 +6,7 @@
 
 다음 순서로 필요한 context만 읽는다.
 
-1. 개발 작업이면 할당된 GitHub Issue의 현재 contract와 연결된 승인·evidence
+1. Project 작업을 요청받으면 승인된 [`task-planning.md`](docs/rules/task-planning.md)에 따라 해당 목표와 작업에서 실행 Issue로 연결한다. 개발 착수 시 해당 Issue의 현재 contract와 연결된 승인·evidence를 확인한다. 제안 상태이면 기존 Issue 진입 절차를 유지한다.
 2. [`docs/README.md`](docs/README.md)의 Document class와 Reading route
 3. Reading route의 역할별 시작 문서·절에서 시작해 task와 일치하는 topic의 Rule과 Reference
 4. 작업 path에 적용되는 가장 가까운 하위 `AGENTS.md`

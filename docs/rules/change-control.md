@@ -65,7 +65,7 @@ Rule 변경이 필요하면 AI는 다음 순서로 진행한다.
 
 ## Issue and preflight
 
-모든 개발 작업은 GitHub Issue를 source로 사용한다. AI는 구현 전에 Issue에 다음 preflight를 comment하고, approval boundary가 없으면 기다리지 않고 진행한다. 현재 contract에 이미 있는 항목은 해당 절 pointer로 연결하고 새 판단·변경분을 기록한다. 아래 항목의 확인과 필요한 승인·검증을 생략하지 않는다.
+목표와 작업의 선택은 [`목표별 계획과 작업 착수`](task-planning.md)의 승인 상태와 기준을 따른다. 모든 개발 작업은 착수 전에 GitHub Execution Issue를 실행 계약의 source로 사용한다. AI는 구현 전에 Issue에 다음 preflight를 comment하고, approval boundary가 없으면 기다리지 않고 진행한다. 현재 contract에 이미 있는 항목은 해당 절 pointer로 연결하고 새 판단·변경분을 기록한다. 아래 항목의 확인과 필요한 승인·검증을 생략하지 않는다.
 
 ```text
 목적
@@ -78,6 +78,8 @@ test 전략
 검증 command
 parallel 작업 충돌 가능성
 ```
+
+Project의 카드 이동은 preflight나 사용자 실행 지시를 대신하지 않는다. 승인된 Project 흐름으로 만든 Issue는 원래 목표와 선택한 작업을 연결한다.
 
 Issue의 현재 실행 contract와 PR의 실제 변경·evidence는 [`Execution Issue`](agent-workflow.md#execution-issue)의 기록 기준을 따른다. Preflight는 현재 contract에서 연결하고 PR에는 그 이후 실제 차이와 검증 결과를 기록한다. 세부 구현 설계와 일시적인 작업 분해는 Issue comment와 PR에서 관리하며 permanent Rule document에 넣지 않는다.
 
