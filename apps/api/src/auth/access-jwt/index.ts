@@ -186,19 +186,12 @@ export async function createAccessJwtVerifier(
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         const isIssuedByNow = iat <= now
-        if (!isIssuedByNow) {
-          throw new AccessJwtError('INVALID_ACCESS_JWT')
-        }
         const isUnexpired = now < exp
-        if (!isUnexpired) {
-          throw new AccessJwtError('INVALID_ACCESS_JWT')
-        }
         const hasPositiveLifetime = exp > iat
-        if (!hasPositiveLifetime) {
-          throw new AccessJwtError('INVALID_ACCESS_JWT')
-        }
         const hasAllowedLifetime = exp - iat <= ACCESS_JWT_MAX_AGE_SECONDS
-        if (!hasAllowedLifetime) {
+        const hasValidLifetime =
+          isIssuedByNow && isUnexpired && hasPositiveLifetime && hasAllowedLifetime
+        if (!hasValidLifetime) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         return { userId: sub, sessionId: sid, issuedAt: iat, expiresAt: exp, tokenId: jti }
