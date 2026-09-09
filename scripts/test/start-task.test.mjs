@@ -71,8 +71,7 @@ test('creates an isolated Issue branch at freshly fetched main and returns conci
   assert.equal(readFileSync(join(f.repository, 'local.txt'), 'utf8'), 'keep me\n')
   assert.match(result, /Test task/)
   assert.match(result, /https:\/\/example\.invalid\/issues\/30/)
-  const hasDestinationContext = result.includes(f.destination)
-  assert.ok(hasDestinationContext)
+  assert.ok(result.includes(f.destination))
   assert.deepEqual(f.calls[0], ['gh', 'issue', 'view', '30', '--json', 'number,title,url,state'])
 })
 
@@ -87,8 +86,7 @@ test('uses workspace and shared-scope prefixes without changing existing branche
     const branch = `${project}-30-add-oauth2-login`
 
     assert.equal(f.git(['branch', '--show-current'], destination), branch)
-    const hasBranchContext = result.includes(`Branch: ${branch}`)
-    assert.ok(hasBranchContext)
+    assert.ok(result.includes(`Branch: ${branch}`))
   }
 
   assert.equal(f.git(['rev-parse', 'codex/issue-30']), legacyHead)
@@ -128,8 +126,7 @@ test('closed or mismatched Issue and GitHub failure do not fetch or create a wor
   f.issue.state = 'OPEN'
   f.issue.number = 31
   assert.throws(() => startTask(['api', '30', 'fix-search', f.destination], f.run), /Issue/)
-  const hasOnlyIssueLookupCalls = f.calls.every(([command]) => command === 'gh')
-  assert.ok(hasOnlyIssueLookupCalls)
+  assert.ok(f.calls.every(([command]) => command === 'gh'))
   assert.throws(
     () =>
       startTask(['api', '30', 'fix-search', f.destination], () => {
