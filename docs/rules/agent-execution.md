@@ -79,7 +79,7 @@ Runner의 입력 고정·배타적 checkout 접근·packet·실행과 monitor·�
 
 단일 Planner는 다음 순서를 배정마다 직렬로 수행한다.
 
-1. 최신 Issue body의 현재 contract·roster·실행 조건과 정확히 연결된 승인·preflight·선행 결과·관련 PR evidence를 확인한다. 연결이 없거나 최신성·결정·기존 담당이 불명확할 때만 관련 comment·PR 이력으로 범위를 넓힌다.
+1. Project에서 들어온 작업은 승인된 [`사용자의 실행 지시에서 PR까지`](task-planning.md#사용자의-실행-지시에서-pr까지)를 거쳐 실행 Issue와 허용 범위를 먼저 확정한다. 최신 Issue body의 현재 contract·roster·실행 조건과 정확히 연결된 승인·preflight·선행 결과·관련 PR evidence를 확인한다. 연결이 없거나 최신성·결정·기존 담당이 불명확할 때만 관련 comment·PR 이력으로 범위를 넓힌다.
 2. Bounded scope, dependency·단계 허용·승인, 기존 실행과의 file·semantic·shared state 충돌을 확인한다.
 3. 현재 roster, `worker_count`, 공개 식별자, 통합 담당·branch·head와 `in process` label을 갱신한다.
 4. Body와 label을 다시 조회해 모두 반영됐고 상충하는 새 배정이 없는지 확인한다.
@@ -153,6 +153,8 @@ Planner는 모든 Worker result의 채택 또는 명시적 제외, 통합 head v
 | 설계안 작성 | 전체 acceptance criteria와 약속한 설계안·대안·근거·validation matrix 완료. 후속 구현 승인은 별도 gate |
 | Rule 반영까지 포함한 설계 | 전체 acceptance criteria, 명시적 Rule 승인과 PR merge 확인 |
 | 부모 추적 | 자식 evidence와 부모 자체의 전체 acceptance criteria 충족 |
+
+Issue 완료 후 연결된 내부 작업과 목표의 완료 판정은 승인된 [`완료와 보존`](task-planning.md#완료와-보존)을 따른다. Issue 상태만으로 Project를 완료하지 않는다.
 
 완료 Issue를 재개하려면 사용자가 재개 범위를 정한 뒤 Planner가 이전 완료 evidence와 현재 roster를 구분하고 `done`을 제거한다. Reopen만으로 Worker를 시작하지 않는다.
 

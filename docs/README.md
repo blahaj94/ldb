@@ -43,10 +43,11 @@ review-after: 승인 후 서로 다른 역할의 Execution Issue 3개에서 누�
 
 ### 역할별 시작점
 
-현재 Issue contract를 확인한 뒤 아래 문서·절에서 시작한다. 이어서 작업 topic과 path에 적용되는 Rule 본문을 확인한다. 시작점은 읽기의 순서이며 적용되는 의무의 상한이 아니다. 동일 revision의 재확인 조건은 [`AGENTS.md`](../AGENTS.md#context), 조회 범위와 출력 제한은 [`Context budget`](rules/code-quality.md#context-budget)을 따른다.
+Project의 목표나 내부 작업을 지정받았으면 [`목표별 계획과 작업 착수`](rules/task-planning.md)의 승인 상태와 진입 절차를 먼저 확인한다. 개발 착수 시 현재 Execution Issue contract를 확인한 뒤 아래 문서·절에서 시작한다. 이어서 작업 topic과 path에 적용되는 Rule 본문을 확인한다. 시작점은 읽기의 순서이며 적용되는 의무의 상한이 아니다. 동일 revision의 재확인 조건은 [`AGENTS.md`](../AGENTS.md#context), 조회 범위와 출력 제한은 [`Context budget`](rules/code-quality.md#context-budget)을 따른다.
 
 | 역할·작업 | 시작 문서·절 |
 | --- | --- |
+| 목표 논의와 Project 작업 선택 | [`task-planning.md`](rules/task-planning.md)의 기록별 책임·Project의 크기와 범위·사용자의 실행 지시에서 PR까지. 실행 Issue가 정해지면 아래 해당 역할 route로 이어간다. |
 | Planner | [`agent-workflow.md`](rules/agent-workflow.md)의 역할과 단일 책임·Execution Issue·Planning과 model tier·Escalation, [`change-control.md`](rules/change-control.md)의 Approval required·Approval evidence·Issue and preflight. 배정할 때 [`agent-execution.md`](rules/agent-execution.md)의 Worker roster와 상태·배정 절차·병렬 가능성·Handoff와 context |
 | 단독 직접 수행 parent | [`agent-workflow.md`의 수행 모드 선택](rules/agent-workflow.md#수행-모드-선택)과 [Code Worker runtime mapping](rules/agent-workflow.md#code-worker-runtime-mapping), [`agent-execution.md`의 수행 모드와 소유권](rules/agent-execution.md#수행-모드와-소유권). 이어서 아래 Code Worker 또는 Code 없는 문서 작업 route의 해당 의무 확인 |
 | 실행 전담 Runner | 현재 실행 packet과 [`agent-runner.md`](rules/agent-runner.md)의 범위와 권한·실행 packet·실행·대기·취소·재시도·고정 결과 형식, [`agent-execution.md`의 실행 보조 기록](rules/agent-execution.md#실행-보조-기록). 판단 owner는 [`testing.md`의 검증 evidence 재사용](rules/testing.md#검증-evidence-재사용) 확인 |
@@ -97,6 +98,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
 - [`rules/design-system.md`](rules/design-system.md): SEED 재사용·고정 source·기본값·override 금지·중립 Example·향후 검증 matrix
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
+- [`rules/task-planning.md`](rules/task-planning.md): Discussion에서 목표별 Project와 실행 Issue로 이어지는 진입점, 분해와 완료 기준. PR #235의 사용자 승인 반영
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
 - [`rules/convention-migration.md`](rules/convention-migration.md): 승인된 기존 convention의 동작 보존 이행 기준(사용자 merge 전 code 이행 불가)과 후속 Execution Issue routing
 - [`rules/agent-execution.md`](rules/agent-execution.md): 수행 모드, Worker roster, context, 상태와 통합 계약
