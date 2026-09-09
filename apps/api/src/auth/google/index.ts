@@ -108,9 +108,11 @@ function verifyGoogleClaims(
   const checkedAt = Math.floor(Date.now() / 1000)
   const issuedAt = payload.iat
   const isIssuedAtNumber = typeof issuedAt === 'number'
-  const isIssuedAtFinite = isIssuedAtNumber && Number.isFinite(issuedAt)
-  const isValidIssuedAt = isIssuedAtNumber && isIssuedAtFinite
-  if (!isValidIssuedAt) {
+  if (!isIssuedAtNumber) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+  }
+  const isIssuedAtFinite = Number.isFinite(issuedAt)
+  if (!isIssuedAtFinite) {
     throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
   const isIssuedInFuture = issuedAt > checkedAt
@@ -119,9 +121,11 @@ function verifyGoogleClaims(
   }
   const expiresAt = payload.exp
   const isExpiryNumber = typeof expiresAt === 'number'
-  const isExpiryFinite = isExpiryNumber && Number.isFinite(expiresAt)
-  const isValidExpiry = isExpiryNumber && isExpiryFinite
-  if (!isValidExpiry) {
+  if (!isExpiryNumber) {
+    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+  }
+  const isExpiryFinite = Number.isFinite(expiresAt)
+  if (!isExpiryFinite) {
     throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
   const isExpired = checkedAt >= expiresAt
@@ -283,16 +287,20 @@ export function createGoogleProviderVerifier(
           registration = resolvedRegistration
           const storedNonceHash = providerInput.nonceHash
           const isNonceHashBuffer = Buffer.isBuffer(storedNonceHash)
-          const hasNonceHashBytes = isNonceHashBuffer && storedNonceHash.length === 32
-          const isValidNonceHash = isNonceHashBuffer && hasNonceHashBytes
-          if (!isValidNonceHash) {
+          if (!isNonceHashBuffer) {
+            throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          }
+          const hasNonceHashBytes = storedNonceHash.length === 32
+          if (!hasNonceHashBytes) {
             throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
           }
           nonceHash = Buffer.from(storedNonceHash)
           const isCodeString = typeof providerInput.code === 'string'
-          const hasCode = isCodeString && providerInput.code.length > 0
-          const isValidCode = isCodeString && hasCode
-          if (!isValidCode) {
+          if (!isCodeString) {
+            throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          }
+          const hasCode = providerInput.code.length > 0
+          if (!hasCode) {
             throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
           }
           try {
@@ -318,9 +326,11 @@ export function createGoogleProviderVerifier(
           const hasIdToken = 'id_token' in tokenResponse
           const candidateIdToken = hasIdToken ? tokenResponse.id_token : undefined
           const isIdTokenString = typeof candidateIdToken === 'string'
-          const isIdTokenEmpty = isIdTokenString && candidateIdToken.length === 0
-          const isValidTokenResponse = hasIdToken && isIdTokenString && !isIdTokenEmpty
-          if (!isValidTokenResponse) {
+          if (!hasIdToken || !isIdTokenString) {
+            throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          }
+          const isIdTokenEmpty = candidateIdToken.length === 0
+          if (isIdTokenEmpty) {
             throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
           }
           idToken = candidateIdToken
