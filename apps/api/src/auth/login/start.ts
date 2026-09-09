@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { AuthLoginRequestSchema } from '../../database/schemas/auth-login-requests.js'
 import { CLEARED_LOGIN_FIELDS, LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure, loginFailure } from '../../errors/login.js'
+import type { AuthProvider } from '../../types/auth.js'
 import type {
   CreatedLoginRequest,
   LoginAuthorization,
@@ -21,6 +22,11 @@ import {
 type AuthorizationCommitResult =
   | { status: 'authorized'; authorization: LoginAuthorization }
   | { status: 'rejected'; error: LoginFailure }
+
+function authorizationScope(provider: AuthProvider): string {
+  const isGoogleProvider = provider === 'google'
+  return isGoogleProvider ? 'openid profile' : 'identify'
+}
 
 export async function createLoginRequest(
   deps: LoginDependencies,
@@ -88,11 +94,16 @@ export async function authorizeLogin(
           lock: { mode: 'pessimistic_write' }
         })
         const checkedAt = await freshTime(manager)
-        if (!request || request.status !== 'created') {
+        const hasRequest = request != null
+        const isRequestTruthy = hasRequest && Boolean(request)
+        const isCreated = isRequestTruthy && request.status === 'created'
+        const isRequestInvalid = !hasRequest || !isCreated
+        if (isRequestInvalid) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
 
-        if (requestExpired(request, checkedAt)) {
+        const isRequestExpired = requestExpired(request, checkedAt)
+        if (isRequestExpired) {
           await markLoginRequestFailed(manager, request.id)
           return {
             status: 'rejected',
@@ -115,7 +126,9 @@ export async function authorizeLogin(
         const state = newOpaque()
         const browserBinding = newOpaque()
         const providerVerifier = newOpaque()
-        const nonce = request.provider === 'google' ? newOpaque() : null
+        const shouldCreateNonce = request.provider === 'google'
+        const nonce = shouldCreateNonce ? newOpaque() : null
+        const hasNonce = nonce != null && Boolean(nonce)
 
         // Ticket 소비와 browser_started 전이를 함께 저장한다.
         await requests.update(
@@ -125,7 +138,7 @@ export async function authorizeLogin(
             launchTicketHash: null,
             stateHash: opaqueHash(state),
             browserBindingHash: opaqueHash(browserBinding),
-            oidcNonceHash: nonce ? opaqueHash(nonce) : null,
+            oidcNonceHash: hasNonce ? opaqueHash(nonce) : null,
             ...deps.pkceKeys.encrypt(providerVerifier, request)
           }
         )
@@ -136,11 +149,11 @@ export async function authorizeLogin(
           response_type: 'code',
           client_id: registration.providerClientId,
           redirect_uri: registration.callbackUrl,
-          scope: request.provider === 'google' ? 'openid profile' : 'identify',
+          scope: authorizationScope(request.provider),
           state,
           code_challenge: challenge(providerVerifier),
           code_challenge_method: LOGIN.method,
-          ...(nonce ? { nonce } : {})
+          ...(hasNonce ? { nonce } : {})
         }).toString()
         const remainingRequestSeconds = (request.expiresAt.getTime() - checkedAt.getTime()) / 1000
         const cookieSeconds = Math.min(LOGIN.requestSeconds, remainingRequestSeconds)
@@ -149,14 +162,19 @@ export async function authorizeLogin(
           status: 'authorized',
           authorization: {
             redirectUrl: authorizationUrl.href,
-            cookie: browserCookie(request.id, browserBinding, cookieSeconds)
+            cookie: browserCookie({
+              requestId: request.id,
+              bindingValue: browserBinding,
+              maxAgeSeconds: cookieSeconds
+            })
           }
         }
       }
     )
 
     // 만료·등록 오류의 정리도 commit·release가 확인된 뒤 거절 결과를 전달한다.
-    if (committed.status === 'rejected') {
+    const isRejected = committed.status === 'rejected'
+    if (isRejected) {
       throw committed.error
     }
     return committed.authorization
