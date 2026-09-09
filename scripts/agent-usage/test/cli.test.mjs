@@ -63,20 +63,21 @@ async function setup(t) {
       )
     )
   }
-  await writeFile(
-    join(sessions, 'root.jsonl'),
-    events.map((row) => JSON.stringify(row)).join('\n') + '\n'
-  )
+  const sessionLogPath = join(sessions, 'root.jsonl')
+  const sessionLogBody = events.map((row) => JSON.stringify(row)).join('\n') + '\n'
+  await writeFile(sessionLogPath, sessionLogBody)
   const output = []
   const options = {
     cwd: directory,
     env: { CODEX_HOME: join(directory, 'codex'), CODEX_THREAD_ID: 'root' },
     write: (text) => output.push(text),
     call: (args) => {
-      if (args[0] === 'repo') {
+      const isRepositoryCommand = args[0] === 'repo'
+      if (isRepositoryCommand) {
         return { nameWithOwner: 'owner/repo' }
       }
-      if (args[0] === 'pr') {
+      const isPullRequestCommand = args[0] === 'pr'
+      if (isPullRequestCommand) {
         return {
           number: 3,
           url: 'https://github.com/owner/repo/pull/3',
@@ -112,7 +113,10 @@ test('begin은 local manifest를 저장하고 시작 turn의 조용한 덮어쓰
 test('canonical repository와 --repo 대소문자가 달라도 begin과 snapshot이 같은 작업을 사용한다', async (t) => {
   const { options, output } = await setup(t)
   const call = options.call
-  options.call = (args) => (args[0] === 'repo' ? { nameWithOwner: 'Owner/Repo' } : call(args))
+  options.call = (args) => {
+    const isRepositoryCommand = args[0] === 'repo'
+    return isRepositoryCommand ? { nameWithOwner: 'Owner/Repo' } : call(args)
+  }
   const begin = ['begin', '--issue', '1', '--from-turn', 'first']
   await runUsage(begin, options)
   await runUsage([...begin, '--repo', 'OWNER/repo'], options)
@@ -183,7 +187,8 @@ test('snapshot은 명시적 종료 범위로 요약하고 --publish 없이는 Gi
   assert.equal(snapshot.agents[0].totalTokens, 12)
   assert.equal(snapshot.issue, 1)
   assert.equal(snapshot.pullRequest, 3)
-  assert.ok(!JSON.stringify(snapshot).includes('fromTurn'))
+  const hasInternalStartTurn = JSON.stringify(snapshot).includes('fromTurn')
+  assert.ok(!hasInternalStartTurn)
   const manifest = JSON.parse(
     await readFile(join(directory, '.git/agent-usage/issue-1.json'), 'utf8')
   )
@@ -210,10 +215,12 @@ test('snapshot 재실행은 저장한 종료 범위를 유지하며 merged PR ba
   await runUsage(args, options)
   assert.deepEqual(JSON.parse(output.at(-1)), original)
   const call = options.call
-  options.call = (arguments_) =>
-    arguments_[0] === 'pr'
+  options.call = (arguments_) => {
+    const isPullRequestCommand = arguments_[0] === 'pr'
+    return isPullRequestCommand
       ? { ...call(arguments_), state: 'MERGED', mergedAt: end }
       : call(arguments_)
+  }
   await runUsage(args, options)
   assert.deepEqual(JSON.parse(output.at(-1)), original)
 })
@@ -226,7 +233,8 @@ test('추가 작업은 --refresh로 명시한 경우에만 종료 범위를 확�
   await runUsage([...args, '--refresh'], options)
   const refreshed = JSON.parse(output.at(-1))
   assert.equal(refreshed.agents[0].totalTokens, 24)
-  assert.ok(Date.parse(refreshed.period.capturedAt) > Date.parse(end))
+  const isCaptureAfterPreviousEnd = Date.parse(refreshed.period.capturedAt) > Date.parse(end)
+  assert.ok(isCaptureAfterPreviousEnd)
   await runUsage(args, options)
   assert.deepEqual(JSON.parse(output.at(-1)), refreshed)
 })
