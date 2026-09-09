@@ -17,12 +17,12 @@ export function createLoginService(dependencies: LoginDependencies): LoginHttpSe
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 
-  const hasRegistry = Boolean(dependencies.registry)
+  const hasRegistry = dependencies.registry != null
   if (!hasRegistry) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 
-  const hasPkceKeys = Boolean(dependencies.pkceKeys)
+  const hasPkceKeys = dependencies.pkceKeys != null
   if (!hasPkceKeys) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
