@@ -66,7 +66,8 @@ async function databaseFailure(source, phase, applied) {
         const after = await snapshot(source, f)
         const didCommit = phase === 'commit' && applied
         if (didCommit) {
-          assert(after.session.last_active_at > before.session.last_active_at)
+          const didActivityAdvance = after.session.last_active_at > before.session.last_active_at
+          assert(didActivityAdvance)
           assert.deepEqual(after.user, before.user)
           assert.deepEqual(after.tokens, before.tokens)
         } else {
@@ -142,15 +143,22 @@ async function upstreamRetention(source, kind) {
     const first = await searchRequest(base, f)
     if (isTimeout) {
       await expectSearchError(first, 504, 'NEOPLE_TIMEOUT')
-      assert(performance.now() - started >= 4900)
-      await waitFor(() => closed, 'upstream body socket was not cancelled')
+      const duration = performance.now() - started
+      const reachedTimeoutDuration = duration >= 4900
+      assert(reachedTimeoutDuration)
+      await waitFor(() => {
+        const isUpstreamClosed = closed
+        return isUpstreamClosed
+      }, 'upstream body socket was not cancelled')
     } else if (isInvalid) {
       await expectSearchError(first, 502, 'NEOPLE_API_ERROR')
     } else {
       assert.equal(first.status, 200)
       assert.deepEqual(await first.json(), { rows: [] })
     }
-    assert((await snapshot(source, f)).session.last_active_at > before.session.last_active_at)
+    const after = await snapshot(source, f)
+    const didActivityAdvance = after.session.last_active_at > before.session.last_active_at
+    assert(didActivityAdvance)
     upstream.respond = undefined
     upstream.body = { rows: [] }
     for (let count = 1; count < 10; count += 1) {

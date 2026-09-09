@@ -26,9 +26,16 @@ async function startLoopback(
 
 async function closeLoopback(server: Server): Promise<void> {
   server.closeAllConnections()
-  await new Promise<void>((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve()))
-  )
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      const hasError = error != null
+      if (hasError) {
+        reject(error)
+      } else {
+        resolve()
+      }
+    })
+  })
 }
 
 async function expectStatus(
@@ -38,7 +45,8 @@ async function expectStatus(
   try {
     await promise
   } catch (error) {
-    assert(error instanceof NeopleSearchFailure)
+    const isSearchFailure = error instanceof NeopleSearchFailure
+    assert(isSearchFailure)
     assert.equal(error.status, status)
     return error
   }
@@ -86,7 +94,8 @@ test('native fetch does not follow redirects or retry upstream failures', async 
   let requests = 0
   const loopback = await startLoopback((_request, response) => {
     requests += 1
-    if (requests === 1) {
+    const isFirstRequest = requests === 1
+    if (isFirstRequest) {
       response.writeHead(302, { location: '/followed' })
       response.end()
       return
@@ -189,8 +198,11 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
-        if (init?.signal !== null && init?.signal !== undefined) {
-          captured.signal = init.signal
+        const isSignalNotNull = init?.signal !== null
+        const isSignalDefined = isSignalNotNull && init?.signal !== undefined
+        const hasSignal = isSignalNotNull && isSignalDefined
+        if (hasSignal) {
+          captured.signal = init.signal as AbortSignal
         }
         const response = await fetch(request, init)
         return {
@@ -253,8 +265,11 @@ test('clock deadline aborts an unfinished native body before its timer callback 
   try {
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
-        if (init?.signal !== null && init?.signal !== undefined) {
-          captured.signal = init.signal
+        const isSignalNotNull = init?.signal !== null
+        const isSignalDefined = isSignalNotNull && init?.signal !== undefined
+        const hasSignal = isSignalNotNull && isSignalDefined
+        if (hasSignal) {
+          captured.signal = init.signal as AbortSignal
         }
         const response = await fetch(request, init)
         now = 5_000

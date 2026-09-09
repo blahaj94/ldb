@@ -128,7 +128,8 @@ async function residual(source, kind) {
     const isDeletedUser = kind === 'deleted-user'
     const isDeletedSession = kind === 'deleted-session'
     const isExpiredRevoked = kind === 'expired-revoked'
-    if (isLogout || isExpiredRevoked) {
+    const shouldLogOut = isLogout || isExpiredRevoked
+    if (shouldLogOut) {
       const response = await fetch(`${base}/auth/logout`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -181,8 +182,10 @@ async function removalAfterActivity(source, kind) {
       const after = await snapshot(source, f)
       const isLogout = kind === 'logout'
       if (isLogout) {
-        assert(after.session.revoked_at != null)
-        assert(after.session.last_active_at > before.session.last_active_at)
+        const isSessionRevoked = after.session.revoked_at != null
+        assert(isSessionRevoked)
+        const didActivityAdvance = after.session.last_active_at > before.session.last_active_at
+        assert(didActivityAdvance)
       } else {
         assert.equal(after.user, undefined)
         assert.equal(after.session, undefined)
@@ -218,7 +221,9 @@ async function expiredAfterAdmission(source) {
       await expectSearchError(await searchRequest(base, f), 401, 'AUTHENTICATION_REQUIRED')
       assert.equal(commits, 1)
       assert.equal(calls.length, 1)
-      assert((await snapshot(source, f)).session.last_active_at > before.session.last_active_at)
+      const after = await snapshot(source, f)
+      const didActivityAdvance = after.session.last_active_at > before.session.last_active_at
+      assert(didActivityAdvance)
     },
     { createQueryRunner }
   )

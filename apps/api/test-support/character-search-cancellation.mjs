@@ -54,7 +54,10 @@ async function lockedDatabaseDeadline(source, mark) {
         const response = await pending
         await expectSearchError(response, 500, 'INTERNAL_SERVER_ERROR')
         const duration = performance.now() - started
-        assert(duration >= 1800 && duration < 3500)
+        const reachedMinimumDuration = duration >= 1800
+        const stayedBelowMaximumDuration = duration < 3500
+        const isDurationInExpectedRange = reachedMinimumDuration && stayedBelowMaximumDuration
+        assert(isDurationInExpectedRange)
         // Client close만으로 server-side lock 대기가 취소됐다고 추정하지 않고 backend 소멸을 확인한다.
         mark('locked search backend disappears while external blocker stays locked')
         await assertBackendGone(source, pid)
@@ -93,7 +96,10 @@ async function lateCommitAcknowledgement(source) {
       const pending = searchRequest(base, f)
       try {
         await bounded(committed.promise)
-        assert((await snapshot(source, f)).session.last_active_at > before.session.last_active_at)
+        const afterCommit = await snapshot(source, f)
+        const didActivityAdvance =
+          afterCommit.session.last_active_at > before.session.last_active_at
+        assert(didActivityAdvance)
         await expectSearchError(await pending, 500, 'INTERNAL_SERVER_ERROR')
         assert.equal(calls.length, 0)
       } finally {

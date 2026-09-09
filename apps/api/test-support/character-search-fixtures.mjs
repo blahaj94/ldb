@@ -161,7 +161,12 @@ export function barrier() {
 
 export async function waitFor(check, message = 'search observation did not arrive') {
   const deadline = Date.now() + 5000
-  while (Date.now() < deadline) {
+  while (true) {
+    const isBeforeDeadline = Date.now() < deadline
+    if (!isBeforeDeadline) {
+      break
+    }
+
     const ready = await check()
     if (ready) {
       return
@@ -177,6 +182,7 @@ export async function assertBackendGone(source, pid) {
       'SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1',
       [pid]
     )
-    return row.count === 0
+    const isBackendGone = row.count === 0
+    return isBackendGone
   }, 'search backend remained after cancellation')
 }
