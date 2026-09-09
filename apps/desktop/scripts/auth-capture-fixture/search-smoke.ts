@@ -6,46 +6,14 @@ import type { CaptureObservation } from './capture-observation'
 import type { createFixtureSearch } from './search-effects'
 import { createCaptureActions, until } from './actions'
 import { installObservation } from './observe'
+import {
+  assertScenarioSelectionQuiet,
+  rethrowMixedSearchFailure,
+  type SearchDiagnostic
+} from './search-diagnostic'
 import { inspectSearch, type SearchUiObservation } from './search-observation'
 
 type Slot = SearchUiObservation['slots'][number]
-type SearchDiagnosticValue = boolean | number
-type SearchDiagnostic = {
-  stage: 'mixed'
-  check:
-    | 'capture-start'
-    | 'mixed-state-ready'
-    | 'initial-rate-wait'
-    | 'scenario-selection-quiet'
-    | 'first-retry-click'
-    | 'first-retry-ready'
-    | 'independent-retry'
-  actual: Record<string, SearchDiagnosticValue>
-  expected: Record<string, SearchDiagnosticValue>
-}
-
-function reportSearchDiagnostic(error: unknown, diagnostic: SearchDiagnostic | null): void {
-  const hasDiagnostic = diagnostic != null
-  if (!hasDiagnostic) {
-    return
-  }
-  const details = error as {
-    code?: unknown
-    message?: unknown
-    generatedMessage?: unknown
-  }
-  const isAssertion = details.code === 'ERR_ASSERTION'
-  const isDeadline = details.message === 'Capture fixture observation deadline exceeded'
-  if (!isAssertion && !isDeadline) {
-    return
-  }
-  const kind = isAssertion ? 'assertion' : 'deadline'
-  const generatedMessage =
-    isAssertion && typeof details.generatedMessage === 'boolean' ? details.generatedMessage : null
-  const record = { ...diagnostic, kind, generatedMessage }
-  console.error(`Capture fixture search diagnostic: ${JSON.stringify(record)}`)
-}
-
 function hasRetryWait(slot: Slot): slot is Slot & { retryAfterSeconds: number } {
   const hasWait = slot.retryAfterSeconds != null
   return hasWait
@@ -278,14 +246,13 @@ export async function smokeCharacterSearch(
     const mixedRequests = search.counts.requests
     search.selectScenario('success')
     const currentRequests = search.counts.requests
-    const selectionRequestDelta = currentRequests - mixedRequests
-    diagnostic = {
-      stage: 'mixed',
-      check: 'scenario-selection-quiet',
-      actual: { requestDelta: selectionRequestDelta },
-      expected: { requestDelta: 0 }
-    }
-    assert.equal(currentRequests, mixedRequests)
+    assertScenarioSelectionQuiet({
+      currentRequests,
+      expectedRequests: mixedRequests,
+      recordDiagnostic: (record) => {
+        diagnostic = record
+      }
+    })
     await retry({ slot: failures[0], diagnosticCheck: 'first-retry-click' })
     const firstRetry = await waitFor((view) => {
       const hasSucceeded = view.slots[failures[0]].state === 'success'
@@ -453,7 +420,7 @@ export async function smokeCharacterSearch(
   } catch (error) {
     const isMixedStage = stage === 'mixed'
     if (isMixedStage) {
-      reportSearchDiagnostic(error, diagnostic)
+      rethrowMixedSearchFailure({ error, diagnostic })
     }
     console.error(`Capture fixture search stage FAIL: ${stage}`)
     throw error
