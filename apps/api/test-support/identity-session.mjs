@@ -238,7 +238,13 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     )
   }
   assert.equal(new Set(distinct.map((result) => result.user.id)).size, inputs.length)
-  assert(distinct.every((result) => result.isNewUser && result.user.nickname === '모험가000007'))
+  const hasOnlyExpectedNewIdentities = distinct.every((result) => {
+    const isNewUser = result.isNewUser
+    const hasExpectedNickname = isNewUser && result.user.nickname === '모험가000007'
+    const isExpectedNewIdentity = isNewUser && hasExpectedNickname
+    return isExpectedNewIdentity
+  })
+  assert(hasOnlyExpectedNewIdentities)
   for (let index = 0; index < inputs.length; index++) {
     const stored = await source
       .getRepository(UserSchema)
@@ -302,8 +308,10 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     const result = await pending
     await b.commitTransaction()
     const [{ maximum }] = await source.query('SELECT clock_timestamp() AS maximum')
-    assert(result.session.createdAt >= minimum)
-    assert(result.session.createdAt <= maximum)
+    const isCreatedAtAfterLockMinimum = result.session.createdAt >= minimum
+    assert(isCreatedAtAfterLockMinimum)
+    const isCreatedAtBeforeObservedMaximum = result.session.createdAt <= maximum
+    assert(isCreatedAtBeforeObservedMaximum)
     await assertStored(source, result)
   })
 

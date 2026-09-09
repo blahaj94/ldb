@@ -44,7 +44,8 @@ async function assertRotationHistory(source) {
     hashes.push(hash)
     const state = await stored(source, f.initial.session.id)
     const current = state.tokens.find((token) => token.token_hash.equals(hash))
-    assert(current)
+    const hasCurrentToken = current != null
+    assert(hasCurrentToken)
     assert.equal(current.issued_at.getTime() % 1000, 0)
     assert.equal(current.consumed_at, null)
     assert.equal(state.tokens.filter((token) => token.consumed_at === null).length, 1)
@@ -62,7 +63,10 @@ async function assertRotationHistory(source) {
     raw = result.refreshToken
   }
   const rotated = await stored(source, f.initial.session.id)
-  assert(hashes.every((hash) => rotated.tokens.some((token) => token.token_hash.equals(hash))))
+  const hasAllIssuedHashes = hashes.every((hash) =>
+    rotated.tokens.some((token) => token.token_hash.equals(hash))
+  )
+  assert(hasAllIssuedHashes)
   await rejected(() => f.rotate(opaque()))
   assert.deepEqual(await stored(source, f.initial.session.id), rotated)
   await rejected(() => f.rotate(f.initial.refreshToken))

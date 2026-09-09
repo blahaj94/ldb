@@ -148,10 +148,11 @@ async function uncertainCommit({ source, applied, reuse }) {
     await rejected(() => f.rotate(current))
   } else {
     assert.equal(after.tokens.length, before.tokens.length + 1)
-    assert(
-      after.tokens.find((token) => token.token_hash.equals(digest(f.initial.refreshToken)))
-        .consumed_at
-    )
+    const consumedAt = after.tokens.find((token) =>
+      token.token_hash.equals(digest(f.initial.refreshToken))
+    ).consumed_at
+    const hasConsumedAt = consumedAt != null
+    assert(hasConsumedAt)
     assert.equal(after.session.revoked_at, null)
     // 실제 응답 유실과 같은 상태다. 원문을 다시 제출하면 grace 없이 reuse 폐기한다.
     await rejected(() => f.rotate(f.initial.refreshToken))

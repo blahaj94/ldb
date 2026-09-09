@@ -327,7 +327,8 @@ async function activityBeforeWait(source) {
     },
     async ({ runner, unlock }, pending) => {
       activityAt = await databaseNow(runner)
-      assert(activityAt < deadline)
+      const isActivityBeforeDeadline = activityAt < deadline
+      assert(isActivityBeforeDeadline)
       await runner.query('UPDATE auth_sessions SET last_active_at=$2 WHERE id=$1', [
         f.initial.session.id,
         activityAt

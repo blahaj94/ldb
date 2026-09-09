@@ -39,7 +39,8 @@ async function headPreservesActivity(source) {
       user: { id: before.user.id, nickname: before.user.nickname }
     })
     const afterGet = await snapshot(source, f)
-    assert(afterGet.session.last_active_at > before.session.last_active_at)
+    const hasGetAdvancedActivity = afterGet.session.last_active_at > before.session.last_active_at
+    assert(hasGetAdvancedActivity)
   })
 }
 
@@ -66,7 +67,8 @@ async function normal(source) {
   })
   const after = await snapshot(source, f)
   assert.equal(after.user.nickname, '중복')
-  assert(after.session.last_active_at > before.session.last_active_at)
+  const hasActivityAdvanced = after.session.last_active_at > before.session.last_active_at
+  assert(hasActivityAdvanced)
   assert.equal(after.session.last_active_at.getMilliseconds(), 0)
   assert.deepEqual(after.tokens, before.tokens)
   const other = await accountFixture(source)
@@ -219,14 +221,17 @@ async function boundary({ source, phase, boundaryKind, method }) {
   } finally {
     restore()
   }
-  assert(clocks >= 1)
+  const hasObservedClockQuery = clocks >= 1
+  assert(hasObservedClockQuery)
   const after = await snapshot(source, f)
   const isAdmission = phase === 'admission'
   if (isAdmission) {
     assert.deepEqual(after, admittedBefore)
   }
   if (!isAdmission) {
-    assert(after.session.last_active_at > before.session.last_active_at)
+    const hasFunctionPhaseActivityAdvanced =
+      after.session.last_active_at > before.session.last_active_at
+    assert(hasFunctionPhaseActivityAdvanced)
   }
 }
 
@@ -383,7 +388,9 @@ async function betweenPhases({ source, kind, method }) {
         pending = settled(accountRequest(base, f, method))
         await bounded(admissionApplied.promise)
         const admitted = await snapshot(source, f)
-        assert(admitted.session.last_active_at > before.session.last_active_at)
+        const hasAdmissionAdvancedActivity =
+          admitted.session.last_active_at > before.session.last_active_at
+        assert(hasAdmissionAdvancedActivity)
         const shouldLogout = kind === 'logout'
         if (shouldLogout) {
           const response = await fetch(`${base}/auth/logout`, {
@@ -514,7 +521,9 @@ async function databaseFailure({ source, phase, applied, method }) {
   if (noActivity) {
     assert.deepEqual(after, before)
   } else {
-    assert(after.session.last_active_at > before.session.last_active_at)
+    const hasActivityAdvancedAfterFailure =
+      after.session.last_active_at > before.session.last_active_at
+    assert(hasActivityAdvancedAfterFailure)
   }
   const isFunctionCommit = phase === 'function'
   const isAppliedFunctionCommit = isFunctionCommit && applied
