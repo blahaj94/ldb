@@ -326,7 +326,8 @@ export function createGoogleProviderVerifier(
           const hasIdToken = 'id_token' in tokenResponse
           const candidateIdToken = hasIdToken ? tokenResponse.id_token : undefined
           const isIdTokenString = typeof candidateIdToken === 'string'
-          if (!hasIdToken || !isIdTokenString) {
+          const isInvalidTokenResponse = !hasIdToken || !isIdTokenString
+          if (isInvalidTokenResponse) {
             throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
           }
           const isIdTokenEmpty = candidateIdToken.length === 0
