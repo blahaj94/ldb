@@ -57,8 +57,9 @@ export async function createAccessJwtIssuer(
       const { userId, sessionId, issuedAt, idleDeadline } = input
       const expiresAt = Math.min(issuedAt + ACCESS_JWT_MAX_AGE_SECONDS, idleDeadline)
       const hasValidExpiration = isTimestamp(expiresAt)
-      const isExpirationAfterIssue = hasValidExpiration && expiresAt > issuedAt
-      if (!isExpirationAfterIssue) {
+      const isExpirationAtOrBeforeIssue = hasValidExpiration && expiresAt <= issuedAt
+      const hasInvalidExpiration = !hasValidExpiration || isExpirationAtOrBeforeIssue
+      if (hasInvalidExpiration) {
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       try {
