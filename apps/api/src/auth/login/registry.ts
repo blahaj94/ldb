@@ -188,8 +188,12 @@ export class LoginRegistry {
   /** 새 요청은 현재 active version으로 시작한다. */
   active(provider: AuthProvider): ProviderRegistration {
     const version = this.#active[provider]
-    const hasVersion = Boolean(version)
+    const hasVersion = version != null
     if (!hasVersion) {
+      throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+    }
+    const hasTruthyVersion = Boolean(version)
+    if (!hasTruthyVersion) {
       throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
     }
     const snapshot = this.#snapshots.get(this.registrationKey({ provider, version }))
