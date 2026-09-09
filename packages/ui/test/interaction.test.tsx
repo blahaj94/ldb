@@ -196,7 +196,10 @@ describe('Dialog interaction', () => {
     await render(<DialogExample defaultOpen />)
     const dialog = element('[role="dialog"]')
 
-    await vi.waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+    await vi.waitFor(() => {
+      const isFocusInsideDialog = dialog.contains(document.activeElement)
+      expect(isFocusInsideDialog).toBe(true)
+    })
   })
 
   it('closes on Escape and restores focus to its trigger', async () => {
