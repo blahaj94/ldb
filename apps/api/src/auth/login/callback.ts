@@ -83,9 +83,11 @@ async function claimCallback(
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
         const hasSameProvider = request.provider === provider
-        const hasCookieBinding = hasSameProvider && cookieMatches(request, cookieHeader)
-        const isRequestInvalid = !hasSameProvider || !hasCookieBinding
-        if (isRequestInvalid) {
+        if (!hasSameProvider) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const hasCookieBinding = cookieMatches(request, cookieHeader)
+        if (!hasCookieBinding) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
         // Binding이 맞는 만료 요청은 processing 상태여도 정리를 commit한다.
@@ -201,16 +203,15 @@ async function verifyProviderLogin(
       throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
     const hasSameProvider = identity?.provider === claimed.snapshot.provider
-    let isSubjectString = false
-    let isSubjectEmpty = false
-    if (hasSameProvider) {
-      isSubjectString = typeof identity.subject === 'string'
-      if (isSubjectString) {
-        isSubjectEmpty = identity.subject.length === 0
-      }
+    if (!hasSameProvider) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
-    const isIdentityInvalid = !hasSameProvider || !isSubjectString || isSubjectEmpty
-    if (isIdentityInvalid) {
+    const isSubjectString = typeof identity.subject === 'string'
+    if (!isSubjectString) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    const isSubjectEmpty = identity.subject.length === 0
+    if (isSubjectEmpty) {
       throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
 
@@ -270,9 +271,12 @@ async function prepareExchangeCode(
         const codeDeadline = verified.completedAt.getTime() + LOGIN.codeSeconds * 1000
         const codeExpiresAt = new Date(Math.min(codeDeadline, request.expiresAt.getTime()))
         const isRequestExpired = requestExpired(request, checkedAt)
-        const isCodeExpired = !isRequestExpired && checkedAt.getTime() >= codeExpiresAt.getTime()
-        const isExchangeExpired = isRequestExpired || isCodeExpired
-        if (isExchangeExpired) {
+        if (isRequestExpired) {
+          await markLoginRequestFailed(manager, request.id)
+          return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID) }
+        }
+        const isCodeExpired = checkedAt.getTime() >= codeExpiresAt.getTime()
+        if (isCodeExpired) {
           await markLoginRequestFailed(manager, request.id)
           return { status: 'rejected', error: new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID) }
         }
