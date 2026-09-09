@@ -53,7 +53,8 @@ export function useCharacterSearch(onInvalidated: () => void): CharacterSearch {
     const snapshot = authRef.current.snapshot
     const isSignedIn = snapshot?.phase === 'signedIn'
     const bridge = bridgeRef.current
-    const canBegin = isSignedIn && bridge != null
+    const hasBridge = bridge != null
+    const canBegin = isSignedIn && hasBridge
     if (!canBegin) {
       return null
     }

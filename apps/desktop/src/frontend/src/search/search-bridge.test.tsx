@@ -190,7 +190,9 @@ it.each(invalidSearchSnapshots)(
     await fixture.emit(state(fixture, searchSlot({ state: 'success', rows: [searchRow] }), 10))
     expect(fixture.container.textContent).toContain(searchRow.characterId)
     const malformed = invalid() as SearchSnapshot
-    const isRevisionValid = Number.isSafeInteger(malformed.revision) && malformed.revision >= 0
+    const isSafeRevision = Number.isSafeInteger(malformed.revision)
+    const isNonnegativeRevision = isSafeRevision && malformed.revision >= 0
+    const isRevisionValid = isSafeRevision && isNonnegativeRevision
     await fixture.emit(isRevisionValid ? { ...malformed, revision: 99 } : malformed)
     expect(fixture.container.textContent).toContain(searchRow.characterId)
   }

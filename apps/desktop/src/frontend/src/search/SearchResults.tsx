@@ -15,10 +15,14 @@ function SlotResult({
   const isSuccess = slot.state === 'success'
   const isEmpty = slot.state === 'empty'
   const error = slot.error
-  const hasError = slot.state === 'failure' && error != null
-  const canRetry = hasError && SEARCH_ERRORS[error.code].retryable
-  const isRateLimited = hasError && error.code === 'SEARCH_RATE_LIMITED'
-  const isWaiting = isRateLimited && error.retryAfterSeconds != null && error.retryAfterSeconds > 0
+  const isFailure = slot.state === 'failure'
+  const hasError = error != null
+  const shouldShowError = isFailure && hasError
+  const canRetry = shouldShowError && SEARCH_ERRORS[error.code].retryable
+  const isRateLimited = shouldShowError && error.code === 'SEARCH_RATE_LIMITED'
+  const hasRetryAfter = isRateLimited && error.retryAfterSeconds != null
+  const hasPositiveRetryAfter = hasRetryAfter && error.retryAfterSeconds > 0
+  const isWaiting = isRateLimited && hasRetryAfter && hasPositiveRetryAfter
   const isBusy = isPending || retryPending
   const isRetryDisabled = isWaiting || retryPending
   const hasNickname = slot.nickname != null
@@ -30,7 +34,7 @@ function SlotResult({
         <ContentStack>
           {hasNickname && <SupportingText>{slot.nickname}</SupportingText>}
           <div role="status">
-            {hasError ? (
+            {shouldShowError ? (
               <SupportingText>{SEARCH_ERRORS[error.code].message}</SupportingText>
             ) : (
               !isSuccess && <SupportingText>{status}</SupportingText>

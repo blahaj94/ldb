@@ -194,7 +194,9 @@ export class CaptureSearchLifetime {
     }
     const runtime = this.options.runtime
     const nickname = slot.nickname
-    const canStart = runtime != null && nickname != null
+    const hasRuntime = runtime != null
+    const hasNickname = nickname != null
+    const canStart = hasRuntime && hasNickname
     if (!canStart) {
       return this.result('SEARCH_NOT_ALLOWED')
     }
@@ -335,7 +337,10 @@ export class CaptureSearchLifetime {
       const seconds = result.error.retryAfterSeconds
       const receivedAt = result.retryAfterReceivedAt
       const isRateLimited = result.error.code === 'SEARCH_RATE_LIMITED'
-      const hasWait = seconds != null && seconds > 0 && receivedAt != null
+      const hasRetryAfter = seconds != null
+      const hasPositiveRetryAfter = hasRetryAfter && seconds > 0
+      const hasReceivedAt = receivedAt != null
+      const hasWait = hasPositiveRetryAfter && hasReceivedAt
       const shouldWait = isRateLimited && hasWait && this.isCurrentSlot(request)
       if (shouldWait) {
         this.startRateWait(request, { clock: runtime.clock, seconds, receivedAt })

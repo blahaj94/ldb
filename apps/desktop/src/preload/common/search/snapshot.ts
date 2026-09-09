@@ -38,10 +38,14 @@ const slot = z
   .refine((value) => {
     const hasRows = value.rows.length > 0
     const hasError = value.error != null
-    const hasIdentity = value.requestId != null && value.nickname != null
+    const hasRequestId = value.requestId != null
+    const hasNickname = value.nickname != null
+    const hasIdentity = hasRequestId && hasNickname
     const isIdle = value.state === 'idle'
     if (isIdle) {
-      const hasNoIdentity = value.requestId === null && value.nickname === null
+      const hasNoRequestId = value.requestId === null
+      const hasNoNickname = value.nickname === null
+      const hasNoIdentity = hasNoRequestId && hasNoNickname
       const isEmpty = hasNoIdentity && !hasRows && !hasError
       return isEmpty
     }

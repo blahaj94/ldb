@@ -26,7 +26,8 @@ it.each(['navigation', 'destruction', 'render-process-gone'] as const)(
         true
       )
     } else {
-      const eventName = transition === 'destruction' ? 'destroyed' : 'render-process-gone'
+      const isDestruction = transition === 'destruction'
+      const eventName = isDestruction ? 'destroyed' : 'render-process-gone'
       fixture.documentEvents.emit(eventName, {}, { reason: 'crashed' })
     }
 
