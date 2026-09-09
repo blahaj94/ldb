@@ -86,6 +86,7 @@ for (const { name, executable, args, cwd, entries } of [
     child.stderr.on('data', appendOutput)
     const exited = once(child, 'exit')
     let timeout
+    let inspectionFailure = {}
 
     try {
       const origin = await Promise.race([
@@ -114,9 +115,12 @@ for (const { name, executable, args, cwd, entries } of [
         assert.equal(response.status, 200, `${entry}\n${output}`)
         assert.match(source, /import /, `Expected transformed module: ${entry}`)
       }
+    } catch (error) {
+      inspectionFailure = { originalError: error }
+      throw error
     } finally {
       clearTimeout(timeout)
-      await stopOwnedProcessGroup({ child, exited })
+      await stopOwnedProcessGroup({ child, exited, ...inspectionFailure })
     }
   })
 }

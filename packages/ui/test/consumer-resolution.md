@@ -31,7 +31,11 @@ Unit 8개는 정상 TERM, 이미 종료·부재, TERM 무응답, child 종료 �
 
 각 unit은 250ms, 실제 child의 종료 판정은 8초의 테스트 안전 제한을 둡니다. 실제 child는 준비 메시지를 보낸 뒤에만 종료 검사를 시작합니다. 테스트의 `finally`는 직접 생성한 detached group만 정리하고 child exit 및 group 부재를 확인합니다. 별도 안전장치로 synthetic child 자신도 12초 뒤 소유 group을 종료하므로 runner의 강제 종료가 무제한 잔존으로 이어지지 않게 합니다. 테스트 안전 정리는 helper의 성공으로 계산하지 않습니다. 외부 감독에서도 위 명령에 30초 제한을 둡니다.
 
-Issue #224의 RED 단계에서는 기존 무제한 종료 동작만 helper로 분리했습니다. 제한 시간과 잔여 group 확인, 오류 보존은 아직 구현하지 않았으므로 신규 요구 assertion은 실패합니다. 통합 담당이 같은 RED를 확인하고 Green을 승인한 뒤에만 구현하며, 최종 cold/전체 workspace 검증은 통합 head에서 수행합니다.
+종료 helper는 최초 SIGTERM 뒤 최대 5초 동안 child exit와 group 부재를 함께 확인합니다. 50ms 이하 간격으로 재확인하며, 제한을 넘기면 남은 소유 group에 SIGKILL을 보내고 최대 2초 동안 정리를 확인합니다. 제한 초과는 정리에 성공해도 실패로 남습니다. ESRCH 경합은 group 부재로 처리하지만 child exit도 확인해야 성공합니다. 권한 오류나 정리 확인 실패는 숨기지 않습니다.
+
+HTTP/import/startup 오류가 있으면 harness가 그 오류를 그대로 다시 던집니다. cleanup도 실패하면 `AggregateError.errors`에 원래 오류와 cleanup 오류를 순서대로 담고 `cause`에는 원래 오류를 유지합니다. 두 실패가 없을 때만 정상 종료로 처리합니다. 이 helper는 호출자가 직접 `detached: true`로 생성한 child만 받으며, 임의 PID나 다른 프로세스 그룹에 대한 정리 도구로 사용하지 않습니다.
+
+Issue #224의 통합 RED에서 10개 중 7개가 새 요구 assertion으로 실패하는 것을 확인한 뒤 Green을 구현했습니다. 최종 cold/전체 workspace 검증은 통합 head에서 수행합니다. 이 보강은 이전 Vite 종료 실패의 내부 원인을 해결했다는 근거가 아닙니다.
 
 ### 기존 cold import 회귀
 
