@@ -99,7 +99,12 @@ export class FakeClock implements AuthClock {
     this.wallMs += milliseconds
     this.monotonicMs += milliseconds
 
-    const dueTasks = this.scheduled.filter((task) => !task.cancelled && task.at <= this.monotonicMs)
+    const dueTasks = this.scheduled.filter((task) => {
+      const isActive = !task.cancelled
+      const hasReachedRunTime = isActive && task.at <= this.monotonicMs
+
+      return hasReachedRunTime
+    })
     for (const task of dueTasks) {
       task.cancelled = true
       task.callback()
@@ -133,19 +138,30 @@ export class FakeStore implements CredentialStore {
     if (this.backendUnavailable) {
       return { status: 'unavailable' }
     }
-    if (this.marker != null) {
+    const hasTransitionMarker = this.marker != null
+    if (hasTransitionMarker) {
       return { status: 'recovery-required' }
     }
-    if (this.refreshToken != null) {
-      return { status: 'ready', refreshToken: this.refreshToken }
+    const refreshToken = this.refreshToken
+    const hasRefreshToken = refreshToken != null
+    if (hasRefreshToken) {
+      return { status: 'ready', refreshToken }
     }
     return { status: 'empty' }
   }
 
   set inspection(value: CredentialInspection) {
-    this.backendUnavailable = value.status === 'unavailable'
-    this.marker = value.status === 'recovery-required' ? 'clear' : null
-    this.refreshToken = value.status === 'ready' ? value.refreshToken : null
+    const isUnavailable = value.status === 'unavailable'
+    const requiresRecovery = value.status === 'recovery-required'
+    const isReady = value.status === 'ready'
+    let readyRefreshToken: string | null = null
+    if (isReady) {
+      readyRefreshToken = value.refreshToken
+    }
+
+    this.backendUnavailable = isUnavailable
+    this.marker = requiresRecovery ? 'clear' : null
+    this.refreshToken = readyRefreshToken
   }
 
   get storedRefreshToken(): string | null {
@@ -163,8 +179,10 @@ export class FakeStore implements CredentialStore {
   readonly establishTransition = vi.fn(async (kind) => {
     this.operations.push(`store:establish:${kind}`)
     const wait = this.establishWaits.shift()
-    const outcome = wait == null ? this.next(this.establishOutcomes) : await wait
-    if (outcome === 'confirmed') {
+    const hasWait = wait != null
+    const outcome = hasWait ? await wait : this.next(this.establishOutcomes)
+    const isConfirmed = outcome === 'confirmed'
+    if (isConfirmed) {
       this.marker = kind
     }
     return outcome
@@ -172,8 +190,10 @@ export class FakeStore implements CredentialStore {
   readonly commitCredential = vi.fn(async (refreshToken) => {
     this.operations.push('store:commit')
     const wait = this.commitWaits.shift()
-    const outcome = wait == null ? this.next(this.commitOutcomes) : await wait
-    if (outcome === 'confirmed') {
+    const hasWait = wait != null
+    const outcome = hasWait ? await wait : this.next(this.commitOutcomes)
+    const isConfirmed = outcome === 'confirmed'
+    if (isConfirmed) {
       this.refreshToken = refreshToken
     }
     return outcome
@@ -181,8 +201,10 @@ export class FakeStore implements CredentialStore {
   readonly clearCredential = vi.fn(async () => {
     this.operations.push('store:clear')
     const wait = this.clearWaits.shift()
-    const outcome = wait == null ? this.next(this.clearOutcomes) : await wait
-    if (outcome === 'confirmed') {
+    const hasWait = wait != null
+    const outcome = hasWait ? await wait : this.next(this.clearOutcomes)
+    const isConfirmed = outcome === 'confirmed'
+    if (isConfirmed) {
       this.refreshToken = null
     }
     return outcome
@@ -190,9 +212,12 @@ export class FakeStore implements CredentialStore {
   readonly removeTransition = vi.fn(async () => {
     this.operations.push('store:remove')
     const wait = this.removeWaits.shift()
-    const outcome = wait == null ? this.next(this.removeOutcomes) : await wait
-    const unknownWasApplied = outcome === 'unknown' && (this.unknownRemoveApplied.shift() ?? false)
-    const markerWasRemoved = outcome === 'confirmed' || unknownWasApplied
+    const hasWait = wait != null
+    const outcome = hasWait ? await wait : this.next(this.removeOutcomes)
+    const isUnknown = outcome === 'unknown'
+    const unknownWasApplied = isUnknown && (this.unknownRemoveApplied.shift() ?? false)
+    const isConfirmed = outcome === 'confirmed'
+    const markerWasRemoved = isConfirmed || unknownWasApplied
     if (markerWasRemoved) {
       this.marker = null
     }
@@ -201,7 +226,8 @@ export class FakeStore implements CredentialStore {
   readonly reestablishTransition = vi.fn(async (kind) => {
     this.operations.push(`store:reestablish:${kind}`)
     const outcome = this.next(this.reestablishOutcomes)
-    if (outcome === 'confirmed') {
+    const isConfirmed = outcome === 'confirmed'
+    if (isConfirmed) {
       this.marker = kind
     }
     return outcome
