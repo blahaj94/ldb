@@ -86,7 +86,8 @@ export async function runCaptureFixture(args = []) {
   const isDenyMedia = hasOneMode && args[0] === '--deny-media'
   const hasValidMode = isInteractive || isSmoke || isOcr || isDenyMedia || isSearchSmoke
   const hasPosixGroups = process.platform !== 'win32'
-  if (!hasValidMode || !hasPosixGroups) {
+  const hasInvalidConfiguration = !hasValidMode || !hasPosixGroups
+  if (hasInvalidConfiguration) {
     console.error('Capture fixture launcher configuration FAIL')
     return 1
   }
@@ -147,7 +148,8 @@ export async function runCaptureFixture(args = []) {
       child.once('error', () => reject(new Error('Capture fixture child could not start')))
       child.once('close', accept)
     })
-    const succeeded = code === 0 && !interrupted
+    const hasSuccessfulExit = code === 0
+    const succeeded = hasSuccessfulExit && !interrupted
     exitCode = succeeded ? 0 : 1
   } catch {
     console.error('Capture fixture launcher execution FAIL')

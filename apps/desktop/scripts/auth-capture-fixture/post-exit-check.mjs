@@ -94,7 +94,12 @@ function reportSearchStages(output) {
       const hasExactKeys = isObject && Object.keys(value).length === keys.length
       const hasCounts =
         hasExactKeys &&
-        keys.every((key) => Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= 4)
+        keys.every((key) => {
+          const isSafeInteger = Number.isSafeInteger(value[key])
+          const isNonnegative = isSafeInteger && value[key] >= 0
+          const isWithinSampleLimit = isNonnegative && value[key] <= 4
+          return isWithinSampleLimit
+        })
       if (hasCounts) {
         const counts = Object.fromEntries(keys.map((key) => [key, value[key]]))
         console.log(`Capture fixture layout evidence: ${JSON.stringify(counts)}`)
@@ -129,7 +134,8 @@ function hasGroupExited() {
 async function waitForExit() {
   const deadline = Date.now() + 5_000
   while (true) {
-    if (hasGroupExited()) {
+    const hasExited = hasGroupExited()
+    if (hasExited) {
       return true
     }
     const hasExpired = Date.now() >= deadline
@@ -189,10 +195,12 @@ try {
         ? 'Capture fixture smoke PASS'
         : 'Capture fixture media BLOCKED / smoke FAIL'
   assert.equal(code, expectedCode, 'Child result did not match the requested check')
-  assert.equal(output.includes(expectedMessage), true)
+  const hasExpectedMessage = output.includes(expectedMessage)
+  assert.equal(hasExpectedMessage, true)
   if (isSearch) {
     const evidence = readSearchEvidence(output)
-    assert.equal(evidence != null, true, 'Search evidence missing or incomplete')
+    const hasEvidence = evidence != null
+    assert.equal(hasEvidence, true, 'Search evidence missing or incomplete')
     console.log(`Capture fixture search evidence: ${JSON.stringify(evidence)}`)
   }
   if (isMedia) {
@@ -204,8 +212,12 @@ try {
   }
   const requiresNativeMedia = isMedia || isSearch
   if (requiresNativeMedia) {
-    assert.equal(output.includes('Video was requested, but no video stream was provided'), false)
-    assert.equal(output.includes('UnhandledPromiseRejectionWarning'), false)
+    const hasMissingVideoWarning = output.includes(
+      'Video was requested, but no video stream was provided'
+    )
+    assert.equal(hasMissingVideoWarning, false)
+    const hasUnhandledRejectionWarning = output.includes('UnhandledPromiseRejectionWarning')
+    assert.equal(hasUnhandledRejectionWarning, false)
     console.log('Capture fixture native denial warnings: 0')
   }
   const remaining = (await readdir(testRoot)).filter((name) => {

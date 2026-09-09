@@ -34,10 +34,9 @@ test('Desktop HTTP client consumes default API, exchange JWT, activity and accou
       const url = new URL(request.url)
       assert.equal(url.origin, apiOrigin, 'test transport must reject other origins')
       assert.equal(url.pathname, '/characters')
-      requests.push({
-        query: url.search,
-        hasBearer: request.headers.get('authorization') === `Bearer ${accessToken}`
-      })
+      const query = url.search
+      const hasBearer = request.headers.get('authorization') === `Bearer ${accessToken}`
+      requests.push({ query, hasBearer })
       const response = await fetch(new Request(`${base}${url.pathname}${url.search}`, request))
       statuses.push(response.status)
       assert.equal(response.headers.get('cache-control'), 'no-store')
@@ -88,10 +87,8 @@ test('Desktop HTTP client consumes default API, exchange JWT, activity and accou
       }
     ])
     const [after] = await source.query('SELECT last_active_at FROM auth_sessions')
-    assert(
-      after.last_active_at.getTime() > before.last_active_at.getTime(),
-      'search must commit session activity'
-    )
+    const hasCommittedActivity = after.last_active_at.getTime() > before.last_active_at.getTime()
+    assert(hasCommittedActivity, 'search must commit session activity')
 
     neople.upstream.body = { rows: [] }
     assert.deepEqual(await search(searchInput), [])
@@ -129,7 +126,8 @@ test('Desktop HTTP client consumes default API, exchange JWT, activity and accou
       const seconds = error.retryAfterSeconds
       const hasSeconds = seconds != null
       const isSafeInteger = Number.isSafeInteger(seconds)
-      const isInServerWindow = hasSeconds && seconds > 0 && seconds <= 60
+      const isPositiveWait = hasSeconds && seconds > 0
+      const isInServerWindow = isPositiveWait && seconds <= 60
       const hasValidWait = hasSeconds && isSafeInteger && isInServerWindow
       assert(hasValidWait, 'Desktop must consume the real account Retry-After header')
       return true

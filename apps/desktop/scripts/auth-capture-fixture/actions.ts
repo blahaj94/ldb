@@ -26,11 +26,23 @@ export async function until(condition: () => Promise<boolean>, deadlineMs = 10_0
     if (!hasTime) {
       throw new Error('Capture fixture observation deadline exceeded')
     }
-    if (await condition()) {
+    const isReady = await condition()
+    if (isReady) {
       return
     }
     await delay(50)
   }
+}
+
+function createClickSource(label: string): string {
+  const source = `(() => {
+      const button = [...document.querySelectorAll('button')].find(item => item.textContent === ${JSON.stringify(label)});
+      const hasButton = button != null;
+      const canClick = hasButton && !button.disabled;
+      if (!canClick) return false;
+      button.click(); return true;
+    })()`
+  return source
 }
 
 export function createCaptureActions({
@@ -56,24 +68,16 @@ export function createCaptureActions({
   const observe = async (): Promise<Observation> =>
     (await evaluate('window.captureObservation()')) as Observation
   const click = async (label: string): Promise<void> => {
-    assert.equal(
-      await evaluate(
-        `(() => {
-      const button = [...document.querySelectorAll('button')].find(item => item.textContent === ${JSON.stringify(label)});
-      const hasButton = button != null;
-      const canClick = hasButton && !button.disabled;
-      if (!canClick) return false;
-      button.click(); return true;
-    })()`,
-        true
-      ),
-      true
-    )
+    const source = createClickSource(label)
+    assert.equal(await evaluate(source, true), true)
   }
   async function enterHome(): Promise<void> {
     await until(() => hasText('Google로 계속하기'))
     await click('Google로 계속하기')
-    await until(async () => coordinator.getSnapshot().phase === 'waitingBrowser')
+    await until(async () => {
+      const isWaitingBrowser = coordinator.getSnapshot().phase === 'waitingBrowser'
+      return isWaitingBrowser
+    })
     await completeLogin()
     await until(() => hasText('시작하기'))
     assert.equal(await evaluate('document.querySelector("select") === null'), true)
@@ -82,25 +86,22 @@ export function createCaptureActions({
   }
 
   async function selectSyntheticSource(): Promise<void> {
-    await until(
-      async () =>
-        (await evaluate(`(() => {
+    const syntheticSourceCheck = `(() => {
     const select = document.querySelector('select');
     const hasSelect = select != null;
     const source = hasSelect ? [...select.options].find(option => option.textContent === 'LDB Synthetic Capture Source') : null;
     return source != null;
-  })()`)) as boolean
-    )
-    assert.equal(
-      await evaluate(`(() => {
+  })()`
+    await until(async () => (await evaluate(syntheticSourceCheck)) as boolean)
+
+    const syntheticSourceSelection = `(() => {
     const select = document.querySelector('select');
     const source = [...select.options].find(option => option.textContent === 'LDB Synthetic Capture Source');
     select.value = source.value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
-  })()`),
-      true
-    )
+  })()`
+    assert.equal(await evaluate(syntheticSourceSelection), true)
     await until(
       async () =>
         (await evaluate(
