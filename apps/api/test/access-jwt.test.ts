@@ -63,7 +63,8 @@ test('발급 token은 승인된 최소 claims만 담고 jose와 독립 verifier�
     tokenId: payload.jti
   })
   const another = await issue(input())
-  assert.ok(payload.jti !== decodeJwt(another.accessToken).jti)
+  const hasDistinctTokenId = payload.jti !== decodeJwt(another.accessToken).jti
+  assert.ok(hasDistinctTokenId)
 })
 
 for (const seconds of [1, 899, 900, 901, 2_592_000]) {

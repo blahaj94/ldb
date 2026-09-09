@@ -10,7 +10,8 @@ async function expectUnavailable(operation: Promise<void>): Promise<void> {
     if (!isErrorObject) {
       return false
     }
-    assert('code' in error)
+    const hasErrorCode = 'code' in error
+    assert(hasErrorCode)
     assert.equal(error.code, 'AUTH_UNAVAILABLE')
     const hasCause = 'cause' in error
     assert.equal(hasCause, false)
@@ -27,7 +28,8 @@ async function expectInvalidRequest(operation: Promise<void>): Promise<void> {
     if (!isErrorObject) {
       return false
     }
-    assert('code' in error)
+    const hasErrorCode = 'code' in error
+    assert(hasErrorCode)
     assert.equal(error.code, 'INVALID_AUTH_REQUEST')
     return true
   })

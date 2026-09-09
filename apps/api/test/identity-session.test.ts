@@ -122,10 +122,12 @@ function fixture(
 
 async function failure(promise: Promise<unknown>, code: string) {
   await assert.rejects(promise, (error: unknown) => {
-    assert(error instanceof Error)
+    const isError = error instanceof Error
+    assert(isError)
     assert.equal((error as Error & { code: string }).code, code)
     assert.equal(error.cause, undefined)
-    assert(!JSON.stringify(error).includes(identity.subject))
+    const isIdentityOmitted = !JSON.stringify(error).includes(identity.subject)
+    assert(isIdentityOmitted)
     return true
   })
 }
