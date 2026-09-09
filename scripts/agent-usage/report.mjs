@@ -56,7 +56,10 @@ function fail() {
 
 function enforceCommentLimit(body) {
   const isString = typeof body === 'string'
-  const exceedsCommentLimit = isString && body.length > COMMENT_LIMIT
+  if (!isString) {
+    return body
+  }
+  const exceedsCommentLimit = body.length > COMMENT_LIMIT
   if (exceedsCommentLimit) {
     const error = new Error("Usage snapshot comment exceeds GitHub's 65536 character limit")
     error.code = 'COMMENT_TOO_LONG'
@@ -76,23 +79,26 @@ function isObject(value) {
 function hasKeys(value, expected) {
   const keys = Object.keys(value)
   const hasExpectedKeyCount = keys.length === expected.length
-  const hasAllExpectedKeys = hasExpectedKeyCount && expected.every((key) => keys.includes(key))
-  const hasExpectedKeys = hasExpectedKeyCount && hasAllExpectedKeys
-  return hasExpectedKeys
+  if (!hasExpectedKeyCount) {
+    return false
+  }
+  return expected.every((key) => keys.includes(key))
 }
 
 function positiveInteger(value) {
   const isSafeInteger = Number.isSafeInteger(value)
-  const isPositive = isSafeInteger && value > 0
-  const isPositiveInteger = isSafeInteger && isPositive
-  return isPositiveInteger
+  if (!isSafeInteger) {
+    return false
+  }
+  return value > 0
 }
 
 function tokenCount(value) {
   const isSafeInteger = Number.isSafeInteger(value)
-  const isNonNegative = isSafeInteger && value >= 0
-  const isValidTokenCount = isSafeInteger && isNonNegative
-  return isValidTokenCount
+  if (!isSafeInteger) {
+    return false
+  }
+  return value >= 0
 }
 
 function utcTimestamp(value) {
@@ -102,7 +108,10 @@ function utcTimestamp(value) {
   }
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?Z$/.exec(value)
   const hasTimestampMatch = match != null
-  const isParseableTimestamp = hasTimestampMatch && Number.isFinite(Date.parse(value))
+  if (!hasTimestampMatch) {
+    return false
+  }
+  const isParseableTimestamp = Number.isFinite(Date.parse(value))
   if (!isParseableTimestamp) {
     return false
   }
@@ -124,17 +133,27 @@ function utcTimestamp(value) {
 
 function safeIdentifier(value, maximum, pattern) {
   const isString = typeof value === 'string'
-  const isWithinMaximum = isString && value.length <= maximum
-  const matchesPattern = isWithinMaximum && pattern.test(value)
-  const isSafeIdentifier = isString && isWithinMaximum && matchesPattern
-  return isSafeIdentifier
+  if (!isString) {
+    return false
+  }
+  const isWithinMaximum = value.length <= maximum
+  if (!isWithinMaximum) {
+    return false
+  }
+  return pattern.test(value)
 }
 
 export function validateSnapshot(value) {
   try {
     const isSnapshotObject = isObject(value)
-    const hasSnapshotKeys = isSnapshotObject && hasKeys(value, SNAPSHOT_KEYS)
-    const hasSupportedSchema = hasSnapshotKeys && value.schemaVersion === 1
+    if (!isSnapshotObject) {
+      fail()
+    }
+    const hasSnapshotKeys = hasKeys(value, SNAPSHOT_KEYS)
+    if (!hasSnapshotKeys) {
+      fail()
+    }
+    const hasSupportedSchema = value.schemaVersion === 1
     if (!hasSupportedSchema) {
       fail()
     }
@@ -147,23 +166,35 @@ export function validateSnapshot(value) {
       fail()
     }
     const isIssueNumberValid = positiveInteger(value.issue)
-    const areRequestNumbersValid = isIssueNumberValid && positiveInteger(value.pullRequest)
-    if (!areRequestNumbersValid) {
+    if (!isIssueNumberValid) {
+      fail()
+    }
+    const isPullRequestNumberValid = positiveInteger(value.pullRequest)
+    if (!isPullRequestNumberValid) {
       fail()
     }
     const isHeadShaString = typeof value.headSha === 'string'
-    const isHeadShaValid = isHeadShaString && /^[a-fA-F0-9]{40}$/.test(value.headSha)
+    if (!isHeadShaString) {
+      fail()
+    }
+    const isHeadShaValid = /^[a-fA-F0-9]{40}$/.test(value.headSha)
     if (!isHeadShaValid) {
       fail()
     }
     const isPeriodObject = isObject(value.period)
-    const hasPeriodKeys = isPeriodObject && hasKeys(value.period, PERIOD_KEYS)
+    if (!isPeriodObject) {
+      fail()
+    }
+    const hasPeriodKeys = hasKeys(value.period, PERIOD_KEYS)
     if (!hasPeriodKeys) {
       fail()
     }
     const isStartTimestampValid = utcTimestamp(value.period.startedAt)
-    const arePeriodTimestampsValid = isStartTimestampValid && utcTimestamp(value.period.capturedAt)
-    if (!arePeriodTimestampsValid) {
+    if (!isStartTimestampValid) {
+      fail()
+    }
+    const isCapturedTimestampValid = utcTimestamp(value.period.capturedAt)
+    if (!isCapturedTimestampValid) {
       fail()
     }
     const isPeriodReversed =
@@ -172,15 +203,19 @@ export function validateSnapshot(value) {
       fail()
     }
     const isCompleteBoolean = typeof value.complete === 'boolean'
-    const hasWarningArray = isCompleteBoolean && Array.isArray(value.warnings)
+    if (!isCompleteBoolean) {
+      fail()
+    }
+    const hasWarningArray = Array.isArray(value.warnings)
     if (!hasWarningArray) {
       fail()
     }
     const hasExcessiveWarnings = value.warnings.length > WARNINGS.size
-    const hasDuplicateWarnings =
-      !hasExcessiveWarnings && new Set(value.warnings).size !== value.warnings.length
-    const hasInvalidWarningList = hasExcessiveWarnings || hasDuplicateWarnings
-    if (hasInvalidWarningList) {
+    if (hasExcessiveWarnings) {
+      fail()
+    }
+    const hasDuplicateWarnings = new Set(value.warnings).size !== value.warnings.length
+    if (hasDuplicateWarnings) {
       fail()
     }
     const hasKnownWarnings = value.warnings.every((warning) => {
@@ -197,17 +232,25 @@ export function validateSnapshot(value) {
       fail()
     }
     const isAgentArray = Array.isArray(value.agents)
-    const hasExcessiveAgents = isAgentArray && value.agents.length > 256
-    const isAgentListInvalid = !isAgentArray || hasExcessiveAgents
-    if (isAgentListInvalid) {
+    if (!isAgentArray) {
+      fail()
+    }
+    const hasExcessiveAgents = value.agents.length > 256
+    if (hasExcessiveAgents) {
       fail()
     }
 
     const tuples = new Set()
     const agents = value.agents.map((agent) => {
       const isAgentObject = isObject(agent)
-      const hasAgentKeys = isAgentObject && hasKeys(agent, AGENT_KEYS)
-      const hasKnownRole = hasAgentKeys && ROLES.has(agent.role)
+      if (!isAgentObject) {
+        fail()
+      }
+      const hasAgentKeys = hasKeys(agent, AGENT_KEYS)
+      if (!hasAgentKeys) {
+        fail()
+      }
+      const hasKnownRole = ROLES.has(agent.role)
       if (!hasKnownRole) {
         fail()
       }
@@ -246,11 +289,15 @@ export function validateSnapshot(value) {
       }
       // 앞서 읽은 값을 재사용하지 않고 기존 검증 단계에서 getter를 다시 읽는다.
       const requiresKnownContext = value.complete
-      const isModelUnknown = requiresKnownContext && agent.model === 'unknown'
-      const isEffortUnknown = requiresKnownContext && !isModelUnknown && agent.effort === 'unknown'
-      const isRequiredContextMissing = isModelUnknown || isEffortUnknown
-      if (isRequiredContextMissing) {
-        fail()
+      if (requiresKnownContext) {
+        const isModelUnknown = agent.model === 'unknown'
+        if (isModelUnknown) {
+          fail()
+        }
+        const isEffortUnknown = agent.effort === 'unknown'
+        if (isEffortUnknown) {
+          fail()
+        }
       }
       const tuple = `${agent.role}\0${agent.agent}\0${agent.model}\0${agent.effort}`
       const isDuplicateAgent = tuples.has(tuple)
@@ -379,7 +426,10 @@ export function parseSnapshotComment(body) {
   enforceCommentLimit(body)
   try {
     const isBodyString = typeof body === 'string'
-    const hasSnapshotMarker = isBodyString && body.includes(SNAPSHOT_MARKER)
+    if (!isBodyString) {
+      fail()
+    }
+    const hasSnapshotMarker = body.includes(SNAPSHOT_MARKER)
     if (!hasSnapshotMarker) {
       fail()
     }
