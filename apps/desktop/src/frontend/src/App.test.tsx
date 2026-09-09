@@ -63,7 +63,8 @@ it('실제 capture는 home에서 선택을 요구하고 인증 이탈·재진입
   const selection = container.querySelector('select')
   expect(selection).not.toBeNull()
   await act(async () => {
-    if (selection != null) {
+    const hasSelection = selection != null
+    if (hasSelection) {
       selection.value = 'fixture'
       selection.dispatchEvent(new Event('change', { bubbles: true }))
     }
@@ -86,7 +87,8 @@ it('인증 이탈과 새 signedIn이 한 render로 합쳐져도 이전 capture �
   await act(async () => root.render(<App />))
   const selection = container.querySelector('select')
   await act(async () => {
-    if (selection != null) {
+    const hasSelection = selection != null
+    if (hasSelection) {
       selection.value = 'fixture'
       selection.dispatchEvent(new Event('change', { bubbles: true }))
     }
@@ -112,7 +114,8 @@ it('main runId 재연결 조회가 같은 render에 완료돼도 이전 capture�
   await act(async () => root.render(<App />))
   const selection = container.querySelector('select')
   await act(async () => {
-    if (selection != null) {
+    const hasSelection = selection != null
+    if (hasSelection) {
       selection.value = 'fixture'
       selection.dispatchEvent(new Event('change', { bubbles: true }))
     }
