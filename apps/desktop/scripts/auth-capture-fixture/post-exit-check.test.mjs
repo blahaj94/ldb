@@ -213,6 +213,15 @@ it('검색 실패 child의 정제된 mixed deadline 진단을 한 record로 전�
   expect(process.exitCode).toBe(1)
 })
 
+it('검색 성공 child가 진단 record를 주입해도 전달하지 않고 성공 의미를 유지한다', async () => {
+  await runSearchChild({ diagnostic: mixedDeadlineDiagnostic })
+
+  const logged = JSON.stringify(vi.mocked(console.log).mock.calls)
+  expect(logged.includes('Capture fixture search diagnostic:')).toBe(false)
+  expect(console.log).toHaveBeenCalledWith('Capture fixture post-exit check PASS')
+  expect(process.exitCode).toBe(0)
+})
+
 it('검색 실패 child의 정제된 mixed assertion 진단을 전달한다', async () => {
   const diagnostic = {
     stage: 'mixed',
@@ -229,6 +238,63 @@ it('검색 실패 child의 정제된 mixed assertion 진단을 전달한다', as
     `Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}`
   )
   expect(process.exitCode).toBe(1)
+})
+
+it.each([
+  {
+    name: 'deadline-only check의 assertion',
+    diagnostic: { ...mixedDeadlineDiagnostic, kind: 'assertion', generatedMessage: true }
+  },
+  {
+    name: 'assertion-only check의 deadline',
+    diagnostic: {
+      stage: 'mixed',
+      check: 'initial-rate-wait',
+      kind: 'deadline',
+      actual: { hasRetryWait: true, hasPositiveWait: false, retryDisabled: false },
+      expected: { hasRetryWait: true, hasPositiveWait: true, retryDisabled: true },
+      generatedMessage: null
+    }
+  }
+])('$name 진단은 전달하지 않는다', async ({ diagnostic }) => {
+  await runSearchChild({ evidence: null, diagnostic, exitCode: 1 })
+
+  const logged = JSON.stringify(vi.mocked(console.log).mock.calls)
+  expect(logged.includes('Capture fixture search diagnostic:')).toBe(false)
+})
+
+it('independent retry 진단은 이미 계산된 슬롯 독립성 boolean만 전달한다', async () => {
+  const diagnostic = {
+    stage: 'mixed',
+    check: 'independent-retry',
+    kind: 'assertion',
+    actual: { independent: false },
+    expected: { independent: true },
+    generatedMessage: true
+  }
+
+  await runSearchChild({ evidence: null, diagnostic, exitCode: 1 })
+
+  expect(console.log).toHaveBeenCalledWith(
+    `Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}`
+  )
+  expect(process.exitCode).toBe(1)
+})
+
+it('independent retry 진단의 미관측 request delta는 전달하지 않는다', async () => {
+  const diagnostic = {
+    stage: 'mixed',
+    check: 'independent-retry',
+    kind: 'assertion',
+    actual: { independent: false, requestDelta: 0 },
+    expected: { independent: true, requestDelta: 1 },
+    generatedMessage: true
+  }
+
+  await runSearchChild({ evidence: null, diagnostic, exitCode: 1 })
+
+  const logged = JSON.stringify(vi.mocked(console.log).mock.calls)
+  expect(logged.includes('Capture fixture search diagnostic:')).toBe(false)
 })
 
 it.each([

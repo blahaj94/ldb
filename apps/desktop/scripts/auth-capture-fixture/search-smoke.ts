@@ -277,14 +277,15 @@ export async function smokeCharacterSearch(
     assert.equal(isRetryDisabledWhileWaiting, true)
     const mixedRequests = search.counts.requests
     search.selectScenario('success')
-    const selectionRequestDelta = search.counts.requests - mixedRequests
+    const currentRequests = search.counts.requests
+    const selectionRequestDelta = currentRequests - mixedRequests
     diagnostic = {
       stage: 'mixed',
       check: 'scenario-selection-quiet',
       actual: { requestDelta: selectionRequestDelta },
       expected: { requestDelta: 0 }
     }
-    assert.equal(selectionRequestDelta, 0)
+    assert.equal(currentRequests, mixedRequests)
     await retry({ slot: failures[0], diagnosticCheck: 'first-retry-click' })
     const firstRetry = await waitFor((view) => {
       const hasSucceeded = view.slots[failures[0]].state === 'success'
@@ -311,13 +312,12 @@ export async function smokeCharacterSearch(
       const hasUnchangedState = hasSameRequest && before.state === after.state
       return hasUnchangedState
     })
-    const retryRequestDelta = hasIndependentSlots ? search.counts.requests - mixedRequests : 0
-    const independentRetry = hasIndependentSlots && retryRequestDelta === 1
+    const independentRetry = hasIndependentSlots && search.counts.requests === mixedRequests + 1
     diagnostic = {
       stage: 'mixed',
       check: 'independent-retry',
-      actual: { independent: hasIndependentSlots, requestDelta: retryRequestDelta },
-      expected: { independent: true, requestDelta: 1 }
+      actual: { independent: hasIndependentSlots },
+      expected: { independent: true }
     }
     assert.equal(independentRetry, true)
 

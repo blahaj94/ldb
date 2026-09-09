@@ -40,10 +40,12 @@ const expectedSearchEvidence = {
 
 const searchDiagnosticDefinitions = {
   'capture-start': {
+    kinds: ['assertion', 'deadline'],
     actual: { started: 'boolean' },
     expected: { started: true }
   },
   'mixed-state-ready': {
+    kinds: ['deadline'],
     actual: {
       regionMask: 'mask',
       statusesMatched: 'boolean',
@@ -60,6 +62,7 @@ const searchDiagnosticDefinitions = {
     }
   },
   'initial-rate-wait': {
+    kinds: ['assertion'],
     actual: {
       hasRetryWait: 'boolean',
       hasPositiveWait: 'boolean',
@@ -72,20 +75,24 @@ const searchDiagnosticDefinitions = {
     }
   },
   'scenario-selection-quiet': {
+    kinds: ['assertion'],
     actual: { requestDelta: 'request-delta' },
     expected: { requestDelta: 0 }
   },
   'first-retry-click': {
+    kinds: ['assertion'],
     actual: { clicked: 'boolean' },
     expected: { clicked: true }
   },
   'first-retry-ready': {
+    kinds: ['deadline'],
     actual: { succeeded: 'boolean', statusMatched: 'boolean' },
     expected: { succeeded: true, statusMatched: true }
   },
   'independent-retry': {
-    actual: { independent: 'boolean', requestDelta: 'request-delta' },
-    expected: { independent: true, requestDelta: 1 }
+    kinds: ['assertion'],
+    actual: { independent: 'boolean' },
+    expected: { independent: true }
   }
 }
 
@@ -126,10 +133,11 @@ function readSearchDiagnostic(output) {
     const definition = hasKnownStage ? searchDiagnosticDefinitions[value.check] : null
     const hasDefinition = definition != null
     const hasKnownKind = value.kind === 'assertion' || value.kind === 'deadline'
+    const hasAllowedKind = hasDefinition && definition.kinds.includes(value.kind)
     const hasGeneratedMessage =
       (value.kind === 'assertion' && typeof value.generatedMessage === 'boolean') ||
       (value.kind === 'deadline' && value.generatedMessage === null)
-    if (!hasDefinition || !hasKnownKind || !hasGeneratedMessage) {
+    if (!hasDefinition || !hasKnownKind || !hasAllowedKind || !hasGeneratedMessage) {
       return null
     }
     const actualKeys = Object.keys(definition.actual)
@@ -193,7 +201,7 @@ function readSearchEvidence(output) {
 
 /** @returns {void} */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
-function reportSearchStages(output) {
+function reportSearchStages(output, { reportDiagnostic }) {
   for (const line of output.split('\n')) {
     const stage = /^Capture fixture search stage(?: FAIL)?: ([a-z-]+)$/.exec(line)?.[1]
     const isStage = [
@@ -236,10 +244,12 @@ function reportSearchStages(output) {
       // 정제된 보조 관측만 전달하며 원문은 출력하지 않는다.
     }
   }
-  const diagnostic = readSearchDiagnostic(output)
-  const hasDiagnostic = diagnostic != null
-  if (hasDiagnostic) {
-    console.log(`Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}`)
+  if (reportDiagnostic) {
+    const diagnostic = readSearchDiagnostic(output)
+    const hasDiagnostic = diagnostic != null
+    if (hasDiagnostic) {
+      console.log(`Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}`)
+    }
   }
 }
 
@@ -315,7 +325,8 @@ try {
   groupStopped = await waitForExit()
   console.log(`Capture fixture child exit: ${code}; group stopped: ${groupStopped}`)
   if (isSearch) {
-    reportSearchStages(output)
+    const reportDiagnostic = code !== 0
+    reportSearchStages(output, { reportDiagnostic })
   }
   assert.equal(groupStopped, true, 'Test child group remains active')
   const expectsSuccess = isOcr || isMedia || isSearch
