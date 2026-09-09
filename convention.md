@@ -119,6 +119,42 @@ function hasNonEmptyText(value: string | null | undefined): boolean {
 }
 ```
 
+### 단순 숫자 for문의 종료 비교 예외
+
+이 절은 [Issue #216](https://github.com/blahaj94/ldb/issues/216)에 대한 [PR #217의 사용자 승인](https://github.com/blahaj94/ldb/pull/217#issuecomment-5600568671)을 반영한 active Rule이다. 승인과 사용자 merge는 별개이며, 사용자 merge 전에는 이 예외를 제품 코드에 적용하거나 기존 코드를 준수로 재분류하지 않는다. 사용자 merge 후 적용 및 전수 재분류를 별도로 확인한다. 그 전에는 기존 §2·§3과 [두 승인 예외](docs/rules/convention-exceptions-proposal.md)가 그대로 적용된다.
+
+```yaml
+status: active
+enforcement: warning
+rationale: 초기값·종료 비교·증분이 드러나는 숫자 반복에서 boolean 명명만을 위한 본문 분기와 break를 줄인다.
+evidence: "PR #217 사용자 승인: https://github.com/blahaj94/ldb/pull/217#issuecomment-5600568671; Issue #216: https://github.com/blahaj94/ldb/issues/216; 기존 판단 기록: https://github.com/blahaj94/ldb/issues/169"
+exceptions: 아래 반복 제어 범위만 대상으로 하며 업무 검증, 복합 조건, 다른 제어문과 실행 source 문자열 변경은 제외한다.
+review-after: 승인·merge 후 서로 다른 적용 PR 3개에서 경계 판단, 가독성, debugger 관찰성과 평가 시점 보존을 재검토한다.
+```
+
+위 적용 경계 아래에서 다음 조건을 모두 만족하는 `for (초기화; 조건; 증분)`의 종료 비교에 한해 §2의 별도 boolean 명명 기본형보다 이 예외를 우선한다. 본문 안의 검증·분기와 나머지 active Rule에는 영향을 주지 않는다.
+
+- 반복 제어용 숫자 counter 하나를 header에서 초기화하고, 같은 counter를 header의 증분식에서 종료 경계 방향의 0이 아닌 일정한 정수 간격으로 갱신한다. 초기값, 진행 방향, 간격과 종료 경계의 의미가 header와 가까운 선언에서 드러나야 한다. 본문에서 counter를 별도로 변경하는 형태는 제외한다.
+- 조건은 counter와 숫자 경계의 단일 `<`, `<=`, `>`, `>=` 비교다. 경계는 숫자 literal, 역할이 명확한 숫자 변수 또는 배열·typed array의 `length` 직접 조회로 제한한다. 비교값이 숫자임을 확인할 수 있어야 하며, 사용자 정의 coercion·getter·Proxy의 동작이 개입하거나 불확실하면 이 예외를 적용하지 않는다.
+- 비교의 목적은 반복 횟수나 순회 범위를 제어하는 것이다. 업무상 허용 여부, 유효성, 권한, 만료 등을 판단하는 검사는 숫자 비교 하나여도 제외한다. 본문에 업무 검증이나 `await`가 있다는 이유만으로 단순 반복 제어 비교를 제외하지는 않는다.
+- 조건 내부의 호출·대입·증감, `&&`·`||`·조건부 표현 등 복합 조건은 제외한다. 증분식의 `index++`·`count += 1`·`index += 4`와 조건 내부의 `index++ < limit`는 구분한다. `if`, `while`, `do...while`, `for...of`, `for...in`, 조건부 표현과 boolean 반환으로 예외를 확대하지 않는다.
+
+다음은 경계를 설명하는 대표 header이며, 저장소 전체 반복문의 목록이나 개수를 뜻하지 않는다.
+
+| 형태 | 적용 판단 |
+| --- | --- |
+| `for (let attempt = 0; attempt < maxAttempts; attempt += 1)` | 숫자 시도 상한까지의 반복 제어이면 허용한다. 성공·실패 판단은 본문에서 기존 기준을 따른다. |
+| `for (let index = 0; index < items.length; index++)` | 배열 순회이면 허용한다. 본문에서 항목이 추가돼도 조건 평가마다 현재 길이를 읽는다. |
+| `for (let offset = 0; offset < pixels.length; offset += 4)` | typed array를 4바이트 간격으로 순회하는 의미가 분명하면 허용한다. |
+| `index < limit && isReady`, `index < readLimit()`, `(index = next) < limit`, `index++ < limit` | 복합 조건 또는 조건 내부의 호출·대입·증감이므로 제외한다. |
+| `balance >= requiredAmount`, `Date.now() < expiresAt` | 업무 검증 또는 시계 호출이므로 제외한다. |
+
+Header를 유지할 때도 §3·§6의 평가 보존 의무를 유지한다. 초기화 뒤 첫 조건 검사, 각 반복의 조건 검사와 정상적으로 경계에 도달해 종료할 때의 마지막 false 검사까지 원래 시점과 횟수를 보존한다. `break`, `return`, throw로 종료된 경로에 조건 검사를 추가하지 않는다. 동적 `length`는 매회 다시 읽으며 최초 길이 캐시나 추정한 반복 횟수로 바꾸지 않는다.
+
+같은 반복문을 대상으로 한 `continue`는 본문의 나머지를 건너뛰고 header 증분 뒤 다음 조건을 검사하는 순서를 유지한다. 본문의 `await`와 그 뒤 처리, 증분, 다음 검사 사이의 순서 및 기존 호출·오류·cleanup을 바꾸지 않는다. 이 예외는 병렬화, 순회 방식 교체, 반복 횟수 변경의 권한이 아니다. 실행 source를 담은 문자열 내부의 표현·값·개행을 변경하는 권한도 부여하지 않는다.
+
+대안은 초기화·증분을 header에 두고 종료 비교를 본문 첫 부분의 이름 있는 boolean과 `if`·`break`로 표현하는 것이다. 대안은 debugger에서 boolean 결과를 직접 볼 수 있지만 본문에 반복 제어 분기가 늘고, 조건 검사 이동 시 위 평가 보존을 따로 확인해야 한다. 승인된 header 직접 비교 방식은 단순한 반복 제어를 header에서 함께 읽을 수 있으나 별도 boolean 결과 변수는 제공하지 않는다. 예외 밖에서는 기존 명명 기본형과 평가 보존 기준을 따른다.
+
 ## 3. 검사 의존성과 평가 시점을 보존
 
 - 존재·type 확인 뒤에만 가능한 property 접근을 미리 실행하지 않는다. 앞선 검사 결과로 다음 평가를 보호한다.
