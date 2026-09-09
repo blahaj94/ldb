@@ -52,30 +52,40 @@ function trustedUrl(value: string): string {
 function sameSnapshot(expected: ProviderRegistration, actual: ProviderRegistration): boolean {
   // 첫 불일치 뒤 property를 읽지 않도록 기존 short-circuit 순서도 유지한다.
   const hasSameProvider = expected.provider === actual.provider
-  const hasSameVersion = hasSameProvider && expected.version === actual.version
-  const hasSameClientId = hasSameVersion && expected.providerClientId === actual.providerClientId
-  const hasSameSecretReference =
-    hasSameClientId && expected.providerSecretRef === actual.providerSecretRef
-  const hasSameCallback = hasSameSecretReference && expected.callbackUrl === actual.callbackUrl
+  if (!hasSameProvider) {
+    return false
+  }
+  const hasSameVersion = expected.version === actual.version
+  if (!hasSameVersion) {
+    return false
+  }
+  const hasSameClientId = expected.providerClientId === actual.providerClientId
+  if (!hasSameClientId) {
+    return false
+  }
+  const hasSameSecretReference = expected.providerSecretRef === actual.providerSecretRef
+  if (!hasSameSecretReference) {
+    return false
+  }
+  const hasSameCallback = expected.callbackUrl === actual.callbackUrl
+  if (!hasSameCallback) {
+    return false
+  }
   const hasSameAuthorizationEndpoint =
-    hasSameCallback && expected.authorizationEndpoint === actual.authorizationEndpoint
-  const hasSameAudience =
-    hasSameAuthorizationEndpoint && expected.expectedAudience === actual.expectedAudience
-  const hasSameReturnTargetId =
-    hasSameAudience && expected.returnTarget.id === actual.returnTarget.id
-  const hasSameReturnUrl =
-    hasSameReturnTargetId && expected.returnTarget.url === actual.returnTarget.url
-  const isSameSnapshot =
-    hasSameProvider &&
-    hasSameVersion &&
-    hasSameClientId &&
-    hasSameSecretReference &&
-    hasSameCallback &&
-    hasSameAuthorizationEndpoint &&
-    hasSameAudience &&
-    hasSameReturnTargetId &&
-    hasSameReturnUrl
-  return isSameSnapshot
+    expected.authorizationEndpoint === actual.authorizationEndpoint
+  if (!hasSameAuthorizationEndpoint) {
+    return false
+  }
+  const hasSameAudience = expected.expectedAudience === actual.expectedAudience
+  if (!hasSameAudience) {
+    return false
+  }
+  const hasSameReturnTargetId = expected.returnTarget.id === actual.returnTarget.id
+  if (!hasSameReturnTargetId) {
+    return false
+  }
+  const hasSameReturnUrl = expected.returnTarget.url === actual.returnTarget.url
+  return hasSameReturnUrl
 }
 
 function verifyGoogleClaims(
@@ -158,29 +168,36 @@ function verifyGoogleClaims(
   if (hasAccessHash) {
     const accessHash = payload.at_hash
     const isAccessHashString = typeof accessHash === 'string'
-    const hasAccessHashEncoding = isAccessHashString && /^[A-Za-z0-9_-]{22}$/.test(accessHash)
-    const isValidAccessHashShape = isAccessHashString && hasAccessHashEncoding
-    if (!isValidAccessHashShape) {
+    if (!isAccessHashString) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    const hasAccessHashEncoding = /^[A-Za-z0-9_-]{22}$/.test(accessHash)
+    if (!hasAccessHashEncoding) {
       throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
     const isAccessTokenString = typeof accessToken === 'string'
-    const hasAccessToken = isAccessTokenString && accessToken.length > 0
-    const hasNonAsciiAccessToken =
-      hasAccessToken &&
-      [...accessToken].some((character) => {
-        const isNonAscii = character.charCodeAt(0) > 127
-        return isNonAscii
-      })
-    const isValidAccessToken = isAccessTokenString && hasAccessToken && !hasNonAsciiAccessToken
-    if (!isValidAccessToken) {
+    if (!isAccessTokenString) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    const hasAccessToken = accessToken.length > 0
+    if (!hasAccessToken) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    const hasNonAsciiAccessToken = [...accessToken].some((character) => {
+      const isNonAscii = character.charCodeAt(0) > 127
+      return isNonAscii
+    })
+    if (hasNonAsciiAccessToken) {
       throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
     const claimedHash = Buffer.from(accessHash, 'base64url')
     const expectedHash = createHash('sha256').update(accessToken, 'ascii').digest().subarray(0, 16)
     const hasHashBytes = claimedHash.length === 16
-    const isCanonicalHash = hasHashBytes && claimedHash.toString('base64url') === accessHash
-    const isValidHashEncoding = hasHashBytes && isCanonicalHash
-    if (!isValidHashEncoding) {
+    if (!hasHashBytes) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
+    const isCanonicalHash = claimedHash.toString('base64url') === accessHash
+    if (!isCanonicalHash) {
       throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
     const hasExpectedAccessHash = timingSafeEqual(claimedHash, expectedHash)
