@@ -7,15 +7,27 @@ import type { AuthLoginRequest } from '../../database/schemas/auth-login-request
 function exactUrl(value: string): URL {
   const url = new URL(value)
   const hasExactHref = url.href === value
-  const hasUsername = hasExactHref && Boolean(url.username)
-  const hasPassword = hasExactHref && !hasUsername && Boolean(url.password)
-  const hasSearch = hasExactHref && !hasUsername && !hasPassword && Boolean(url.search)
-  const hasHash = hasExactHref && !hasUsername && !hasPassword && !hasSearch && Boolean(url.hash)
-  const hasWildcard =
-    hasExactHref && !hasUsername && !hasPassword && !hasSearch && !hasHash && value.includes('*')
-  const isUrlInvalid =
-    !hasExactHref || hasUsername || hasPassword || hasSearch || hasHash || hasWildcard
-  if (isUrlInvalid) {
+  if (!hasExactHref) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const hasUsername = Boolean(url.username)
+  if (hasUsername) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const hasPassword = Boolean(url.password)
+  if (hasPassword) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const hasSearch = Boolean(url.search)
+  if (hasSearch) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const hasHash = Boolean(url.hash)
+  if (hasHash) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const hasWildcard = value.includes('*')
+  if (hasWildcard) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
   return url
@@ -24,7 +36,7 @@ function exactUrl(value: string): URL {
 function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string): void {
   // 1. 등록 항목의 provider와 식별값을 확인한다.
   const isGoogleProvider = snapshot.provider === 'google'
-  const isDiscordProvider = !isGoogleProvider && snapshot.provider === 'discord'
+  const isDiscordProvider = snapshot.provider === 'discord'
   const isProviderInvalid = !isGoogleProvider && !isDiscordProvider
   if (isProviderInvalid) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
@@ -38,7 +50,10 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
   ]
   const hasRequiredValues = requiredValues.every((value) => {
     const isValueString = typeof value === 'string'
-    const hasNonblankValue = isValueString && value.trim().length > 0
+    if (!isValueString) {
+      return false
+    }
+    const hasNonblankValue = value.trim().length > 0
     return hasNonblankValue
   })
   if (!hasRequiredValues) {
@@ -47,11 +62,13 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
 
   // 2. Provider endpoint와 이 API의 exact callback에만 연결한다.
   const isAuthorizationHttps = exactUrl(snapshot.authorizationEndpoint).protocol === 'https:'
-  const hasExactCallback =
-    isAuthorizationHttps &&
-    exactUrl(snapshot.callbackUrl).href === `${apiOrigin}/auth/callback/${snapshot.provider}`
-  const isProviderEndpointInvalid = !isAuthorizationHttps || !hasExactCallback
-  if (isProviderEndpointInvalid) {
+  if (!isAuthorizationHttps) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const callbackUrl = exactUrl(snapshot.callbackUrl)
+  const expectedCallback = `${apiOrigin}/auth/callback/${snapshot.provider}`
+  const hasExactCallback = callbackUrl.href === expectedCallback
+  if (!hasExactCallback) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
   const shouldCheckGoogleAudience = snapshot.provider === 'google'
@@ -83,11 +100,19 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
     'tel:'
   ]
   const hasHostname = Boolean(target.hostname)
-  const hasPort = hasHostname && Boolean(target.port)
-  const hasAbsolutePath = hasHostname && !hasPort && target.pathname.startsWith('/')
-  const isProtocolDisallowed = hasAbsolutePath && disallowedProtocols.includes(target.protocol)
-  const isReturnTargetInvalid = !hasHostname || hasPort || !hasAbsolutePath || isProtocolDisallowed
-  if (isReturnTargetInvalid) {
+  if (!hasHostname) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const hasPort = Boolean(target.port)
+  if (hasPort) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const hasAbsolutePath = target.pathname.startsWith('/')
+  if (!hasAbsolutePath) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+  const isProtocolDisallowed = disallowedProtocols.includes(target.protocol)
+  if (isProtocolDisallowed) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 }
@@ -103,12 +128,19 @@ export class LoginRegistry {
       const config = structuredClone(configuration)
       const origin = new URL(config.apiOrigin)
       const isOriginHttps = origin.protocol === 'https:'
-      const hasExactOrigin = isOriginHttps && origin.origin === config.apiOrigin
-      const hasOriginUsername = hasExactOrigin && Boolean(origin.username)
-      const hasOriginPassword = hasExactOrigin && !hasOriginUsername && Boolean(origin.password)
-      const isOriginInvalid =
-        !isOriginHttps || !hasExactOrigin || hasOriginUsername || hasOriginPassword
-      if (isOriginInvalid) {
+      if (!isOriginHttps) {
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+      }
+      const hasExactOrigin = origin.origin === config.apiOrigin
+      if (!hasExactOrigin) {
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+      }
+      const hasOriginUsername = Boolean(origin.username)
+      if (hasOriginUsername) {
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+      }
+      const hasOriginPassword = Boolean(origin.password)
+      if (hasOriginPassword) {
         throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
       this.apiOrigin = config.apiOrigin
@@ -128,17 +160,19 @@ export class LoginRegistry {
 
       const activeVersions = Object.entries(this.#active)
       const hasNoActiveVersions = activeVersions.length === 0
-      const hasInvalidActiveVersion =
-        !hasNoActiveVersions &&
-        activeVersions.some(([provider, version]) => {
-          const isSupportedProvider = provider === 'google' || provider === 'discord'
-          const hasRegistration =
-            isSupportedProvider && this.#snapshots.has(this.registrationKey({ provider, version }))
-          const isActiveVersionInvalid = !isSupportedProvider || !hasRegistration
-          return isActiveVersionInvalid
-        })
-      const areActiveVersionsInvalid = hasNoActiveVersions || hasInvalidActiveVersion
-      if (areActiveVersionsInvalid) {
+      if (hasNoActiveVersions) {
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+      }
+      const hasInvalidActiveVersion = activeVersions.some(([provider, version]) => {
+        const isSupportedProvider = provider === 'google' || provider === 'discord'
+        if (!isSupportedProvider) {
+          return true
+        }
+        const hasRegistration = this.#snapshots.has(this.registrationKey({ provider, version }))
+        const isActiveVersionInvalid = !hasRegistration
+        return isActiveVersionInvalid
+      })
+      if (hasInvalidActiveVersion) {
         throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
       Object.freeze(this)
@@ -154,11 +188,11 @@ export class LoginRegistry {
   /** 새 요청은 현재 active version으로 시작한다. */
   active(provider: AuthProvider): ProviderRegistration {
     const version = this.#active[provider]
-    const hasVersion = version != null
-    const hasTruthyVersion = hasVersion && Boolean(version)
-    const snapshot = hasTruthyVersion
-      ? this.#snapshots.get(this.registrationKey({ provider, version }))
-      : undefined
+    const hasVersion = Boolean(version)
+    if (!hasVersion) {
+      throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+    }
+    const snapshot = this.#snapshots.get(this.registrationKey({ provider, version }))
     const hasSnapshot = snapshot != null
     if (!hasSnapshot) {
       throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
@@ -176,9 +210,11 @@ export class LoginRegistry {
     })
     const snapshot = this.#snapshots.get(key)
     const hasSnapshot = snapshot != null
-    const hasSameReturnTarget = hasSnapshot && snapshot.returnTarget.id === request.returnTargetId
-    const isRegistrationInvalid = !hasSnapshot || !hasSameReturnTarget
-    if (isRegistrationInvalid) {
+    if (!hasSnapshot) {
+      throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+    }
+    const hasSameReturnTarget = snapshot.returnTarget.id === request.returnTargetId
+    if (!hasSameReturnTarget) {
       throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
     }
     return snapshot
