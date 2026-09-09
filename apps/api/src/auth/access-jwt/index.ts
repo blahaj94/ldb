@@ -18,14 +18,26 @@ import type {
 
 function isUuid(value: unknown): value is string {
   const isString = typeof value === 'string'
-  const hasUuidFormat = isString && UUID_PATTERN.test(value)
+  if (!isString) {
+    return false
+  }
+
+  const hasUuidFormat = UUID_PATTERN.test(value)
   return hasUuidFormat
 }
 
 function isTimestamp(value: unknown): value is number {
   const isNumber = typeof value === 'number'
-  const isSafeInteger = isNumber && Number.isSafeInteger(value)
-  const isRepresentableDate = isSafeInteger && Number.isFinite(new Date(value * 1000).getTime())
+  if (!isNumber) {
+    return false
+  }
+
+  const isSafeInteger = Number.isSafeInteger(value)
+  if (!isSafeInteger) {
+    return false
+  }
+
+  const isRepresentableDate = Number.isFinite(new Date(value * 1000).getTime())
   return isRepresentableDate
 }
 
@@ -48,18 +60,29 @@ export async function createAccessJwtIssuer(
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       const hasValidUserId = isUuid(input.userId)
-      const hasValidSessionId = hasValidUserId && isUuid(input.sessionId)
-      const hasValidIssuedAt = hasValidSessionId && isTimestamp(input.issuedAt)
-      const hasValidIdleDeadline = hasValidIssuedAt && isTimestamp(input.idleDeadline)
+      if (!hasValidUserId) {
+        throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
+      }
+      const hasValidSessionId = isUuid(input.sessionId)
+      if (!hasValidSessionId) {
+        throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
+      }
+      const hasValidIssuedAt = isTimestamp(input.issuedAt)
+      if (!hasValidIssuedAt) {
+        throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
+      }
+      const hasValidIdleDeadline = isTimestamp(input.idleDeadline)
       if (!hasValidIdleDeadline) {
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       const { userId, sessionId, issuedAt, idleDeadline } = input
       const expiresAt = Math.min(issuedAt + ACCESS_JWT_MAX_AGE_SECONDS, idleDeadline)
       const hasValidExpiration = isTimestamp(expiresAt)
-      const isExpirationAtOrBeforeIssue = hasValidExpiration && expiresAt <= issuedAt
-      const hasInvalidExpiration = !hasValidExpiration || isExpirationAtOrBeforeIssue
-      if (hasInvalidExpiration) {
+      if (!hasValidExpiration) {
+        throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
+      }
+      const isExpirationAtOrBeforeIssue = expiresAt <= issuedAt
+      if (isExpirationAtOrBeforeIssue) {
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       try {
@@ -92,7 +115,10 @@ export async function createAccessJwtVerifier(
     return async (token, now) => {
       try {
         const isTokenString = typeof token === 'string'
-        const hasValidVerificationTime = isTokenString && isTimestamp(now)
+        if (!isTokenString) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasValidVerificationTime = isTimestamp(now)
         if (!hasValidVerificationTime) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
@@ -101,9 +127,18 @@ export async function createAccessJwtVerifier(
           (header) => {
             // jose의 typ normalization보다 엄격한 exact type과 local kid allowlist를 적용한다.
             const hasExpectedAlgorithm = header.alg === ACCESS_JWT_ALGORITHM
-            const hasExpectedType = hasExpectedAlgorithm && header.typ === ACCESS_JWT_TYPE
-            const isKeyIdString = hasExpectedType && hasStringKeyId(header)
-            const hasRegisteredKey = isKeyIdString && keys.has(header.kid)
+            if (!hasExpectedAlgorithm) {
+              throw new AccessJwtError('INVALID_ACCESS_JWT')
+            }
+            const hasExpectedType = header.typ === ACCESS_JWT_TYPE
+            if (!hasExpectedType) {
+              throw new AccessJwtError('INVALID_ACCESS_JWT')
+            }
+            const isKeyIdString = hasStringKeyId(header)
+            if (!isKeyIdString) {
+              throw new AccessJwtError('INVALID_ACCESS_JWT')
+            }
+            const hasRegisteredKey = keys.has(header.kid)
             if (!hasRegisteredKey) {
               throw new AccessJwtError('INVALID_ACCESS_JWT')
             }
@@ -121,27 +156,44 @@ export async function createAccessJwtVerifier(
         )
         const { sub, sid, iat, exp, jti } = payload
         const hasExpectedIssuer = payload.iss === issuer
-        const hasExpectedAudience = hasExpectedIssuer && payload.aud === audience
-        const hasNoNotBeforeClaim = hasExpectedAudience && !Object.hasOwn(payload, 'nbf')
+        if (!hasExpectedIssuer) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasExpectedAudience = payload.aud === audience
+        if (!hasExpectedAudience) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasNoNotBeforeClaim = !Object.hasOwn(payload, 'nbf')
         if (!hasNoNotBeforeClaim) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         const hasValidUserId = isUuid(sub)
-        const hasValidSessionId = hasValidUserId && isUuid(sid)
-        const hasValidTokenId = hasValidSessionId && isUuid(jti)
+        if (!hasValidUserId) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasValidSessionId = isUuid(sid)
+        if (!hasValidSessionId) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasValidTokenId = isUuid(jti)
         if (!hasValidTokenId) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         const hasValidIssuedAt = isTimestamp(iat)
-        const hasValidExpiration = hasValidIssuedAt && isTimestamp(exp)
+        if (!hasValidIssuedAt) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasValidExpiration = isTimestamp(exp)
         if (!hasValidExpiration) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         const isIssuedByNow = iat <= now
-        const isUnexpired = isIssuedByNow && now < exp
-        const hasPositiveLifetime = isUnexpired && exp > iat
-        const hasAllowedLifetime = hasPositiveLifetime && exp - iat <= ACCESS_JWT_MAX_AGE_SECONDS
-        if (!hasAllowedLifetime) {
+        const isUnexpired = now < exp
+        const hasPositiveLifetime = exp > iat
+        const hasAllowedLifetime = exp - iat <= ACCESS_JWT_MAX_AGE_SECONDS
+        const hasValidLifetime =
+          isIssuedByNow && isUnexpired && hasPositiveLifetime && hasAllowedLifetime
+        if (!hasValidLifetime) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         return { userId: sub, sessionId: sid, issuedAt: iat, expiresAt: exp, tokenId: jti }
