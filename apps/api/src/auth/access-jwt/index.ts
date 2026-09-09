@@ -17,15 +17,21 @@ import type {
 } from './types.js'
 
 function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value)
+  const isString = typeof value === 'string'
+  const hasUuidFormat = isString && UUID_PATTERN.test(value)
+  return hasUuidFormat
 }
 
 function isTimestamp(value: unknown): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isSafeInteger(value) &&
-    Number.isFinite(new Date(value * 1000).getTime())
-  )
+  const isNumber = typeof value === 'number'
+  const isSafeInteger = isNumber && Number.isSafeInteger(value)
+  const isRepresentableDate = isSafeInteger && Number.isFinite(new Date(value * 1000).getTime())
+  return isRepresentableDate
+}
+
+function hasStringKeyId(header: { kid?: unknown }): header is { kid: string } {
+  const isKeyIdString = typeof header.kid === 'string'
+  return isKeyIdString
 }
 
 export async function createAccessJwtIssuer(
@@ -37,18 +43,22 @@ export async function createAccessJwtIssuer(
     const { kid, privateKey } = await loadSigningKey(config, keys)
     const { issuer, audience } = config
     return async (input) => {
-      if (
-        !input ||
-        !isUuid(input.userId) ||
-        !isUuid(input.sessionId) ||
-        !isTimestamp(input.issuedAt) ||
-        !isTimestamp(input.idleDeadline)
-      ) {
+      const isInputFalsy = !input
+      if (isInputFalsy) {
+        throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
+      }
+      const hasValidUserId = isUuid(input.userId)
+      const hasValidSessionId = hasValidUserId && isUuid(input.sessionId)
+      const hasValidIssuedAt = hasValidSessionId && isTimestamp(input.issuedAt)
+      const hasValidIdleDeadline = hasValidIssuedAt && isTimestamp(input.idleDeadline)
+      if (!hasValidIdleDeadline) {
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       const { userId, sessionId, issuedAt, idleDeadline } = input
       const expiresAt = Math.min(issuedAt + ACCESS_JWT_MAX_AGE_SECONDS, idleDeadline)
-      if (!isTimestamp(expiresAt) || expiresAt <= issuedAt) {
+      const hasValidExpiration = isTimestamp(expiresAt)
+      const isExpirationAfterIssue = hasValidExpiration && expiresAt > issuedAt
+      if (!isExpirationAfterIssue) {
         throw new AccessJwtError('INVALID_ACCESS_JWT_INPUT')
       }
       try {
@@ -80,19 +90,20 @@ export async function createAccessJwtVerifier(
     const { issuer, audience } = config
     return async (token, now) => {
       try {
-        if (typeof token !== 'string' || !isTimestamp(now)) {
+        const isTokenString = typeof token === 'string'
+        const hasValidVerificationTime = isTokenString && isTimestamp(now)
+        if (!hasValidVerificationTime) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         const { payload } = await jwtVerify(
           token,
           (header) => {
             // jose의 typ normalization보다 엄격한 exact type과 local kid allowlist를 적용한다.
-            if (
-              header.alg !== ACCESS_JWT_ALGORITHM ||
-              header.typ !== ACCESS_JWT_TYPE ||
-              typeof header.kid !== 'string' ||
-              !keys.has(header.kid)
-            ) {
+            const hasExpectedAlgorithm = header.alg === ACCESS_JWT_ALGORITHM
+            const hasExpectedType = hasExpectedAlgorithm && header.typ === ACCESS_JWT_TYPE
+            const isKeyIdString = hasExpectedType && hasStringKeyId(header)
+            const hasRegisteredKey = isKeyIdString && keys.has(header.kid)
+            if (!hasRegisteredKey) {
               throw new AccessJwtError('INVALID_ACCESS_JWT')
             }
             return keys.get(header.kid)!
@@ -108,20 +119,28 @@ export async function createAccessJwtVerifier(
           }
         )
         const { sub, sid, iat, exp, jti } = payload
-        if (
-          payload.iss !== issuer ||
-          payload.aud !== audience ||
-          Object.hasOwn(payload, 'nbf') ||
-          !isUuid(sub) ||
-          !isUuid(sid) ||
-          !isUuid(jti) ||
-          !isTimestamp(iat) ||
-          !isTimestamp(exp) ||
-          iat > now ||
-          now >= exp ||
-          exp <= iat ||
-          exp - iat > ACCESS_JWT_MAX_AGE_SECONDS
-        ) {
+        const hasExpectedIssuer = payload.iss === issuer
+        const hasExpectedAudience = hasExpectedIssuer && payload.aud === audience
+        const hasNoNotBeforeClaim = hasExpectedAudience && !Object.hasOwn(payload, 'nbf')
+        if (!hasNoNotBeforeClaim) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasValidUserId = isUuid(sub)
+        const hasValidSessionId = hasValidUserId && isUuid(sid)
+        const hasValidTokenId = hasValidSessionId && isUuid(jti)
+        if (!hasValidTokenId) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const hasValidIssuedAt = isTimestamp(iat)
+        const hasValidExpiration = hasValidIssuedAt && isTimestamp(exp)
+        if (!hasValidExpiration) {
+          throw new AccessJwtError('INVALID_ACCESS_JWT')
+        }
+        const isIssuedByNow = iat <= now
+        const isUnexpired = isIssuedByNow && now < exp
+        const hasPositiveLifetime = isUnexpired && exp > iat
+        const hasAllowedLifetime = hasPositiveLifetime && exp - iat <= ACCESS_JWT_MAX_AGE_SECONDS
+        if (!hasAllowedLifetime) {
           throw new AccessJwtError('INVALID_ACCESS_JWT')
         }
         return { userId: sub, sessionId: sid, issuedAt: iat, expiresAt: exp, tokenId: jti }
