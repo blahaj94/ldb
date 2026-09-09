@@ -54,14 +54,12 @@ Logic budget을 넘으면 AI는 구현을 숨기거나 기계적으로 줄 수�
 
 - Module은 설명 가능한 하나의 책임을 가진다.
 - 실제 사용 사례가 없는 speculative abstraction을 만들지 않는다.
-- 한 번만 사용되는 wrapper와 불필요한 indirection을 피한다.
+- 공통 로직의 재사용, wrapper와 모듈 분리는 [코드 재사용과 공통 패키지 분리 기준](code-reuse.md)을 따릅니다. 불필요한 indirection은 피합니다.
 - 기존 pattern과 다른 새 pattern을 도입하려면 이유와 영향을 설명한다.
 - Feature와 unrelated refactoring을 같은 Issue에 섞지 않는다.
 - Core behavior는 test와 분리되어 추론 가능해야 한다.
 - 큰 mock, fixture, generated file이 logic review를 가리지 않도록 분리한다.
 - Source 위치는 file path로 참조하며 line number를 durable context로 저장하지 않는다.
-
-위의 한 번만 사용하는 wrapper 회피 기준을 사용 횟수와 무관한 역할 판단으로 바꾸는 [코드 재사용 기준 제안](code-reuse.md)이 있습니다. 제안은 같은 책임의 중복과 서로 다른 책임의 강제 공통화를 함께 방지하며, 승인 전에는 위 active Rule을 유지합니다.
 
 ## Context budget
 

@@ -79,7 +79,7 @@ Package의 published peer 범위는 조합 선정 evidence이며 실제 Web·Ele
 
 ## Architecture change
 
-새 공통 package의 판단 근거는 [앱 내부 모듈과 공통 패키지 기준 제안](../rules/code-reuse.md#앱-내부-모듈과-공통-패키지)에서 다룹니다. 독립 책임과 계약, 의존성 방향과 경계 이점을 모두 확인하는 proposed 기준이며, 현재 승인된 boundary나 아래 승인 의무를 변경하지 않습니다.
+새 공통 package의 분리는 [앱 내부 모듈과 공통 패키지 기준](../rules/code-reuse.md#앱-내부-모듈과-공통-패키지)에 따라 판단합니다. 개별 package의 생성과 의존성 방향은 아래 승인 절차를 유지합니다.
 
 다음은 architecture 변경으로 취급한다.
 

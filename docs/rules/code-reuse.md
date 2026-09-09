@@ -1,19 +1,19 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: repository
 rationale: 공통 로직의 재구현과 불필요한 공통화를 줄이고 프로젝트가 맡을 유지보수 책임을 명확히 합니다.
-evidence: "Discussion #257의 제안과 후속 합의; Issue #258"
+evidence: "Discussion #257; Issue #258; PR #259 사용자 승인: https://github.com/blahaj94/ldb/pull/259#issuecomment-5609921277"
 exceptions: 기존 구현이나 표준 API를 그대로 사용하거나 프로젝트 정책만 연결하는 단순 adapter는 새 범용 동작을 구현하지 않으면 별도 비교 문서나 질문을 요구하지 않습니다.
 review-after: 승인 후 재사용 또는 자체 구현 판단이 포함된 서로 다른 실행 Issue 3개에서 누락, 과도한 공통화와 재조사 비용을 확인합니다.
 ---
 
 # 코드 재사용과 공통 패키지 분리 기준
 
-[재사용 원칙 Discussion](https://github.com/blahaj94/ldb/discussions/257)의 후속 합의를 [Issue #258](https://github.com/blahaj94/ldb/issues/258)에서 구체화한 제안입니다. 이 문서와 연결 문구는 Draft PR의 명시적인 사용자 승인 전에는 실행 권한이 아닙니다. 승인 전에는 기존 [Dependency 선택과 비용](change-control.md#dependency-선택과-비용)과 [Maintainability](code-quality.md#maintainability)의 active Rule을 유지합니다.
+[재사용 원칙 Discussion](https://github.com/blahaj94/ldb/discussions/257)의 후속 합의를 [Issue #258](https://github.com/blahaj94/ldb/issues/258)에서 구체화하고 [PR #259의 사용자 승인](https://github.com/blahaj94/ldb/pull/259#issuecomment-5609921277)을 반영한 active Rule입니다. 승인된 변경을 반영한 checkout에서 적용합니다.
 
-이 제안은 재사용 검토의 시작을 예상 구현 부담과 사용 횟수에서 코드의 역할로 바꿉니다. 승인 후에도 새 dependency, architecture와 보안 계약의 변경은 [기존 승인 절차](change-control.md#approval-evidence)를 따릅니다. 특정 라이브러리 선정, package 생성이나 기존 코드 교정을 일괄 승인하지 않습니다.
+재사용 탐색, 자체 구현 판단, 공통 package 분리와 선택 근거의 관리는 이 문서를 따릅니다. 새 dependency, architecture와 보안 계약의 변경은 [기존 승인 절차](change-control.md#approval-evidence)를 유지합니다. 특정 라이브러리 선정, package 생성이나 기존 코드 교정을 일괄 승인하지 않습니다.
 
 ## 역할로 판단하기
 
@@ -24,7 +24,7 @@ review-after: 승인 후 재사용 또는 자체 구현 판단이 포함된 서�
 
 ## 구현 전 재사용 탐색
 
-공통 로직을 작성하거나 확장하기 전에 필요한 입력, 출력, 실패 조건과 실행 환경을 확인하고 다음 순서로 적합한 기능을 찾습니다.
+공통 로직을 작성하거나 확장하기 전에 필요한 입력, 출력, 실패 조건과 실행 환경을 확인하고 다음 순서로 적합한 기능을 찾습니다. 작업 도중 범용 기능의 재구현이 필요하다는 사실을 발견하면 해당 구현을 더 늘리기 전에 같은 절차를 진행합니다.
 
 1. 프로젝트의 기존 구현과 관련 결정 기록을 확인합니다. 같은 책임의 중복을 만들지 않되, 기존 코드가 있다는 사실만으로 선택을 정당화하지 않습니다. 계약이나 선택 이유가 불분명하면 그 사실을 드러냅니다.
 2. Node.js, 브라우저 등 대상 런타임의 표준 API와 내장 모듈을 확인합니다. 이를 사용하는 것은 재사용이며 자체 재구현으로 분류하지 않습니다.

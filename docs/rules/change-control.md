@@ -34,24 +34,8 @@ last-reviewed: 2026-09-08
 
 ## Dependency 선택과 비용
 
-공통 로직의 재사용 탐색, 자체 구현 판단과 결정 기록을 확장하는 [코드 재사용 기준 제안](code-reuse.md)이 있습니다. 제안은 예상 구현 부담 대신 역할을 기준으로 검토를 시작하도록 합니다. 명시적인 Draft PR 승인 전에는 아래 active Rule을 유지하며, 승인 절차 자체는 변경하지 않습니다.
+재사용 탐색, 자체 구현의 비교와 승인, 소유 모듈 및 package 분리, 선택 근거의 기록과 재사용은 [코드 재사용과 공통 패키지 분리 기준](code-reuse.md)을 따릅니다. [PR #97의 기존 승인](https://github.com/blahaj94/ldb/pull/97#issuecomment-5559626371)을 바탕으로 [PR #259에서 승인된 역할 중심 기준](https://github.com/blahaj94/ldb/pull/259#issuecomment-5609921277)을 반영했습니다. 판단 절차를 한 문서에서 관리하며 개별 dependency의 승인 경계는 유지합니다.
 
-아래 정책과 다른 Rule의 연결 문구는 [PR #97의 사용자 승인](https://github.com/blahaj94/ldb/pull/97#issuecomment-5559626371)과 merge를 반영한 active Rule이다. 특정 library 선정·설치를 승인하지 않는다.
-
-```yaml
-status: active
-enforcement: approval-required
-rationale: dependency 제약을 지키려다 범용 기능의 자체 구현·검증 비용이 커지는 선택을 조기에 확인한다.
-evidence: "Issue #96, PR #97 사용자 승인: https://github.com/blahaj94/ldb/pull/97#issuecomment-5559626371"
-exceptions: 기존 기능이나 작은 native API 호출·단순 adapter로 요구를 충족하면 별도 비교 문서나 질문을 요구하지 않는다.
-review-after: 승인 후 dependency 선택이 필요한 구현 Issue 3개에서 질문의 적시성과 비교 비용을 확인한다.
-```
-
-- 새 dependency의 사전 승인은 사용 금지나 자체 구현 우선 지시가 아니다. 승인 절차를 피하려고 library가 맡을 범용 기능을 직접 구현하지 않는다.
-- Dependency 제약으로 범용 기능을 반복해서 만들거나 여러 공통 처리와 실패 경계 test를 직접 구성해야 해 구현·검증 부담이 커질 것으로 예상되면, 설계·착수 전에 아래 비교와 질문을 진행한다. 작업 도중 발견하면 해당 구현을 더 늘리기 전에 즉시 진행한다.
-- 비교는 기존 repository 기능, native API, 유지보수되는 library와 직접 구현 중 해당 요구에 적합한 선택지를 필요한 범위에서 확인한다. 구현뿐 아니라 test·mock·review·유지보수 비용, 호환성·dependency 부담과 library 도입 후에도 남는 인증·응답 제한·경합 등 제품 정책을 함께 고려한다. 정밀한 비용 추정이나 포괄적인 library 조사를 의무화하지 않는다.
-- 사용자에게 추천안과 실질적인 대안 1개, 각각의 trade-off를 짧게 제시하고 선택을 질문한다. Worker는 Planner에게 근거를 전달하고 선택에 영향받는 구현을 보류하며, 결정이 필요 없는 독립 작업은 계속할 수 있다. 질문만 하고 답변 전에 영향받는 자체 구현을 진행하지 않는다.
-- Planner가 dependency 추가를 제외 범위로 정할 때는 사용자 지시·승인된 Rule·이번 작업 범위 등 근거를 Issue에 명시한다. 이유 없이 관행적으로 고정하거나 필요한 library 검토까지 생략하는 제약으로 사용하지 않는다. 외부 library 도입과 자체 공통 package 신설은 목적·비용·boundary가 다른 별도 판단이다.
 - 명시적 사용자 금지와 승인된 runtime·API·security contract는 유지한다. 비용·요구 변화에 따른 기존 제한의 재검토는 제안할 수 있지만, 실제 dependency 설치·역할 변경이나 contract를 바꾸는 구현은 필요한 Rule 변경안의 Draft PR 승인과 해당 작업의 실행 허용 후에만 진행한다. 사용자의 후보 선택은 그 자체로 Rule 승인 evidence를 대신하지 않는다.
 
 ## Approval evidence
