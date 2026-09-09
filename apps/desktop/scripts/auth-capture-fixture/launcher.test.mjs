@@ -115,13 +115,15 @@ function captureSignals() {
       if (!isSignal) {
         return original(event, listener)
       }
-      handlers.set(event, { listener, once: method === 'once' })
+      const isOnce = method === 'once'
+      handlers.set(event, { listener, once: isOnce })
       return process
     })
   }
   vi.spyOn(process, 'removeListener').mockImplementation((event, listener) => {
     const registration = handlers.get(event)
-    const isRegistered = registration != null && registration.listener === listener
+    const hasRegistration = registration != null
+    const isRegistered = hasRegistration && registration.listener === listener
     if (isRegistered) {
       handlers.delete(event)
     } else {

@@ -79,8 +79,10 @@ async function withApi({ source, database, google, neople }, operation) {
         const hasNoRuntimeOutput = hasNoStdout && hasNoStderr
         assert(hasNoRuntimeOutput, 'API must not log raw fixture data')
         const events = runtime.events.map(({ event }) => event)
-        assert(events.includes('db.disconnected'), 'API must disconnect its real database')
-        assert(events.includes('app.closed'), 'API must close its HTTP application')
+        const hasDisconnectedDatabase = events.includes('db.disconnected')
+        assert(hasDisconnectedDatabase, 'API must disconnect its real database')
+        const hasClosedApplication = events.includes('app.closed')
+        assert(hasClosedApplication, 'API must close its HTTP application')
       } finally {
         await stopRuntime(runtime)
       }
@@ -128,7 +130,8 @@ export async function withSearchServer(operation) {
         }
       },
       async () => {
-        const hasInitializedSource = source != null && source.isInitialized
+        const hasSource = source != null
+        const hasInitializedSource = hasSource && source.isInitialized
         if (hasInitializedSource) {
           await source.destroy()
         }
