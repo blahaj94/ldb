@@ -30,7 +30,15 @@ vi.mock('../capture/recognition', async (original) => ({
 type Loop = { signal: AbortSignal; getIntervalMs: () => number; runCycle: () => Promise<void> }
 const cleanup: Array<() => Promise<void>> = []
 
-export function authSnapshot(revision = 1, signedIn = true): AuthSnapshot {
+type AuthSnapshotInput = Readonly<{
+  revision?: number
+  signedIn?: boolean
+}>
+
+export function authSnapshot({
+  revision = 1,
+  signedIn = true
+}: AuthSnapshotInput = {}): AuthSnapshot {
   return {
     runId: SEARCH_RUN,
     revision,

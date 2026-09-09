@@ -37,9 +37,14 @@ async function activityFirst(source, cleanup) {
         assert(activityAt < deadline)
         // 후보 조회 시에는 아직 commit되지 않은 활동을 볼 수 없어 만료된 옛 row가 선택된다.
         await waitUntil(source, deadline)
-        await cleanupWaitingOn(source, cleanup, 'auth_sessions', f.initial.session.id, pid, () =>
-          release.resolve()
-        )
+        await cleanupWaitingOn({
+          source,
+          cleanup,
+          table: 'auth_sessions',
+          id: f.initial.session.id,
+          blocker: pid,
+          unlock: () => release.resolve()
+        })
         const result = await pending
         assert.equal(result.error, undefined)
         assert.equal(result.value.status, 200)
@@ -64,8 +69,13 @@ async function cleanupFirst(source, cleanup) {
   const createQueryRunner = observeSearchRunners({
     query: async ({ sql, parameters, query, run }) => {
       const isLock =
-        targets(sql, parameters, 'SELECT', 'auth_sessions', f.initial.session.id) &&
-        sql.includes('FOR UPDATE')
+        targets({
+          sql,
+          parameters,
+          verb: 'SELECT',
+          table: 'auth_sessions',
+          id: f.initial.session.id
+        }) && sql.includes('FOR UPDATE')
       if (isLock) {
         activityLock.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
       }
@@ -81,12 +91,12 @@ async function cleanupFirst(source, cleanup) {
   await withSearchApp(
     f,
     async ({ base, calls }) => {
-      await withCleanupDeletionHeld(
+      await withCleanupDeletionHeld({
         source,
         cleanup,
-        'auth_sessions',
-        f.initial.session.id,
-        async ({ pid, waiter, release }) => {
+        table: 'auth_sessions',
+        id: f.initial.session.id,
+        operation: async ({ pid, waiter, release }) => {
           const activity = settled(searchRequest(base, f))
           const refresh = settled(f.rotate(f.initial.refreshToken))
           try {
@@ -105,7 +115,7 @@ async function cleanupFirst(source, cleanup) {
             await Promise.all([activity, refresh])
           }
         }
-      )
+      })
     },
     { createQueryRunner }
   )
@@ -123,13 +133,13 @@ async function staleSessionHint(source, cleanup, change) {
   const otherBefore = await stored(source, other.initial.session.id)
   await setDeadline(source, f.initial.session.id, await databaseNow(source))
   await withLock(source, 'auth_sessions', f, async ({ runner, pid }) => {
-    await cleanupWaitingOn(
+    await cleanupWaitingOn({
       source,
       cleanup,
-      'auth_sessions',
-      f.initial.session.id,
-      pid,
-      async () => {
+      table: 'auth_sessions',
+      id: f.initial.session.id,
+      blocker: pid,
+      unlock: async () => {
         const canCommit = runner.isTransactionActive
         if (!canCommit) {
           return
@@ -145,7 +155,7 @@ async function staleSessionHint(source, cleanup, change) {
         }
         await runner.commitTransaction()
       }
-    )
+    })
   })
   const final = await stored(source, f.initial.session.id)
   const wasDeleted = change === 'deleted'

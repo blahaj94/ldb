@@ -59,7 +59,11 @@ describe('검색의 main authorization 소비 경계', () => {
     expect(before.accessGeneration).toEqual(expect.any(Number))
     harness.clock.advance(16 * 60_000)
     harness.http.refresh.mockResolvedValueOnce(
-      tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+      tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
     )
 
     const after = await usedAccess(auth)
@@ -84,7 +88,11 @@ describe('검색의 main authorization 소비 경계', () => {
     async (boundary) => {
       const { auth, harness } = await setup()
       harness.clock.advance(16 * 60_000)
-      const tokens = tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+      const tokens = tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
       const refresh = deferred<ReturnType<typeof tokenResponse>>()
       const storage = deferred<'confirmed'>()
       const isRefresh = boundary === 'refresh'
@@ -155,11 +163,11 @@ describe('검색의 main authorization 소비 경계', () => {
       await vi.waitFor(() => expect(harness.http.refresh).toHaveBeenCalledTimes(1))
       await settle()
       expect(ordinaryResult).toBeUndefined()
-      refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2))
+      refresh.resolve(tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 }))
       await vi.waitFor(() => expect(harness.store.commitCredential).toHaveBeenCalledTimes(1))
       expect(ordinaryResult).toBeUndefined()
     } finally {
-      refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2))
+      refresh.resolve(tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 }))
       commit.resolve('confirmed')
       await Promise.all([first, second, ordinary])
     }
@@ -182,7 +190,11 @@ describe('검색의 main authorization 소비 경계', () => {
     const previous = await usedAccess(auth)
     harness.clock.advance(16 * 60_000)
     harness.http.refresh.mockResolvedValueOnce(
-      tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+      tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
     )
     const current = await usedAccess(auth)
     harness.http.refresh.mockClear()
@@ -218,7 +230,11 @@ describe('검색의 main authorization 소비 경계', () => {
       const access = await usedAccess(auth)
       harness.clock.advance(16 * 60_000)
       harness.store.establishTransition.mockClear()
-      const tokens = tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+      const tokens = tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
       const refresh = deferred<ReturnType<typeof tokenResponse>>()
       const storage = deferred<'confirmed'>()
       const isMarker = boundary === 'marker'

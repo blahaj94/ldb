@@ -25,7 +25,11 @@ function tokensFor({
   const bytes = Buffer.alloc(32, seed)
   const refreshToken = bytes.toString('base64url')
   const expiry = new Date(fixture.harness.clock.wallMs + expiresInMs).toISOString()
-  return tokenResponse(refreshToken, `stage${seed}.payload.signature`, expiry)
+  return tokenResponse({
+    refreshToken,
+    accessToken: `stage${seed}.payload.signature`,
+    accessTokenExpiresAt: expiry
+  })
 }
 
 async function failure(fixture: Fixture, code: SearchErrorCode, slot = 0): Promise<SearchSlot> {
@@ -65,7 +69,9 @@ describe('검색 401 회복과 수동 재시도', () => {
   it('401 회복은 자동 GET 없이 끝나며 사용자 retry만 최신 access로 새 GET을 보낸다', async () => {
     const fixture = await createSearchFixture()
     fixture.fetchSearch.mockResolvedValueOnce(unauthorized())
-    fixture.harness.http.refresh.mockResolvedValueOnce(tokenResponse(REFRESH_2, ACCESS_2))
+    fixture.harness.http.refresh.mockResolvedValueOnce(
+      tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 })
+    )
 
     await fixture.observe({ slot: 0, observationRevision: 1, nickname: '가나' })
     const failed = await failure(fixture, 'SEARCH_AUTH_RETRY_REQUIRED')
@@ -84,7 +90,9 @@ describe('검색 401 회복과 수동 재시도', () => {
   it('revision 승격 뒤에도 회복된 실패의 retry가 최신 access에서 401이면 최종 인증 상실이다', async () => {
     const fixture = await createSearchFixture()
     fixture.fetchSearch.mockImplementation(async () => unauthorized())
-    fixture.harness.http.refresh.mockResolvedValueOnce(tokenResponse(REFRESH_2, ACCESS_2))
+    fixture.harness.http.refresh.mockResolvedValueOnce(
+      tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 })
+    )
     await fixture.observe({ slot: 0, observationRevision: 1, nickname: '가나' })
     const failed = await failure(fixture, 'SEARCH_AUTH_RETRY_REQUIRED')
     await fixture.observe({ slot: 0, observationRevision: 2, nickname: '가나' })
@@ -108,7 +116,9 @@ describe('검색 401 회복과 수동 재시도', () => {
     fixture.fetchSearch.mockReturnValueOnce(response.promise)
     await fixture.observe({ slot: 0, observationRevision: 1, nickname: '가나' })
     await vi.waitFor(() => expect(fixture.fetchSearch).toHaveBeenCalledTimes(1))
-    fixture.harness.http.refresh.mockResolvedValueOnce(tokenResponse(REFRESH_2, ACCESS_2))
+    fixture.harness.http.refresh.mockResolvedValueOnce(
+      tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 })
+    )
     await fixture.auth.recoverAuthorization({
       generation: used.generation,
       accessGeneration: used.accessGeneration,
@@ -149,7 +159,7 @@ describe('검색 401 회복과 수동 재시도', () => {
       })
       expect(fixture.harness.http.refresh.mock.calls[0][1].aborted).toBe(false)
     } finally {
-      refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2))
+      refresh.resolve(tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 }))
       await ordinary
     }
 
@@ -178,7 +188,7 @@ describe('검색 401 회복과 수동 재시도', () => {
       await failure(fixture, 'SEARCH_TIMEOUT')
       expect(fixture.harness.http.refresh.mock.calls[0][1].aborted).toBe(false)
     } finally {
-      refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2))
+      refresh.resolve(tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 }))
       await fixture.auth.authorization()
       await flushSearch()
     }

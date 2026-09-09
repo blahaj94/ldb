@@ -191,7 +191,7 @@ it.each(['Stop', 'source', 'auth', 'unmount'] as const)(
     } else if (isSource) {
       await fixture.select('next')
     } else if (isAuth) {
-      await fixture.emitAuth(authSnapshot(2, false))
+      await fixture.emitAuth(authSnapshot({ revision: 2, signedIn: false }))
     } else {
       await fixture.unmount()
     }

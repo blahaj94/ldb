@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { blockedBy, bounded, instrument, settled } from './login-test-control.mjs'
 
-export function targets(sql, parameters, verb, table, id) {
+export function targets({ sql, parameters, verb, table, id }) {
   const hasVerb = sql.startsWith(verb)
   const hasTable = sql.includes(table)
   const hasId = parameters?.includes(id) === true
@@ -9,15 +9,15 @@ export function targets(sql, parameters, verb, table, id) {
 }
 
 // 삭제 SQL은 실제로 실행한 채 commit만 보류한다. 경합 상대의 backend가 이 잠금을 기다리는지 확인한다.
-export async function withCleanupDeletionHeld(source, cleanup, table, id, operation) {
+export async function withCleanupDeletionHeld({ source, cleanup, table, id, operation }) {
   const held = Promise.withResolvers()
   const release = Promise.withResolvers()
   const waiter = Promise.withResolvers()
   let owner
   const restore = instrument(source, {
     query: async ({ runner, sql, parameters, query, run }) => {
-      const isDeletion = targets(sql, parameters, 'DELETE', table, id)
-      const isTargetRead = targets(sql, parameters, 'SELECT', table, id)
+      const isDeletion = targets({ sql, parameters, verb: 'DELETE', table, id })
+      const isTargetRead = targets({ sql, parameters, verb: 'SELECT', table, id })
       const hasWriteLock = sql.includes('FOR UPDATE')
       const hasOwner = owner != null
       const isOtherRunner = runner !== owner
@@ -46,12 +46,12 @@ export async function withCleanupDeletionHeld(source, cleanup, table, id, operat
   assert.equal((await pending).error, undefined)
 }
 
-export async function cleanupWaitingOn(source, cleanup, table, id, blocker, unlock) {
+export async function cleanupWaitingOn({ source, cleanup, table, id, blocker, unlock }) {
   const observed = Promise.withResolvers()
   const restore = instrument(source, {
     query: async ({ sql, parameters, query, run }) => {
       const isTargetLock =
-        targets(sql, parameters, 'SELECT', table, id) && sql.includes('FOR UPDATE')
+        targets({ sql, parameters, verb: 'SELECT', table, id }) && sql.includes('FOR UPDATE')
       if (isTargetLock) {
         observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
       }
