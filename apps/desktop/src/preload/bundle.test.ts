@@ -14,7 +14,8 @@ it.each(['electron.vite.config.ts', 'scripts/auth-capture-fixture.config.ts'])(
       logLevel: 'silent',
       build: { ...preload!.build, write: false }
     })
-    const bundles = Array.isArray(output) ? output : [output]
+    const isOutputArray = Array.isArray(output)
+    const bundles = isOutputArray ? output : [output]
     const chunks: string[] = []
     for (const bundle of bundles) {
       const hasOutput = 'output' in bundle

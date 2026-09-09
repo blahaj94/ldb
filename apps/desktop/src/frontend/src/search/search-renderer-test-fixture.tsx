@@ -115,10 +115,10 @@ export function createRendererFixture(): RendererFixture {
         const isBegin = command.action === 'begin'
         if (isBegin) {
           sequence += 1
-          const captureId =
-            sequence === 1
-              ? CAPTURE_ID
-              : `00000000-0000-4000-8000-${String(100 + sequence).padStart(12, '0')}`
+          const isFirstCapture = sequence === 1
+          const captureId = isFirstCapture
+            ? CAPTURE_ID
+            : `00000000-0000-4000-8000-${String(100 + sequence).padStart(12, '0')}`
           currentSearch = searchSnapshot({ captureId, revision: currentSearch.revision + 1 })
         }
         return { ok: true, snapshot: currentSearch }

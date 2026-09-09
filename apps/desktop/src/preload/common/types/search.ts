@@ -20,6 +20,8 @@ export type CharacterSearchRow = Readonly<{
   fame: number | null
 }>
 
+type SearchErrorDefinition = Readonly<{ message: string; retryable: boolean }>
+
 export const SEARCH_ERRORS = {
   INVALID_SEARCH_QUERY: { message: '검색 조건을 확인해 주세요.', retryable: false },
   AUTHENTICATION_REQUIRED: { message: '로그인이 필요합니다.', retryable: false },
@@ -54,7 +56,7 @@ export const SEARCH_ERRORS = {
     message: '검색에 필요한 로그인 상태 확인을 마치지 못했습니다. 다시 시도해 주세요.',
     retryable: true
   }
-} as const
+} as const satisfies Record<string, SearchErrorDefinition>
 
 export type SearchErrorCode = keyof typeof SEARCH_ERRORS
 export type SearchError = Readonly<{ code: SearchErrorCode; retryAfterSeconds: number | null }>

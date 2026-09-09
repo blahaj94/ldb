@@ -91,17 +91,24 @@ export class CaptureSearch {
       authRunId: auth.runId,
       authRevision: auth.revision
     })
-    const captureId = result?.ok === true ? result.snapshot.captureId : null
+    const isBeginSuccessful = result?.ok === true
+    const captureId = isBeginSuccessful ? result.snapshot.captureId : null
     const hasCaptureId = captureId != null
-    const isCurrentTicket = this.capture === ticket && ticket.active
+    const hasCurrentTicket = this.capture === ticket
+    const isTicketActive = hasCurrentTicket && ticket.active
+    const isCurrentTicket = hasCurrentTicket && isTicketActive
     const latest = this.snapshot
     const completed = result?.snapshot
-    const canCompareSnapshot = latest != null && completed != null
+    const hasLatestSnapshot = latest != null
+    const hasCompletedSnapshot = completed != null
+    const canCompareSnapshot = hasLatestSnapshot && hasCompletedSnapshot
     const hasChangedRun = canCompareSnapshot && latest.runId !== completed.runId
     const hasNewerSnapshot = canCompareSnapshot && latest.revision > completed.revision
-    const hasDifferentCapture = latest != null && latest.captureId !== captureId
-    const isSuperseded = hasChangedRun || (hasNewerSnapshot && hasDifferentCapture)
-    const isCancelled = signal.aborted || !isCurrentTicket || isSuperseded
+    const hasDifferentCapture = hasLatestSnapshot && latest.captureId !== captureId
+    const hasNewerDifferentCapture = hasNewerSnapshot && hasDifferentCapture
+    const isSuperseded = hasChangedRun || hasNewerDifferentCapture
+    const isSignalAborted = signal.aborted
+    const isCancelled = isSignalAborted || !isCurrentTicket || isSuperseded
     if (isCancelled) {
       if (isCurrentTicket) {
         ticket.active = false
@@ -144,16 +151,19 @@ export class CaptureSearch {
   observe({ slot, nickname }: { slot: number; nickname: string | null }): void {
     const ticket = this.capture
     const captureId = ticket?.captureId
-    const canObserve = ticket != null && ticket.active && captureId != null
+    const hasTicket = ticket != null
+    const isTicketActive = hasTicket && ticket.active
+    const hasCaptureId = captureId != null
+    const canObserve = hasTicket && isTicketActive && hasCaptureId
     if (!canObserve) {
       return
     }
     ticket.revisions[slot] += 1
-    ticket.cleared[slot] = nickname === null
+    const isClear = nickname === null
+    ticket.cleared[slot] = isClear
     this.pending.delete(slot)
     const observationRevision = ticket.revisions[slot]
     this.publish()
-    const isClear = nickname === null
     if (isClear) {
       void this.connection.command({ action: 'clear', captureId, slot, observationRevision })
     } else {
@@ -167,16 +177,22 @@ export class CaptureSearch {
     const captureId = this.capture?.captureId
     const slot = this.visibleSlots()[slotIndex]
     const error = slot.error
-    const isFailure = slot.state === 'failure' && error != null
-    const hasId = captureId != null && slot.requestId != null
+    const isFailureState = slot.state === 'failure'
+    const hasError = error != null
+    const hasFailure = isFailureState && hasError
+    const hasCaptureId = captureId != null
+    const hasRequestId = slot.requestId != null
+    const hasId = hasCaptureId && hasRequestId
     const isPending = this.pending.has(slotIndex)
-    const canConsiderRetry = isFailure && hasId && !isPending
+    const canConsiderRetry = hasFailure && hasId && !isPending
     if (!canConsiderRetry) {
       return
     }
     const isRetryable = SEARCH_ERRORS[error.code].retryable
     const isRateLimit = error.code === 'SEARCH_RATE_LIMITED'
-    const isWaiting = isRateLimit && error.retryAfterSeconds != null && error.retryAfterSeconds > 0
+    const hasRetryAfter = isRateLimit && error.retryAfterSeconds != null
+    const hasPositiveRetryAfter = hasRetryAfter && error.retryAfterSeconds > 0
+    const isWaiting = isRateLimit && hasRetryAfter && hasPositiveRetryAfter
     const canRetry = isRetryable && !isWaiting
     if (!canRetry) {
       return
@@ -227,9 +243,13 @@ export class CaptureSearch {
   private visibleSlots(): readonly SearchSlot[] {
     const ticket = this.capture
     const snapshot = this.snapshot
-    const hasTicket = ticket != null && ticket.active && ticket.captureId != null
+    const hasTicket = ticket != null
+    const isTicketActive = hasTicket && ticket.active
+    const hasCaptureId = isTicketActive && ticket.captureId != null
+    const hasActiveTicket = isTicketActive && hasCaptureId
     const hasSnapshot = snapshot != null
-    const hasSameCapture = hasTicket && hasSnapshot && ticket.captureId === snapshot.captureId
+    const canCompareCapture = hasActiveTicket && hasSnapshot
+    const hasSameCapture = canCompareCapture && ticket.captureId === snapshot.captureId
     if (!hasSameCapture) {
       return emptySearchSlots()
     }
@@ -249,7 +269,10 @@ export class CaptureSearch {
     this.options.onChange({
       ready: this.connection.ready,
       slots: this.visibleSlots(),
-      retryPending: Array.from({ length: 4 }, (_, slot) => this.pending.has(slot)),
+      retryPending: Array.from({ length: 4 }, (_, slot) => {
+        const isPending = this.pending.has(slot)
+        return isPending
+      }),
       connectionFailed: this.failed
     })
   }
