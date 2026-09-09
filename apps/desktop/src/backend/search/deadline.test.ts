@@ -121,7 +121,13 @@ describe('검색 접수부터 전체 완료까지 하나의 monotonic 예산', (
       await vi.waitFor(() => expect(fixture.harness.http.refresh).toHaveBeenCalledTimes(1))
 
       fixture.harness.clock.advance(10_000)
-      refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z'))
+      refresh.resolve(
+        tokenResponse({
+          refreshToken: REFRESH_2,
+          accessToken: ACCESS_2,
+          accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+        })
+      )
       await vi.waitFor(() => expect(body.pull).toHaveBeenCalled())
       fixture.harness.clock.elapseWithoutTimers(bodyElapsed)
       body.finish(JSON.stringify({ rows: [] }))
@@ -142,7 +148,11 @@ describe('검색 접수부터 전체 완료까지 하나의 monotonic 예산', (
     async (mode) => {
       const fixture = await createSearchFixture()
       fixture.harness.clock.advance(16 * 60_000)
-      const tokens = tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+      const tokens = tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
       const refresh = deferred<ReturnType<typeof tokenResponse>>()
       fixture.harness.http.refresh.mockReturnValueOnce(refresh.promise)
       await fixture.observe({ slot: 0, observationRevision: 1, nickname: '가나' })
@@ -198,7 +208,13 @@ describe('검색 접수부터 전체 완료까지 하나의 monotonic 예산', (
     })
     expect((await fixture.read()).slots[0]).toMatchObject({ state: 'idle', observationRevision: 2 })
     expect(fixture.harness.http.refresh.mock.calls[0][1].aborted).toBe(false)
-    refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z'))
+    refresh.resolve(
+      tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
+    )
     expect(await ordinary).toMatchObject({ status: 'available', accessToken: ACCESS_2 })
     await flushSearch()
 

@@ -705,7 +705,7 @@ describe('Desktop AuthCoordinator login', () => {
       }
       await beginWaitingLogin(coordinator)
       harness.http.exchange.mockResolvedValueOnce({
-        ...tokenResponse(REFRESH_2),
+        ...tokenResponse({ refreshToken: REFRESH_2 }),
         user: { id: USER_ID, nickname: '모험가000001' },
         isNewUser: false
       })
@@ -1963,7 +1963,11 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     const coordinator = createAuthCoordinator(harness.dependencies)
     await coordinator.start()
     harness.http.refresh.mockResolvedValueOnce(
-      tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:30:00.000Z')
+      tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:30:00.000Z'
+      })
     )
     const unsubscribe = coordinator.subscribe((snapshot) => {
       const isRestoring = snapshot.phase === 'restoring'
@@ -2061,7 +2065,13 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     await settle()
     expect(harness.http.refresh).toHaveBeenCalledTimes(1)
 
-    refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z'))
+    refresh.resolve(
+      tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
+    )
     const [firstResult, secondResult] = await Promise.all([first, second])
     expect(firstResult).toEqual(secondResult)
     expect(firstResult).toMatchObject({ status: 'available', accessToken: ACCESS_2 })
@@ -2080,7 +2090,11 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
       harness.store.commitCredential.mockClear()
       harness.store.removeTransition.mockClear()
       harness.http.refresh.mockResolvedValueOnce(
-        tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+        tokenResponse({
+          refreshToken: REFRESH_2,
+          accessToken: ACCESS_2,
+          accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+        })
       )
       const storage = deferred<'confirmed'>()
       const expiresDuringCommit = boundary === 'commit-expired'
@@ -2115,7 +2129,13 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
 
       const nextRefresh = Buffer.alloc(32, 14).toString('base64url')
       const nextExpiry = new Date(harness.clock.wallMs + 15 * 60_000).toISOString()
-      harness.http.refresh.mockResolvedValueOnce(tokenResponse(nextRefresh, ACCESS_1, nextExpiry))
+      harness.http.refresh.mockResolvedValueOnce(
+        tokenResponse({
+          refreshToken: nextRefresh,
+          accessToken: ACCESS_1,
+          accessTokenExpiresAt: nextExpiry
+        })
+      )
       const nextAuthorization = coordinator.authorization()
       harness.clock.discontinuous = false
       const nextResult = await nextAuthorization
@@ -2147,7 +2167,13 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     })
     expect(coordinator.getSnapshot().phase).toBe('signingOut')
 
-    refresh.resolve(tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z'))
+    refresh.resolve(
+      tokenResponse({
+        refreshToken: REFRESH_2,
+        accessToken: ACCESS_2,
+        accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+      })
+    )
     const [authorizationResult] = await Promise.all([authorization, logout])
     expect(authorizationResult).toEqual({ status: 'unavailable' })
     expect(harness.store.commitCredential).not.toHaveBeenCalled()
@@ -2162,7 +2188,11 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
       await restoreSignedIn(coordinator, harness)
       harness.clock.advance(16 * 60_000)
       harness.http.refresh.mockResolvedValueOnce(
-        tokenResponse(REFRESH_2, ACCESS_2, '2026-09-06T12:31:00.000Z')
+        tokenResponse({
+          refreshToken: REFRESH_2,
+          accessToken: ACCESS_2,
+          accessTokenExpiresAt: '2026-09-06T12:31:00.000Z'
+        })
       )
       const isCommitFailure = failureStage === 'commit'
       const isReestablishFailure = failureStage === 'reestablish'
@@ -2226,7 +2256,7 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     await restoreSignedIn(coordinator, harness)
     harness.clock.advance(16 * 60_000)
     harness.store.commitOutcomes.push('failed')
-    harness.http.refresh.mockResolvedValueOnce(tokenResponse(REFRESH_2))
+    harness.http.refresh.mockResolvedValueOnce(tokenResponse({ refreshToken: REFRESH_2 }))
     const disposal = deferred<void>()
     harness.http.logout.mockImplementationOnce(() => disposal.promise)
 

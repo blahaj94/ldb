@@ -66,7 +66,7 @@ describe('macOS adapter와 기존 coordinator writer 경계', () => {
 
     await coordinator.cancelLogin(ATTEMPT_ID)
     response.resolve({
-      ...tokenResponse(REFRESH_1),
+      ...tokenResponse({ refreshToken: REFRESH_1 }),
       user: { id: '00000000-0000-4000-8000-000000000031', nickname: '합성사용자' },
       isNewUser: false
     })

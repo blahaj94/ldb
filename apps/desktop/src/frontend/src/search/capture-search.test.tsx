@@ -70,7 +70,7 @@ it.each(['Stop', 'source', 'auth', 'unmount'] as const)(
     } else if (isSource) {
       await fixture.select('next')
     } else if (isAuth) {
-      await fixture.emitAuth(authSnapshot(2, false))
+      await fixture.emitAuth(authSnapshot({ revision: 2, signedIn: false }))
     } else {
       await fixture.unmount()
     }
@@ -114,7 +114,7 @@ it.each([
   } else if (isSource) {
     await fixture.select('next')
   } else if (isAuth) {
-    await fixture.emitAuth(authSnapshot(2, false))
+    await fixture.emitAuth(authSnapshot({ revision: 2, signedIn: false }))
   } else if (isUnmount) {
     await fixture.unmount()
   } else if (isTrackEnded) {
@@ -227,8 +227,8 @@ it('재로그인 뒤 source 선택과 Start 없이 이전 capture와 OCR를 재�
   const fixture = createRendererFixture()
   await fixture.mount()
   await fixture.start()
-  await fixture.emitAuth(authSnapshot(2, false))
-  await fixture.emitAuth(authSnapshot(3, true))
+  await fixture.emitAuth(authSnapshot({ revision: 2, signedIn: false }))
+  await fixture.emitAuth(authSnapshot({ revision: 3, signedIn: true }))
   expect(fixture.search.controlCharacterSearch).toHaveBeenCalledWith({
     action: 'end',
     captureId: CAPTURE_ID

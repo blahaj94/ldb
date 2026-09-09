@@ -92,18 +92,18 @@ async function cleanupBeforeCallbackCompletion(source, cleanup) {
   try {
     await bounded(providerEntered.promise)
     await setRequestDeadline(source, flow.request.requestId, await databaseNow(source))
-    await withCleanupDeletionHeld(
+    await withCleanupDeletionHeld({
       source,
       cleanup,
-      'auth_login_requests',
-      flow.request.requestId,
-      async ({ pid, waiter, release }) => {
+      table: 'auth_login_requests',
+      id: flow.request.requestId,
+      operation: async ({ pid, waiter, release }) => {
         releaseProvider.resolve()
         await blockedBy(source, await bounded(waiter), pid)
         release()
         assert.equal((await pending).error?.code, 'LOGIN_REQUEST_INVALID')
       }
-    )
+    })
   } finally {
     releaseProvider.resolve()
     await pending
@@ -136,14 +136,14 @@ async function callbackCompletionBeforeCleanup(source, cleanup) {
   try {
     const pid = await bounded(committing.promise)
     await waitUntil(source, deadline)
-    await cleanupWaitingOn(
+    await cleanupWaitingOn({
       source,
       cleanup,
-      'auth_login_requests',
-      flow.request.requestId,
-      pid,
-      () => release.resolve()
-    )
+      table: 'auth_login_requests',
+      id: flow.request.requestId,
+      blocker: pid,
+      unlock: () => release.resolve()
+    })
     const result = await pending
     assert.equal(result.error, undefined)
     const code = new URL(result.value.returnUrl).searchParams.get('code')
@@ -171,12 +171,12 @@ async function cleanupBeforeExchange(source, cleanup) {
   const flow = await ready(f.service)
   const baseline = await counts(source)
   await setRequestDeadline(source, flow.request.requestId, await databaseNow(source))
-  await withCleanupDeletionHeld(
+  await withCleanupDeletionHeld({
     source,
     cleanup,
-    'auth_login_requests',
-    flow.request.requestId,
-    async ({ pid, waiter, release }) => {
+    table: 'auth_login_requests',
+    id: flow.request.requestId,
+    operation: async ({ pid, waiter, release }) => {
       const pending = settled(f.service.exchange(flow.exchange))
       try {
         await blockedBy(source, await bounded(waiter), pid)
@@ -187,7 +187,7 @@ async function cleanupBeforeExchange(source, cleanup) {
         await pending
       }
     }
-  )
+  })
   assert.equal(await row(source, flow.request.requestId), undefined)
   assert.deepEqual(await counts(source), baseline)
 }
@@ -215,14 +215,14 @@ async function exchangeBeforeCleanup(source, cleanup) {
   try {
     const pid = await bounded(committing.promise)
     await waitUntil(source, deadline)
-    await cleanupWaitingOn(
+    await cleanupWaitingOn({
       source,
       cleanup,
-      'auth_login_requests',
-      flow.request.requestId,
-      pid,
-      () => release.resolve()
-    )
+      table: 'auth_login_requests',
+      id: flow.request.requestId,
+      blocker: pid,
+      unlock: () => release.resolve()
+    })
     const result = await pending
     assert.equal(result.error, undefined)
     assert.equal(await row(source, flow.request.requestId), undefined)

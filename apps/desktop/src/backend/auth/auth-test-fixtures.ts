@@ -46,11 +46,17 @@ export function deferred<T>(): Deferred<T> {
   return { promise, resolve: resolvePromise, reject: rejectPromise }
 }
 
-export function tokenResponse(
+type TokenResponseInput = Readonly<{
+  refreshToken?: string
+  accessToken?: string
+  accessTokenExpiresAt?: string
+}>
+
+export function tokenResponse({
   refreshToken = REFRESH_1,
   accessToken = ACCESS_1,
   accessTokenExpiresAt = '2026-09-06T12:15:00.000Z'
-): AuthTokens {
+}: TokenResponseInput = {}): AuthTokens {
   return {
     tokenType: 'Bearer',
     accessToken,
