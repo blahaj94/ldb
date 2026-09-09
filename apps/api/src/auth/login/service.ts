@@ -8,22 +8,32 @@ import { authorizeLogin, createLoginRequest } from './start.js'
 /** 실제 adapter·등록·key와 초기화된 DB가 준비된 server composition에서만 연결한다. */
 export function createLoginService(dependencies: LoginDependencies): LoginHttpService {
   const isDataSourceInitialized = Boolean(dependencies.dataSource?.isInitialized)
-  const isLoggingDisabled =
-    isDataSourceInitialized && dependencies.dataSource.options.logging === false
-  const hasRegistry = isLoggingDisabled && Boolean(dependencies.registry)
-  const hasPkceKeys = hasRegistry && Boolean(dependencies.pkceKeys)
-  const isProviderVerifierFunction =
-    hasPkceKeys && typeof dependencies.verifyProvider === 'function'
-  const isAccessJwtIssuerFunction =
-    isProviderVerifierFunction && typeof dependencies.issueAccessJwt === 'function'
-  const areDependenciesInvalid =
-    !isDataSourceInitialized ||
-    !isLoggingDisabled ||
-    !hasRegistry ||
-    !hasPkceKeys ||
-    !isProviderVerifierFunction ||
-    !isAccessJwtIssuerFunction
-  if (areDependenciesInvalid) {
+  if (!isDataSourceInitialized) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+
+  const isLoggingDisabled = dependencies.dataSource.options.logging === false
+  if (!isLoggingDisabled) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+
+  const hasRegistry = dependencies.registry != null
+  if (!hasRegistry) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+
+  const hasPkceKeys = dependencies.pkceKeys != null
+  if (!hasPkceKeys) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+
+  const isProviderVerifierFunction = typeof dependencies.verifyProvider === 'function'
+  if (!isProviderVerifierFunction) {
+    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  }
+
+  const isAccessJwtIssuerFunction = typeof dependencies.issueAccessJwt === 'function'
+  if (!isAccessJwtIssuerFunction) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
 
