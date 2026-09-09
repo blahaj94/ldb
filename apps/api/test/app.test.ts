@@ -34,7 +34,11 @@ before(async () => {
   await app.listen(0, '127.0.0.1')
   const server = app.getHttpServer() as Server
   const address = server.address()
-  assert(address && typeof address !== 'string')
+  const isAddressMissing = address == null
+  const isAddressEmpty = !isAddressMissing && address === ''
+  const hasAddress = !isAddressMissing && !isAddressEmpty
+  const isAddressObject = hasAddress && typeof address !== 'string'
+  assert(isAddressObject)
   baseUrl = `http://127.0.0.1:${address.port}`
 })
 

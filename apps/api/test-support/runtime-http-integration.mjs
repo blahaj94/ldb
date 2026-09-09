@@ -165,7 +165,9 @@ async function assertSearchShutdown({ source, runtime, client, tokens, principal
     }
     assert.equal(neople.calls.length, beforeCalls)
     const events = runtime.events.map(({ event }) => event)
-    assert(events.indexOf('app.closed') < events.indexOf('db.destroy'))
+    const hasClosedAppBeforeDatabaseDestroy =
+      events.indexOf('app.closed') < events.indexOf('db.destroy')
+    assert(hasClosedAppBeforeDatabaseDestroy)
   } finally {
     await stopRuntime(runtime)
     const hasPending = pending !== undefined
