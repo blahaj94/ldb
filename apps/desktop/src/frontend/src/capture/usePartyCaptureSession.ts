@@ -67,7 +67,8 @@ export function usePartyCaptureSession({
     if (startingRef.current) {
       return
     }
-    if (!isSelectedSourceRegistered()) {
+    const isSourceRegistered = isSelectedSourceRegistered()
+    if (!isSourceRegistered) {
       setStatus('Wait until the selected window is registered.')
       return
     }
@@ -120,7 +121,10 @@ export function usePartyCaptureSession({
       await video.play()
       await metadataLoaded
       signal.throwIfAborted()
-      if (video.videoWidth !== SUPPORTED_WIDTH || video.videoHeight !== SUPPORTED_HEIGHT) {
+      const hasSupportedWidth = video.videoWidth === SUPPORTED_WIDTH
+      const hasSupportedHeight = hasSupportedWidth && video.videoHeight === SUPPORTED_HEIGHT
+      const hasSupportedLayout = hasSupportedWidth && hasSupportedHeight
+      if (!hasSupportedLayout) {
         throw new Error(`Unsupported capture layout: ${video.videoWidth}×${video.videoHeight}.`)
       }
 
@@ -133,8 +137,10 @@ export function usePartyCaptureSession({
         getIntervalMs: () => intervalSecondsRef.current * 1000,
         runCycle: () => recognizePartyNicknames(video, worker, signal)
       }).catch((error: unknown) => {
-        if (!signal.aborted) {
-          stopCapture(error instanceof Error ? error.message : 'Party OCR failed.')
+        const isCaptureActive = !signal.aborted
+        if (isCaptureActive) {
+          const isError = error instanceof Error
+          stopCapture(isError ? error.message : 'Party OCR failed.')
         }
       })
       startingRef.current = false
@@ -145,7 +151,8 @@ export function usePartyCaptureSession({
         // 취소 후 반환된 stream/worker도 이 session에서 정리한다.
         releaseSession(session)
       } else {
-        stopCapture(error instanceof Error ? error.message : 'Could not start capture.')
+        const isError = error instanceof Error
+        stopCapture(isError ? error.message : 'Could not start capture.')
       }
     }
   }

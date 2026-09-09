@@ -37,11 +37,16 @@ export function usePartyRecognition(
     const crops = capturePartyNicknameCrops(video)
     const nextStableNicknames = stableNicknamesRef.current.slice()
     for (const [slot, crop] of crops.entries()) {
-      const nickname = crop ? normalizeNickname((await worker.recognize(crop)).data.text) : null
+      const hasCrop = crop != null
+      const nickname = hasCrop ? normalizeNickname((await worker.recognize(crop)).data.text) : null
       if (signal.aborted) {
         return
       }
-      const stability = updateSlotStability(slotStabilityRef.current[slot], nickname || null)
+      const hasNickname = nickname != null
+      const isNicknameEmpty = hasNickname && nickname.length === 0
+      const hasUsableNickname = hasNickname && !isNicknameEmpty
+      const recognizedNickname = hasUsableNickname ? nickname : null
+      const stability = updateSlotStability(slotStabilityRef.current[slot], recognizedNickname)
       slotStabilityRef.current[slot] = stability
       const hasStableNickname = stability.stableNickname != null
       if (!hasStableNickname) {

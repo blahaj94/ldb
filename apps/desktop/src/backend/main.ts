@@ -10,15 +10,20 @@ let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
-  const hasDevUrl = is.dev && devUrl != null
+  const isDevelopment = is.dev
+  const hasDevUrl = devUrl != null
+  const shouldLoadDevUrl = isDevelopment && hasDevUrl
   const entry = join(__dirname, '../frontend/index.html')
-  const rendererDocumentUrl = hasDevUrl ? validateDevRendererUrl(devUrl) : pathToFileURL(entry).href
+  const rendererDocumentUrl = shouldLoadDevUrl
+    ? validateDevRendererUrl(devUrl)
+    : pathToFileURL(entry).href
+  const isLinux = process.platform === 'linux'
   const window = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(isLinux ? { icon } : {}),
     webPreferences: {
       backgroundThrottling: false,
       preload: join(__dirname, '../preload/index.js'),
@@ -32,7 +37,8 @@ function createWindow(): void {
   registerCaptureWindow(window, rendererDocumentUrl)
 
   window.on('closed', () => {
-    if (mainWindow === window) {
+    const isCurrentWindow = mainWindow === window
+    if (isCurrentWindow) {
       mainWindow = null
     }
   })
@@ -44,7 +50,7 @@ function createWindow(): void {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event) => event.preventDefault())
 
-  if (hasDevUrl) {
+  if (shouldLoadDevUrl) {
     void window.loadURL(rendererDocumentUrl)
   } else {
     void window.loadFile(entry)
@@ -76,7 +82,8 @@ app.whenReady().then(() => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) {
+    const hasNoOpenWindows = BrowserWindow.getAllWindows().length === 0
+    if (hasNoOpenWindows) {
       createWindow()
     }
   })
@@ -86,7 +93,8 @@ app.whenReady().then(() => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  const shouldQuit = process.platform !== 'darwin'
+  if (shouldQuit) {
     app.quit()
   }
 })

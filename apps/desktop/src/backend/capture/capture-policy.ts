@@ -24,5 +24,8 @@ export function isCaptureRequestAllowed({
   audioRequested,
   userGesture
 }: CaptureRequest): boolean {
-  return hasSelectedSource && isMainFrame && videoRequested && !audioRequested && userGesture
+  const isVideoOnlyRequest = videoRequested && !audioRequested
+  const isCaptureAllowed = hasSelectedSource && isMainFrame && isVideoOnlyRequest && userGesture
+
+  return isCaptureAllowed
 }

@@ -38,14 +38,31 @@ function clearSource(): void {
 }
 
 function isTrustedFrame(window: BrowserWindow | null, frame: WebFrameMain | null): boolean {
-  const isRegisteredWindow = window != null && window === captureWindow
-  const isWindowAlive =
-    isRegisteredWindow && !window.isDestroyed() && !window.webContents.isDestroyed()
-  if (!isWindowAlive) {
+  const hasWindow = window != null
+  if (!hasWindow) {
     return false
   }
-  const isMainFrame = frame != null && frame === window.webContents.mainFrame
-  const hasExactDocument = isMainFrame && !frame.isDestroyed() && frame.url === documentUrl
+
+  const isRegisteredWindow = window === captureWindow
+  if (!isRegisteredWindow) {
+    return false
+  }
+
+  const isWindowAlive = !window.isDestroyed()
+  const isWindowContentsAlive = isWindowAlive && !window.webContents.isDestroyed()
+  if (!isWindowContentsAlive) {
+    return false
+  }
+
+  const hasFrame = frame != null
+  if (!hasFrame) {
+    return false
+  }
+
+  const isMainFrame = frame === window.webContents.mainFrame
+  const isFrameAlive = isMainFrame && !frame.isDestroyed()
+  const hasExactDocument = isFrameAlive && frame.url === documentUrl
+
   return hasExactDocument
 }
 
@@ -85,10 +102,17 @@ function isCurrentCapture(generation: number, startedWindowGeneration: number): 
 
 function currentMainFrame(): WebFrameMain | null {
   const window = captureWindow
-  const isAlive = window != null && !window.isDestroyed() && !window.webContents.isDestroyed()
-  if (!isAlive) {
+  const hasWindow = window != null
+  if (!hasWindow) {
     return null
   }
+
+  const isWindowAlive = !window.isDestroyed()
+  const isWindowContentsAlive = isWindowAlive && !window.webContents.isDestroyed()
+  if (!isWindowContentsAlive) {
+    return null
+  }
+
   return window.webContents.mainFrame
 }
 
@@ -96,9 +120,12 @@ function isCurrentSearch(binding: CaptureBinding): boolean {
   const hasSameAuth = binding.authGeneration === auth?.captureGeneration()
   const hasSameWindow = binding.windowGeneration === windowGeneration
   const hasSameSource = binding.sourceGeneration === sourceSelectionGeneration
-  const hasSource = selectedSourceId != null && !selectingSource
+  const hasSelectedSource = selectedSourceId != null
+  const isSourceSelectionComplete = !selectingSource
+  const hasSource = hasSelectedSource && isSourceSelectionComplete
   const isTrusted = isTrustedFrame(captureWindow, currentMainFrame())
   const isCurrent = hasSameAuth && hasSameWindow && hasSameSource && hasSource && isTrusted
+
   return isCurrent
 }
 
@@ -108,7 +135,9 @@ function registerCaptureIpc(
 ): () => void {
   unsubscribe?.()
   auth = coordinator
-  const hasRuntime = coordinator != null && configuration != null
+  const hasCoordinator = coordinator != null
+  const hasConfiguration = configuration != null
+  const hasRuntime = hasCoordinator && hasConfiguration
   const runtime = hasRuntime
     ? { auth: coordinator, http: createSearchHttp(configuration), clock: configuration.clock }
     : undefined
