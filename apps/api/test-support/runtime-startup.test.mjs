@@ -40,8 +40,9 @@ test('build entry preserves 404 for unregistered paths and existing registered r
           assert.equal(response.status, 404)
           assert.equal(response.headers.get('cache-control'), 'no-store')
           const body = await response.text()
+          const hasReflectedCredentials = body.includes(canary)
           assert.equal(
-            body.includes(canary),
+            hasReflectedCredentials,
             false,
             '404 response must not reflect request credentials'
           )
@@ -118,7 +119,8 @@ test('build entry validates required environment before acquiring resources', as
     const valid = runtimeEnvironment(path, port)
     for (const name of Object.keys(valid)) {
       for (const value of [undefined, '']) {
-        const kind = value === undefined ? 'missing' : 'empty'
+        const isMissing = value === undefined
+        const kind = isMissing ? 'missing' : 'empty'
         await t.test(`${name} ${kind}`, () =>
           rejectedBeforeInitialization({ ...valid, [name]: value })
         )
@@ -521,7 +523,8 @@ test('signals during initialization and pending listen cannot leave a late runni
           ])
           const wasInitializing = fault === 'initialize-signal'
           if (wasInitializing) {
-            assert.equal(events.includes('app.listen'), false)
+            const hasStartedListening = events.includes('app.listen')
+            assert.equal(hasStartedListening, false)
           }
         } finally {
           await stopRuntime(runtime)

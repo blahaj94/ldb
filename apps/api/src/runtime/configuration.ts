@@ -69,12 +69,16 @@ export async function readRuntimeConfiguration(environment: NodeJS.ProcessEnv) {
     const port = parsePort(environment.PORT)
     const database = readDatabaseConfiguration(environment)
     const apiKey = environment.NEOPLE_API_KEY
-    const hasApiKey = apiKey !== undefined && apiKey.length > 0
+    const isApiKeyDefined = apiKey !== undefined
+    const hasApiKeyContent = isApiKeyDefined && apiKey.length > 0
+    const hasApiKey = isApiKeyDefined && hasApiKeyContent
     if (!hasApiKey) {
       throw new Error(invalidConfiguration)
     }
     const path = environment.AUTH_CONFIG_FILE
-    const hasPath = path !== undefined && path.length > 0
+    const isPathDefined = path !== undefined
+    const hasPathContent = isPathDefined && path.length > 0
+    const hasPath = isPathDefined && hasPathContent
     const hasAbsolutePath = hasPath && isAbsolute(path)
     if (!hasAbsolutePath) {
       throw new Error(invalidConfiguration)
