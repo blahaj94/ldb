@@ -41,9 +41,16 @@ function createRetryScript({
 }): string {
   const retryScript = `(() => {
       const region = document.querySelector('[aria-label="슬롯 ${slot + 1} 검색"]');
-      const button = [...(region?.querySelectorAll('button') ?? [])].find(item => item.textContent?.trim() === '다시 시도');
-      const canClick = button != null && (${allowDisabled} || !button.disabled);
-      if (!canClick) return false;
+      const button = [...(region?.querySelectorAll('button') ?? [])].find(item => {
+        const isRetry = item.textContent?.trim() === '다시 시도';
+        return isRetry;
+      });
+      const hasButton = button != null;
+      const allowsDisabledClick = ${allowDisabled};
+      const canClick = hasButton && (allowsDisabledClick || !button.disabled);
+      if (!canClick) {
+        return false;
+      }
       button.click();
       return true;
     })()`
@@ -130,12 +137,12 @@ export async function smokeCharacterSearch(
     assert.equal(await evaluate(retryScript, true), true)
   }
   try {
-    assert.equal(
-      await evaluate(
-        'typeof window.electron === "undefined" && typeof window.require === "undefined"'
-      ),
-      true
-    )
+    const sandboxInspectionSource = `(() => {
+      const hasNoElectron = typeof window.electron === "undefined";
+      const hasNoRequire = hasNoElectron && typeof window.require === "undefined";
+      return hasNoRequire;
+    })()`
+    assert.equal(await evaluate(sandboxInspectionSource), true)
     assert.equal(await evaluate(installObservation), true)
     search.selectScenario('empty')
     await enterHome()

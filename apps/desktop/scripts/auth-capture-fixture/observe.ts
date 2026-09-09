@@ -6,30 +6,46 @@ export const installObservation = `(() => {
   navigator.mediaDevices.getDisplayMedia = async (...args) => {
     counts.requests += 1;
     let stream;
-    try { stream = await getDisplayMedia(...args); }
-    catch (error) {
+    try {
+      stream = await getDisplayMedia(...args);
+    } catch (error) {
       const allowedNames = ['NotAllowedError', 'NotFoundError', 'NotReadableError', 'AbortError', 'OverconstrainedError', 'InvalidStateError'];
-      counts.mediaFailure = allowedNames.includes(error.name) ? error.name : 'other';
+      const hasAllowedName = allowedNames.includes(error.name);
+      counts.mediaFailure = hasAllowedName ? error.name : 'other';
       throw error;
     }
-    const settings = stream.getVideoTracks()[0]?.getSettings();
+    const settings = stream
+      .getVideoTracks()[0]
+      ?.getSettings();
     counts.width = settings?.width ?? 0;
     counts.height = settings?.height ?? 0;
     counts.streams += 1;
     for (const track of stream.getTracks()) {
       tracks.push(track);
       const stop = track.stop.bind(track);
-      track.stop = () => { counts.stops += 1; stop(); };
+      track.stop = () => {
+        counts.stops += 1;
+        stop();
+      };
     }
     return stream;
   };
   const NativeWorker = window.Worker;
   window.Worker = class extends NativeWorker {
-    constructor(...args) { super(...args); counts.workers += 1; }
-    terminate() { counts.terminated += 1; return super.terminate(); }
+    constructor(...args) {
+      super(...args);
+      counts.workers += 1;
+    }
+    terminate() {
+      counts.terminated += 1;
+      return super.terminate();
+    }
     postMessage(...args) {
-      const isRecognition = args[0] != null && args[0].action === 'recognize';
-      if (isRecognition) counts.recognitionRequests += 1;
+      const hasMessage = args[0] != null;
+      const isRecognition = hasMessage && args[0].action === 'recognize';
+      if (isRecognition) {
+        counts.recognitionRequests += 1;
+      }
       return super.postMessage(...args);
     }
   };
@@ -38,20 +54,33 @@ export const installObservation = `(() => {
     await play.apply(this, args);
     const isVideo = this instanceof HTMLVideoElement;
     if (isVideo) {
-      try { Object.assign(counts, window.inspectFixtureFrame(this)); }
-      catch { counts.allSlotsPresent = false; }
+      try {
+        Object.assign(counts, window.inspectFixtureFrame(this));
+      } catch {
+        counts.allSlotsPresent = false;
+      }
     }
   };
   const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'srcObject');
   Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
     ...descriptor,
     set(value) {
-      const isCleared = value == null && descriptor.get.call(this) != null;
-      if (isCleared) counts.clearedVideos += 1;
+      const isNullishValue = value == null;
+      const isCleared = isNullishValue && descriptor.get.call(this) != null;
+      if (isCleared) {
+        counts.clearedVideos += 1;
+      }
       descriptor.set.call(this, value);
     }
   });
-  window.captureObservation = () => ({ ...counts, ended: tracks.every(track => track.readyState === 'ended') });
+  const haveTracksEnded = () => {
+    const hasEnded = tracks.every(track => {
+      const isEnded = track.readyState === 'ended';
+      return isEnded;
+    });
+    return hasEnded;
+  };
+  window.captureObservation = () => ({ ...counts, ended: haveTracksEnded() });
   return true;
 })()`
 

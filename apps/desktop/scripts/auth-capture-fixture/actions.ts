@@ -36,11 +36,17 @@ export async function until(condition: () => Promise<boolean>, deadlineMs = 10_0
 
 function createClickSource(label: string): string {
   const source = `(() => {
-      const button = [...document.querySelectorAll('button')].find(item => item.textContent === ${JSON.stringify(label)});
+      const button = [...document.querySelectorAll('button')].find(item => {
+        const hasLabel = item.textContent === ${JSON.stringify(label)};
+        return hasLabel;
+      });
       const hasButton = button != null;
       const canClick = hasButton && !button.disabled;
-      if (!canClick) return false;
-      button.click(); return true;
+      if (!canClick) {
+        return false;
+      }
+      button.click();
+      return true;
     })()`
   return source
 }
@@ -89,25 +95,35 @@ export function createCaptureActions({
     const syntheticSourceCheck = `(() => {
     const select = document.querySelector('select');
     const hasSelect = select != null;
-    const source = hasSelect ? [...select.options].find(option => option.textContent === 'LDB Synthetic Capture Source') : null;
-    return source != null;
+    const source = hasSelect ? [...select.options].find(option => {
+      const isSyntheticSource = option.textContent === 'LDB Synthetic Capture Source';
+      return isSyntheticSource;
+    }) : null;
+    const hasSource = source != null;
+    return hasSource;
   })()`
     await until(async () => (await evaluate(syntheticSourceCheck)) as boolean)
 
     const syntheticSourceSelection = `(() => {
     const select = document.querySelector('select');
-    const source = [...select.options].find(option => option.textContent === 'LDB Synthetic Capture Source');
+    const source = [...select.options].find(option => {
+      const isSyntheticSource = option.textContent === 'LDB Synthetic Capture Source';
+      return isSyntheticSource;
+    });
     select.value = source.value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
   })()`
     assert.equal(await evaluate(syntheticSourceSelection), true)
-    await until(
-      async () =>
-        (await evaluate(
-          `[...document.querySelectorAll('button')].some(button => button.textContent === 'Start' && !button.disabled)`
-        )) as boolean
-    )
+    const startButtonCheck = `(() => {
+      const hasEnabledStart = [...document.querySelectorAll('button')].some(button => {
+        const isStart = button.textContent === 'Start';
+        const canStart = isStart && !button.disabled;
+        return canStart;
+      });
+      return hasEnabledStart;
+    })()`
+    await until(async () => (await evaluate(startButtonCheck)) as boolean)
   }
   return { evaluate, hasText, observe, click, enterHome, selectSyntheticSource }
 }

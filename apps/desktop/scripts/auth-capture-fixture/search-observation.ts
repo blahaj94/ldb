@@ -25,6 +25,11 @@ export type SearchUiObservation = {
 
 // 이 함수의 self-contained JavaScript만 소유한 fixture renderer에서 실행한다.
 async function readSearchUi(messages: Record<string, string>): Promise<SearchUiObservation> {
+  function isPendingRegion(region: Element | null): boolean {
+    const isPending = region?.getAttribute('aria-busy') === 'true'
+    return isPending
+  }
+
   let snapshot
   try {
     const result = await window.search.controlCharacterSearch({ action: 'read' })
@@ -72,7 +77,8 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
     const hasCode = code != null
     const expectedStatus = hasCode ? messages[code] : stateLabels[slot.state]
     const statusText = region?.querySelector('[role="status"]')?.textContent?.trim()
-    const hasExpectedStatus = expectedStatus != null && statusText === expectedStatus
+    const hasStatusLabel = expectedStatus != null
+    const hasExpectedStatus = hasStatusLabel && statusText === expectedStatus
     const statusMatched = hasRegion && (isSuccess ? hasCandidate : hasExpectedStatus)
     return {
       state: slot.state,
@@ -83,7 +89,7 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
       retryDisabled: buttons[0]?.disabled ?? null,
       retryCount: buttons.length,
       statusMatched,
-      pending: region?.getAttribute('aria-busy') === 'true'
+      pending: isPendingRegion(region)
     }
   })
   const lines = document.querySelector('pre')?.textContent?.split('\n') ?? []
@@ -95,7 +101,8 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
     }
   }
   const source = document.querySelector('select')
-  const sourceSelected = source != null && source.value.length > 0
+  const hasSource = source != null
+  const sourceSelected = hasSource && source.value.length > 0
   const start = Array.from(document.querySelectorAll('button')).find((button) => {
     const isStart = button.textContent?.trim() === 'Start'
     return isStart
