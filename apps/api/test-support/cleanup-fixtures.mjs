@@ -19,7 +19,8 @@ export function cleanupFixture({
     query: async (sql) => {
       const isSessionQuery = sql.includes('auth_sessions')
       const isRequestQuery = sql.includes('auth_login_requests')
-      assert(isSessionQuery || isRequestQuery)
+      const isCleanupQuery = isSessionQuery || isRequestQuery
+      assert(isCleanupQuery)
       const rows = isSessionQuery ? sessions : requests
       return rows.map((row) => ({ ...row, user_id: row.userId }))
     },
@@ -48,7 +49,8 @@ export function cleanupFixture({
               return rows.find((row) => row.id === options.where.id) ?? null
             },
             delete: async (where) => {
-              const id = typeof where === 'string' ? where : where.id
+              const isDirectId = typeof where === 'string'
+              const id = isDirectId ? where : where.id
               pending.push([kind, id])
               return { affected: 1 }
             }

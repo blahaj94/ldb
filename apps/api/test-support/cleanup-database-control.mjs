@@ -5,7 +5,8 @@ export function targets({ sql, parameters, verb, table, id }) {
   const hasVerb = sql.startsWith(verb)
   const hasTable = sql.includes(table)
   const hasId = parameters?.includes(id) === true
-  return hasVerb && hasTable && hasId
+  const isTarget = hasVerb && hasTable && hasId
+  return isTarget
 }
 
 // 삭제 SQL은 실제로 실행한 채 commit만 보류한다. 경합 상대의 backend가 이 잠금을 기다리는지 확인한다.

@@ -71,22 +71,23 @@ async function deleteEndedRequest(source: DataSource, id: string): Promise<numbe
 /** 호출자의 초기화된 DataSource를 사용한다. 연결 수명과 주기 실행은 호출자의 책임이다. */
 export async function cleanupAuthentication(source: DataSource): Promise<CleanupResult> {
   try {
-    const sessions = (await source.query(
-      `SELECT id, user_id AS "userId" FROM auth_sessions
+    const endedSessionCandidatesSql = `SELECT id, user_id AS "userId" FROM auth_sessions
       WHERE revoked_at IS NOT NULL
          OR last_active_at <= to_timestamp(floor(extract(epoch from clock_timestamp()))) - $1 * interval '1 second'
-      ORDER BY id`,
-      [LOGIN.idleSeconds]
-    )) as SessionHint[]
+      ORDER BY id`
+    const sessions = (await source.query(endedSessionCandidatesSql, [
+      LOGIN.idleSeconds
+    ])) as SessionHint[]
     let sessionsDeleted = 0
     for (const hint of sessions) {
       sessionsDeleted += await deleteEndedSession(source, hint)
     }
 
-    const requests = (await source.query(`SELECT id FROM auth_login_requests
+    const endedRequestCandidatesSql = `SELECT id FROM auth_login_requests
       WHERE status IN ('consumed', 'failed')
          OR expires_at <= to_timestamp(floor(extract(epoch from clock_timestamp())))
-      ORDER BY id`)) as Array<{ id: string }>
+      ORDER BY id`
+    const requests = (await source.query(endedRequestCandidatesSql)) as Array<{ id: string }>
     let loginRequestsDeleted = 0
     for (const request of requests) {
       loginRequestsDeleted += await deleteEndedRequest(source, request.id)
