@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import { rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, test } from 'node:test'
+import { stopOwnedProcessGroup } from './consumer-process-lifecycle.mjs'
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
 
@@ -115,13 +116,7 @@ for (const { name, executable, args, cwd, entries } of [
       }
     } finally {
       clearTimeout(timeout)
-      const hasNoExitCode = child.exitCode == null
-      const hasNoSignalCode = child.signalCode == null
-      const isRunning = hasNoExitCode && hasNoSignalCode
-      if (isRunning) {
-        process.kill(-child.pid, 'SIGTERM')
-      }
-      await exited
+      await stopOwnedProcessGroup({ child, exited })
     }
   })
 }
