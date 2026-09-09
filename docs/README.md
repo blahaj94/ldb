@@ -98,7 +98,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/code-quality.md`](rules/code-quality.md): logic budget과 유지보수성 기준
 - [`rules/design-system.md`](rules/design-system.md): SEED 재사용·고정 source·기본값·override 금지·중립 Example·향후 검증 matrix
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
-- [`rules/task-planning.md`](rules/task-planning.md): Discussion에서 목표별 Project와 실행 Issue로 이어지는 진입점, 분해와 완료 기준. Issue #234의 승인 대기 제안
+- [`rules/task-planning.md`](rules/task-planning.md): Discussion에서 목표별 Project와 실행 Issue로 이어지는 진입점, 분해와 완료 기준. PR #235의 사용자 승인 반영
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
 - [`rules/convention-migration.md`](rules/convention-migration.md): 승인된 기존 convention의 동작 보존 이행 기준(사용자 merge 전 code 이행 불가)과 후속 Execution Issue routing
 - [`rules/agent-execution.md`](rules/agent-execution.md): 수행 모드, Worker roster, context, 상태와 통합 계약

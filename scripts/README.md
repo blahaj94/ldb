@@ -4,6 +4,8 @@
 
 ## `start-task`
 
+Project 작업을 지정받았으면 먼저 [목표별 계획과 작업 착수](../docs/rules/task-planning.md)에 따라 해당 목표와 작업, 연결된 결정을 읽고 실행 Issue를 재사용하거나 분해해 확정합니다. 이 명령은 그 다음 단계에서 사용합니다. `project` 인자는 GitHub Project 번호가 아니라 아래 workspace 범위입니다.
+
 기존 OPEN Issue 확인, `origin/main` fetch, Issue별 branch와 worktree 생성을 한 번에 실행합니다. Git와 인증된 GitHub CLI가 필요하며, 대상 repository root에서 실행합니다.
 
 ```bash

@@ -1,17 +1,17 @@
 ---
 type: rule
-status: proposed
+status: active
 enforcement: approval-required
 scope: repository
 rationale: 완료 가능한 목표를 Project에서 선택하고 실행 Issue로 구체화해 계획과 착수를 구분한다.
-evidence: "https://github.com/blahaj94/ldb/issues/234"
+evidence: "https://github.com/blahaj94/ldb/pull/235#issuecomment-5603621681"
 exceptions: 기존 실행 Issue와 기록을 재사용하며 작은 직접 요청에 불필요한 Discussion이나 Project를 강제하지 않는다.
 review-after: 목표별 Project 2개에서 작업 착수와 완료 판정의 누락 및 중복 기록을 확인한다.
 ---
 
 # 목표별 계획과 작업 착수
 
-이 문서와 연결 문구는 Issue #234의 Rule 변경 제안이다. Draft PR의 명시적인 `승인` 댓글 전에는 현재 작업 절차를 대체하거나 GitHub 이관의 실행 근거로 사용하지 않는다. 승인과 실행 허용은 [`change-control.md`](change-control.md#approval-evidence)를 따른다.
+이 문서와 연결 문구는 [PR #235의 사용자 승인](https://github.com/blahaj94/ldb/pull/235#issuecomment-5603621681)을 반영한다. 승인된 문서를 반영한 checkout에서 적용하며, 기존 제품 작업의 별도 착수 조건은 유지한다. 승인과 실행 허용은 [`change-control.md`](change-control.md#approval-evidence)를 따른다.
 
 ## 기록별 책임
 
