@@ -65,9 +65,9 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
   if (!isAuthorizationHttps) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
-  const callbackUrl = exactUrl(snapshot.callbackUrl)
+  const callbackHref = exactUrl(snapshot.callbackUrl).href
   const expectedCallback = `${apiOrigin}/auth/callback/${snapshot.provider}`
-  const hasExactCallback = callbackUrl.href === expectedCallback
+  const hasExactCallback = callbackHref === expectedCallback
   if (!hasExactCallback) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
