@@ -37,7 +37,9 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return false
   }
 
-  return !Array.isArray(value)
+  const isNotArray = !Array.isArray(value)
+
+  return isNotArray
 }
 
 function projectResponse(body: unknown, status: number, ok: boolean): CharacterSearchResult {
@@ -96,25 +98,17 @@ function projectResponse(body: unknown, status: number, ok: boolean): CharacterS
     }
 
     const rawFame = candidate.fame
-    const isFameAbsent = rawFame == null
-    if (isFameAbsent) {
-      return {
-        characterId,
-        characterName,
-        serverId,
-        serverName: NEOPLE_SERVER_NAMES.get(serverId) ?? null,
-        fame: null
+    const hasFame = rawFame != null
+    if (hasFame) {
+      const isFameNumber = typeof rawFame === 'number'
+      if (!isFameNumber) {
+        throw neopleSearchFailure('api')
       }
-    }
 
-    const isFameNumber = typeof rawFame === 'number'
-    if (!isFameNumber) {
-      throw neopleSearchFailure('api')
-    }
-
-    const isFameFinite = Number.isFinite(rawFame)
-    if (!isFameFinite) {
-      throw neopleSearchFailure('api')
+      const isFameFinite = Number.isFinite(rawFame)
+      if (!isFameFinite) {
+        throw neopleSearchFailure('api')
+      }
     }
 
     return {
