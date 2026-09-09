@@ -24,11 +24,15 @@ import {
   userId
 } from './access-jwt.fixtures.js'
 
-const isInvalidToken = (error: unknown) =>
-  error instanceof AccessJwtError &&
-  error.code === 'INVALID_ACCESS_JWT' &&
-  error.message === 'Invalid access JWT' &&
-  !Object.hasOwn(error, 'cause')
+const isInvalidToken = (error: unknown) => {
+  const isAccessJwtError = error instanceof AccessJwtError
+  const hasInvalidTokenCode = isAccessJwtError && error.code === 'INVALID_ACCESS_JWT'
+  const hasInvalidTokenMessage = hasInvalidTokenCode && error.message === 'Invalid access JWT'
+  const hasNoCause = hasInvalidTokenMessage && !Object.hasOwn(error, 'cause')
+  const isExpectedInvalidToken =
+    isAccessJwtError && hasInvalidTokenCode && hasInvalidTokenMessage && hasNoCause
+  return isExpectedInvalidToken
+}
 
 test('발급 token은 승인된 최소 claims만 담고 jose와 독립 verifier로 검증된다', async () => {
   const issue = await createAccessJwtIssuer(configuration())
@@ -59,7 +63,8 @@ test('발급 token은 승인된 최소 claims만 담고 jose와 독립 verifier�
     tokenId: payload.jti
   })
   const another = await issue(input())
-  assert.ok(payload.jti !== decodeJwt(another.accessToken).jti)
+  const hasDistinctTokenId = payload.jti !== decodeJwt(another.accessToken).jti
+  assert.ok(hasDistinctTokenId)
 })
 
 for (const seconds of [1, 899, 900, 901, 2_592_000]) {
@@ -106,12 +111,45 @@ test('발급 입력은 UUID와 UTC 정수 초를 요구하고 만료된 session�
     { issuedAt: Number.MAX_SAFE_INTEGER }
   ]
   for (const value of cases) {
-    await assert.rejects(
-      issue({ ...input(), ...value }),
-      (error: unknown) =>
-        error instanceof AccessJwtError && error.code === 'INVALID_ACCESS_JWT_INPUT'
-    )
+    await assert.rejects(issue({ ...input(), ...value }), (error: unknown) => {
+      const isAccessJwtError = error instanceof AccessJwtError
+      const hasInvalidInputCode = isAccessJwtError && error.code === 'INVALID_ACCESS_JWT_INPUT'
+      const isInvalidInputFailure = isAccessJwtError && hasInvalidInputCode
+      return isInvalidInputFailure
+    })
   }
+})
+
+test('issuedAt 재조회 값의 NaN 비교는 서명 실패와 coercion 순서를 유지한다', async () => {
+  const issue = await createAccessJwtIssuer(configuration())
+  const issuanceInput = input()
+  const events: string[] = []
+  let issuedAtReads = 0
+  const subsequentIssuedAt = {
+    [Symbol.toPrimitive](hint: string) {
+      events.push(hint)
+      const isDefaultHint = hint === 'default'
+      if (isDefaultHint) {
+        return now
+      }
+      const isNumberHint = hint === 'number'
+      if (isNumberHint) {
+        return NaN
+      }
+      return 'invalid duration'
+    }
+  }
+  Object.defineProperty(issuanceInput, 'issuedAt', {
+    get() {
+      events.push('issuedAt')
+      issuedAtReads += 1
+      const isFirstRead = issuedAtReads === 1
+      return isFirstRead ? now : subsequentIssuedAt
+    }
+  })
+
+  await assert.rejects(issue(issuanceInput), { code: 'ACCESS_JWT_SIGNING_FAILED' })
+  assert.deepEqual(events, ['issuedAt', 'issuedAt', 'default', 'number'])
 })
 
 test('token 변조·다른 key 서명·malformed compact 입력을 거절한다', async () => {

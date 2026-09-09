@@ -17,12 +17,15 @@ import {
   withLock
 } from './refresh-fixtures.mjs'
 
-async function observeWaitingRefresh(source, kind, f, controller) {
+async function observeWaitingRefresh({ source, kind, fixture: f }, controller) {
   await withLock(source, kind, f, async (lock) => {
     const observed = Promise.withResolvers()
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
-        if (sql.includes(`"${kind}"`) && sql.includes('FOR UPDATE')) {
+        const isTargetTableQuery = sql.includes(`"${kind}"`)
+        const hasUpdateLock = isTargetTableQuery && sql.includes('FOR UPDATE')
+        const isTargetTableLock = isTargetTableQuery && hasUpdateLock
+        if (isTargetTableLock) {
           observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
         }
         return run()
@@ -49,9 +52,13 @@ async function concurrentR0(source) {
     const observed = Promise.withResolvers()
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
-        if (sql.includes('"users"') && sql.includes('FOR UPDATE')) {
+        const isUserQuery = sql.includes('"users"')
+        const hasUpdateLock = isUserQuery && sql.includes('FOR UPDATE')
+        const isUserLock = isUserQuery && hasUpdateLock
+        if (isUserLock) {
           pids.push((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
-          if (pids.length === 2) {
+          const haveBothRefreshesEntered = pids.length === 2
+          if (haveBothRefreshesEntered) {
             observed.resolve()
           }
         }
@@ -69,12 +76,24 @@ async function concurrentR0(source) {
       }
       await unlock()
       const results = await Promise.all(pending)
-      assert.equal(results.filter((result) => result.value).length, 1)
       assert.equal(
-        results.filter((result) => result.error?.code === 'AUTHENTICATION_REQUIRED').length,
+        results.filter((result) => {
+          const hasSuccessfulResult = result.value != null
+          return hasSuccessfulResult
+        }).length,
         1
       )
-      const next = results.find((result) => result.value).value.refreshToken
+      assert.equal(
+        results.filter((result) => {
+          const isAuthenticationRequired = result.error?.code === 'AUTHENTICATION_REQUIRED'
+          return isAuthenticationRequired
+        }).length,
+        1
+      )
+      const next = results.find((result) => {
+        const hasSuccessfulResult = result.value != null
+        return hasSuccessfulResult
+      }).value.refreshToken
       await rejected(() => f.rotate(next))
       const final = await stored(source, f.initial.session.id)
       assert.equal(final.session.revoked_reason, 'refresh_reuse')
@@ -92,7 +111,8 @@ async function r2BeforeReuse(source) {
   const releaseSigning = Promise.withResolvers()
   let signCalls = 0
   f.deps.issueAccessJwt = async (input) => {
-    if (++signCalls === 1) {
+    const isFirstSigningCall = ++signCalls === 1
+    if (isFirstSigningCall) {
       signing.resolve()
       await releaseSigning.promise
     }
@@ -105,7 +125,11 @@ async function r2BeforeReuse(source) {
   let paused = false
   const restore = instrument(source, {
     query: async ({ sql, run }) => {
-      if (!paused && sql.includes('"users"') && sql.includes('FOR UPDATE')) {
+      const canPauseReplay = !paused
+      const isUserQuery = canPauseReplay && sql.includes('"users"')
+      const hasUpdateLock = isUserQuery && sql.includes('FOR UPDATE')
+      const shouldPauseReplay = canPauseReplay && isUserQuery && hasUpdateLock
+      if (shouldPauseReplay) {
         paused = true
         replayReady.resolve()
         await releaseReplay.promise
@@ -145,22 +169,36 @@ async function expiresWhileWaiting(source, kind) {
   const deadline = new Date((await databaseNow(source)).getTime() + 2000)
   await setDeadline(source, f.initial.session.id, deadline)
   const before = await stored(source, f.initial.session.id)
-  await observeWaitingRefresh(source, kind, f, async ({ unlock }, pending) => {
-    await waitUntil(source, deadline)
-    await unlock()
-    assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
-  })
+  await observeWaitingRefresh(
+    {
+      source,
+      kind,
+      fixture: f
+    },
+    async ({ unlock }, pending) => {
+      await waitUntil(source, deadline)
+      await unlock()
+      assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
+    }
+  )
   assert.deepEqual(await stored(source, f.initial.session.id), before)
 }
 
 async function logoutFirst(source) {
   const f = await fixture(source)
   const before = await stored(source, f.initial.session.id)
-  await observeWaitingRefresh(source, 'auth_sessions', f, async ({ runner, unlock }, pending) => {
-    await revoke(runner, f.initial.session.id)
-    await unlock()
-    assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
-  })
+  await observeWaitingRefresh(
+    {
+      source,
+      kind: 'auth_sessions',
+      fixture: f
+    },
+    async ({ runner, unlock }, pending) => {
+      await revoke(runner, f.initial.session.id)
+      await unlock()
+      assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
+    }
+  )
   const after = await stored(source, f.initial.session.id)
   assert.equal(after.session.revoked_reason, 'logout')
   assert.deepEqual(after.tokens, before.tokens)
@@ -209,19 +247,28 @@ async function deletedAfterHint(source, kind) {
   const f = await fixture(source)
   const unrelated = await fixture(source)
   const preserved = await stored(source, unrelated.initial.session.id)
-  await observeWaitingRefresh(source, kind, f, async ({ runner, unlock }, pending) => {
-    if (kind === 'users') {
-      await runner.query('DELETE FROM users WHERE id=$1', [f.initial.user.id])
-    } else {
-      await runner.query('DELETE FROM auth_sessions WHERE id=$1', [f.initial.session.id])
+  await observeWaitingRefresh(
+    {
+      source,
+      kind,
+      fixture: f
+    },
+    async ({ runner, unlock }, pending) => {
+      const isUserDeletion = kind === 'users'
+      if (isUserDeletion) {
+        await runner.query('DELETE FROM users WHERE id=$1', [f.initial.user.id])
+      } else {
+        await runner.query('DELETE FROM auth_sessions WHERE id=$1', [f.initial.session.id])
+      }
+      await unlock()
+      assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
     }
-    await unlock()
-    assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
-  })
+  )
   assert.deepEqual(await stored(source, f.initial.session.id), { session: undefined, tokens: [] })
   await rejected(() => f.rotate(f.initial.refreshToken))
   assert.deepEqual(await stored(source, unrelated.initial.session.id), preserved)
-  if (kind === 'users') {
+  const isUserDeletion = kind === 'users'
+  if (isUserDeletion) {
     assert.equal(
       (await source.query('SELECT id FROM users WHERE id=$1', [f.initial.user.id])).length,
       0
@@ -234,21 +281,29 @@ async function staleOwnership(source, kind) {
   await f.rotate(f.initial.refreshToken)
   const other = await fixture(source)
   const preserved = await stored(source, other.initial.session.id)
-  await observeWaitingRefresh(source, kind, f, async ({ runner, unlock }, pending) => {
-    if (kind === 'auth_sessions') {
-      await runner.query('UPDATE auth_sessions SET user_id=$2 WHERE id=$1', [
-        f.initial.session.id,
-        other.initial.user.id
-      ])
-    } else {
-      await runner.query('UPDATE auth_refresh_tokens SET session_id=$2 WHERE token_hash=$1', [
-        digest(f.initial.refreshToken),
-        other.initial.session.id
-      ])
+  await observeWaitingRefresh(
+    {
+      source,
+      kind,
+      fixture: f
+    },
+    async ({ runner, unlock }, pending) => {
+      const isSessionOwnershipChange = kind === 'auth_sessions'
+      if (isSessionOwnershipChange) {
+        await runner.query('UPDATE auth_sessions SET user_id=$2 WHERE id=$1', [
+          f.initial.session.id,
+          other.initial.user.id
+        ])
+      } else {
+        await runner.query('UPDATE auth_refresh_tokens SET session_id=$2 WHERE token_hash=$1', [
+          digest(f.initial.refreshToken),
+          other.initial.session.id
+        ])
+      }
+      await unlock()
+      assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
     }
-    await unlock()
-    assert.equal((await pending).error?.code, 'AUTHENTICATION_REQUIRED')
-  })
+  )
   assert.equal((await stored(source, f.initial.session.id)).session.revoked_at, null)
   const after = await stored(source, other.initial.session.id)
   assert.deepEqual(after.session, preserved.session)
@@ -264,17 +319,25 @@ async function activityBeforeWait(source) {
   const deadline = new Date((await databaseNow(source)).getTime() + 2000)
   await setDeadline(source, f.initial.session.id, deadline)
   let activityAt
-  await observeWaitingRefresh(source, 'auth_sessions', f, async ({ runner, unlock }, pending) => {
-    activityAt = await databaseNow(runner)
-    assert(activityAt < deadline)
-    await runner.query('UPDATE auth_sessions SET last_active_at=$2 WHERE id=$1', [
-      f.initial.session.id,
-      activityAt
-    ])
-    await waitUntil(source, deadline)
-    await unlock()
-    assert.equal((await pending).error, undefined)
-  })
+  await observeWaitingRefresh(
+    {
+      source,
+      kind: 'auth_sessions',
+      fixture: f
+    },
+    async ({ runner, unlock }, pending) => {
+      activityAt = await databaseNow(runner)
+      const isActivityBeforeDeadline = activityAt < deadline
+      assert(isActivityBeforeDeadline)
+      await runner.query('UPDATE auth_sessions SET last_active_at=$2 WHERE id=$1', [
+        f.initial.session.id,
+        activityAt
+      ])
+      await waitUntil(source, deadline)
+      await unlock()
+      assert.equal((await pending).error, undefined)
+    }
+  )
   assert.equal(
     (await stored(source, f.initial.session.id)).session.last_active_at.getTime(),
     activityAt.getTime()

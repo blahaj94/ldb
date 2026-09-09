@@ -61,7 +61,8 @@ function fixture(
     updateEntity: () => insertBuilder,
     execute: async () => {
       events.push('user-insert')
-      return { raw: options.missing ? [] : [{ id: inserted?.id }] }
+      const isUserMissing = options.missing === true
+      return { raw: isUserMissing ? [] : [{ id: inserted?.id }] }
     }
   }
   const userRepository = {
@@ -73,7 +74,9 @@ function fixture(
       })
       assert.deepEqual(query.lock, { mode: 'pessimistic_write' })
       events.push('user-lock')
-      return options.missing ? null : options.existing ? { ...existing } : (inserted ?? null)
+      const isUserMissing = options.missing === true
+      const hasExistingUser = !isUserMissing && options.existing === true
+      return isUserMissing ? null : hasExistingUser ? { ...existing } : (inserted ?? null)
     },
     update: async (_where: unknown, values: Record<string, unknown>) => {
       events.push('user-time')
@@ -83,7 +86,8 @@ function fixture(
   const manager = {
     queryRunner: { isTransactionActive: options.active ?? true },
     query: async (sql: string) => {
-      if (sql.startsWith('SHOW')) {
+      const isIsolationQuery = sql.startsWith('SHOW')
+      if (isIsolationQuery) {
         return [{ transaction_isolation: options.isolation ?? 'read committed' }]
       }
       assert.match(sql, /floor\(extract\(epoch from clock_timestamp\(\)\)\)/)
@@ -91,10 +95,12 @@ function fixture(
       return [{ now: time }]
     },
     getRepository: (schema: unknown) => {
-      if (schema === UserSchema) {
+      const isUserSchema = schema === UserSchema
+      if (isUserSchema) {
         return userRepository
       }
-      if (schema === AuthSessionSchema) {
+      const isSessionSchema = schema === AuthSessionSchema
+      if (isSessionSchema) {
         return {
           insert: async (value: Record<string, unknown>) => {
             events.push('session')
@@ -116,10 +122,12 @@ function fixture(
 
 async function failure(promise: Promise<unknown>, code: string) {
   await assert.rejects(promise, (error: unknown) => {
-    assert(error instanceof Error)
+    const isError = error instanceof Error
+    assert(isError)
     assert.equal((error as Error & { code: string }).code, code)
     assert.equal(error.cause, undefined)
-    assert(!JSON.stringify(error).includes(identity.subject))
+    const isIdentityOmitted = !JSON.stringify(error).includes(identity.subject)
+    assert(isIdentityOmitted)
     return true
   })
 }
@@ -140,7 +148,10 @@ test('new identity gets padded nickname, fresh whole-second session and hash of 
       }
     })
     assert.equal(result.isNewUser, true)
-    assert.equal(result.user.nickname, `모험가${String(value).padStart(6, '0')}`)
+    const nickname = result.user.nickname
+    const nicknameSuffix = String(value).padStart(6, '0')
+    const expectedNickname = `모험가${nicknameSuffix}`
+    assert.equal(nickname, expectedNickname)
     assert.deepEqual(Object.keys(result.user).sort(), ['id', 'nickname'])
     assert.match(result.user.id, /^[0-9a-f-]{36}$/)
     assert.match(result.session.id, /^[0-9a-f-]{36}$/)

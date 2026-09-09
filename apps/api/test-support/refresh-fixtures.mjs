@@ -73,18 +73,22 @@ export async function withLock(source, kind, f, operation) {
     await runner.connect()
     await runner.startTransaction('READ COMMITTED')
     const [{ pid }] = await runner.query('SELECT pg_backend_pid() AS pid')
-    if (kind === 'users') {
+    const isUserLock = kind === 'users'
+    if (isUserLock) {
       await runner.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [f.initial.user.id])
-    } else if (kind === 'auth_sessions') {
-      await runner.query('SELECT id FROM auth_sessions WHERE id=$1 FOR UPDATE', [
-        f.initial.session.id
-      ])
     } else {
-      assert.equal(kind, 'auth_refresh_tokens')
-      await runner.query(
-        'SELECT token_hash FROM auth_refresh_tokens WHERE token_hash=$1 FOR UPDATE',
-        [digest(f.initial.refreshToken)]
-      )
+      const isSessionLock = kind === 'auth_sessions'
+      if (isSessionLock) {
+        await runner.query('SELECT id FROM auth_sessions WHERE id=$1 FOR UPDATE', [
+          f.initial.session.id
+        ])
+      } else {
+        assert.equal(kind, 'auth_refresh_tokens')
+        await runner.query(
+          'SELECT token_hash FROM auth_refresh_tokens WHERE token_hash=$1 FOR UPDATE',
+          [digest(f.initial.refreshToken)]
+        )
+      }
     }
     await operation({ runner, pid, unlock: () => runner.commitTransaction() })
   } finally {

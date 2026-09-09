@@ -10,9 +10,11 @@ async function expectUnavailable(operation: Promise<void>): Promise<void> {
     if (!isErrorObject) {
       return false
     }
-    assert('code' in error)
+    const hasErrorCode = 'code' in error
+    assert(hasErrorCode)
     assert.equal(error.code, 'AUTH_UNAVAILABLE')
-    assert.equal('cause' in error, false)
+    const hasCause = 'cause' in error
+    assert.equal(hasCause, false)
     const hasStack = 'stack' in error
     const stack = hasStack ? error.stack : ''
     assert.doesNotMatch(String(stack), /private|credential|SQL/)
@@ -26,7 +28,8 @@ async function expectInvalidRequest(operation: Promise<void>): Promise<void> {
     if (!isErrorObject) {
       return false
     }
-    assert('code' in error)
+    const hasErrorCode = 'code' in error
+    assert(hasErrorCode)
     assert.equal(error.code, 'INVALID_AUTH_REQUEST')
     return true
   })
@@ -141,7 +144,8 @@ test('logout leaves ended, missing and stale ownership sessions unchanged', asyn
     const before = structuredClone(fixture.session)
     await logoutSession(fixture.dataSource, fixture.rawToken)
     assert.deepEqual(fixture.session, before)
-    assert.equal(fixture.events.includes('revoke'), false)
+    const hasRevokedSession = fixture.events.includes('revoke')
+    assert.equal(hasRevokedSession, false)
   }
 })
 
@@ -158,6 +162,7 @@ test('logout sanitizes database and commit uncertainty without retry', async () 
 
     await expectUnavailable(logoutSession(fixture.dataSource, fixture.rawToken))
     assert.equal(fixture.events.filter((event) => event === 'begin').length, 1)
-    assert.equal(fixture.events.includes('commit'), false)
+    const hasCommitted = fixture.events.includes('commit')
+    assert.equal(hasCommitted, false)
   }
 })

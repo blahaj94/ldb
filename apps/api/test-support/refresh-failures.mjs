@@ -7,7 +7,8 @@ async function rollbackFailure(source, scenario) {
   const f = await fixture(source)
   const other = await fixture(source, f.identity)
   let raw = f.initial.refreshToken
-  if (scenario === 'old-hash') {
+  const isOldHashCollision = scenario === 'old-hash'
+  if (isOldHashCollision) {
     raw = (await f.rotate(raw)).refreshToken
   }
   const before = await stored(source, f.initial.session.id)
@@ -19,13 +20,18 @@ async function rollbackFailure(source, scenario) {
   const restore = instrument(source, {
     query: async ({ sql, parameters, query, run }) => {
       try {
-        if (scenario === 'insert' && sql.startsWith('INSERT INTO "auth_refresh_tokens"')) {
+        const isInsertFailure = scenario === 'insert'
+        const isRefreshTokenInsert =
+          isInsertFailure && sql.startsWith('INSERT INTO "auth_refresh_tokens"')
+        const shouldFailInsert = isInsertFailure && isRefreshTokenInsert
+        if (shouldFailInsert) {
           // 실제 DB CHECK가 UPDATE 이후 INSERT를 거절하도록 hash parameter만 고장 주입한다.
           assert.equal(consumed, true)
           return await query(sql, [Buffer.alloc(31), ...parameters.slice(1)])
         }
         const result = await run()
-        if (sql.startsWith('UPDATE "auth_refresh_tokens"')) {
+        const isRefreshTokenUpdate = sql.startsWith('UPDATE "auth_refresh_tokens"')
+        if (isRefreshTokenUpdate) {
           consumed = true
         }
         return result
@@ -40,13 +46,17 @@ async function rollbackFailure(source, scenario) {
     }
   })
   const signer = f.deps.issueAccessJwt
-  if (scenario === 'signing') {
+  const isSigningFailure = scenario === 'signing'
+  if (isSigningFailure) {
     f.deps.issueAccessJwt = async () => {
       throw new Error('private detail')
     }
   }
   try {
-    if (scenario === 'entropy') {
+    const isEntropyFailure = scenario === 'entropy'
+    const isHashCollision =
+      !isEntropyFailure && ['current-hash', 'old-hash', 'other-device-hash'].includes(scenario)
+    if (isEntropyFailure) {
       await rejected(
         () =>
           f.rotateWithBytes(raw, () => {
@@ -55,9 +65,9 @@ async function rollbackFailure(source, scenario) {
           }),
         'AUTH_INTERNAL_ERROR'
       )
-    } else if (['current-hash', 'old-hash', 'other-device-hash'].includes(scenario)) {
-      const collision =
-        scenario === 'other-device-hash' ? other.initial.refreshToken : f.initial.refreshToken
+    } else if (isHashCollision) {
+      const isOtherDeviceCollision = scenario === 'other-device-hash'
+      const collision = isOtherDeviceCollision ? other.initial.refreshToken : f.initial.refreshToken
       await rejected(
         () =>
           f.rotateWithBytes(raw, () => {
@@ -71,14 +81,17 @@ async function rollbackFailure(source, scenario) {
     } else {
       await rejected(
         () => f.rotate(raw),
-        scenario === 'signing' ? 'AUTH_INTERNAL_ERROR' : 'AUTH_UNAVAILABLE'
+        isSigningFailure ? 'AUTH_INTERNAL_ERROR' : 'AUTH_UNAVAILABLE'
       )
     }
     assert.equal(commits, 0)
-    if (scenario === 'insert') {
+    const isInsertFailure = scenario === 'insert'
+    if (isInsertFailure) {
       assert.equal(constraint, 'ck_auth_refresh_tokens_hash_length')
     }
-    if (scenario === 'entropy' || scenario.includes('hash')) {
+    const isHashScenario = !isEntropyFailure && scenario.includes('hash')
+    const shouldHaveEntropyCall = isEntropyFailure || isHashScenario
+    if (shouldHaveEntropyCall) {
       assert.equal(entropyCalls, 1)
     }
   } finally {
@@ -91,7 +104,7 @@ async function rollbackFailure(source, scenario) {
   await f.rotate(raw)
 }
 
-async function uncertainCommit(source, applied, reuse) {
+async function uncertainCommit({ source, applied, reuse }) {
   const f = await fixture(source)
   let current = f.initial.refreshToken
   if (reuse) {
@@ -102,7 +115,8 @@ async function uncertainCommit(source, applied, reuse) {
   let commits = 0
   const restore = instrument(source, {
     query: async ({ sql, run }) => {
-      if (sql === 'START TRANSACTION') {
+      const isTransactionStart = sql === 'START TRANSACTION'
+      if (isTransactionStart) {
         attempts++
       }
       return run()
@@ -134,10 +148,11 @@ async function uncertainCommit(source, applied, reuse) {
     await rejected(() => f.rotate(current))
   } else {
     assert.equal(after.tokens.length, before.tokens.length + 1)
-    assert(
-      after.tokens.find((token) => token.token_hash.equals(digest(f.initial.refreshToken)))
-        .consumed_at
-    )
+    const consumedAt = after.tokens.find((token) =>
+      token.token_hash.equals(digest(f.initial.refreshToken))
+    ).consumed_at
+    const hasConsumedAt = consumedAt != null
+    assert(hasConsumedAt)
     assert.equal(after.session.revoked_at, null)
     // 실제 응답 유실과 같은 상태다. 원문을 다시 제출하면 grace 없이 reuse 폐기한다.
     await rejected(() => f.rotate(f.initial.refreshToken))
@@ -156,10 +171,11 @@ export async function assertRefreshFailures(source, mark) {
   }
   for (const reuse of [false, true]) {
     for (const applied of [false, true]) {
-      mark(
-        `${reuse ? 'reuse revocation' : 'rotation'} uncertain ${applied ? 'committed' : 'rolled back'} outcome`
-      )
-      await uncertainCommit(source, applied, reuse)
+      const operationName = reuse ? 'reuse revocation' : 'rotation'
+      const commitOutcome = applied ? 'committed' : 'rolled back'
+      const scenarioName = `${operationName} uncertain ${commitOutcome} outcome`
+      mark(scenarioName)
+      await uncertainCommit({ source, applied, reuse })
     }
   }
   return failures.length + 4

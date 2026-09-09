@@ -12,13 +12,17 @@ import type {
 import { active, configuration, input, keyPair, now, previous } from './access-jwt.fixtures.js'
 
 function sanitized(error: unknown) {
-  assert.ok(error instanceof AccessJwtError)
+  const isAccessJwtError = error instanceof AccessJwtError
+  assert.ok(isAccessJwtError)
   assert.equal(error.code, 'INVALID_ACCESS_JWT_CONFIGURATION')
   assert.equal(error.message, 'Invalid access JWT configuration')
-  assert.ok(!Object.hasOwn(error, 'cause'))
+  const hasNoCause = !Object.hasOwn(error, 'cause')
+  assert.ok(hasNoCause)
   for (const secret of [active.privateKeyPem, previous.privateKeyPem, 'sensitive-invalid-key']) {
-    assert.ok(!inspect(error).includes(secret))
-    assert.ok(!JSON.stringify(error).includes(secret))
+    const isInspectedErrorSanitized = !inspect(error).includes(secret)
+    assert.ok(isInspectedErrorSanitized)
+    const isSerializedErrorSanitized = !JSON.stringify(error).includes(secret)
+    assert.ok(isSerializedErrorSanitized)
   }
   return true
 }

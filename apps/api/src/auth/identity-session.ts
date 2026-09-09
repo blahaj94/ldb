@@ -26,24 +26,30 @@ function generate<T>(operation: () => T): T {
   }
 }
 
-async function create(
-  manager: EntityManager,
-  identity: VerifiedIdentity,
+async function create({
+  manager,
+  identity,
+  entropy
+}: {
+  manager: EntityManager
+  identity: VerifiedIdentity
   entropy: IdentitySessionEntropy
-): Promise<IdentitySession> {
+}): Promise<IdentitySession> {
   try {
-    if (
-      !manager.queryRunner?.isTransactionActive ||
-      !Object.values(AUTH_PROVIDERS).some((provider) => provider === identity.provider) ||
-      typeof identity.subject !== 'string' ||
-      identity.subject.length === 0
-    ) {
+    const isTransactionActive = manager.queryRunner?.isTransactionActive === true
+    const isProviderSupported =
+      isTransactionActive &&
+      Object.values(AUTH_PROVIDERS).some((provider) => provider === identity.provider)
+    const isSubjectString = isProviderSupported && typeof identity.subject === 'string'
+    const hasSubject = isSubjectString && identity.subject.length !== 0
+    if (!hasSubject) {
       throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
     }
     const [isolation] = (await manager.query('SHOW transaction_isolation')) as Array<{
       transaction_isolation: string
     }>
-    if (isolation?.transaction_isolation !== 'read committed') {
+    const isReadCommitted = isolation?.transaction_isolation === 'read committed'
+    if (!isReadCommitted) {
       throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
     }
 
@@ -52,9 +58,11 @@ async function create(
       where: { provider: identity.provider, providerSubject: identity.subject },
       lock: { mode: 'pessimistic_write' as const }
     }
-    let user = await users.findOne(lookup)
+    const existingUser = await users.findOne(lookup)
+    let user: NonNullable<typeof existingUser>
     let isNewUser = false
-    if (!user) {
+    const isUserMissing = existingUser == null
+    if (isUserMissing) {
       const id = generate(() => entropy.uuid())
       const nickname = generate(() => {
         const digits = String(entropy.nicknameNumber(0, 10 ** INITIAL_NICKNAME.digits))
@@ -79,10 +87,14 @@ async function create(
         .execute()
       isNewUser = (inserted.raw as Array<{ id: string }>).length === 1
       // READ COMMITTED의 다음 statement로 insert 대기 중 commit된 winner를 읽는다.
-      user = await users.findOne(lookup)
-      if (!user) {
+      const insertedUser = await users.findOne(lookup)
+      const isWinnerMissing = insertedUser == null
+      if (isWinnerMissing) {
         throw new IdentitySessionFailure(AUTH_ERRORS.UNAVAILABLE)
       }
+      user = insertedUser
+    } else {
+      user = existingUser
     }
 
     const [clock] = (await manager.query(`SELECT ${databaseTimeExpression} AS now`)) as Array<{
@@ -119,7 +131,8 @@ async function create(
     }
   } catch (error) {
     // QueryFailedError의 SQL/parameters·identity를 호출자나 log에 전달하지 않는다.
-    if (error instanceof IdentitySessionFailure) {
+    const isIdentitySessionFailure = error instanceof IdentitySessionFailure
+    if (isIdentitySessionFailure) {
       throw error
     }
     throw new IdentitySessionFailure(AUTH_ERRORS.UNAVAILABLE)
@@ -135,7 +148,7 @@ export function createIdentitySession(
   manager: EntityManager,
   identity: VerifiedIdentity
 ): Promise<IdentitySession> {
-  return create(manager, identity, nativeEntropy)
+  return create({ manager, identity, entropy: nativeEntropy })
 }
 
 /** 기존 adapter와 같은 test 전용 entropy 주입 경계. Runtime 설정으로 노출하지 않는다. */
@@ -144,5 +157,5 @@ export function createIdentitySessionForTest(
   identity: VerifiedIdentity,
   entropy: Partial<IdentitySessionEntropy>
 ): Promise<IdentitySession> {
-  return create(manager, identity, { ...nativeEntropy, ...entropy })
+  return create({ manager, identity, entropy: { ...nativeEntropy, ...entropy } })
 }

@@ -14,24 +14,30 @@ export type { RefreshDependencies, RefreshTokens } from './types.js'
 type RefreshCommitResult = { status: 'issued'; tokens: RefreshTokens } | { status: 'reuse-revoked' }
 
 export function refreshTokenHash(rawToken: unknown): Buffer {
-  if (typeof rawToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(rawToken)) {
+  const isTokenString = typeof rawToken === 'string'
+  const hasEncodedTokenFormat = isTokenString && /^[A-Za-z0-9_-]{43}$/.test(rawToken)
+  if (!hasEncodedTokenFormat) {
     throw new RefreshFailure(REFRESH_ERRORS.INVALID_REQUEST)
   }
   const bytes = Buffer.from(rawToken, REFRESH_TOKEN.encoding)
-  if (
-    bytes.length !== REFRESH_TOKEN.byteLength ||
-    bytes.toString(REFRESH_TOKEN.encoding) !== rawToken
-  ) {
+  const hasExpectedByteLength = bytes.length === REFRESH_TOKEN.byteLength
+  const isCanonicalToken =
+    hasExpectedByteLength && bytes.toString(REFRESH_TOKEN.encoding) === rawToken
+  if (!isCanonicalToken) {
     throw new RefreshFailure(REFRESH_ERRORS.INVALID_REQUEST)
   }
   return createHash(REFRESH_TOKEN.hashAlgorithm).update(bytes).digest()
 }
 
-async function rotate(
-  deps: RefreshDependencies,
-  rawToken: unknown,
+async function rotate({
+  deps,
+  rawToken,
+  refreshBytes
+}: {
+  deps: RefreshDependencies
+  rawToken: unknown
   refreshBytes: (size: number) => Buffer
-): Promise<RefreshTokens> {
+}): Promise<RefreshTokens> {
   const presentedHash = refreshTokenHash(rawToken)
 
   try {
@@ -44,8 +50,12 @@ async function rotate(
 
         // 잠금 없는 두 조회는 잠글 ID의 hint다. 아래 재조회 전에는 존재·소유·상태를 신뢰하지 않는다.
         const tokenHint = await refresh.findOneBy({ tokenHash: presentedHash })
-        const sessionHint = tokenHint && (await sessions.findOneBy({ id: tokenHint.sessionId }))
-        if (!tokenHint || !sessionHint) {
+        const hasTokenHint = tokenHint != null
+        const sessionHint = hasTokenHint
+          ? await sessions.findOneBy({ id: tokenHint.sessionId })
+          : tokenHint
+        const hasSessionHint = hasTokenHint && sessionHint != null
+        if (!hasSessionHint) {
           throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
         }
 
@@ -53,7 +63,8 @@ async function rotate(
           where: { id: sessionHint.userId },
           lock: { mode: 'pessimistic_write' }
         })
-        if (!user) {
+        const isUserMissing = user == null
+        if (isUserMissing) {
           throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
         }
 
@@ -71,22 +82,25 @@ async function rotate(
         )) as Array<{ now: Date }>
         const checkedAt = clock.now
 
-        if (
-          !session ||
-          !token ||
-          session.userId !== user.id ||
-          token.sessionId !== session.id ||
-          !token.tokenHash.equals(presentedHash)
-        ) {
+        const hasSession = session != null
+        const hasToken = hasSession && token != null
+        const isSessionOwnedByUser = hasToken && session.userId === user.id
+        const isTokenOwnedBySession = isSessionOwnedByUser && token.sessionId === session.id
+        const hasPresentedHash = isTokenOwnedBySession && token.tokenHash.equals(presentedHash)
+        if (!hasPresentedHash) {
           throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
         }
         const issuedAt = checkedAt.getTime() / 1000
         const idleDeadline = session.lastActiveAt.getTime() / 1000 + LOGIN.idleSeconds
-        if (session.revokedAt !== null || issuedAt >= idleDeadline) {
+        const isSessionRevoked = session.revokedAt !== null
+        const isIdleExpired = !isSessionRevoked && issuedAt >= idleDeadline
+        const isSessionInactive = isSessionRevoked || isIdleExpired
+        if (isSessionInactive) {
           throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
         }
 
-        if (token.consumedAt !== null) {
+        const isTokenConsumed = token.consumedAt !== null
+        if (isTokenConsumed) {
           await sessions.update(
             { id: session.id },
             {
@@ -102,7 +116,9 @@ async function rotate(
         let accessJwt: IssuedAccessJwt
         try {
           bytes = refreshBytes(REFRESH_TOKEN.byteLength)
-          if (!Buffer.isBuffer(bytes) || bytes.length !== REFRESH_TOKEN.byteLength) {
+          const isBuffer = Buffer.isBuffer(bytes)
+          const hasExpectedByteLength = isBuffer && bytes.length === REFRESH_TOKEN.byteLength
+          if (!hasExpectedByteLength) {
             throw new RefreshFailure(REFRESH_ERRORS.INTERNAL)
           }
           accessJwt = await deps.issueAccessJwt({
@@ -137,12 +153,14 @@ async function rotate(
     )
 
     // DataSource가 commit·release를 완료한 후에만 결과를 전달한다.
-    if (committed.status === 'reuse-revoked') {
+    const isReuseRevoked = committed.status === 'reuse-revoked'
+    if (isReuseRevoked) {
       throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
     }
     return committed.tokens
   } catch (error) {
-    if (error instanceof RefreshFailure) {
+    const isRefreshFailure = error instanceof RefreshFailure
+    if (isRefreshFailure) {
       throw error
     }
     // DB 실패·random unique 충돌·commit 결과 불명은 원문 상세 없이 거절한다. 자동 retry하지 않는다.
@@ -155,7 +173,7 @@ export function rotateRefresh(
   deps: RefreshDependencies,
   rawToken: unknown
 ): Promise<RefreshTokens> {
-  return rotate(deps, rawToken, randomBytes)
+  return rotate({ deps, rawToken, refreshBytes: randomBytes })
 }
 
 /** Random 충돌·실패 검증용 주입 경계. Runtime 설정이나 HTTP 입력으로 노출하지 않는다. */
@@ -164,5 +182,5 @@ export function rotateRefreshForTest(
   rawToken: unknown,
   refreshBytes: (size: number) => Buffer
 ): Promise<RefreshTokens> {
-  return rotate(deps, rawToken, refreshBytes)
+  return rotate({ deps, rawToken, refreshBytes })
 }

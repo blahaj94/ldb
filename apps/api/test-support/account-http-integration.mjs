@@ -39,7 +39,8 @@ async function headPreservesActivity(source) {
       user: { id: before.user.id, nickname: before.user.nickname }
     })
     const afterGet = await snapshot(source, f)
-    assert(afterGet.session.last_active_at > before.session.last_active_at)
+    const hasGetAdvancedActivity = afterGet.session.last_active_at > before.session.last_active_at
+    assert(hasGetAdvancedActivity)
   })
 }
 
@@ -66,7 +67,8 @@ async function normal(source) {
   })
   const after = await snapshot(source, f)
   assert.equal(after.user.nickname, '중복')
-  assert(after.session.last_active_at > before.session.last_active_at)
+  const hasActivityAdvanced = after.session.last_active_at > before.session.last_active_at
+  assert(hasActivityAdvanced)
   assert.equal(after.session.last_active_at.getMilliseconds(), 0)
   assert.deepEqual(after.tokens, before.tokens)
   const other = await accountFixture(source)
@@ -139,7 +141,7 @@ async function initialRejections(source) {
   assert.deepEqual(await snapshot(source, f), before)
 }
 
-async function inaccessible(source, kind, method) {
+async function inaccessible({ source, kind, method }) {
   const f = await accountFixture(source)
   const userId = f.initial.user.id
   const sessionId = f.initial.session.id
@@ -177,7 +179,7 @@ async function inaccessible(source, kind, method) {
   assert.deepEqual(await snapshot(source, f), before)
 }
 
-async function boundary(source, phase, boundaryKind, method) {
+async function boundary({ source, phase, boundaryKind, method }) {
   const f = await accountFixture(source)
   const before = await snapshot(source, f)
   const isIdleBoundary = boundaryKind === 'idle'
@@ -219,18 +221,21 @@ async function boundary(source, phase, boundaryKind, method) {
   } finally {
     restore()
   }
-  assert(clocks >= 1)
+  const hasObservedClockQuery = clocks >= 1
+  assert(hasObservedClockQuery)
   const after = await snapshot(source, f)
   const isAdmission = phase === 'admission'
   if (isAdmission) {
     assert.deepEqual(after, admittedBefore)
   }
   if (!isAdmission) {
-    assert(after.session.last_active_at > before.session.last_active_at)
+    const hasFunctionPhaseActivityAdvanced =
+      after.session.last_active_at > before.session.last_active_at
+    assert(hasFunctionPhaseActivityAdvanced)
   }
 }
 
-async function realLockExpiry(source, table, method, kind) {
+async function realLockExpiry({ source, table, method, kind }) {
   const f = await accountFixture(source)
   const deadline = new Date((await databaseNow(source)).getTime() + 2000)
   const isIdleBoundary = kind === 'idle'
@@ -283,7 +288,7 @@ async function realLockExpiry(source, table, method, kind) {
   assert.deepEqual(await snapshot(source, f), before)
 }
 
-async function removalBeforeAdmission(source, kind, method) {
+async function removalBeforeAdmission({ source, kind, method }) {
   const f = await accountFixture(source)
   const before = await snapshot(source, f)
   await withAccountApp(f, async (base) => {
@@ -359,7 +364,7 @@ async function removalBeforeAdmission(source, kind, method) {
   }
 }
 
-async function betweenPhases(source, kind, method) {
+async function betweenPhases({ source, kind, method }) {
   const f = await accountFixture(source)
   const before = await snapshot(source, f)
   const admissionApplied = Promise.withResolvers()
@@ -383,7 +388,9 @@ async function betweenPhases(source, kind, method) {
         pending = settled(accountRequest(base, f, method))
         await bounded(admissionApplied.promise)
         const admitted = await snapshot(source, f)
-        assert(admitted.session.last_active_at > before.session.last_active_at)
+        const hasAdmissionAdvancedActivity =
+          admitted.session.last_active_at > before.session.last_active_at
+        assert(hasAdmissionAdvancedActivity)
         const shouldLogout = kind === 'logout'
         if (shouldLogout) {
           const response = await fetch(`${base}/auth/logout`, {
@@ -425,7 +432,7 @@ async function betweenPhases(source, kind, method) {
   }
 }
 
-async function databaseFailure(source, phase, applied, method) {
+async function databaseFailure({ source, phase, applied, method }) {
   const f = await accountFixture(source)
   const before = await snapshot(source, f)
   let commits = 0
@@ -501,8 +508,10 @@ async function databaseFailure(source, phase, applied, method) {
     '변경 이름',
     'private SQL'
   ]) {
-    assert.equal(stdout.includes(value), false)
-    assert.equal(stderr.includes(value), false)
+    const hasStdoutValue = stdout.includes(value)
+    assert.equal(hasStdoutValue, false)
+    const hasStderrValue = stderr.includes(value)
+    assert.equal(hasStderrValue, false)
   }
   const after = await snapshot(source, f)
   const isInitialReadFailure = phase === 'read'
@@ -512,7 +521,9 @@ async function databaseFailure(source, phase, applied, method) {
   if (noActivity) {
     assert.deepEqual(after, before)
   } else {
-    assert(after.session.last_active_at > before.session.last_active_at)
+    const hasActivityAdvancedAfterFailure =
+      after.session.last_active_at > before.session.last_active_at
+    assert(hasActivityAdvancedAfterFailure)
   }
   const isFunctionCommit = phase === 'function'
   const isAppliedFunctionCommit = isFunctionCommit && applied
@@ -534,49 +545,52 @@ export async function assertAccountHttpIntegration(source, mark) {
     ...['GET', 'PATCH'].flatMap((method) => [
       ...['user', 'session', 'owner', 'revoked', 'idle'].map((kind) => [
         `${method} inaccessible ${kind}`,
-        () => inaccessible(source, kind, method)
+        () => inaccessible({ source, kind, method })
       ]),
       ...['jwt', 'idle'].map((kind) => [
         `${method} exact admission ${kind} expiry`,
-        () => boundary(source, 'admission', kind, method)
+        () => boundary({ source, phase: 'admission', boundaryKind: kind, method })
       ]),
       [
         `${method} function elapsed JWT preserves admitted request`,
-        () => boundary(source, 'function', 'jwt', method)
+        () => boundary({ source, phase: 'function', boundaryKind: 'jwt', method })
       ],
       [
         `${method} function exact idle rejects while preserving activity`,
-        () => boundary(source, 'function', 'idle', method)
+        () => boundary({ source, phase: 'function', boundaryKind: 'idle', method })
       ],
       ...['users', 'auth_sessions'].flatMap((table) =>
         ['jwt', 'idle'].map((kind) => [
           `${method} real ${table} lock crosses ${kind} deadline`,
-          () => realLockExpiry(source, table, method, kind)
+          () => realLockExpiry({ source, table, method, kind })
         ])
       ),
       ...['logout', 'delete'].map((kind) => [
         `${method} committed activity then ${kind}`,
-        () => betweenPhases(source, kind, method)
+        () => betweenPhases({ source, kind, method })
       ]),
       ...['logout', 'delete'].map((kind) => [
         `${method} ${kind} commit blocks admission`,
-        () => removalBeforeAdmission(source, kind, method)
+        () => removalBeforeAdmission({ source, kind, method })
       ]),
-      [`${method} database read failure`, () => databaseFailure(source, 'read', false, method)],
+      [
+        `${method} database read failure`,
+        () => databaseFailure({ source, phase: 'read', applied: false, method })
+      ],
       [
         `${method} function read failure preserves admitted activity`,
-        () => databaseFailure(source, 'function-read', false, method)
+        () => databaseFailure({ source, phase: 'function-read', applied: false, method })
       ],
       ...['admission', 'function'].flatMap((phase) =>
         [false, true].map((applied) => [
           `${method} ${phase} commit acknowledgement unknown applied=${applied}`,
-          () => databaseFailure(source, phase, applied, method)
+          () => databaseFailure({ source, phase, applied, method })
         ])
       )
     ]),
     [
       'nickname write failure preserves committed activity',
-      () => databaseFailure(source, 'write', false, 'PATCH')
+      () => databaseFailure({ source, phase: 'write', applied: false, method: 'PATCH' })
     ]
   ]
   for (const [name, run] of cases) {

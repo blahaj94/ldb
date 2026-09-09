@@ -90,8 +90,10 @@ test('consumed reuse commits session revocation before the rejection escapes', a
   await failure(rotateRefresh(f.deps, f.raw), 'AUTHENTICATION_REQUIRED')
   assert.equal(f.session.revokedReason, 'refresh_reuse')
   assert.deepEqual(f.events.slice(-2), ['revoke', 'commit'])
-  assert.equal(f.events.includes('rollback'), false)
-  assert.equal(f.events.includes('sign'), false)
+  const hasRolledBack = f.events.includes('rollback')
+  assert.equal(hasRolledBack, false)
+  const hasSignedToken = f.events.includes('sign')
+  assert.equal(hasSignedToken, false)
 })
 
 test('unknown, removed and stale ownership hints cannot select or revoke a session', async () => {
@@ -106,11 +108,13 @@ test('unknown, removed and stale ownership hints cannot select or revoke a sessi
   ]) {
     const f = fixture()
     f.token.consumedAt = time
-    if (scenario === 'session-owner') {
+    const shouldChangeSessionOwner = scenario === 'session-owner'
+    const shouldChangeTokenOwner = !shouldChangeSessionOwner && scenario === 'token-owner'
+    if (shouldChangeSessionOwner) {
       f.state.beforeLockedRead = () => {
         f.session.userId = randomUUID()
       }
-    } else if (scenario === 'token-owner') {
+    } else if (shouldChangeTokenOwner) {
       f.state.beforeLockedRead = () => {
         f.token.sessionId = randomUUID()
       }
@@ -119,8 +123,10 @@ test('unknown, removed and stale ownership hints cannot select or revoke a sessi
     }
     await failure(rotateRefresh(f.deps, f.raw), 'AUTHENTICATION_REQUIRED')
     assert.equal(f.session.revokedAt, null)
-    assert.equal(f.events.includes('sign'), false)
-    assert.equal(f.events.includes('revoke'), false)
+    const hasSignedToken = f.events.includes('sign')
+    assert.equal(hasSignedToken, false)
+    const hasRevokedSession = f.events.includes('revoke')
+    assert.equal(hasRevokedSession, false)
   }
 })
 
@@ -132,7 +138,8 @@ test('exact idle deadline, expired and revoked sessions never issue or revive', 
     await failure(rotateRefresh(f.deps, f.raw), 'AUTHENTICATION_REQUIRED')
     assert.equal(f.token.consumedAt, null)
     assert.equal(f.session.lastActiveAt, time)
-    assert.equal(f.events.includes('sign'), false)
+    const hasSignedToken = f.events.includes('sign')
+    assert.equal(hasSignedToken, false)
   }
   const f = fixture()
   f.session.revokedAt = time
@@ -158,19 +165,24 @@ test('signing, entropy, insert and commit failures sanitize and rollback without
     const explode = () => {
       throw new Error('private detail')
     }
-    if (scenario === 'sign') {
+    const shouldFailSigning = scenario === 'sign'
+    if (shouldFailSigning) {
       f.deps.issueAccessJwt = explode
     }
-    if (scenario === 'insert') {
+    const shouldFailInsert = scenario === 'insert'
+    if (shouldFailInsert) {
       f.state.beforeInsert = explode
     }
-    if (scenario === 'commit') {
+    const shouldFailCommit = scenario === 'commit'
+    if (shouldFailCommit) {
       f.state.beforeCommit = explode
     }
-    await failure(
-      rotateRefreshForTest(f.deps, f.raw, scenario === 'entropy' ? explode : randomBytes),
-      scenario === 'entropy' || scenario === 'sign' ? 'AUTH_INTERNAL_ERROR' : 'AUTH_UNAVAILABLE'
-    )
+    const shouldFailEntropy = scenario === 'entropy'
+    const operation = rotateRefreshForTest(f.deps, f.raw, shouldFailEntropy ? explode : randomBytes)
+    const isEntropyFailure = scenario === 'entropy'
+    const isSigningFailure = !isEntropyFailure && scenario === 'sign'
+    const isInternalFailure = isEntropyFailure || isSigningFailure
+    await failure(operation, isInternalFailure ? 'AUTH_INTERNAL_ERROR' : 'AUTH_UNAVAILABLE')
     assert.equal(f.token.consumedAt, null)
     assert.equal(f.inserted.length, 0)
     assert.equal(f.events.filter((event) => event === 'begin').length, 1)

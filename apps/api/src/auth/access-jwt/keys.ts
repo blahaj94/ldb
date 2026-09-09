@@ -4,17 +4,18 @@ import { AccessJwtError } from './errors.js'
 import type { AccessJwtIssuerConfiguration, AccessJwtVerifierConfiguration } from './types.js'
 
 function requiredString(value: unknown): asserts value is string {
-  if (typeof value !== 'string' || value.trim() === '') {
+  const isString = typeof value === 'string'
+  const hasContent = isString && value.trim() !== ''
+  if (!hasContent) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
 }
 
 function requireEs256(key: CryptoKey, type: 'private' | 'public'): void {
-  if (
-    key.type !== type ||
-    key.algorithm.name !== 'ECDSA' ||
-    (key.algorithm as EcKeyAlgorithm).namedCurve !== 'P-256'
-  ) {
+  const hasExpectedType = key.type === type
+  const isEcdsa = hasExpectedType && key.algorithm.name === 'ECDSA'
+  const hasExpectedCurve = isEcdsa && (key.algorithm as EcKeyAlgorithm).namedCurve === 'P-256'
+  if (!hasExpectedCurve) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
 }
@@ -23,14 +24,17 @@ function requireEs256(key: CryptoKey, type: 'private' | 'public'): void {
 export async function loadVerificationKeys(config: AccessJwtVerifierConfiguration) {
   requiredString(config.issuer)
   requiredString(config.audience)
-  if (!Array.isArray(config.verificationKeys) || config.verificationKeys.length === 0) {
+  const isKeyList = Array.isArray(config.verificationKeys)
+  const hasVerificationKeys = isKeyList && config.verificationKeys.length !== 0
+  if (!hasVerificationKeys) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
   const keys = new Map<string, CryptoKey>()
   for (const entry of config.verificationKeys) {
     requiredString(entry.kid)
     requiredString(entry.publicKeyPem)
-    if (keys.has(entry.kid)) {
+    const isDuplicateKeyId = keys.has(entry.kid)
+    if (isDuplicateKeyId) {
       throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
     }
     const key = await importSPKI(entry.publicKeyPem, ACCESS_JWT_ALGORITHM)
@@ -48,7 +52,8 @@ export async function loadSigningKey(
   requiredString(kid)
   requiredString(privateKeyPem)
   const publicKey = verificationKeys.get(kid)
-  if (!publicKey) {
+  const isPublicKeyMissing = publicKey == null
+  if (isPublicKeyMissing) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
   const privateKey = await importPKCS8(privateKeyPem, ACCESS_JWT_ALGORITHM)

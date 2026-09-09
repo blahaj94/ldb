@@ -8,7 +8,7 @@ import { UserSchema } from '../dist/database/schemas/users.js'
 import { insertLogin, loginRequest } from './database-contract.mjs'
 
 const digest = (token) => createHash('sha256').update(Buffer.from(token, 'base64url')).digest()
-const identity = (subject = randomUUID(), provider = 'google') => ({ provider, subject })
+const identity = ({ subject = randomUUID(), provider = 'google' } = {}) => ({ provider, subject })
 const login = (source, create, input) =>
   source.transaction('READ COMMITTED', (manager) => create(manager, input))
 
@@ -29,9 +29,13 @@ async function expectFailure(operation, code) {
 }
 
 // 경과 시간 추측 대신 PostgreSQL이 관측한 blocker를 barrier로 사용한다.
-async function blockedBy(source, waiter, blocker) {
+async function blockedBy({ source, waiter, blocker }) {
   const deadline = Date.now() + 5_000
-  while (Date.now() < deadline) {
+  while (true) {
+    const canObserveBlocker = Date.now() < deadline
+    if (!canObserveBlocker) {
+      break
+    }
     const [state] = await source.query(
       'SELECT $2::int = ANY(pg_blocking_pids($1::int)) AS blocked',
       [waiter, blocker]
@@ -55,7 +59,7 @@ async function runners(source, operation) {
     }
     const [{ pid: aPid }] = await a.query('SELECT pg_backend_pid() AS pid')
     const [{ pid: bPid }] = await b.query('SELECT pg_backend_pid() AS pid')
-    await operation(a, b, aPid, bPid)
+    await operation({ blocker: a, waiter: b, blockerPid: aPid, waiterPid: bPid })
   } finally {
     // 대기 중인 두 번째 connection보다 blocker를 먼저 해제한다.
     for (const runner of [a, b]) {
@@ -71,10 +75,12 @@ async function consumeFixture(manager, request) {
   await manager.query('SELECT id FROM auth_login_requests WHERE id = $1 FOR UPDATE', [request.id])
   const consumed = loginRequest('consumed', request.id)
   const columns = Object.keys(consumed).filter((column) => column !== 'id')
-  await manager.query(
-    `UPDATE auth_login_requests SET ${columns.map((column, i) => `"${column}" = $${i + 2}`).join(', ')} WHERE id = $1`,
-    [request.id, ...columns.map((column) => consumed[column])]
-  )
+  const assignments = columns.map((column, i) => `"${column}" = $${i + 2}`).join(', ')
+  const consumeRequestQuery = `UPDATE auth_login_requests SET ${assignments} WHERE id = $1`
+  await manager.query(consumeRequestQuery, [
+    request.id,
+    ...columns.map((column) => consumed[column])
+  ])
 }
 
 async function assertUserInsertSql(source, create) {
@@ -82,7 +88,8 @@ async function assertUserInsertSql(source, create) {
   const query = runner.query.bind(runner)
   const inserts = []
   runner.query = async (sql, parameters, ...options) => {
-    if (/^\s*INSERT INTO "?users"?(?:\s|\()/.test(sql)) {
+    const isUserInsert = /^\s*INSERT INTO "?users"?(?:\s|\()/.test(sql)
+    if (isUserInsert) {
       inserts.push({ sql, parameters })
     }
     return query(sql, parameters, ...options)
@@ -213,12 +220,12 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   mark('opaque identity and duplicate nickname')
   const prefix = randomUUID()
   const inputs = [
-    identity(`${prefix}Ab001`),
-    identity(`${prefix}ab001`),
-    identity(`${prefix}Ab001`, 'discord'),
-    identity(`${prefix}0009007199254740993`),
-    identity(`${prefix}9007199254740993`),
-    identity(` ${prefix}Ab001 `)
+    identity({ subject: `${prefix}Ab001` }),
+    identity({ subject: `${prefix}ab001` }),
+    identity({ subject: `${prefix}Ab001`, provider: 'discord' }),
+    identity({ subject: `${prefix}0009007199254740993` }),
+    identity({ subject: `${prefix}9007199254740993` }),
+    identity({ subject: ` ${prefix}Ab001 ` })
   ]
   const distinct = []
   for (const item of inputs) {
@@ -231,7 +238,13 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     )
   }
   assert.equal(new Set(distinct.map((result) => result.user.id)).size, inputs.length)
-  assert(distinct.every((result) => result.isNewUser && result.user.nickname === '모험가000007'))
+  const hasOnlyExpectedNewIdentities = distinct.every((result) => {
+    const isNewUser = result.isNewUser
+    const hasExpectedNickname = isNewUser && result.user.nickname === '모험가000007'
+    const isExpectedNewIdentity = isNewUser && hasExpectedNickname
+    return isExpectedNewIdentity
+  })
+  assert(hasOnlyExpectedNewIdentities)
   for (let index = 0; index < inputs.length; index++) {
     const stored = await source
       .getRepository(UserSchema)
@@ -241,11 +254,11 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
 
   mark('concurrent insert winner and separate loser snapshot')
   const concurrent = identity()
-  await runners(source, async (a, b, aPid, bPid) => {
+  await runners(source, async ({ blocker: a, waiter: b, blockerPid: aPid, waiterPid: bPid }) => {
     const winner = await create(a.manager, concurrent)
     const pending = create(b.manager, concurrent)
     pending.catch(() => undefined)
-    await blockedBy(source, bPid, aPid)
+    await blockedBy({ source, waiter: bPid, blocker: aPid })
     await a.commitTransaction()
     const loser = await pending
     await b.commitTransaction()
@@ -265,12 +278,12 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   })
 
   mark('rolled-back insert contender becomes actual winner')
-  await runners(source, async (a, b, aPid, bPid) => {
+  await runners(source, async ({ blocker: a, waiter: b, blockerPid: aPid, waiterPid: bPid }) => {
     const value = identity()
     const rolledBack = await create(a.manager, value)
     const pending = create(b.manager, value)
     pending.catch(() => undefined)
-    await blockedBy(source, bPid, aPid)
+    await blockedBy({ source, waiter: bPid, blocker: aPid })
     await a.rollbackTransaction()
     const winner = await pending
     await b.commitTransaction()
@@ -281,13 +294,13 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   })
 
   mark('existing user lock precedes fresh database time')
-  await runners(source, async (a, b, aPid, bPid) => {
+  await runners(source, async ({ blocker: a, waiter: b, blockerPid: aPid, waiterPid: bPid }) => {
     await a.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [first.user.id])
     // Clock boundary를 DB에서 넘겨 transaction 시작 시각 재사용을 식별한다.
     await a.query('SELECT pg_sleep(1.05)')
     const pending = create(b.manager, input)
     pending.catch(() => undefined)
-    await blockedBy(source, bPid, aPid)
+    await blockedBy({ source, waiter: bPid, blocker: aPid })
     const [{ minimum }] = await a.query(
       'SELECT to_timestamp(floor(extract(epoch from clock_timestamp()))) AS minimum'
     )
@@ -295,8 +308,10 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
     const result = await pending
     await b.commitTransaction()
     const [{ maximum }] = await source.query('SELECT clock_timestamp() AS maximum')
-    assert(result.session.createdAt >= minimum)
-    assert(result.session.createdAt <= maximum)
+    const isCreatedAtAfterLockMinimum = result.session.createdAt >= minimum
+    assert(isCreatedAtAfterLockMinimum)
+    const isCreatedAtBeforeObservedMaximum = result.session.createdAt <= maximum
+    assert(isCreatedAtBeforeObservedMaximum)
     await assertStored(source, result)
   })
 
@@ -364,7 +379,10 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
       run: async (manager) => {
         let calls = 0
         return createForTest(manager, identity(), {
-          uuid: () => (++calls === 1 ? randomUUID() : first.session.id)
+          uuid: () => {
+            const isFirstUuidCall = ++calls === 1
+            return isFirstUuidCall ? randomUUID() : first.session.id
+          }
         })
       }
     },
@@ -418,7 +436,8 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   mark('pre-existing fixture rows remain intact')
   const final = await rows(source)
   for (const table of Object.keys(original)) {
-    const key = table === 'auth_refresh_tokens' ? 'token_hash' : 'id'
+    const isRefreshTokenTable = table === 'auth_refresh_tokens'
+    const key = isRefreshTokenTable ? 'token_hash' : 'id'
     const ids = new Set(original[table].map((row) => String(row[key])))
     assert.deepEqual(
       final[table].filter((row) => ids.has(String(row[key]))),

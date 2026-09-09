@@ -36,13 +36,16 @@ async function assertRotationHistory(source) {
     assert.equal(result.tokenType, 'Bearer')
     const decoded = Buffer.from(result.refreshToken, 'base64url')
     assert.equal(decoded.length, 32)
-    assert.equal(decoded.toString('base64url') === result.refreshToken, true)
-    assert.equal(result.refreshToken === raw, false)
+    const isRefreshTokenCanonical = decoded.toString('base64url') === result.refreshToken
+    assert.equal(isRefreshTokenCanonical, true)
+    const isPreviousRefreshToken = result.refreshToken === raw
+    assert.equal(isPreviousRefreshToken, false)
     const hash = digest(result.refreshToken)
     hashes.push(hash)
     const state = await stored(source, f.initial.session.id)
     const current = state.tokens.find((token) => token.token_hash.equals(hash))
-    assert(current)
+    const hasCurrentToken = current != null
+    assert(hasCurrentToken)
     assert.equal(current.issued_at.getTime() % 1000, 0)
     assert.equal(current.consumed_at, null)
     assert.equal(state.tokens.filter((token) => token.consumed_at === null).length, 1)
@@ -60,7 +63,10 @@ async function assertRotationHistory(source) {
     raw = result.refreshToken
   }
   const rotated = await stored(source, f.initial.session.id)
-  assert(hashes.every((hash) => rotated.tokens.some((token) => token.token_hash.equals(hash))))
+  const hasAllIssuedHashes = hashes.every((hash) =>
+    rotated.tokens.some((token) => token.token_hash.equals(hash))
+  )
+  assert(hasAllIssuedHashes)
   await rejected(() => f.rotate(opaque()))
   assert.deepEqual(await stored(source, f.initial.session.id), rotated)
   await rejected(() => f.rotate(f.initial.refreshToken))
@@ -85,7 +91,8 @@ async function assertBoundary(source) {
     const initial = await stored(source, f.initial.session.id)
     const deadline = new Date(initial.session.last_active_at.getTime() + idleSeconds * 1000)
     await atExactTime(source, new Date(deadline.getTime() + offset * 1000), async () => {
-      if (offset >= 0) {
+      const isAtOrAfterDeadline = offset >= 0
+      if (isAtOrAfterDeadline) {
         await rejected(() => f.rotate(f.initial.refreshToken))
       } else {
         const result = await f.rotate(f.initial.refreshToken)
@@ -96,7 +103,8 @@ async function assertBoundary(source) {
     })
     const after = await stored(source, f.initial.session.id)
     assert.deepEqual(after.session, initial.session)
-    if (offset >= 0) {
+    const isAtOrAfterDeadline = offset >= 0
+    if (isAtOrAfterDeadline) {
       assert.deepEqual(after.tokens, initial.tokens)
     }
   }
