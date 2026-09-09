@@ -16,6 +16,19 @@ export type SearchDiagnostic = {
   expected: Record<string, SearchDiagnosticValue>
 }
 
+export function createIndependentRetryDiagnostic({
+  independentRetry
+}: {
+  independentRetry: boolean
+}): SearchDiagnostic {
+  return {
+    stage: 'mixed',
+    check: 'independent-retry',
+    actual: { independent: independentRetry },
+    expected: { independent: true }
+  }
+}
+
 export function assertScenarioSelectionQuiet({
   currentRequests,
   expectedRequests,

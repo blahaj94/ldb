@@ -8,6 +8,7 @@ import { createCaptureActions, until } from './actions'
 import { installObservation } from './observe'
 import {
   assertScenarioSelectionQuiet,
+  createIndependentRetryDiagnostic,
   rethrowMixedSearchFailure,
   type SearchDiagnostic
 } from './search-diagnostic'
@@ -280,12 +281,7 @@ export async function smokeCharacterSearch(
       return hasUnchangedState
     })
     const independentRetry = hasIndependentSlots && search.counts.requests === mixedRequests + 1
-    diagnostic = {
-      stage: 'mixed',
-      check: 'independent-retry',
-      actual: { independent: hasIndependentSlots },
-      expected: { independent: true }
-    }
+    diagnostic = createIndependentRetryDiagnostic({ independentRetry })
     assert.equal(independentRetry, true)
 
     enterStage('rate-wait')

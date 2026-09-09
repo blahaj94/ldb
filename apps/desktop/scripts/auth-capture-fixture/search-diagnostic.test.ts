@@ -2,9 +2,21 @@ import assert from 'node:assert/strict'
 import { expect, it, vi } from 'vitest'
 import {
   assertScenarioSelectionQuiet,
+  createIndependentRetryDiagnostic,
   rethrowMixedSearchFailure,
   type SearchDiagnostic
 } from './search-diagnostic'
+
+it('independent retry 진단은 결합 assertion 결과를 기록한다', () => {
+  const diagnostic = createIndependentRetryDiagnostic({ independentRetry: false })
+
+  expect(diagnostic).toEqual({
+    stage: 'mixed',
+    check: 'independent-retry',
+    actual: { independent: false },
+    expected: { independent: true }
+  })
+})
 
 it('selection count assertion과 mixed 진단이 원래 오류 object를 보존한다', () => {
   let diagnostic: SearchDiagnostic | null = null
