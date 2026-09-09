@@ -5,20 +5,24 @@ import { opaque } from './login-fixtures.mjs'
 import { LoginRegistry } from '../dist/auth/login/registry.js'
 import { registryConfiguration } from './login-fixtures.mjs'
 
-const stdout = process.stdout.write,
-  stderr = process.stderr.write
+const stdout = process.stdout.write
+const stderr = process.stderr.write
 const captured = []
 const capture = (chunk, encoding, callback) => {
   captured.push(String(chunk))
-  if (typeof encoding === 'function') {
+  const isEncodingCallback = typeof encoding === 'function'
+  if (isEncodingCallback) {
     encoding()
-  } else if (typeof callback === 'function') {
-    callback()
+  } else {
+    const hasWriteCallback = typeof callback === 'function'
+    if (hasWriteCallback) {
+      callback()
+    }
   }
   return true
 }
-let app,
-  failed = false
+let app
+let failed = false
 process.stdout.write = capture
 process.stderr.write = capture
 try {
@@ -180,7 +184,9 @@ try {
   process.stdout.write = stdout
   process.stderr.write = stderr
 }
-if (failed || captured.length) {
+const hasCapturedOutput = !failed && captured.length > 0
+const hasProbeFailure = failed || hasCapturedOutput
+if (hasProbeFailure) {
   process.stderr.write('Login log probe failed\n')
   process.exitCode = 1
 } else {

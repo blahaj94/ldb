@@ -8,13 +8,16 @@ import { atExactTime, instrument } from './login-test-control.mjs'
 async function assertExchangeRollback(source) {
   const f = await fixture(source)
   const flow = await ready(f.service)
-  const before = await counts(source),
-    original = await row(source, flow.request.requestId)
+  const before = await counts(source)
+  const original = await row(source, flow.request.requestId)
   let consumedWrites = 0
   const restore = instrument(source, {
     query: async ({ sql, parameters, run }) => {
       const result = await run()
-      if (sql.startsWith('UPDATE "auth_login_requests"') && parameters.includes('consumed')) {
+      const isLoginRequestUpdate = sql.startsWith('UPDATE "auth_login_requests"')
+      const hasConsumedParameter = isLoginRequestUpdate && parameters.includes('consumed')
+      const isConsumedWrite = isLoginRequestUpdate && hasConsumedParameter
+      if (isConsumedWrite) {
         consumedWrites++
         throw new Error('fixture-secret SQL detail')
       }
@@ -32,7 +35,7 @@ async function assertExchangeRollback(source) {
   assert.equal((await f.service.exchange(flow.exchange)).isNewUser, true)
 }
 
-async function assertUnknownExchangeCommit(source, committed) {
+async function assertUnknownExchangeCommit({ source, committed }) {
   const f = await fixture(source)
   const flow = await ready(f.service)
   const before = await counts(source)
@@ -67,14 +70,15 @@ async function assertUnknownExchangeCommit(source, committed) {
   }
 }
 
-async function assertUnknownCallbackCommit(source, commitNumber) {
+async function assertUnknownCallbackCommit({ source, commitNumber }) {
   const f = await fixture(source)
   const flow = await started(f.service)
   let commits = 0
   const restore = instrument(source, {
     commit: async (_runner, commit) => {
       await commit()
-      if (++commits === commitNumber) {
+      const isTargetCommit = ++commits === commitNumber
+      if (isTargetCommit) {
         throw new Error('fixture-secret lost callback commit result')
       }
     }
@@ -86,13 +90,13 @@ async function assertUnknownCallbackCommit(source, commitNumber) {
     restore()
   }
   assert.equal(f.verifiedCalls.length, commitNumber - 1)
-  assert.equal(
-    (await row(source, flow.request.requestId)).status,
-    commitNumber === 1 ? 'processing' : 'exchange_ready'
-  )
+  const storedStatus = (await row(source, flow.request.requestId)).status
+  const isClaimCommit = commitNumber === 1
+  assert.equal(storedStatus, isClaimCommit ? 'processing' : 'exchange_ready')
   await failure(() => f.service.callback('google', query, flow.cookie), 'LOGIN_REQUEST_INVALID')
   assert.equal(f.verifiedCalls.length, commitNumber - 1)
-  if (commitNumber === 1) {
+  const shouldExpireProcessing = commitNumber === 1
+  if (shouldExpireProcessing) {
     // Crash/commit 응답 유실 뒤 남은 processing도 만료 read에서 정리한다.
     const expiresAt = (await row(source, flow.request.requestId)).expires_at
     await atExactTime(source, expiresAt, () =>
@@ -123,7 +127,8 @@ async function assertSnapshotsAndKeys(source) {
   )
   assert.equal(f.verifiedCalls.at(-1).snapshot.version, 'test-v1')
   assert.equal(f.verifiedCalls.at(-1).snapshot.providerClientId, 'google-test-client')
-  assert(completion.returnUrl.startsWith('ldb-test://login/complete?code='))
+  const hasOriginalReturnTarget = completion.returnUrl.startsWith('ldb-test://login/complete?code=')
+  assert(hasOriginalReturnTarget)
   await service.exchange({
     requestId: flow.request.requestId,
     clientId: 'desktop',
@@ -165,8 +170,8 @@ async function assertSnapshotsAndKeys(source) {
   assertCleared(await row(source, cannotDecrypt.request.requestId), 'failed')
 
   const valid = await ready(f.service)
-  const original = await row(source, valid.request.requestId),
-    count = await counts(source)
+  const original = await row(source, valid.request.requestId)
+  const count = await counts(source)
   await failure(
     () => f.service.exchange({ ...valid.exchange, clientId: 'another-client' }),
     'LOGIN_EXCHANGE_INVALID'
@@ -182,13 +187,22 @@ async function assertSnapshotsAndKeys(source) {
 export async function assertLoginFailures(source, mark) {
   const cases = [
     ['actual consumed UPDATE rollback', () => assertExchangeRollback(source)],
-    ['exchange commit succeeded but result lost', () => assertUnknownExchangeCommit(source, true)],
-    ['exchange commit failed before send', () => assertUnknownExchangeCommit(source, false)],
+    [
+      'exchange commit succeeded but result lost',
+      () => assertUnknownExchangeCommit({ source, committed: true })
+    ],
+    [
+      'exchange commit failed before send',
+      () => assertUnknownExchangeCommit({ source, committed: false })
+    ],
     [
       'callback claim commit result lost and expired processing cleanup',
-      () => assertUnknownCallbackCommit(source, 1)
+      () => assertUnknownCallbackCommit({ source, commitNumber: 1 })
     ],
-    ['callback completion commit result lost', () => assertUnknownCallbackCommit(source, 2)],
+    [
+      'callback completion commit result lost',
+      () => assertUnknownCallbackCommit({ source, commitNumber: 2 })
+    ],
     [
       'historical registration, missing snapshot/key and invalid client isolation',
       () => assertSnapshotsAndKeys(source)

@@ -18,7 +18,7 @@ export async function assertLoginHttpIntegration(source, mark) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body)
       })
-    const assertHeadPreservesRequest = async (path, requestId, cookie = '') => {
+    const assertHeadPreservesRequest = async ({ path, requestId, cookie = '' }) => {
       const beforeRequest = await row(source, requestId)
       const beforeCounts = await counts(source)
       const beforeProviderCalls = f.verifiedCalls.length
@@ -49,7 +49,7 @@ export async function assertLoginHttpIntegration(source, mark) {
       const request = await created.json()
       const launchUrl = new URL(request.browserUrl)
       const launchPath = `${launchUrl.pathname}${launchUrl.search}`
-      await assertHeadPreservesRequest(launchPath, request.requestId)
+      await assertHeadPreservesRequest({ path: launchPath, requestId: request.requestId })
       const launch = await fetch(`${base}${launchPath}`, {
         redirect: 'manual'
       })
@@ -59,16 +59,16 @@ export async function assertLoginHttpIntegration(source, mark) {
       const providerUrl = new URL(launch.headers.get('location'))
       const cookie = launch.headers.getSetCookie()[0].split(';')[0]
       const callbackPath = `/auth/callback/${provider}?state=${providerUrl.searchParams.get('state')}`
-      await assertHeadPreservesRequest(
-        `${callbackPath}&error=access_denied`,
-        request.requestId,
+      await assertHeadPreservesRequest({
+        path: `${callbackPath}&error=access_denied`,
+        requestId: request.requestId,
         cookie
-      )
-      await assertHeadPreservesRequest(
-        `${callbackPath}&code=fixture-provider-code`,
-        request.requestId,
+      })
+      await assertHeadPreservesRequest({
+        path: `${callbackPath}&code=fixture-provider-code`,
+        requestId: request.requestId,
         cookie
-      )
+      })
       const callback = await fetch(`${base}${callbackPath}&code=fixture-provider-code`, {
         headers: { cookie },
         redirect: 'manual'
@@ -78,7 +78,8 @@ export async function assertLoginHttpIntegration(source, mark) {
       assert.equal(callback.headers.get('referrer-policy'), 'no-referrer')
       const html = await callback.text()
       const code = /ldb-test:\/\/login\/complete\?code=([A-Za-z0-9_-]{43})/.exec(html)?.[1]
-      assert(code)
+      const hasExchangeCode = code != null
+      assert(hasExchangeCode)
       assert.doesNotMatch(
         html,
         /fixture-provider-code|accessToken|refreshToken|providerVerifier|<script/
@@ -101,8 +102,8 @@ export async function assertLoginHttpIntegration(source, mark) {
     const denied = await post('/auth/exchange', { ...flow.exchange, codeVerifier: opaque() })
     assert.equal(denied.status, 400)
     assert.deepEqual(await counts(source), before)
-    const committed = Promise.withResolvers(),
-      release = Promise.withResolvers()
+    const committed = Promise.withResolvers()
+    const release = Promise.withResolvers()
     const restore = instrument(source, {
       commit: async (_runner, commit) => {
         await commit()
