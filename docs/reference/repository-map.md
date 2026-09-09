@@ -10,10 +10,6 @@ last-reviewed: 2026-09-08
 
 이 file은 현재 repository의 사실을 설명하는 Reference document다. AI가 code와 config 변경에 맞춰 자율적으로 갱신한다.
 
-## 개발 작업 다시 시작하기
-
-[작업 흐름 안내](task-workflow/README.md)에서 현재 개발 절차의 PNG와 Mermaid 원본, 에이전트에게 보낼 지시 예시를 확인합니다. 실제 실행 기준은 해당 안내에서 연결한 canonical Rule을 따릅니다.
-
 ## Workspace
 
 - Package manager: `pnpm@11.23.0`
