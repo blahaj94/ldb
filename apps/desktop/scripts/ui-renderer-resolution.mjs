@@ -6,7 +6,8 @@ import { createServer } from 'vite'
 process.env.NODE_ENV_ELECTRON_VITE = 'development'
 const resolved = await resolveConfig({}, 'serve', 'development')
 const renderer = resolved.config?.renderer
-assert.ok(renderer, 'Actual electron-vite renderer config must exist')
+const hasRenderer = renderer != null
+assert.ok(hasRenderer, 'Actual electron-vite renderer config must exist')
 const server = await createServer({
   ...renderer,
   server: { ...renderer.server, host: '127.0.0.1', port: 0 }

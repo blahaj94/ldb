@@ -120,7 +120,8 @@ test('Desktop HTTP client consumes default API, exchange JWT, activity and accou
       quotaClock.current_second.getTime() > beforeQuota.last_active_at.getTime()
     assert(hasLaterDbSecond, 'quota rejection must run in a later database second')
     await assert.rejects(search(searchInput), (error: unknown) => {
-      assert(error instanceof SearchHttpFailure)
+      const isSearchHttpFailure = error instanceof SearchHttpFailure
+      assert(isSearchHttpFailure)
       assert.equal(error.code, 'SEARCH_RATE_LIMITED')
       assert.equal(error.retryAfterReceivedAt, 1234)
       const seconds = error.retryAfterSeconds
