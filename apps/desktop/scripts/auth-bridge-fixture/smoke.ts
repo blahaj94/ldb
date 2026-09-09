@@ -6,11 +6,17 @@ import { canaries, syntheticCode, createFixtureEffects } from './effects'
 
 function createClickSource(label: string): string {
   const source = `(() => {
-      const button = [...document.querySelectorAll('button')].find(button => button.textContent === ${JSON.stringify(label)});
+      const button = [...document.querySelectorAll('button')].find(button => {
+        const hasLabel = button.textContent === ${JSON.stringify(label)};
+        return hasLabel;
+      });
       const hasButton = button != null;
       const canClick = hasButton && !button.disabled;
-      if (!canClick) return false;
-      button.click(); return true;
+      if (!canClick) {
+        return false;
+      }
+      button.click();
+      return true;
     })()`
   return source
 }
@@ -68,12 +74,12 @@ export async function smoke(
     'onAuthStateChanged',
     'retryAuth'
   ])
-  assert.equal(
-    await evaluate(
-      "typeof window.electron === 'undefined' && typeof window.require === 'undefined'"
-    ),
-    true
-  )
+  const sandboxInspectionSource = `(() => {
+    const hasNoElectronApi = typeof window.electron === 'undefined';
+    const hasNoPrivilegedGlobals = hasNoElectronApi && typeof window.require === 'undefined';
+    return hasNoPrivilegedGlobals;
+  })()`
+  assert.equal(await evaluate(sandboxInspectionSource), true)
   assert.equal((await state()).phase, 'signedOut')
   await evaluate(
     'window.fixtureEvents = []; window.fixtureOff = window.auth.onAuthStateChanged((...args) => window.fixtureEvents.push(args)); true'
@@ -88,7 +94,8 @@ export async function smoke(
   const waiting = await state()
   noCanary(waiting)
   const events = (await evaluate('window.fixtureEvents')) as AuthSnapshot[][]
-  assert.ok(events.length >= 2)
+  const hasInitialAuthEvents = events.length >= 2
+  assert.ok(hasInitialAuthEvents)
   for (const args of events) {
     assert.equal(args.length, 1)
     noCanary(args)
