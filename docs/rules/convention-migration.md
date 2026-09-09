@@ -114,18 +114,18 @@ review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담�
 
 ## 누적 조건 변수의 재점검 제안
 
-이 절은 Issue #248의 proposed 변경안이며, 적용되는 표현 기준은 [`convention.md`의 개별 검사와 누적 판단의 구분 제안](../../convention.md#개별-검사와-누적-판단의-구분-제안) 한 곳에서 관리한다. 해당 Draft PR의 사용자 `승인` 전에는 새 기준을 적용한 코드 수정을 시작하지 않는다. 기존 Rule과 이행의 소유권·검증·사용자 merge 조건은 유지한다.
+이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이며, 적용되는 표현 기준은 [`convention.md`의 개별 검사와 누적 판단의 구분 제안](../../convention.md#개별-검사와-누적-판단의-구분-제안) 한 곳에서 관리한다. 코드 교정은 Issue #248의 실행 계약에 따라 진행하며 기존 Rule과 이행의 소유권·검증·사용자 merge 조건은 유지한다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 이전 convention 이행으로 만들어진 누적 조건도 다시 확인하고 독립 검사와 필요한 평가 보호를 구분한다.
-evidence: "Issue #248의 기존 리팩토링 코드 교정 요청"
+evidence: "https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588"
 exceptions: 실제 업무 합성과 필요한 평가 보호를 기계적으로 해체하지 않으며 근거가 불명확한 항목은 판단 필요로 남긴다.
 review-after: 교정 PR 3개를 사용자 merge한 뒤 전수 분류 누락과 불필요한 재수정을 확인한다.
 ```
 
-승인 후 기존 이행 완료·이미 준수로 기록한 파일도 재점검 대상에 포함한다. 기존 source, test, script, tooling과 생성 원본을 기준 revision에서 조사한다. 종전 완료 기록은 당시 기준의 evidence로 보존하며, 새 기준에서 조사·교정 완료를 자동 승계하지 않는다.
+기존 이행 완료·이미 준수로 기록한 파일도 재점검 대상에 포함한다. 기존 source, test, script, tooling과 생성 원본을 기준 revision에서 조사한다. 종전 완료 기록은 당시 기준의 evidence로 보존하며, 새 기준에서 조사·교정 완료를 자동 승계하지 않는다.
 
 실행 Issue에 후보의 파일과 symbol, 원래 조건의 의미, 선행 조건 의존성, 추가 평가의 순수성 근거, 필요한 검증과 담당을 기록한다. 각 후보를 `변경 필요`, `이미 준수`, `적용 제외`, `판단 필요`로 구분한다. 선행 보호가 필요한 항목은 단순히 제외하지 않고 guard나 필요한 분기로 동작을 보존하며 교정할 수 있는지 확인한다. 실제 업무 합성은 유지 근거를 남긴다. 텍스트·AST 검색은 후보 수집 수단이며 동등성과 최종 분류를 자동 결정하지 않는다.
 

@@ -90,13 +90,13 @@ function sameSnapshot(expected: Snapshot, actual: Snapshot): boolean {
 
 ### 개별 검사와 누적 판단의 구분 제안
 
-다음은 Issue #248의 변경안이다. Draft PR의 사용자 `승인` 전에는 기존 active 기준을 유지하고 새 기준을 전제로 코드를 수정하지 않는다. 승인 후 이 절은 §2의 개별 명명과 §3의 평가 보호 방식을 구체화하며, 아래 기존 nullish·응답 검증 예시보다 이 절의 guard 방식이 우선한다.
+이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이다. §2의 개별 명명과 §3의 평가 보호 방식을 구체화하며, 아래 기존 nullish·응답 검증 예시보다 이 절의 guard 방식이 우선한다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: warning
 rationale: 개별 조건의 이름에 앞선 조건의 실패를 누적해 debugger와 코드 독해에서 검사 결과를 오해하지 않도록 한다.
-evidence: "Issue #248 사용자 요청; apps/api/src/auth/google/index.ts의 sameSnapshot"
+evidence: "https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588; apps/api/src/auth/google/index.ts의 sameSnapshot"
 exceptions: 독립 순수 검사 이외에는 단락 평가를 유지하며 실제 업무 의미를 가진 중간 합성과 하나의 의미를 이루는 원시 조건은 허용한다.
 review-after: 교정 PR 3개를 사용자 merge한 뒤 독립 검사 관찰성, guard 과잉과 동작 보존 근거를 확인한다.
 ```
@@ -124,7 +124,7 @@ const isWithinLimit = count < limit
 const canProceed = isActive && hasPermission && isWithinLimit
 ```
 
-존재 확인이 필요한 nullable string은 먼저 guard하고 길이 검사를 수행한다. §2의 기존 `hasNonEmptyText` 예시는 승인 후 다음 형태를 따른다.
+존재 확인이 필요한 nullable string은 먼저 guard하고 길이 검사를 수행한다. §2의 기존 `hasNonEmptyText` 예시는 다음 형태를 따른다.
 
 ```ts
 function hasNonEmptyText(value: string | null | undefined): boolean {
