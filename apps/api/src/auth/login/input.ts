@@ -105,7 +105,7 @@ export function parseCallback(query: URLSearchParams): LoginCallbackInput {
     const isCallbackQueryInvalid = !hasSingleState || !hasSingleOutcome || !hasTruthyOutcome
 
     if (isCallbackQueryInvalid) {
-      throw new Error()
+      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
 
     decodeOpaque(states[0])

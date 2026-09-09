@@ -92,7 +92,7 @@ export class ProviderPkceKeys {
         const hasExpectedKeyLength = isKeyBuffer && key.length === 32
         const isKeyInvalid = !hasKeyId || isDuplicateKey || !isKeyBuffer || !hasExpectedKeyLength
         if (isKeyInvalid) {
-          throw new Error()
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
         }
         // 호출자가 원본 Buffer를 바꿔도 등록된 key는 바뀌지 않는다.
         this.#keys.set(id, Buffer.from(key))
@@ -100,7 +100,7 @@ export class ProviderPkceKeys {
 
       const hasActiveKey = this.#keys.has(this.#activeKeyId)
       if (!hasActiveKey) {
-        throw new Error()
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
     } catch {
       throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
@@ -137,7 +137,7 @@ export class ProviderPkceKeys {
       const hasSealedFields = hasKey && hasCompleteSealedPkce(row)
       const isSealedPkceInvalid = !hasKey || !hasSealedFields
       if (isSealedPkceInvalid) {
-        throw new Error()
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
 
       // 저장 당시의 key ID와 동일한 AAD/tag로만 verifier를 복원한다.

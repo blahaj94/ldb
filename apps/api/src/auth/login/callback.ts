@@ -172,7 +172,7 @@ async function verifyProviderLogin(
     const remainingMs = deadline - performance.now()
     const isDeadlineElapsed = remainingMs <= 0
     if (isDeadlineElapsed) {
-      throw new Error()
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
 
     // Provider 호출과 timeout은 같은 deadline을 공유하며 retry하지 않는다.
@@ -188,7 +188,7 @@ async function verifyProviderLogin(
     const timeout = new Promise<never>((_, reject) => {
       deadlineTimer = setTimeout(() => {
         controller.abort()
-        reject(new Error())
+        reject(new LoginFailure(LOGIN_ERRORS.PROVIDER))
       }, remainingMs)
     })
     const identity = await Promise.race([verification, timeout])
@@ -202,7 +202,7 @@ async function verifyProviderLogin(
     const isIdentityInvalid =
       isVerificationExpired || !hasSameProvider || !isSubjectString || isSubjectEmpty
     if (isIdentityInvalid) {
-      throw new Error()
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
     }
 
     // 완료 transaction의 DB 잠금 대기가 code TTL을 연장하지 않도록 먼저 시각을 고정한다.
