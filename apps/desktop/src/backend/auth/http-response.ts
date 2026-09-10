@@ -60,8 +60,8 @@ function isUtcIso(value: string): boolean {
   const normalized = `${match[1]}.${milliseconds}Z`
   const timestamp = Date.parse(normalized)
   const isValidDate = Number.isFinite(timestamp)
-  const hasExactDate = isValidDate && new Date(timestamp).toISOString() === normalized
-  const isValidUtcIso = isValidDate && hasExactDate
+  const hasExactDate = isValidDate ? new Date(timestamp).toISOString() === normalized : undefined
+  const isValidUtcIso = isValidDate && hasExactDate === true
 
   return isValidUtcIso
 }
@@ -142,8 +142,14 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
   const parameters = contentTypeParts.slice(1)
   const hasJsonMediaType = mediaType === 'application/json'
   const hasNoParameters = parameters.length === 0
-  const hasOneParameter = !hasNoParameters && parameters.length === 1
-  const hasUtf8Charset = hasOneParameter && parameters[0] === 'charset=utf-8'
+  let hasOneParameter: boolean | undefined
+  let hasUtf8Charset: boolean | undefined
+  if (!hasNoParameters) {
+    hasOneParameter = parameters.length === 1
+    if (hasOneParameter) {
+      hasUtf8Charset = parameters[0] === 'charset=utf-8'
+    }
+  }
   const hasSupportedParameters = hasNoParameters || hasUtf8Charset
   const hasSupportedContentType = hasJsonMediaType && hasSupportedParameters
   if (!hasSupportedContentType) {
@@ -153,10 +159,13 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
   const declaredLength = response.headers.get('content-length')
   const hasDeclaredLength = declaredLength != null
   const declaredBytes = hasDeclaredLength ? Number(declaredLength) : null
-  const hasOversizeDeclaration =
-    declaredBytes != null &&
-    Number.isFinite(declaredBytes) &&
-    declaredBytes > AUTH_RESPONSE_MAX_BYTES
+  let hasOversizeDeclaration: boolean | undefined
+  if (declaredBytes != null) {
+    const hasFiniteDeclaration = Number.isFinite(declaredBytes)
+    if (hasFiniteDeclaration) {
+      hasOversizeDeclaration = declaredBytes > AUTH_RESPONSE_MAX_BYTES
+    }
+  }
   if (hasOversizeDeclaration) {
     try {
       await response.body?.cancel()

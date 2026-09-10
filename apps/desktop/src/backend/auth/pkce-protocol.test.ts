@@ -23,42 +23,45 @@ describe('Desktop auth PKCE와 URL 경계', () => {
       validate: () => validateReturnTarget('test-ldb://auth/return'),
       laterGetter: 'port'
     }
-  ])('$name은 username 실패 뒤 password를 건너뛰고 이후 getter를 평가한다', ({ validate, laterGetter }) => {
-    const access: string[] = []
-    class ObservedUrl {
-      protocol: string
-      constructor(raw: string) {
-        this.protocol = raw.startsWith('test-ldb:') ? 'test-ldb:' : 'https:'
+  ])(
+    '$name은 username 실패 뒤 password를 건너뛰고 이후 getter를 평가한다',
+    ({ validate, laterGetter }) => {
+      const access: string[] = []
+      class ObservedUrl {
+        protocol: string
+        constructor(raw: string) {
+          this.protocol = raw.startsWith('test-ldb:') ? 'test-ldb:' : 'https:'
+        }
+        username = 'user'
+        get password(): string {
+          access.push('password')
+          throw new Error('password must be skipped')
+        }
+        get pathname(): string {
+          access.push('pathname')
+          throw new Error('sentinel later getter')
+        }
+        get port(): string {
+          access.push('port')
+          throw new Error('sentinel later getter')
+        }
+        search = ''
+        hash = ''
+        origin = 'https://example.test'
+        toString(): string {
+          return 'test-ldb://auth/return'
+        }
       }
-      username = 'user'
-      get password(): string {
-        access.push('password')
-        throw new Error('password must be skipped')
-      }
-      get pathname(): string {
-        access.push('pathname')
-        throw new Error('sentinel later getter')
-      }
-      get port(): string {
-        access.push('port')
-        throw new Error('sentinel later getter')
-      }
-      search = ''
-      hash = ''
-      origin = 'https://example.test'
-      toString(): string {
-        return 'test-ldb://auth/return'
-      }
-    }
-    vi.stubGlobal('URL', ObservedUrl)
+      vi.stubGlobal('URL', ObservedUrl)
 
-    try {
-      expect(validate).toThrow('sentinel later getter')
-      expect(access).toEqual([laterGetter])
-    } finally {
-      vi.unstubAllGlobals()
+      try {
+        expect(validate).toThrow('sentinel later getter')
+        expect(access).toEqual([laterGetter])
+      } finally {
+        vi.unstubAllGlobals()
+      }
     }
-  })
+  )
 
   it('non-string Proxy는 URL 내부 접근 없이 AuthProtocolFailure로 거절한다', () => {
     const value = new Proxy(

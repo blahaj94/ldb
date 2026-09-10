@@ -38,9 +38,13 @@ export class AuthProtocolFailure extends Error {
 
 function parseExactUrl(raw: unknown): URL {
   const isString = typeof raw === 'string'
-  const isWithinLimit = isString && Buffer.byteLength(raw, 'utf8') <= MAX_URL_BYTES
-  const hasForbiddenCharacter = isString && hasForbiddenUrlCharacter(raw)
-  const canParse = isString && isWithinLimit && !hasForbiddenCharacter
+  let isWithinLimit: boolean | undefined
+  let hasForbiddenCharacter: boolean | undefined
+  if (isString) {
+    isWithinLimit = Buffer.byteLength(raw, 'utf8') <= MAX_URL_BYTES
+    hasForbiddenCharacter = hasForbiddenUrlCharacter(raw)
+  }
+  const canParse = isString && isWithinLimit !== false && hasForbiddenCharacter !== true
   if (!canParse) {
     throw new AuthProtocolFailure()
   }
@@ -56,8 +60,11 @@ export function validateApiOrigin(apiOrigin: string): string {
   const url = parseExactUrl(apiOrigin)
   const isHttps = url.protocol === 'https:'
   const hasNoUsername = url.username.length === 0
-  const hasNoPassword = hasNoUsername && url.password.length === 0
-  const hasNoCredentials = hasNoUsername && hasNoPassword
+  let hasNoPassword: boolean | undefined
+  if (hasNoUsername) {
+    hasNoPassword = url.password.length === 0
+  }
+  const hasNoCredentials = hasNoUsername && hasNoPassword === true
   const hasRootPath = url.pathname === '/'
   const hasNoQuery = url.search.length === 0
   const hasNoFragment = url.hash.length === 0
@@ -76,8 +83,11 @@ export function validateReturnTarget(returnTarget: string): string {
   // 실제 owned scheme 값은 bootstrap이 주입한다. Browser/network가 이미 소유한 built-in만 제외한다.
   const isPrivateScheme = !INCOMPATIBLE_APP_PROTOCOLS.has(url.protocol)
   const hasNoUsername = url.username.length === 0
-  const hasNoPassword = hasNoUsername && url.password.length === 0
-  const hasNoCredentials = hasNoUsername && hasNoPassword
+  let hasNoPassword: boolean | undefined
+  if (hasNoUsername) {
+    hasNoPassword = url.password.length === 0
+  }
+  const hasNoCredentials = hasNoUsername && hasNoPassword === true
   const hasNoPort = url.port.length === 0
   const hasNoQuery = !returnTarget.includes('?')
   const hasNoFragment = !returnTarget.includes('#')
@@ -101,20 +111,26 @@ export function validateBrowserLaunchUrl(raw: unknown, apiOrigin: string): strin
   const url = parseExactUrl(raw)
   const tickets = url.searchParams.getAll('ticket')
   const hasOneQueryParameter = url.searchParams.size === 1
-  const hasOneTicket = hasOneQueryParameter && tickets.length === 1
-  const hasOneQuery = hasOneQueryParameter && hasOneTicket
+  let hasOneTicket: boolean | undefined
+  if (hasOneQueryParameter) {
+    hasOneTicket = tickets.length === 1
+  }
+  const hasOneQuery = hasOneQueryParameter && hasOneTicket === true
   const ticket = tickets[0]
   const isCanonicalTicket = isCanonicalOpaque(ticket)
   const expected = isCanonicalTicket
     ? `${trustedOrigin}/auth/login/authorize?ticket=${ticket}`
     : null
   const hasExpectedLaunchUrl = expected != null
-  const isExactLaunchUrl = hasExpectedLaunchUrl && raw === expected
-  const isValidLaunchUrl = hasOneQuery && isCanonicalTicket && isExactLaunchUrl
+  const isExactLaunchUrl = hasExpectedLaunchUrl ? raw === expected : undefined
+  const isValidLaunchUrl = hasOneQuery && isCanonicalTicket && isExactLaunchUrl === true
   if (!isValidLaunchUrl) {
     throw new AuthProtocolFailure()
   }
 
+  if (!hasExpectedLaunchUrl) {
+    throw new AuthProtocolFailure()
+  }
   return expected
 }
 
@@ -123,14 +139,17 @@ export function parseReturnUrl(raw: unknown, returnTarget: string): Readonly<{ c
   const url = parseExactUrl(raw)
   const codes = url.searchParams.getAll('code')
   const hasOneQueryParameter = url.searchParams.size === 1
-  const hasOneCode = hasOneQueryParameter && codes.length === 1
-  const hasOneQuery = hasOneQueryParameter && hasOneCode
+  let hasOneCode: boolean | undefined
+  if (hasOneQueryParameter) {
+    hasOneCode = codes.length === 1
+  }
+  const hasOneQuery = hasOneQueryParameter && hasOneCode === true
   const code = codes[0]
   const isCanonicalCode = isCanonicalOpaque(code)
   const expected = isCanonicalCode ? `${trustedTarget}?code=${code}` : null
   const hasExpectedReturnUrl = expected != null
-  const isExactReturnUrl = hasExpectedReturnUrl && raw === expected
-  const isValidReturnUrl = hasOneQuery && isCanonicalCode && isExactReturnUrl
+  const isExactReturnUrl = hasExpectedReturnUrl ? raw === expected : undefined
+  const isValidReturnUrl = hasOneQuery && isCanonicalCode && isExactReturnUrl === true
   if (!isValidReturnUrl) {
     throw new AuthProtocolFailure()
   }
