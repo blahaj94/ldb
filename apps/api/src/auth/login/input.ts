@@ -6,21 +6,25 @@ import { decodeOpaque } from './crypto.js'
 
 function requireExactFields(value: unknown, fields: readonly string[]): Record<string, unknown> {
   const isValueTruthy = Boolean(value)
-  const isValueObject = isValueTruthy && typeof value === 'object'
-  const isValueArray = isValueObject && Array.isArray(value)
-  const isValueInvalid = !isValueTruthy || !isValueObject || isValueArray
-
-  if (isValueInvalid) {
+  if (!isValueTruthy) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  const isValueObject = typeof value === 'object'
+  if (!isValueObject) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  const isValueArray = Array.isArray(value)
+  if (isValueArray) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
   const objectValue = value as Record<string, unknown>
   const hasExpectedFieldCount = Object.keys(objectValue).length === fields.length
-  const hasExpectedFields =
-    hasExpectedFieldCount && fields.every((field) => Object.hasOwn(objectValue, field))
-  const hasExactFields = hasExpectedFieldCount && hasExpectedFields
-
-  if (!hasExactFields) {
+  if (!hasExpectedFieldCount) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  const hasExpectedFields = fields.every((field) => Object.hasOwn(objectValue, field))
+  if (!hasExpectedFields) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
@@ -100,11 +104,15 @@ export function parseCallback(query: URLSearchParams): LoginCallbackInput {
 
     // OAuth의 다른 query는 허용하되 state 하나와 code/error 중 하나만 받는다.
     const hasSingleState = states.length === 1
-    const hasSingleOutcome = hasSingleState && codes.length + errors.length === 1
-    const hasTruthyOutcome = hasSingleOutcome && Boolean(codes[0] ?? errors[0])
-    const isCallbackQueryInvalid = !hasSingleState || !hasSingleOutcome || !hasTruthyOutcome
-
-    if (isCallbackQueryInvalid) {
+    if (!hasSingleState) {
+      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+    }
+    const hasSingleOutcome = codes.length + errors.length === 1
+    if (!hasSingleOutcome) {
+      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+    }
+    const hasTruthyOutcome = Boolean(codes[0] ?? errors[0])
+    if (!hasTruthyOutcome) {
       throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
 

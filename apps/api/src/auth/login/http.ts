@@ -50,10 +50,13 @@ function escapeHtml(value: string): string {
 function loginPage(message: string, returnUrl?: string): string {
   const messageHtml = `<p>${escapeHtml(message)}</p>`
   const hasReturnUrl = returnUrl != null
-  const hasTruthyReturnUrl = hasReturnUrl && Boolean(returnUrl)
-  const returnLink = hasTruthyReturnUrl
-    ? `<a href="${escapeHtml(returnUrl)}">앱으로 돌아가기</a>`
-    : ''
+  let returnLink = ''
+  if (hasReturnUrl) {
+    const hasTruthyReturnUrl = Boolean(returnUrl)
+    if (hasTruthyReturnUrl) {
+      returnLink = `<a href="${escapeHtml(returnUrl)}">앱으로 돌아가기</a>`
+    }
+  }
 
   const pageHtml = [
     '<!doctype html>',
@@ -174,9 +177,11 @@ class LoginController {
 
     const query = readOriginalQuery(request)
     const hasSingleQueryParameter = query.size === 1
-    const hasSingleTicket = hasSingleQueryParameter && query.getAll('ticket').length === 1
-    const isQueryInvalid = !hasSingleQueryParameter || !hasSingleTicket
-    if (isQueryInvalid) {
+    if (!hasSingleQueryParameter) {
+      throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+    }
+    const hasSingleTicket = query.getAll('ticket').length === 1
+    if (!hasSingleTicket) {
       throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
     }
 

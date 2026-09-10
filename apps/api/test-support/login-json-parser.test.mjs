@@ -7,12 +7,12 @@ import { loginJsonParser } from '../dist/auth/login/json-parser.js'
 import { LOGIN_ERRORS } from '../dist/constants/login.js'
 import { LoginFailure } from '../dist/errors/login.js'
 
-function parserFixture() {
+function parserFixture(rawHeaders = ['Content-Type', 'application/json']) {
   const request = new PassThrough({ autoDestroy: false })
   Object.assign(request, {
     method: 'POST',
     path: '/auth/exchange',
-    rawHeaders: ['Content-Type', 'application/json']
+    rawHeaders
   })
   const responses = []
   const nextCalls = []
@@ -30,6 +30,29 @@ function parserFixture() {
   loginJsonParser(request, response, (error) => nextCalls.push(error))
   return { request, response, responses, nextCalls, headers }
 }
+
+test('duplicate media headers reject before body read', () => {
+  for (const rawHeaders of [
+    ['Content-Type', 'application/json', 'Content-Type', 'application/json'],
+    ['Content-Type', 'application/json', 'Content-Encoding', 'identity', 'Content-Encoding', 'gzip']
+  ]) {
+    const f = parserFixture(rawHeaders)
+    assert.equal(f.responses.length, 1)
+    assert.equal(f.responses[0].status, 415)
+    assert.equal(f.nextCalls.length, 0)
+    assert.equal(f.request.isPaused(), true)
+    f.request.destroy()
+  }
+})
+
+test('oversized declared content length rejects before body read', () => {
+  const f = parserFixture(['Content-Type', 'application/json', 'Content-Length', '16385'])
+  assert.equal(f.responses.length, 1)
+  assert.equal(f.responses[0].status, 413)
+  assert.equal(f.nextCalls.length, 0)
+  assert.equal(f.request.isPaused(), true)
+  f.request.destroy()
+})
 
 function assertInvalidResponse(responses) {
   assert.deepEqual(responses, [

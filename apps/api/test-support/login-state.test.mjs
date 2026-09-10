@@ -7,6 +7,7 @@ import { digest } from './login-database.mjs'
 import { bounded, settled } from './login-test-control.mjs'
 
 const { completeLoginCallback } = await import('../dist/auth/login/callback.js')
+const { authorizeLogin } = await import('../dist/auth/login/start.js')
 const { exchangeLogin } = await import('../dist/auth/login/exchange.js')
 const { LOGIN } = await import('../dist/constants/login.js')
 
@@ -198,4 +199,86 @@ test('expired active request read by exchange clears secrets while terminal cons
     assert.equal(updates, isConsumedStatus ? 0 : 1)
     assert.equal(stored.status, isConsumedStatus ? 'consumed' : 'failed')
   }
+})
+
+test('failed exchange row rejects without mutation', async () => {
+  const stored = { id: randomUUID(), status: 'failed', expiresAt: new Date(Date.now() + 600_000) }
+  let updates = 0
+  const manager = {
+    query: async () => [{ now: new Date() }],
+    getRepository: () => ({
+      findOne: async () => stored,
+      update: async () => {
+        updates++
+      }
+    })
+  }
+  await assert.rejects(
+    () =>
+      exchangeLogin(
+        { dataSource: { transaction: async (_isolation, operation) => operation(manager) } },
+        { requestId: stored.id, clientId: 'desktop', code: opaque(), codeVerifier: opaque() }
+      ),
+    { code: 'LOGIN_EXCHANGE_INVALID' }
+  )
+  assert.equal(updates, 0)
+})
+
+test('consumed exchange row reads status once before rejecting', async () => {
+  let statusReads = 0
+  const stored = {
+    id: randomUUID(),
+    get status() {
+      statusReads++
+      return 'consumed'
+    },
+    expiresAt: new Date(Date.now() + 600_000)
+  }
+  const manager = {
+    query: async () => [{ now: new Date() }],
+    getRepository: () => ({ findOne: async () => stored })
+  }
+  await assert.rejects(
+    () =>
+      exchangeLogin(
+        { dataSource: { transaction: async (_isolation, operation) => operation(manager) } },
+        { requestId: stored.id, clientId: 'desktop', code: opaque(), codeVerifier: opaque() }
+      ),
+    { code: 'LOGIN_EXCHANGE_INVALID' }
+  )
+  assert.equal(statusReads, 1)
+})
+
+test('Discord authorize omits nonce and persists a null nonce hash', async () => {
+  const snapshot = registration()
+  snapshot.provider = 'discord'
+  snapshot.expectedAudience = null
+  const stored = {
+    id: randomUUID(),
+    provider: 'discord',
+    providerConfigVersion: snapshot.version,
+    returnTargetId: snapshot.returnTarget.id,
+    status: 'created',
+    expiresAt: new Date(Date.now() + 600_000)
+  }
+  let patch
+  const manager = {
+    query: async () => [{ now: new Date() }],
+    getRepository: () => ({
+      findOne: async () => stored,
+      update: async (_where, nextPatch) => {
+        patch = nextPatch
+      }
+    })
+  }
+  const authorization = await authorizeLogin(
+    {
+      registry: { resolve: () => snapshot },
+      pkceKeys: { encrypt: () => ({ provider_pkce_ciphertext: 'cipher' }) },
+      dataSource: { transaction: async (_isolation, operation) => operation(manager) }
+    },
+    opaque()
+  )
+  assert.equal(new URL(authorization.redirectUrl).searchParams.has('nonce'), false)
+  assert.equal(patch.oidcNonceHash, null)
 })
