@@ -95,18 +95,28 @@ export class CaptureSearch {
     const captureId = isBeginSuccessful ? result.snapshot.captureId : null
     const hasCaptureId = captureId != null
     const hasCurrentTicket = this.capture === ticket
-    const isTicketActive = hasCurrentTicket && ticket.active
-    const isCurrentTicket = hasCurrentTicket && isTicketActive
+    let isCurrentTicket = false
+    if (hasCurrentTicket) {
+      const isTicketActive = ticket.active
+      isCurrentTicket = isTicketActive
+    }
     const latest = this.snapshot
     const completed = result?.snapshot
     const hasLatestSnapshot = latest != null
     const hasCompletedSnapshot = completed != null
-    const canCompareSnapshot = hasLatestSnapshot && hasCompletedSnapshot
-    const hasChangedRun = canCompareSnapshot && latest.runId !== completed.runId
-    const hasNewerSnapshot = canCompareSnapshot && latest.revision > completed.revision
-    const hasDifferentCapture = hasLatestSnapshot && latest.captureId !== captureId
-    const hasNewerDifferentCapture = hasNewerSnapshot && hasDifferentCapture
-    const isSuperseded = hasChangedRun || hasNewerDifferentCapture
+    let isSuperseded = false
+    if (hasLatestSnapshot) {
+      if (hasCompletedSnapshot) {
+        const hasChangedRun = latest.runId !== completed.runId
+        const hasNewerSnapshot = latest.revision > completed.revision
+        const hasDifferentCapture = latest.captureId !== captureId
+        const hasNewerDifferentCapture = hasNewerSnapshot && hasDifferentCapture
+        isSuperseded = hasChangedRun || hasNewerDifferentCapture
+      } else {
+        const hasDifferentCapture = latest.captureId !== captureId
+        isSuperseded = hasDifferentCapture && hasCompletedSnapshot
+      }
+    }
     const isSignalAborted = signal.aborted
     const isCancelled = isSignalAborted || !isCurrentTicket || isSuperseded
     if (isCancelled) {
