@@ -44,10 +44,10 @@ Rule 변경이 필요하면 AI는 다음 순서로 진행한다.
 
 1. Issue와 preflight에 변경 이유, 영향, 대안과 사용자의 요청 또는 실행 허용 근거를 기록한다.
 2. [`testing.md`의 Red-Green workflow](testing.md#red-green-workflow)에 따라 Rule, test, 구현과 Reference를 하나의 review 가능한 PR에 준비한다. Rule-only PR이나 Rule만 담은 첫 commit은 필수가 아니다.
-3. PR에 실제 Rule 변경과 적용 범위, 검증 결과를 명시한다. 별도 `승인` comment나 review approval은 요구하지 않는다.
-4. 사용자가 PR을 merge하면 그 merge가 포함된 Rule과 문서 변경의 최종 승인이고, merge된 revision부터 active Rule로 적용한다.
+3. PR에 실제 Rule 변경과 적용 범위, 채택할 substantive Rule 및 status 변경, 검증 결과를 명시한다. 별도 `승인` comment나 review approval은 요구하지 않는다.
+4. 사용자가 PR을 merge하면 그 merge가 PR scope에서 채택 대상으로 명시한 Rule과 문서 변경의 최종 승인이고, merge된 revision부터 그 변경을 active Rule로 적용한다.
 
-Merge 전 Rule 변경은 해당 PR의 구현과 검증을 일관되게 준비하는 데 사용할 수 있지만, 다른 Issue나 main의 active Rule을 바꾸지 않는다. 기존 승인 comment·review URL은 당시 결정의 historical evidence로 보존하며 새 merge 기반 절차에서 다시 만들 필요가 없다. 제품별로 명시된 구현 착수, 환경 확보, 운영 실행과 사용자 전용 merge 조건은 Rule 승인과 별개로 유지한다.
+Merge 전 Rule 변경은 해당 PR의 구현과 검증을 일관되게 준비하는 데 사용할 수 있지만, 다른 Issue나 main의 active Rule을 바꾸지 않는다. Proposed section의 승인 절차·link·표현만 정비하는 PR은 그 section의 substantive contract를 채택하거나 status를 바꾸지 않는다. Proposed 내용을 채택하려면 PR scope에 그 내용과 status 전환을 명시한다. 기존 승인 comment·review URL은 당시 결정의 historical evidence로 보존하며 새 merge 기반 절차에서 다시 만들 필요가 없다. 제품별로 명시된 구현 착수, 환경 확보, 운영 실행과 사용자 전용 merge 조건은 Rule 승인과 별개로 유지한다.
 
 ## Issue and preflight
 

@@ -85,4 +85,4 @@ exceptions: 예외 조건
 review-after: 재검토 시점 또는 조건
 ```
 
-AI는 실험과 변경을 PR에 제안할 수 있다. 사용자가 PR을 merge하면 포함된 Rule이 `active`가 되며, merge 전에는 해당 PR의 구현·검증 범위 밖에서 active Rule로 사용하지 않는다.
+AI는 실험과 변경을 PR에 제안할 수 있다. PR scope가 proposed Rule의 substantive contract와 `active` 전환을 채택 대상으로 명시하고 사용자가 merge하면 그 Rule이 `active`가 된다. 절차 문구·link·표현만 수정한 merge는 기존 proposed status를 바꾸지 않는다. Merge 전에는 해당 PR의 구현·검증 범위 밖에서 active Rule로 사용하지 않는다.

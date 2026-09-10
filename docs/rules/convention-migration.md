@@ -89,7 +89,7 @@ Planner는 작업별 file과 계약 소유권, generated source, artifact, fixtu
 
 ## 작업 단위 재계획 제안
 
-Issue #196에서 사용자가 남은 PR 수를 줄이도록 작업 단위 재계획을 요청했다. 다음은 merge 전 제안이며, 이 변경을 담은 PR을 사용자가 merge하기 전에는 기존 active Rule을 그대로 적용한다.
+Issue #196에서 사용자가 남은 PR 수를 줄이도록 작업 단위 재계획을 요청했다. 다음은 merge 전 제안이며, 이 재계획의 substantive contract와 status 전환을 채택 범위로 명시한 PR을 사용자가 merge하기 전에는 기존 active Rule을 그대로 적용한다. 절차 문구나 link만 수정하면 제안 상태를 유지한다.
 
 ```yaml
 status: proposed
@@ -100,7 +100,7 @@ exceptions: 동작·API·보안·Rule·새 dependency의 미결정 사항은 기
 review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담·재작업·되돌리기 단위와 남은 항목의 판단 필요 여부를 확인한다.
 ```
 
-사용자 merge 후 이 제안은 위 `작업 단위와 순서`의 다음 기존 문장에 우선 적용한다.
+위 채택 범위를 명시한 PR의 사용자 merge 후 이 제안은 `active`가 되어 `작업 단위와 순서`의 다음 기존 문장에 우선 적용한다.
 
 - “한 모듈에서는 한 종류의 변경만 다룬다.”는 하나의 기능·모듈에 남은 승인된 convention 항목(예: 명명, 문자열 결과, 내부 인자명)을 관련 test와 필요한 callsite까지 함께 완료하는 단위로 대체한다.
 - “초기 제품 code 작업은 3~5개 파일, 약 200 변경줄을 목표 상한으로 삼는 soft 기준이다.”의 숫자는 PR 크기 목표나 분리 기준에서 제외하고 내부 Worker 작업 분해의 참고로만 사용한다. PR 크기는 완료 범위, 실측한 예상 diff, 검토 가능성, 되돌리기 단위로 판단하며, `code-quality.md`의 약 300 logic 줄/commit soft 기준은 유지한다.

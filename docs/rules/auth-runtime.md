@@ -51,7 +51,7 @@ review-after: Node 24·TypeScript 5.9 compiled ESM과 실제 연결 취소 검�
 | 선택 상태 | **승인됨** |
 | 선택 승인 evidence | [PR #50 사용자 승인](https://github.com/blahaj94/ldb/pull/50#issuecomment-5552245712) (2026-09-05T13:48:26Z) |
 
-이 표가 선택 상태와 evidence의 단일 기준이다. 선택 상태가 merge 대기이면 아래 값은 proposal이며 active Rule이 아니다. 변경을 담은 PR의 사용자 merge를 확인하고 evidence를 기록해 선택 상태를 승인됨으로 바꾼 revision부터 선택 gate만 해소된다. 선택 승인은 image pull·DB 실행·구현 authority나 실제 compatibility·운영 검증 완료를 뜻하지 않으며 기존 승인 metadata와 아래 Migration 계약은 그대로 유지한다.
+이 표가 선택 상태와 evidence의 단일 기준이다. 선택 상태가 merge 대기이면 아래 값은 proposal이며 active Rule이 아니다. 해당 선택과 상태 전환을 채택 범위로 명시한 PR의 사용자 merge를 확인하고 evidence를 기록해 선택 상태를 승인됨으로 바꾼 revision부터 선택 gate만 해소된다. 절차 문구나 link만 수정하면 선택 상태를 바꾸지 않는다. 선택 승인은 image pull·DB 실행·구현 authority나 실제 compatibility·운영 검증 완료를 뜻하지 않으며 기존 승인 metadata와 아래 Migration 계약은 그대로 유지한다.
 
 ### 선택과 근거
 

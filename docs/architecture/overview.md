@@ -55,7 +55,7 @@ PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상
 
 ## Shared UI boundary
 
-[Issue #86의 SEED 채택 결정](https://github.com/blahaj94/ldb/issues/86#issuecomment-5560112909)에 따라 다음 boundary를 이 변경을 담은 PR에서 제안한다. 기존 active architecture와 인증·API·domain·platform contract는 유지한다. 현재 Issue의 사용자 실행 허용 범위에 package 생성·dependency 설치·제품 교체가 포함되지 않았다면 진행하지 않는다. 이 boundary를 담은 PR의 사용자 merge가 문서 변경을 승인·활성화하며, 현재 tracked package가 없다는 topology 설명은 구현 현황이다.
+[Issue #86의 SEED 채택 결정](https://github.com/blahaj94/ldb/issues/86#issuecomment-5560112909)에 따라 다음 boundary를 PR에서 제안한다. 기존 active architecture와 인증·API·domain·platform contract는 유지한다. 현재 Issue의 사용자 실행 허용 범위에 package 생성·dependency 설치·제품 교체가 포함되지 않았다면 진행하지 않는다. 이 boundary의 substantive contract와 status 전환을 채택 범위로 명시한 PR의 사용자 merge가 문서 변경을 승인·활성화하며, 절차 문구나 link만 수정하면 기존 status를 바꾸지 않는다. 현재 tracked package가 없다는 topology 설명은 구현 현황이다.
 
 | 대상 | 책임과 dependency direction |
 | --- | --- |

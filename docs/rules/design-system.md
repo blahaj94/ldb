@@ -18,7 +18,7 @@ review-after: 최초 Template Example과 공용 자산의 사용자 Review 완�
 
 승인 후 새로 만드는 UI와 수정하는 UI에 적용한다. 기존 화면의 전면 교체를 이 Rule의 승인만으로 착수하지 않는다. 기존 사용처에 영향을 주는 공용 자산 변경은 아래 변경·Review 절차를 따른다.
 
-SEED 채택 변경분은 [채택 결정](https://github.com/blahaj94/ldb/issues/86#issuecomment-5560112909)을 근거로 이 변경을 담은 PR에서 제안한다. 기존 active Rule의 승인은 유지하며, 추가 Rule·architecture·dependency 구현은 현재 Issue의 사용자 실행 허용 범위에서 같은 PR에 준비할 수 있다. 그 PR의 사용자 merge가 문서 변경을 승인·활성화하고 별도 metadata 활성화 작업은 요구하지 않는다. 제품 behavior·API·인증·domain·platform contract는 변경하지 않는다.
+SEED 채택 변경분은 [채택 결정](https://github.com/blahaj94/ldb/issues/86#issuecomment-5560112909)을 근거로 PR에서 제안한다. 기존 active Rule의 승인은 유지하며, 추가 Rule·architecture·dependency 구현은 현재 Issue가 substantive contract의 채택과 실행을 허용할 때 같은 PR에 준비할 수 있다. 그 범위를 명시한 PR의 사용자 merge가 문서 변경을 승인·활성화하며, 절차 문구나 link만 수정하면 기존 status를 바꾸지 않는다. 별도 metadata 활성화 작업은 요구하지 않는다. 제품 behavior·API·인증·domain·platform contract는 변경하지 않는다.
 
 ## SEED 재사용 기준
 

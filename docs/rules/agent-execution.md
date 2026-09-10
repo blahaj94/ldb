@@ -151,7 +151,7 @@ Planner는 모든 Worker result의 채택 또는 명시적 제외, 통합 head v
 | --- | --- |
 | 구현 | 전체 acceptance criteria·통합 head validation 충족과 구현 PR merge 확인 |
 | 설계안 작성 | 전체 acceptance criteria와 약속한 설계안·대안·근거·validation matrix 완료. 후속 구현 승인은 별도 gate |
-| Rule 반영까지 포함한 설계 | 전체 acceptance criteria 충족과 Rule을 담은 PR의 사용자 merge 확인. 사용자 merge가 Rule 승인이다. |
+| Rule 반영까지 포함한 설계 | 전체 acceptance criteria 충족과 해당 Rule을 채택 범위로 명시한 PR의 사용자 merge 확인. 사용자 merge가 Rule 승인이다. |
 | 부모 추적 | 자식 evidence와 부모 자체의 전체 acceptance criteria 충족 |
 
 Issue 완료 후 연결된 내부 작업과 목표의 완료 판정은 승인된 [`완료와 보존`](task-planning.md#완료와-보존)을 따른다. Issue 상태만으로 Project를 완료하지 않는다.

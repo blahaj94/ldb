@@ -22,7 +22,7 @@ Code가 따라야 하는 결정과 agent의 행동 경계를 정의한다. 다�
 - `docs/architecture/**`
 - 향후 생성되는 domain rule
 
-AI는 사용자가 요청하거나 실행을 허용한 범위에서 Rule 변경과 필요한 구현을 같은 PR에 준비할 수 있다. 사용자의 merge가 문서 변경의 최종 승인이고 merge된 revision부터 active Rule로 적용한다. 별도 승인 comment나 review approval은 요구하지 않는다. Rule document와 실제 implementation이 충돌하면 AI가 어느 한쪽을 임의로 선택하지 않고 사용자에게 질문한다.
+AI는 사용자가 요청하거나 실행을 허용한 범위에서 Rule 변경과 필요한 구현을 같은 PR에 준비할 수 있다. 사용자의 merge가 PR scope에서 채택 대상으로 명시한 문서 변경의 최종 승인이고 merge된 revision부터 그 변경을 active Rule로 적용한다. Proposed 내용의 절차 문구·link만 수정하면 그 내용 자체를 채택하거나 status를 바꾸지 않는다. 별도 승인 comment나 review approval은 요구하지 않는다. Rule document와 실제 implementation이 충돌하면 AI가 어느 한쪽을 임의로 선택하지 않고 사용자에게 질문한다.
 
 ### Reference document
 
