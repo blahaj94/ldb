@@ -5,7 +5,10 @@ import type { AccessJwtIssuerConfiguration, AccessJwtVerifierConfiguration } fro
 
 function requiredString(value: unknown): asserts value is string {
   const isString = typeof value === 'string'
-  const hasContent = isString && value.trim() !== ''
+  if (!isString) {
+    throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+  }
+  const hasContent = value.trim() !== ''
   if (!hasContent) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
@@ -13,8 +16,14 @@ function requiredString(value: unknown): asserts value is string {
 
 function requireEs256(key: CryptoKey, type: 'private' | 'public'): void {
   const hasExpectedType = key.type === type
-  const isEcdsa = hasExpectedType && key.algorithm.name === 'ECDSA'
-  const hasExpectedCurve = isEcdsa && (key.algorithm as EcKeyAlgorithm).namedCurve === 'P-256'
+  if (!hasExpectedType) {
+    throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+  }
+  const isEcdsa = key.algorithm.name === 'ECDSA'
+  if (!isEcdsa) {
+    throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+  }
+  const hasExpectedCurve = (key.algorithm as EcKeyAlgorithm).namedCurve === 'P-256'
   if (!hasExpectedCurve) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
@@ -25,7 +34,10 @@ export async function loadVerificationKeys(config: AccessJwtVerifierConfiguratio
   requiredString(config.issuer)
   requiredString(config.audience)
   const isKeyList = Array.isArray(config.verificationKeys)
-  const hasVerificationKeys = isKeyList && config.verificationKeys.length !== 0
+  if (!isKeyList) {
+    throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
+  }
+  const hasVerificationKeys = config.verificationKeys.length !== 0
   if (!hasVerificationKeys) {
     throw new AccessJwtError('INVALID_ACCESS_JWT_CONFIGURATION')
   }
