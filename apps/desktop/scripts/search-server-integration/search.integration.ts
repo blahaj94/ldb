@@ -127,9 +127,11 @@ test('Desktop HTTP client consumes default API, exchange JWT, activity and accou
       const seconds = error.retryAfterSeconds
       const hasSeconds = seconds != null
       const isSafeInteger = Number.isSafeInteger(seconds)
-      const isPositiveWait = hasSeconds && seconds > 0
-      const isInServerWindow = isPositiveWait && seconds <= 60
-      const hasValidWait = hasSeconds && isSafeInteger && isInServerWindow
+      const secondsForComparison = seconds ?? Number.NaN
+      const isPositiveWait = secondsForComparison > 0
+      const isInServerWindow = secondsForComparison <= 60
+      const hasValidWait =
+        hasSeconds && isSafeInteger && isPositiveWait && isInServerWindow
       assert(hasValidWait, 'Desktop must consume the real account Retry-After header')
       return true
     })
