@@ -101,20 +101,36 @@ it('begin은 양쪽 snapshot 비교 뒤 signal을 정확히 한 번 읽는다', 
   } as AbortSignal
   const search = createSearch()
   ;(search as unknown as MutableCaptureSearch).snapshot = latest
-  connectionState.responses.push({ ok: true, snapshot: completed })
+  const response = Promise.withResolvers<SearchCommandResult | null>()
+  connectionState.responses.push(response.promise)
 
-  await search.begin({ auth, signal })
+  const begin = search.begin({ auth, signal })
+  const ticket = (search as unknown as MutableCaptureSearch).capture!
+  let activeReadCount = 0
+  Object.defineProperty(ticket, 'active', {
+    get: () => {
+      activeReadCount += 1
+      const isInspectionRead = activeReadCount === 1
+      events.push(isInspectionRead ? 'current.active.inspection' : 'current.active.publish')
+      return true
+    }
+  })
+  response.resolve({ ok: true, snapshot: completed })
+  await begin
 
   expect(events).toEqual([
     'completed.captureId',
+    'current.active.inspection',
     'latest.runId',
     'completed.runId',
     'latest.revision',
     'completed.revision',
     'latest.captureId',
     'signal.aborted',
+    'current.active.publish',
     'latest.captureId'
   ])
+  expect(activeReadCount).toBe(2)
 })
 
 it('begin은 completed가 없으면 latest captureId 뒤 signal만 읽는다', async () => {
