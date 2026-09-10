@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { createAuthCoordinator } from './coordinator'
-import { createPkce } from './pkce'
+import { createPkce, isCanonicalOpaque } from './pkce'
 import {
   AuthProtocolFailure,
   parseReturnUrl,
@@ -11,6 +11,26 @@ import {
 import { API_ORIGIN, CODE, RETURN_TARGET, createAuthHarness } from './auth-test-fixtures'
 
 describe('Desktop auth PKCE와 URL 경계', () => {
+  it.each([null, undefined, 42, true, {}, new String('A'.repeat(43))])(
+    '문자열이 아닌 PKCE 입력 %p를 정규식과 coercion 없이 거절한다',
+    (value) => {
+      expect(isCanonicalOpaque(value)).toBe(false)
+    }
+  )
+
+  it('문자열이 아닌 Proxy 입력은 내부 접근 없이 거절한다', () => {
+    const value = new Proxy({}, {
+      get: () => {
+        throw new Error('unexpected get')
+      },
+      has: () => {
+        throw new Error('unexpected has')
+      }
+    })
+
+    expect(isCanonicalOpaque(value)).toBe(false)
+  })
+
   it('로그인마다 독립된 32-byte verifier와 ASCII S256 challenge를 만든다', () => {
     const firstBytes = Buffer.alloc(32, 1)
     const secondBytes = Buffer.alloc(32, 2)
