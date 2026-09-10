@@ -32,17 +32,27 @@ function exactField(args: unknown[], key: string): unknown {
   const hasOneArgument = args.length === 1
   const value = args[0]
   const hasValue = value != null
-  const hasObjectType = hasValue && typeof value === 'object'
-  const isObject = hasObjectType && !Array.isArray(value)
-  const hasValidArgumentShape = hasOneArgument && isObject
-  if (!hasValidArgumentShape) {
+  if (!hasValue) {
+    return undefined
+  }
+  const hasObjectType = typeof value === 'object'
+  if (!hasObjectType) {
+    return undefined
+  }
+  const isArray = Array.isArray(value)
+  if (isArray) {
+    return undefined
+  }
+  if (!hasOneArgument) {
     return undefined
   }
   const keys = Reflect.ownKeys(value)
   const hasOneKey = keys.length === 1
-  const hasExpectedKey = hasOneKey && keys[0] === key
-  const hasExactKey = hasOneKey && hasExpectedKey
-  if (!hasExactKey) {
+  if (!hasOneKey) {
+    return undefined
+  }
+  const hasExpectedKey = keys[0] === key
+  if (!hasExpectedKey) {
     return undefined
   }
   return Object.getOwnPropertyDescriptor(value, key)?.value
@@ -61,10 +71,13 @@ function validArguments(channel: Mutation, args: unknown[]): boolean {
   if (isCancel) {
     const attemptId = exactField(args, 'attemptId')
     const isString = typeof attemptId === 'string'
-    const hasUuidShape =
-      isString && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(attemptId)
-    const isUuid = isString && hasUuidShape
-    return isUuid
+    if (!isString) {
+      return false
+    }
+    const hasUuidShape = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(
+      attemptId
+    )
+    return hasUuidShape
   }
   const hasNoArguments = args.length === 0
   return hasNoArguments
@@ -91,15 +104,23 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
     }
     const frame = contents.mainFrame
     const hasFrame = frame != null
-    const isFrameAttached = hasFrame && !frame.detached
-    const hasCurrentUrl = isFrameAttached && frame.url === documentUrl
-    const isCurrentDocument = hasFrame && isFrameAttached && hasCurrentUrl
-    return isCurrentDocument
+    if (!hasFrame) {
+      return false
+    }
+    const isFrameAttached = !frame.detached
+    if (!isFrameAttached) {
+      return false
+    }
+    const hasCurrentUrl = frame.url === documentUrl
+    return hasCurrentUrl
   }
 
   function requireSender(event: IpcMainInvokeEvent, expected = getWindow()): BrowserWindow {
     const isCurrentWindow = expected === getWindow()
-    const isWindowAllowed = isCurrentWindow && allowedWindow(expected)
+    if (!isCurrentWindow) {
+      throw new Error('AUTH_NOT_ALLOWED')
+    }
+    const isWindowAllowed = allowedWindow(expected)
     if (!isWindowAllowed) {
       throw new Error('AUTH_NOT_ALLOWED')
     }
