@@ -75,8 +75,16 @@ export class NeopleSearchFailure extends Error {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   const hasObjectType = typeof value === 'object'
-  const isNotNull = hasObjectType && value !== null
-  const isNonArrayObject = isNotNull && !Array.isArray(value)
+  if (!hasObjectType) {
+    return false
+  }
+
+  const isNotNull = value !== null
+  if (!isNotNull) {
+    return false
+  }
+
+  const isNonArrayObject = !Array.isArray(value)
 
   return isNonArrayObject
 }
@@ -104,19 +112,28 @@ export function classifyNeopleUpstreamFailure(
   ok: boolean
 ): NeopleSearchFailure | undefined {
   const isBodyObject = isObject(body)
-  const hasError = isBodyObject && Object.hasOwn(body, 'error')
-  if (hasError) {
-    const upstreamError = body.error
-    const isUpstreamErrorObject = isObject(upstreamError)
-    const hasStringCode = isUpstreamErrorObject && typeof upstreamError.code === 'string'
-    const code = hasStringCode ? (upstreamError.code as string) : undefined
-    const hasCode = code !== undefined
-    const knownError = hasCode ? upstreamCodeErrors.get(code) : undefined
-    const isKnownError = knownError !== undefined
-
-    return isKnownError ? neopleSearchFailure(knownError) : neopleStatusFailure(status)
+  if (!isBodyObject) {
+    const hasHttpFailure = !ok
+    return hasHttpFailure ? neopleStatusFailure(status) : undefined
   }
 
-  const hasHttpFailure = !ok
-  return hasHttpFailure ? neopleStatusFailure(status) : undefined
+  const hasError = Object.hasOwn(body, 'error')
+  if (!hasError) {
+    const hasHttpFailure = !ok
+    return hasHttpFailure ? neopleStatusFailure(status) : undefined
+  }
+
+  const upstreamError = body.error
+  const isUpstreamErrorObject = isObject(upstreamError)
+  if (!isUpstreamErrorObject) {
+    return neopleStatusFailure(status)
+  }
+
+  const hasStringCode = typeof upstreamError.code === 'string'
+  const code = hasStringCode ? (upstreamError.code as string) : undefined
+  const hasCode = code !== undefined
+  const knownError = hasCode ? upstreamCodeErrors.get(code) : undefined
+  const isKnownError = knownError !== undefined
+
+  return isKnownError ? neopleSearchFailure(knownError) : neopleStatusFailure(status)
 }
