@@ -37,11 +37,20 @@ async function create({
 }): Promise<IdentitySession> {
   try {
     const isTransactionActive = manager.queryRunner?.isTransactionActive === true
-    const isProviderSupported =
-      isTransactionActive &&
-      Object.values(AUTH_PROVIDERS).some((provider) => provider === identity.provider)
-    const isSubjectString = isProviderSupported && typeof identity.subject === 'string'
-    const hasSubject = isSubjectString && identity.subject.length !== 0
+    if (!isTransactionActive) {
+      throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
+    }
+    const isProviderSupported = Object.values(AUTH_PROVIDERS).some(
+      (provider) => provider === identity.provider
+    )
+    if (!isProviderSupported) {
+      throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
+    }
+    const isSubjectString = typeof identity.subject === 'string'
+    if (!isSubjectString) {
+      throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
+    }
+    const hasSubject = identity.subject.length !== 0
     if (!hasSubject) {
       throw new IdentitySessionFailure(AUTH_ERRORS.INTERNAL)
     }
