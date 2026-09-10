@@ -115,7 +115,7 @@ review-after: 승인 후 초기 restore·paused retry의 commit/finalize 지연�
 6. 기존 single writer·같은 session generation의 shared refresh를 유지한다. 각 대기 완료와 발행 직전에 generation을 확인하고 logout·복원 포기·새 generation이 먼저 유효해졌으면 이전 작업은 pause나 signedIn으로 덮어쓰지 않는다. Logout과 저장 정리는 기존 직렬화·late response 폐기 규칙을 따른다.
 7. Commit 실패·불명 결과, marker 삭제 durability 실패·재확립 실패와 crash는 저장 확정으로 분류하지 않고 기존 platform 처리를 따른다. `/me` network/5xx와 인증 상실도 기존 원인별 처리를 유지한다. 위 자동 rotation 0회는 local 시간 문제의 정책이며, 기존 `/me` 등 read의 제한된 401 처리와 그 적용 경계를 새로 정하거나 대체하지 않는다.
 
-이 절은 [명시적 Rule 승인](change-control.md#approval-evidence)을 기다리는 추천안이다. 상세 상황표·추가 rotation 대안·후속 Red→Green 검증 계획은 Issue/PR에 둔다. 제품 반영은 이 Rule의 승인·merge 뒤 별도 구현 범위에서 진행한다.
+이 절은 [사용자 merge 승인](change-control.md#approval-evidence)을 위해 검토하는 추천안이다. 상세 상황표·추가 rotation 대안·후속 Red→Green 검증 계획은 Issue/PR에 둔다. 이 Rule을 담은 PR의 사용자 merge가 문서 변경을 승인·활성화하며, 제품 반영은 그 merge와 별도의 사용자 실행 범위에서 진행한다.
 
 ## 취소·로그아웃·실패의 최종 동작
 
