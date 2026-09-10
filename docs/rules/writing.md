@@ -33,6 +33,8 @@ review-after: 승인 후 실제 답변·Issue·PR·인계 설명 중 3건을 작
 
 ## GitHub 글의 문체와 형식
 
+이슈, PR, 댓글을 작성하거나 다듬기 전에 [텍스트 작성 모델](agent-text-writing.md)의 모델 선택 및 판단 책임 기준도 함께 확인합니다.
+
 이 절은 [PR #193의 사용자 승인](https://github.com/blahaj94/ldb/pull/193#issuecomment-5589616464)을 반영한 active Rule입니다. 위의 승인된 작성 기준과 함께 적용합니다.
 
 ```yaml
