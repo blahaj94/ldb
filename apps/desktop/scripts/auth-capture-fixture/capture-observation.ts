@@ -33,14 +33,14 @@ function isAcceptedObservation({
   const hasSameRevision = slot.observationRevision === observation.observationRevision
   const hasSameNickname = slot.nickname === observation.nickname
   const hasRequestId = slot.requestId != null
-  let isRequestActive = false
   if (hasRequestId) {
-    isRequestActive = slot.state !== 'idle'
+    const isRequestActive = slot.state !== 'idle'
+    const hasRequest = isRequestActive
+    const isAccepted =
+      hasSameCapture && hasSameSlot && hasSameRevision && hasSameNickname && hasRequest
+    return isAccepted
   }
-  const hasRequest = hasRequestId && isRequestActive
-  const isAccepted =
-    hasSameCapture && hasSameSlot && hasSameRevision && hasSameNickname && hasRequest
-  return isAccepted
+  return false
 }
 
 function syntheticSlotMask(value: unknown): number {
@@ -50,17 +50,16 @@ function syntheticSlotMask(value: unknown): number {
   }
   const { slot, nickname } = value as { slot?: unknown; nickname?: unknown }
   const isSlotNumber = typeof slot === 'number'
-  let isSlotInteger = false
   if (isSlotNumber) {
-    isSlotInteger = Number.isInteger(slot as number)
+    const isSlotInteger = Number.isInteger(slot)
+    if (isSlotInteger) {
+      const isSlotInRange = slot >= 0 && slot < 4
+      const isExpectedNickname = nickname === 'ALICE'
+      const isExpectedSlot = isSlotInRange && isExpectedNickname
+      return isExpectedSlot ? 1 << slot : 0
+    }
   }
-  let isSlotInRange = false
-  if (isSlotInteger) {
-    isSlotInRange = (slot as number) >= 0 && (slot as number) < 4
-  }
-  const isExpectedNickname = nickname === 'ALICE'
-  const isExpectedSlot = isSlotInRange && isExpectedNickname
-  return isExpectedSlot ? 1 << (slot as number) : 0
+  return 0
 }
 
 export function registerObservedCapture(
