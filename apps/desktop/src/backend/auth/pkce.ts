@@ -11,7 +11,10 @@ export type Pkce = Readonly<{
 
 export function isCanonicalOpaque(value: unknown): value is string {
   const isString = typeof value === 'string'
-  const hasCanonicalCharacters = isString && CANONICAL_BASE64URL.test(value)
+  if (!isString) {
+    return false
+  }
+  const hasCanonicalCharacters = CANONICAL_BASE64URL.test(value)
   if (!hasCanonicalCharacters) {
     return false
   }
