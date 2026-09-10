@@ -5,12 +5,77 @@ import { createPkce, isCanonicalOpaque } from './pkce'
 import {
   AuthProtocolFailure,
   parseReturnUrl,
+  validateApiOrigin,
   validateBrowserLaunchUrl,
   validateReturnTarget
 } from './protocol'
 import { API_ORIGIN, CODE, RETURN_TARGET, createAuthHarness } from './auth-test-fixtures'
 
 describe('Desktop auth PKCE와 URL 경계', () => {
+  it.each([
+    {
+      name: 'API origin',
+      validate: () => validateApiOrigin('https://example.test/'),
+      laterGetter: 'pathname'
+    },
+    {
+      name: 'return target',
+      validate: () => validateReturnTarget('test-ldb://auth/return'),
+      laterGetter: 'port'
+    }
+  ])('$name은 username 실패 뒤 password를 건너뛰고 이후 getter를 평가한다', ({ validate, laterGetter }) => {
+    const access: string[] = []
+    class ObservedUrl {
+      protocol: string
+      constructor(raw: string) {
+        this.protocol = raw.startsWith('test-ldb:') ? 'test-ldb:' : 'https:'
+      }
+      username = 'user'
+      get password(): string {
+        access.push('password')
+        throw new Error('password must be skipped')
+      }
+      get pathname(): string {
+        access.push('pathname')
+        throw new Error('sentinel later getter')
+      }
+      get port(): string {
+        access.push('port')
+        throw new Error('sentinel later getter')
+      }
+      search = ''
+      hash = ''
+      origin = 'https://example.test'
+      toString(): string {
+        return 'test-ldb://auth/return'
+      }
+    }
+    vi.stubGlobal('URL', ObservedUrl)
+
+    try {
+      expect(validate).toThrow('sentinel later getter')
+      expect(access).toEqual([laterGetter])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('non-string Proxy는 URL 내부 접근 없이 AuthProtocolFailure로 거절한다', () => {
+    const value = new Proxy(
+      {},
+      {
+        get: () => {
+          throw new Error('unexpected get')
+        },
+        has: () => {
+          throw new Error('unexpected has')
+        }
+      }
+    )
+
+    expect(() => validateApiOrigin(value as unknown as string)).toThrow(AuthProtocolFailure)
+  })
+
   it.each([null, undefined, 42, true, {}, new String('A'.repeat(43))])(
     '문자열이 아닌 PKCE 입력 %p를 정규식과 coercion 없이 거절한다',
     (value) => {
@@ -65,6 +130,9 @@ describe('Desktop auth PKCE와 URL 경계', () => {
     expect(() =>
       validateBrowserLaunchUrl(valid.replace(ticket, `${ticket}=`), API_ORIGIN)
     ).toThrow()
+    expect(() => validateBrowserLaunchUrl(`${valid}&ticket=${ticket}`, API_ORIGIN)).toThrow(
+      'Authentication URL is invalid.'
+    )
   })
 
   it('등록 target의 code 하나인 canonical 복귀 URL만 반환한다', () => {
@@ -81,6 +149,9 @@ describe('Desktop auth PKCE와 URL 경계', () => {
     expect(() =>
       parseReturnUrl(`${RETURN_TARGET}?code=${CODE.slice(0, -1)}`, RETURN_TARGET)
     ).toThrow()
+    expect(() => parseReturnUrl(`${valid.replace(CODE, `${CODE}=`)}`, RETURN_TARGET)).toThrow(
+      'Authentication URL is invalid.'
+    )
   })
 
   it.each(['?', '#', '?#', '#?'])(
