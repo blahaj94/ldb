@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import type { SearchControl } from '../common/types/search'
+import type { CharacterSearchRow, SearchControl } from '../common/types/search'
+import { parseSearchResult } from '../common/search/snapshot'
 import {
   CAPTURE_ID,
   REQUEST_ID,
@@ -130,4 +131,53 @@ it('승인된 상태·nullable 값과 후보 순서를 보존한다', async () =
     renderer.invoke.mockResolvedValueOnce(result)
     expect(await search.controlCharacterSearch({ action: 'read' })).toEqual(result)
   }
+})
+
+function searchResultWithRow(row: CharacterSearchRow): object {
+  return {
+    ok: true,
+    snapshot: withSearchSlot(searchSlot({ state: 'success', rows: [row] }))
+  }
+}
+
+it('schema가 inherited 필드를 읽은 뒤 exact shape가 own 확인에서 재귀 읽기를 생략한다', () => {
+  const events: string[] = []
+  const inheritedRow = Object.create({ characterId: searchRow.characterId })
+  Object.assign(inheritedRow, searchRow)
+  delete inheritedRow.characterId
+  const row = new Proxy(inheritedRow, {
+    get(target, property, receiver) {
+      events.push(`get:${String(property)}`)
+      return Reflect.get(target, property, receiver)
+    },
+    getOwnPropertyDescriptor(target, property) {
+      events.push(`own:${String(property)}`)
+      return Reflect.getOwnPropertyDescriptor(target, property)
+    }
+  })
+
+  expect(parseSearchResult(searchResultWithRow(row))).toBeNull()
+  const characterReads = events.filter((event) => event.endsWith(':characterId'))
+  expect(characterReads).toContain('get:characterId')
+  expect(characterReads).toContain('own:characterId')
+  expect(characterReads.at(-1)).toBe('own:characterId')
+})
+
+it('schema 성공 뒤 own field의 exact-shape get 예외를 그대로 전파한다', () => {
+  const sentinel = new Error('search exact-shape getter')
+  let characterReads = 0
+  const row = new Proxy(searchRow, {
+    get(target, property, receiver) {
+      if (property === 'characterId') {
+        characterReads += 1
+        if (characterReads > 1) {
+          throw sentinel
+        }
+      }
+      return Reflect.get(target, property, receiver)
+    }
+  })
+
+  expect(() => parseSearchResult(searchResultWithRow(row))).toThrow(sentinel)
+  expect(characterReads).toBe(2)
 })
