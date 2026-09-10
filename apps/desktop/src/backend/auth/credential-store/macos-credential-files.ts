@@ -15,9 +15,22 @@ const OWNED_TEMP =
   /^\.(credential|transition)\.v1\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/
 
 function isMissing(error: unknown): boolean {
-  const isErrorObject = error != null && typeof error === 'object'
-  const hasCode = isErrorObject && 'code' in error
-  const isNotFound = hasCode && error.code === 'ENOENT'
+  const hasError = error != null
+  if (!hasError) {
+    return false
+  }
+
+  const isErrorObject = typeof error === 'object'
+  if (!isErrorObject) {
+    return false
+  }
+
+  const hasCode = 'code' in error
+  if (!hasCode) {
+    return false
+  }
+
+  const isNotFound = error.code === 'ENOENT'
   return isNotFound
 }
 
