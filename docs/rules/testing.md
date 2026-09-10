@@ -50,7 +50,7 @@ review-after: 적용 후 서로 다른 변경 유형의 PR 3건에서 판단 근
 
 동작 보존 refactor는 기존 test로 관련 계약을 변경 전후에 확인할 수 있으면 신규 test 없이 진행한다. 중요한 보호 공백은 refactor 전에 기존 동작을 확인하는 test로 보완한다. 이때 통과하는 test는 Red가 아니며, Red를 만들려고 production code를 일부러 망가뜨리지 않는다.
 
-Rule 변경이 필요한 작업은 승인된 Rule commit 이후 Red-Green 순서를 시작한다. Red commit은 PR branch에서 허용되지만 최종 PR head는 반드시 Green이어야 한다. Main에는 squash merge하므로 의도적으로 실패하는 중간 commit이 남지 않는다.
+Rule 변경이 필요한 작업도 같은 review 가능한 PR에서 Red-Green 순서를 진행할 수 있다. Rule 문서를 먼저 확정해야 기대값을 정의할 수 있으면 Rule commit 뒤 Red를 시작하고, 요구사항이 이미 Issue contract에 충분히 정해졌으면 Red commit을 먼저 만들 수 있다. Red commit은 PR branch에서 허용되지만 최종 PR head는 반드시 Green이어야 한다. Main에는 squash merge하므로 의도적으로 실패하는 중간 commit이 남지 않는다.
 
 Red-Green 대상의 병렬 작업도 이 선후 관계를 바꾸지 않는다. 같은 behavior의 Red 검증과 Green implementation을 서로 다른 Worker가 동시에 시작하지 않는다. Test 변경이 있으면 Issue 통합 branch에 먼저 반영하고, 기존 test 재사용도 통합 담당이 integration head에서 기대한 실패를 확인한 뒤 Green을 시작한다. 서로 다른 base에서 작성한 Red와 Green은 최신 integration head에서 실패 원인과 최종 통과를 다시 검증한다.
 
@@ -76,7 +76,7 @@ Test framework 또는 dependency가 없으면 임의로 추가하지 않는다. 
 ## Test integrity
 
 - Test를 통과시키기 위해 assertion을 약화하거나 원래 acceptance criteria를 바꾸지 않는다.
-- 실제로 변경된 요구사항은 필요한 승인을 확인한 뒤 해당 test의 기대값에 반영한다. 신규 사례 수를 줄이려고 여전히 유효한 사례·assertion을 교체하거나 약화하지 않는다.
+- 실제로 변경된 요구사항은 현재 Issue의 사용자 요청 또는 실행 허용 범위를 확인한 뒤 해당 test의 기대값에 반영한다. Rule 변경과 test는 같은 PR에서 검토하며, 신규 사례 수를 줄이려고 여전히 유효한 사례·assertion을 교체하거나 약화하지 않는다.
 - 잘못 작성된 test를 수정할 때는 이유를 PR에 설명한다.
 - `skip`, `only`, 임시 disable 상태를 최종 PR에 남기지 않는다.
 - Mock이 실제 contract의 중요한 behavior를 숨기지 않도록 한다.

@@ -143,7 +143,7 @@ review-after: "5개 Issue에 적용한 뒤 분류 모호성과 누락을 검토�
 
 ### Design / RFC Issue
 
-새 목표의 논의와 기존 설계 기록 전환은 [`기존 기록의 전환`](task-planning.md#기존-기록의-전환)의 승인 후 적용한다. Rule 변경안 작성처럼 실행할 설계 작업은 여전히 Issue와 Draft PR로 관리한다.
+새 목표의 논의와 기존 설계 기록 전환은 [`기존 기록의 전환`](task-planning.md#기존-기록의-전환)을 담은 PR의 사용자 merge 후 적용한다. Rule 변경안 작성처럼 실행할 설계 작업은 여전히 Issue와 PR로 관리한다.
 
 Workflow, Rule, architecture의 대안, trade-off, open question, decision history를 기록한다. 재사용 가치가 있는 Proposal Revision, Decision, Rejected Alternative만 comment로 남기고 모든 reasoning step을 복사하지 않는다.
 

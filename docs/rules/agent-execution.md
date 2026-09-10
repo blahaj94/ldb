@@ -61,7 +61,7 @@ Issue label은 Worker 상태와 분리한다.
 | Issue 상태 | 의미와 신규 배정 |
 | --- | --- |
 | Open, 두 상태 label 없음 | 미배정 후보. Contract·기존 진행 기록·실행 조건을 확인한다. |
-| Open, `in process` | Worker 작업, 부분 통합, review, blocker, Rule 승인 또는 merge 대기를 포함한다. 최신 roster에 없는 Worker를 시작하지 않는다. |
+| Open, `in process` | Worker 작업, 부분 통합, review, blocker 또는 사용자 merge 대기를 포함한다. 최신 roster에 없는 Worker를 시작하지 않는다. |
 | `done` 또는 Closed | 신규 배정에서 제외한다. Closed만으로 성공 완료를 추정하지 않는다. |
 | 두 상태 label 동시 존재 또는 body·label·evidence 불일치 | 상태 복구 전 배정을 보류한다. |
 
@@ -203,7 +203,7 @@ PR이 merge되면 연결된 same-repository Issue에 작업 사용량 보고를 
 
 ## 기존 Issue에 도입
 
-승인 후 기존 Open Issue에 도입할 때는 body·preflight·PR과 실제 담당을 확인해 현재 roster와 상태를 맞춘다. 확인하지 못한 작업을 미배정으로 간주하거나 Rule 승인·실행 허용을 새로 만들지 않는다. 기존 `Ready`·`Blocked` label은 근거를 body에 옮기고 재조회한 뒤 제거한다.
+이 기준을 기존 Open Issue에 도입할 때는 body·preflight·PR과 실제 담당을 확인해 현재 roster와 상태를 맞춘다. 확인하지 못한 작업을 미배정으로 간주하거나 실행 허용을 새로 만들지 않는다. 기존 `Ready`·`Blocked` label은 근거를 body에 옮기고 재조회한 뒤 제거한다.
 
 ## Automation boundary
 

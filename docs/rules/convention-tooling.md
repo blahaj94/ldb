@@ -47,7 +47,7 @@ enforcement: approval-required
 rationale: root와 모든 프로젝트가 같은 ESLint·Prettier 명령과 보존 경계를 사용하도록 공통 소유권과 검증 순서를 정한다.
 evidence: "https://github.com/blahaj94/ldb/pull/165#issuecomment-5583974743"
 exceptions: 이 기준은 PR #163의 active 역할 원칙을 유지하며, 승인된 config/version/glob/ignore와 기존 Oxlint 보조 검사의 책임을 임의로 넓히지 않는다.
-review-after: Draft PR 승인·merge 후 전체 프로젝트의 lint·format check와 첫 formatter diff 2~3건에서 누락·재작업·검토 부담을 확인한다.
+review-after: 사용자 merge 후 전체 프로젝트의 lint·format check와 첫 formatter diff 2~3건에서 누락·재작업·검토 부담을 확인한다.
 ```
 
 다음 공통화는 Issue #164의 Rule-only PR #165에서 승인된 기준이다. 구현에서는 root가 공통 소유자가 되는 flat ESLint config, Prettier config와 ignore를 두고 root와 `apps/api`, `apps/desktop`, `apps/web`, `packages/ui`, 그리고 workspace에 등록하지 않은 `scripts` 실행 범위를 같은 명령 계약으로 연결한다. `scripts/package.json`의 workspace 등록 여부는 바꾸지 않는다.
@@ -111,4 +111,4 @@ CI는 root command 하나가 전체 범위를 커버해도 되며, root·scripts
 
 도구 적용이 끝났다는 표시는 대상 설정 범위에만 해당한다. 설정되지 않은 app·root·scripts와 의미 판단은 `판단 필요`로 남기며, 저장소 전체 convention 완료로 확대하지 않는다.
 
-승인 전에는 기존 Rule이 적용되며, 승인 후에도 이 문서가 명시한 설정 범위와 도구 책임을 넘는 변경은 별도 approval과 testing을 따른다.
+이 문서를 담은 PR의 사용자 merge 전에는 기존 Rule이 적용된다. Merge 후에도 이 문서가 명시한 설정 범위와 도구 책임을 넘는 변경은 현재 Issue의 사용자 실행 허용 범위와 testing을 따른다.

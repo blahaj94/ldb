@@ -16,11 +16,13 @@ Issue는 현재 실행 contract를, PR은 실제 변경과 AC별 evidence를 기
 - Worker별 채택 result commit:
 - 사람이 집중해서 확인할 부분:
 
-## Rule approval
+## Rule changes
 
 - [ ] Rule 변경 없음
-- [ ] Rule 변경이 있으며 첫 commit에 분리함
-- 승인 comment:
+- [ ] Rule 변경이 있으며 변경 내용과 적용 범위를 아래 기록함
+- 변경한 Rule과 적용 범위:
+
+사용자 merge가 포함된 Rule과 문서 변경의 승인·활성화입니다.
 
 ## Red-Green evidence
 

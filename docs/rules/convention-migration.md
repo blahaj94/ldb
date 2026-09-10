@@ -89,7 +89,7 @@ Planner는 작업별 file과 계약 소유권, generated source, artifact, fixtu
 
 ## 작업 단위 재계획 제안
 
-Issue #196에서 사용자가 남은 PR 수를 줄이도록 작업 단위 재계획을 요청했다. 다음은 승인 전 제안이며, 사용자의 명시적인 `승인` comment와 사용자 merge 완료 전에는 기존 active Rule을 그대로 적용한다.
+Issue #196에서 사용자가 남은 PR 수를 줄이도록 작업 단위 재계획을 요청했다. 다음은 merge 전 제안이며, 이 변경을 담은 PR을 사용자가 merge하기 전에는 기존 active Rule을 그대로 적용한다.
 
 ```yaml
 status: proposed
@@ -100,7 +100,7 @@ exceptions: 동작·API·보안·Rule·새 dependency의 미결정 사항은 기
 review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담·재작업·되돌리기 단위와 남은 항목의 판단 필요 여부를 확인한다.
 ```
 
-승인 후 이 제안은 위 `작업 단위와 순서`의 다음 기존 문장에 우선 적용한다.
+사용자 merge 후 이 제안은 위 `작업 단위와 순서`의 다음 기존 문장에 우선 적용한다.
 
 - “한 모듈에서는 한 종류의 변경만 다룬다.”는 하나의 기능·모듈에 남은 승인된 convention 항목(예: 명명, 문자열 결과, 내부 인자명)을 관련 test와 필요한 callsite까지 함께 완료하는 단위로 대체한다.
 - “초기 제품 code 작업은 3~5개 파일, 약 200 변경줄을 목표 상한으로 삼는 soft 기준이다.”의 숫자는 PR 크기 목표나 분리 기준에서 제외하고 내부 Worker 작업 분해의 참고로만 사용한다. PR 크기는 완료 범위, 실측한 예상 diff, 검토 가능성, 되돌리기 단위로 판단하며, `code-quality.md`의 약 300 logic 줄/commit soft 기준은 유지한다.
@@ -114,7 +114,7 @@ review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담�
 
 ## 누적 조건 변수의 재점검 제안
 
-이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이며, 적용되는 표현 기준은 [`convention.md`의 개별 검사와 누적 판단의 구분 제안](../../convention.md#개별-검사와-누적-판단의-구분-제안) 한 곳에서 관리한다. 적용과 이 기준을 전제로 한 코드 교정은 Rule 변경 PR의 사용자 명시적 `승인` 댓글과 사용자 merge를 모두 확인한 뒤 시작한다. 둘 중 하나만 확인된 동안에는 기존 기준을 유지한다. 코드 교정은 Issue #248의 실행 계약에 따라 진행하며 기존 Rule과 이행의 소유권·검증·사용자 merge 조건은 유지한다.
+이 절은 [PR #249의 기존 사용자 승인 evidence](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)와 merge를 반영한 active Rule이며, 적용되는 표현 기준은 [`convention.md`의 개별 검사와 누적 판단의 구분 제안](../../convention.md#개별-검사와-누적-판단의-구분-제안) 한 곳에서 관리한다. 해당 merge부터 적용과 이 기준을 전제로 한 코드 교정을 시작한다. 코드 교정은 Issue #248의 실행 계약에 따라 진행하며 기존 Rule과 이행의 소유권·검증·사용자 merge 조건은 유지한다.
 
 ```yaml
 status: active
@@ -153,4 +153,4 @@ review-after: 교정 PR 3개를 사용자 merge한 뒤 전수 분류 누락과 �
 
 ## 승인 경계
 
-이 문서는 `change-control.md`의 approval evidence와 `testing.md`의 변경별 validation을 따른다. 기존 `병렬 실행` subsection은 PR #181의 사용자 승인과 merge를 반영하며, `의존성과 자원 격리 기반 병렬 실행`은 PR #240의 사용자 승인을 반영한다. 새 기준의 적용은 해당 변경의 사용자 merge 후에 시작하며 Rule 승인과 사용자 merge 권한은 기존 change-control 경계를 유지한다.
+이 문서는 `change-control.md`의 approval evidence와 `testing.md`의 변경별 validation을 따른다. 기존 `병렬 실행` subsection은 PR #181의 사용자 승인과 merge를 반영하며, `의존성과 자원 격리 기반 병렬 실행`은 PR #240의 사용자 승인을 반영한다. 새 기준의 적용은 해당 변경의 사용자 merge 후에 시작하며 사용자 전용 merge 권한은 기존 change-control 경계를 유지한다.
