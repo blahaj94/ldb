@@ -12,6 +12,36 @@ export type CaptureObservation = {
   nicknameMatchedSlots: number
 }
 
+type ParsedObservation = NonNullable<ReturnType<typeof parseSearchObservation>>
+type SuccessfulSearchResult = Extract<
+  NonNullable<ReturnType<typeof parseSearchResult>>,
+  { ok: true }
+>
+
+export function isAcceptedParsedObservation(
+  observation: ParsedObservation,
+  result: SuccessfulSearchResult
+): boolean {
+  const slot = result.snapshot.slots[observation.slot]
+  const hasSameCapture = result.snapshot.captureId === observation.captureId
+  const hasSameSlot = slot.slot === observation.slot
+  const hasSameRevision = slot.observationRevision === observation.observationRevision
+  const hasSameNickname = slot.nickname === observation.nickname
+  const hasRequestId = slot.requestId != null
+  if (hasRequestId) {
+    const isRequestActive = slot.state !== 'idle'
+    const isAccepted =
+      hasSameCapture &&
+      hasSameSlot &&
+      hasSameRevision &&
+      hasSameNickname &&
+      hasRequestId &&
+      isRequestActive
+    return isAccepted
+  }
+  return false
+}
+
 function isAcceptedObservation({
   value,
   response
@@ -27,31 +57,26 @@ function isAcceptedObservation({
   if (!canCompare) {
     return false
   }
-  const slot = result.snapshot.slots[observation.slot]
-  const hasSameCapture = result.snapshot.captureId === observation.captureId
-  const hasSameSlot = slot.slot === observation.slot
-  const hasSameRevision = slot.observationRevision === observation.observationRevision
-  const hasSameNickname = slot.nickname === observation.nickname
-  const hasRequestId = slot.requestId != null
-  const isRequestActive = hasRequestId && slot.state !== 'idle'
-  const hasRequest = hasRequestId && isRequestActive
-  const isAccepted =
-    hasSameCapture && hasSameSlot && hasSameRevision && hasSameNickname && hasRequest
-  return isAccepted
+  return isAcceptedParsedObservation(observation, result)
 }
 
-function syntheticSlotMask(value: unknown): number {
+export function syntheticSlotMask(value: unknown): number {
   const isObject = value != null && typeof value === 'object'
   if (!isObject) {
     return 0
   }
   const { slot, nickname } = value as { slot?: unknown; nickname?: unknown }
   const isSlotNumber = typeof slot === 'number'
-  const isSlotInteger = isSlotNumber && Number.isInteger(slot)
-  const isSlotInRange = isSlotInteger && slot >= 0 && slot < 4
   const isExpectedNickname = nickname === 'ALICE'
-  const isExpectedSlot = isSlotInRange && isExpectedNickname
-  return isExpectedSlot ? 1 << slot : 0
+  if (isSlotNumber) {
+    const isSlotInteger = Number.isInteger(slot)
+    if (isSlotInteger) {
+      const isSlotInRange = slot >= 0 && slot < 4
+      const isExpectedSlot = isSlotInRange && isExpectedNickname
+      return isExpectedSlot ? 1 << slot : 0
+    }
+  }
+  return 0
 }
 
 export function registerObservedCapture(
