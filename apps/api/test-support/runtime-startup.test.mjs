@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import test from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
+import { parsePort } from '../dist/port.js'
 import {
   assertStartupFailure,
   collectRuntimeExit,
@@ -15,6 +16,20 @@ import {
 } from './runtime-fixtures.mjs'
 
 const eventsOf = (runtime) => runtime.events.map(({ event }) => event)
+
+test('port parser preserves strict decimal and range validation', () => {
+  const configurationError = 'Invalid server configuration'
+  for (const value of [undefined, '', '0', '65536', '1.5', 'abc', ' 1', '1e3']) {
+    assert.throws(() => parsePort(value), new Error(configurationError))
+  }
+  for (const [value, numericValue] of [
+    ['1', 1],
+    ['65535', 65535],
+    ['00080', 80]
+  ]) {
+    assert.equal(parsePort(value), numericValue)
+  }
+})
 
 test('build entry preserves 404 for unregistered paths and existing registered route failures', async (t) => {
   await withRuntimeConfiguration(async ({ path }) => {
