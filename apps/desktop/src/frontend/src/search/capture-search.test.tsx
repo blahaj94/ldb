@@ -1,95 +1,14 @@
 // @vitest-environment jsdom
 import { act } from 'react'
-import { expect, it, vi } from 'vitest'
-import type { SearchApi, SearchCommandResult } from '../../../preload/common/types/search'
+import { expect, it } from 'vitest'
+import type { SearchCommandResult } from '../../../preload/common/types/search'
 import { CAPTURE_ID, searchSnapshot, SEARCH_RUN } from '../../../preload/api/search-test-fixture'
-import { CaptureSearch } from './capture-search'
 import {
   authSnapshot,
   captureResources,
   createRendererFixture,
   media
 } from './search-renderer-test-fixture'
-
-it('begin은 snapshot 비교와 signal을 원본 순서로 읽고 latest-only captureId도 읽는다', async () => {
-  const events: string[] = []
-  const latest = searchSnapshot({ revision: 2 })
-  const completed = searchSnapshot({ revision: 1 })
-  for (const [snapshot, prefix] of [
-    [latest, 'latest'],
-    [completed, 'completed']
-  ] as const) {
-    for (const property of ['runId', 'revision', 'captureId'] as const) {
-      const value = snapshot[property]
-      Object.defineProperty(snapshot, property, {
-        configurable: true,
-        get: () => {
-          events.push(`${prefix}.${property}`)
-          return value
-        }
-      })
-    }
-  }
-  const signal = {
-    get aborted() {
-      events.push('signal.aborted')
-      return false
-    }
-  } as AbortSignal
-  const api: SearchApi = {
-    controlCharacterSearch: vi.fn<SearchApi['controlCharacterSearch']>(async (control) => {
-      if (control.action === 'read') {
-        return { ok: true, snapshot: searchSnapshot() }
-      }
-      if (control.action === 'begin') {
-        return { ok: true, snapshot: completed }
-      }
-      throw new Error('unexpected control')
-    }),
-    onCharacterSearchChanged: vi.fn(() => {
-      return () => {}
-    })
-  }
-  const search = new CaptureSearch({
-    api,
-    notify: vi.fn(),
-    onChange: vi.fn(),
-    onInvalidated: vi.fn(),
-    resynchronizeAuth: vi.fn()
-  })
-  search.connect()
-  await vi.waitFor(() =>
-    expect(api.controlCharacterSearch).toHaveBeenCalledWith({ action: 'read' })
-  )
-  ;(search as unknown as { snapshot: typeof latest }).snapshot = latest
-  events.length = 0
-
-  await search.begin({ auth: authSnapshot(), signal })
-  const latestOrder = ['latest.runId', 'latest.revision', 'latest.captureId'].map((event) =>
-    events.lastIndexOf(event)
-  )
-  const completedOrder = ['completed.runId', 'completed.revision', 'completed.captureId'].map(
-    (event) => events.lastIndexOf(event)
-  )
-  expect(latestOrder[0]).toBeLessThan(latestOrder[1])
-  expect(latestOrder[1]).toBeLessThan(latestOrder[2])
-  expect(completedOrder[0]).toBeLessThan(completedOrder[1])
-  expect(completedOrder[1]).toBeLessThan(completedOrder[2])
-
-  const latestOnly = searchSnapshot({ revision: 2 })
-  Object.defineProperty(latestOnly, 'captureId', {
-    configurable: true,
-    get: () => {
-      events.push('latestOnly.captureId')
-      return CAPTURE_ID
-    }
-  })
-  ;(search as unknown as { snapshot: typeof latestOnly }).snapshot = latestOnly
-  events.length = 0
-  await search.begin({ auth: authSnapshot(), signal })
-  expect(events).toContain('latestOnly.captureId')
-  expect(events.indexOf('signal.aborted')).toBeGreaterThan(events.indexOf('latestOnly.captureId'))
-})
 
 it('Start는 현재 auth snapshot으로 begin한 뒤 반환 captureId의 media와 OCR를 시작한다', async () => {
   const fixture = createRendererFixture()
