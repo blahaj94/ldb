@@ -1,22 +1,8 @@
-const RULE_PATHS = [
-  'AGENTS.md',
-  'convention.md',
-  'docs/rules/',
-  'docs/architecture/',
-  'docs/domain/'
-]
-
 const LOGIC_EXTENSION = /\.(?:[cm]?[jt]sx?|py|rb|go|rs|java|kt|swift|cs|php)$/i
 const NON_LOGIC_PATH =
   /(?:^|\/)(?:test|tests|__tests__|mocks?|fixtures?|generated|dist|build)(?:\/|$)|\.(?:test|spec|mock)\.[^.]+$/i
 const IMPLEMENTATION_COMMIT = /^(?:feat|fix|refactor)(?:\([^)]*\))?!?:/i
 const TEST_COMMIT = /^test(?:\([^)]*\))?!?:/i
-
-function isRuleFile(filename) {
-  return RULE_PATHS.some((path) =>
-    path.endsWith('/') ? filename.startsWith(path) : filename === path
-  )
-}
 
 function isLogicFile(filename) {
   const hasLogicExtension = LOGIC_EXTENSION.test(filename)
@@ -43,32 +29,6 @@ function linkedIssueCheck(pullRequest) {
     name: 'linked_issue',
     status: 'warning',
     detail: 'PR body에 linked Issue가 없습니다.'
-  }
-}
-
-function approvalCheck(files, comments, repositoryOwner) {
-  const hasRuleFileChange = files.some(({ filename }) => isRuleFile(filename))
-  if (!hasRuleFileChange) {
-    return {
-      name: 'rule_approval',
-      status: 'skipped',
-      detail: 'Rule 변경 없음'
-    }
-  }
-
-  const approved = comments.some((comment) => {
-    const isOwnerComment = comment.user?.login === repositoryOwner
-    const hasApprovalText = isOwnerComment && comment.body?.trim() === '승인'
-    return hasApprovalText
-  })
-  const approvalStatus = approved ? 'pass' : 'warning'
-  const approvalDetail = approved
-    ? 'Repository owner 승인 확인'
-    : 'Repository owner의 정확한 `승인` comment 필요'
-  return {
-    name: 'rule_approval',
-    status: approvalStatus,
-    detail: approvalDetail
   }
 }
 
@@ -125,19 +85,11 @@ function logicBudgetCheck(files, commitFiles) {
   }
 }
 
-export function buildPolicyReport({
-  pullRequest,
-  repositoryOwner,
-  files,
-  commits,
-  comments,
-  commitFiles
-}) {
+export function buildPolicyReport({ pullRequest, files, commits, commitFiles }) {
   return {
     advisory: true,
     checks: [
       linkedIssueCheck(pullRequest),
-      approvalCheck(files, comments, repositoryOwner),
       testEvidenceCheck(files, commits),
       logicBudgetCheck(files, commitFiles)
     ]

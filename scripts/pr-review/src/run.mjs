@@ -73,10 +73,8 @@ async function main() {
 
   const report = buildPolicyReport({
     pullRequest,
-    repositoryOwner: event.repository.owner.login,
     files,
     commits,
-    comments,
     commitFiles
   })
   const summary = buildPolicySummary({

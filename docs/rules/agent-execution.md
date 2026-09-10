@@ -61,7 +61,7 @@ Issue label은 Worker 상태와 분리한다.
 | Issue 상태 | 의미와 신규 배정 |
 | --- | --- |
 | Open, 두 상태 label 없음 | 미배정 후보. Contract·기존 진행 기록·실행 조건을 확인한다. |
-| Open, `in process` | Worker 작업, 부분 통합, review, blocker, Rule 승인 또는 merge 대기를 포함한다. 최신 roster에 없는 Worker를 시작하지 않는다. |
+| Open, `in process` | Worker 작업, 부분 통합, review, blocker 또는 사용자 merge 대기를 포함한다. 최신 roster에 없는 Worker를 시작하지 않는다. |
 | `done` 또는 Closed | 신규 배정에서 제외한다. Closed만으로 성공 완료를 추정하지 않는다. |
 | 두 상태 label 동시 존재 또는 body·label·evidence 불일치 | 상태 복구 전 배정을 보류한다. |
 
@@ -151,7 +151,7 @@ Planner는 모든 Worker result의 채택 또는 명시적 제외, 통합 head v
 | --- | --- |
 | 구현 | 전체 acceptance criteria·통합 head validation 충족과 구현 PR merge 확인 |
 | 설계안 작성 | 전체 acceptance criteria와 약속한 설계안·대안·근거·validation matrix 완료. 후속 구현 승인은 별도 gate |
-| Rule 반영까지 포함한 설계 | 전체 acceptance criteria, 명시적 Rule 승인과 PR merge 확인 |
+| Rule 반영까지 포함한 설계 | 전체 acceptance criteria 충족과 해당 Rule을 채택 범위로 명시한 PR의 사용자 merge 확인. 사용자 merge가 Rule 승인이다. |
 | 부모 추적 | 자식 evidence와 부모 자체의 전체 acceptance criteria 충족 |
 
 Issue 완료 후 연결된 내부 작업과 목표의 완료 판정은 승인된 [`완료와 보존`](task-planning.md#완료와-보존)을 따른다. Issue 상태만으로 Project를 완료하지 않는다.
@@ -203,7 +203,7 @@ PR이 merge되면 연결된 same-repository Issue에 작업 사용량 보고를 
 
 ## 기존 Issue에 도입
 
-승인 후 기존 Open Issue에 도입할 때는 body·preflight·PR과 실제 담당을 확인해 현재 roster와 상태를 맞춘다. 확인하지 못한 작업을 미배정으로 간주하거나 Rule 승인·실행 허용을 새로 만들지 않는다. 기존 `Ready`·`Blocked` label은 근거를 body에 옮기고 재조회한 뒤 제거한다.
+이 기준을 기존 Open Issue에 도입할 때는 body·preflight·PR과 실제 담당을 확인해 현재 roster와 상태를 맞춘다. 확인하지 못한 작업을 미배정으로 간주하거나 실행 허용을 새로 만들지 않는다. 기존 `Ready`·`Blocked` label은 근거를 body에 옮기고 재조회한 뒤 제거한다.
 
 ## Automation boundary
 

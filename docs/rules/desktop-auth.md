@@ -127,7 +127,7 @@ review-after: 승인 후 초기 restore·paused retry의 저장 지연·clock �
 - [저장 확정 뒤 복원 종료 제안](desktop-auth-lifecycle.md#저장-확정-뒤-복원-종료-제안)의 시간 문제로 복원을 마치지 못하면 `restorePaused`로 안내한다. Notice 후보는 `RESTORE_RETRY_REQUIRED`이며, 승인되면 기존 notice allowlist에 추가한다. 현재 승인된 enum으로 취급하지 않는다.
 - 고정 문구는 “로그인 상태 확인을 마치지 못했습니다. 다시 시도해 주세요.”로 제안한다. Network·서버·저장 장애나 인증 상실을 뜻하지 않는다. `user`와 `entry`는 null이고 보호 화면·capture는 열지 않는다.
 - 처리 종료 뒤 “다시 시도”(`retryAuth`)와 현재 기기 logout을 제공한다. 진행 중에는 복원 중 표시와 중복 실행 차단을 유지하고, 다시 pause로 끝나면 다음 수동 재시도를 제공한다. 저장된 credential만으로 로그인 성공을 표시하지 않는다.
-- 기존 `retryAuth`의 인자 0개·`AuthCommandResult`·snapshot/event 순서와 `ok:true`의 명령 처리 의미를 유지한다. 새 IPC, snapshot field, browser login 또는 자동 재시도를 추가하지 않는다. 이 절과 연결된 lifecycle 제안은 [Draft PR의 명시적 승인](change-control.md#approval-evidence) 전에는 구현 권한이 없다.
+- 기존 `retryAuth`의 인자 0개·`AuthCommandResult`·snapshot/event 순서와 `ok:true`의 명령 처리 의미를 유지한다. 새 IPC, snapshot field, browser login 또는 자동 재시도를 추가하지 않는다. 이 절과 연결된 lifecycle 제안은 현재 Issue가 substantive contract의 채택과 구현을 허용할 때 같은 PR에 구현할 수 있으며, 그 범위를 명시한 PR의 사용자 merge로 승인·활성화한다. 절차 문구나 link만 수정하면 제안 상태를 유지한다.
 
 ## 승인된 선택과 서버 별도 결정
 
@@ -146,7 +146,7 @@ exceptions: 기존 인증·서버 검색·capture 계약의 승인과 구현 범
 review-after: 최초 Desktop 검색 구현의 수명·401·429 검증과 실제 Electron 화면 확인 후
 ```
 
-이 절은 검색 연결에 추가할 계약의 추천안이다. [승인 절차](change-control.md#approval-evidence)에 따른 Draft PR의 사용자 `승인` 전에는 구현 권한이 없다. 기존 인증 계약과 restore 종료 정책, platform gate를 유지한다. 상세 선택 비교·상황별 기대 결과·후속 검증 계획은 해당 Issue/PR에 둔다.
+이 절은 검색 연결에 추가할 계약의 추천안이다. 현재 Issue에서 사용자가 substantive contract의 채택과 실행을 허용하면 [승인 절차](change-control.md#approval-evidence)에 따라 같은 PR에 구현과 검증을 준비하고, 그 범위를 명시한 PR의 사용자 merge로 승인·활성화한다. 절차 문구나 link만 수정하면 추천안 상태를 유지한다. 기존 인증 계약과 restore 종료 정책, platform gate를 유지한다. 상세 선택 비교·상황별 기대 결과·후속 검증 계획은 해당 Issue/PR에 둔다.
 
 ### 입력과 권한의 소유
 

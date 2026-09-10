@@ -90,7 +90,7 @@ function sameSnapshot(expected: Snapshot, actual: Snapshot): boolean {
 
 ### 개별 검사와 누적 판단의 구분 제안
 
-이 절은 [PR #249의 사용자 승인](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)과 merge를 반영한 active Rule이다. 적용과 이 기준을 전제로 한 코드 교정은 Rule 변경 PR의 사용자 명시적 `승인` 댓글과 사용자 merge를 모두 확인한 뒤 시작한다. 둘 중 하나만 확인된 동안에는 기존 기준을 유지한다. §2의 개별 명명과 §3의 평가 보호 방식을 구체화하며, 아래 기존 nullish·응답 검증 예시보다 이 절의 guard 방식이 우선한다.
+이 절은 [PR #249의 기존 사용자 승인 evidence](https://github.com/blahaj94/ldb/pull/249#issuecomment-5607728588)와 merge를 반영한 active Rule이다. 해당 merge부터 적용과 이 기준을 전제로 한 코드 교정을 시작한다. §2의 개별 명명과 §3의 평가 보호 방식을 구체화하며, 아래 기존 nullish·응답 검증 예시보다 이 절의 guard 방식이 우선한다.
 
 ```yaml
 status: active
@@ -173,7 +173,7 @@ function hasNonEmptyText(value: string | null | undefined): boolean {
 
 ### 단순 숫자 for문의 종료 비교 예외
 
-이 절은 [Issue #216](https://github.com/blahaj94/ldb/issues/216)에 대한 [PR #217의 사용자 승인](https://github.com/blahaj94/ldb/pull/217#issuecomment-5600568671)을 반영한 active Rule이다. 승인과 사용자 merge는 별개이며, 사용자 merge 전에는 이 예외를 제품 코드에 적용하거나 기존 코드를 준수로 재분류하지 않는다. 사용자 merge 후 적용 및 전수 재분류를 별도로 확인한다. 그 전에는 기존 §2·§3과 [두 승인 예외](docs/rules/convention-exceptions-proposal.md)가 그대로 적용된다.
+이 절은 [Issue #216](https://github.com/blahaj94/ldb/issues/216)에 대한 [PR #217의 기존 사용자 승인 evidence](https://github.com/blahaj94/ldb/pull/217#issuecomment-5600568671)와 merge를 반영한 active Rule이다. 해당 merge부터 이 예외를 제품 코드에 적용하며, 전수 재분류는 별도 실행 범위로 확인한다. 그 전 revision에는 기존 §2·§3과 [두 승인 예외](docs/rules/convention-exceptions-proposal.md)가 그대로 적용된다.
 
 ```yaml
 status: active

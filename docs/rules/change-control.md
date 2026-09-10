@@ -17,7 +17,7 @@ last-reviewed: 2026-09-08
 
 ## Approval required
 
-다음 변경은 구현 전에 중단하고 사용자에게 설명한 뒤 승인을 받는다.
+다음 변경은 사용자의 요청이나 실행 허용 범위에 명시돼 있어야 한다. 현재 Issue contract에 포함되지 않았다면 구현 전에 중단하고 이유, 영향과 선택지를 설명해 사용자의 결정을 받는다.
 
 - `AGENTS.md`, Rule document, architecture document, domain rule 변경
 - 새로운 dependency 추가 또는 기존 dependency의 역할 변경
@@ -30,24 +30,24 @@ last-reviewed: 2026-09-08
 - GitHub Issue 범위를 벗어난 refactoring
 - 사용자의 선택과 책임이 필요한 ambiguity
 
-두 개 이상의 app을 변경한다는 사실만으로 중단하지 않는다. 위 approval boundary를 건드릴 때 중단한다.
+두 개 이상의 app을 변경한다는 사실만으로 중단하지 않는다. 사용자가 이미 요청하거나 실행을 허용한 approval boundary는 같은 PR에서 구현과 함께 검토 가능한 결과로 준비하며 별도 문서 승인 comment를 기다리지 않는다. 범위에 없는 boundary를 건드릴 때만 해당 변경을 중단한다.
 
 ## Dependency 선택과 비용
 
 재사용 탐색, 자체 구현의 비교와 승인, 소유 모듈 및 package 분리, 선택 근거의 기록과 재사용은 [코드 재사용과 공통 패키지 분리 기준](code-reuse.md)을 따릅니다. [PR #97의 기존 승인](https://github.com/blahaj94/ldb/pull/97#issuecomment-5559626371)을 바탕으로 [PR #259에서 승인된 역할 중심 기준](https://github.com/blahaj94/ldb/pull/259#issuecomment-5609921277)을 반영했습니다. 판단 절차를 한 문서에서 관리하며 개별 dependency의 승인 경계는 유지합니다.
 
-- 명시적 사용자 금지와 승인된 runtime·API·security contract는 유지한다. 비용·요구 변화에 따른 기존 제한의 재검토는 제안할 수 있지만, 실제 dependency 설치·역할 변경이나 contract를 바꾸는 구현은 필요한 Rule 변경안의 Draft PR 승인과 해당 작업의 실행 허용 후에만 진행한다. 사용자의 후보 선택은 그 자체로 Rule 승인 evidence를 대신하지 않는다.
+- 명시적 사용자 금지와 승인된 runtime·API·security contract는 유지한다. 비용·요구 변화에 따른 기존 제한의 재검토는 제안할 수 있지만, 실제 dependency 설치·역할 변경이나 contract를 바꾸는 구현은 해당 작업의 사용자 요청 또는 실행 허용 범위에서만 진행한다. 후보 비교나 선택이 설치·실행까지 허용한다고 명시되지 않았다면 별도 실행 조건은 해소되지 않는다.
 
 ## Approval evidence
 
 Rule 변경이 필요하면 AI는 다음 순서로 진행한다.
 
-1. 변경 이유, 영향, 대안을 사용자에게 설명한다.
-2. Draft PR의 첫 commit으로 Rule 변경안만 올린다.
-3. Draft PR에서 사용자의 명시적인 `승인` comment를 기다린다.
-4. 승인 후 같은 PR에서 [`testing.md`의 Red-Green workflow](testing.md#red-green-workflow)에 따라 필요한 검증·구현·Reference commit 순서로 진행한다.
+1. Issue와 preflight에 변경 이유, 영향, 대안과 사용자의 요청 또는 실행 허용 근거를 기록한다.
+2. [`testing.md`의 Red-Green workflow](testing.md#red-green-workflow)에 따라 Rule, test, 구현과 Reference를 하나의 review 가능한 PR에 준비한다. Rule-only PR이나 Rule만 담은 첫 commit은 필수가 아니다.
+3. PR에 실제 Rule 변경과 적용 범위, 채택할 substantive Rule 및 status 변경, 검증 결과를 명시한다. 별도 `승인` comment나 review approval은 요구하지 않는다.
+4. 사용자가 PR을 merge하면 그 merge가 PR scope에서 채택 대상으로 명시한 Rule과 문서 변경의 최종 승인이고, merge된 revision부터 그 변경을 active Rule로 적용한다.
 
-승인 전 Rule 변경안은 proposal이며 implementation authority가 아니다.
+Merge 전 Rule 변경은 해당 PR의 구현과 검증을 일관되게 준비하는 데 사용할 수 있지만, 다른 Issue나 main의 active Rule을 바꾸지 않는다. Proposed section의 승인 절차·link·표현만 정비하는 PR은 그 section의 substantive contract를 채택하거나 status를 바꾸지 않는다. Proposed 내용을 채택하려면 PR scope에 그 내용과 status 전환을 명시한다. 기존 승인 comment·review URL은 당시 결정의 historical evidence로 보존하며 새 merge 기반 절차에서 다시 만들 필요가 없다. 제품별로 명시된 구현 착수, 환경 확보, 운영 실행과 사용자 전용 merge 조건은 Rule 승인과 별개로 유지한다.
 
 ## Issue and preflight
 
@@ -140,10 +140,11 @@ repo-179-standardize-branch-names
 
 같은 PR 안에서 필요한 만큼 commit을 나누되 다음 의미 순서를 지킨다.
 
-1. `docs:` 승인 대상 Rule 변경안이 있을 때만
-2. `test:` test 변경이 필요할 때. 구현 전 검증과 commit 적용 조건은 [`testing.md`의 Red-Green workflow](testing.md#red-green-workflow)를 따른다.
-3. `feat:` 또는 `refactor:` Green implementation
-4. 추가 `test:`, `docs:` Reference 갱신 등
+1. `test:` test 변경이 필요할 때. 구현 전 검증과 commit 적용 조건은 [`testing.md`의 Red-Green workflow](testing.md#red-green-workflow)를 따른다.
+2. `feat:` 또는 `refactor:` Green implementation
+3. `docs:` Rule 또는 Reference 갱신 등
+
+Rule 문서를 Red보다 먼저 확정해야 실패 기대값을 정의할 수 있으면 `docs:` commit을 먼저 둘 수 있다. Commit 순서와 무관하게 Rule 변경과 구현은 같은 review 가능한 PR에 포함할 수 있다.
 
 - Logic commit은 [`code-quality.md`](code-quality.md)의 logic budget을 따른다.
 - 최종 PR head는 Green 상태여야 한다.

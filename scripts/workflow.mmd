@@ -15,8 +15,8 @@ flowchart LR
     direction TB
     C["관련 MD와 결정 확인<br/>기존 Issue · PR · 담당 확인"]
     I["실행 Issue 재사용 또는 분해<br/>범위 · 완료 조건 · 의존성 · preflight<br/>Issue별 branch + worktree"]
-    G{"승인과 선행 조건<br/>충족?"}
-    H["영향받는 작업만 대기<br/>Rule 변경은 Draft PR의 승인 댓글<br/>선행 구현은 사용자 merge 확인"]
+    G{"실행 범위와 선행 조건<br/>충족?"}
+    H["영향받는 작업만 대기<br/>범위 밖 변경은 사용자 결정 확인<br/>선행 구현은 사용자 merge 확인"]
     W["구현 작업<br/>필요한 Red → 구현 → 검증<br/>리뷰와 필요한 수정"]
     R["해당 Issue에 연결한 PR<br/>실제 변경과 검증 근거 전달"]
     C --> I --> G
@@ -27,7 +27,7 @@ flowchart LR
 
   subgraph FINISH["03  사용자 merge와 완료 확인"]
     direction TB
-    M["사용자가 PR 검토 후 merge<br/>에이전트는 merge하지 않음"]
+    M["사용자가 PR 검토 후 merge<br/>채택 범위의 Rule·문서 변경 승인과 활성화<br/>에이전트는 merge하지 않음"]
     E["Issue 완료 조건과 merge 확인<br/>완료 근거 및 상태 갱신"]
     Q{"선택한 작업의<br/>완료 조건을 모두 충족?"}
     N["남은 Issue를 같은 절차로 진행<br/>의존 작업은 선행 merge 후<br/>독립 작업만 충돌 확인 후 병렬"]

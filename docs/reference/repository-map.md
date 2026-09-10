@@ -149,7 +149,7 @@ Repository Secret `LDB_REVIEW_TRIGGER_TOKEN`은 2026-08-29에 등록했다. 같�
 
 Built-in Codex review는 `P0`와 `P1` finding만 발행하므로 `P2`와 `P3` summary publication은 향후 direct provider integration 범위다.
 
-Workflow가 자체적으로 확인하는 policy는 linked Issue, Rule approval, Red-before-Green evidence, approximate logic budget이다. 결과는 하나의 advisory summary comment로 유지되며 merge를 차단하지 않는다.
+Workflow가 자체적으로 확인하는 policy는 linked Issue, Red-before-Green evidence, approximate logic budget이다. PR scope에서 채택 대상으로 명시한 Rule 변경은 별도 approval comment 검사 없이 사용자의 merge로 승인·활성화한다. 결과는 하나의 advisory summary comment로 유지되며 merge를 차단하지 않는다.
 
 ## Generated and dependency output
 

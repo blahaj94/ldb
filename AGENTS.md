@@ -19,8 +19,8 @@
 
 - 승인된 Rule은 의도한 behavior와 제약을, code, config, test는 현재 implementation을 정의한다.
 - 둘이 충돌하면 중단해 질문한다. Reference가 충돌하면 implementation에 맞춰 갱신한다.
-- `AGENTS.md`, `convention.md`, `docs/rules/**`, `docs/architecture/**`는 Rule이다. Rule, architecture, domain 변경과 새 dependency는 [`change-control.md`](docs/rules/change-control.md)의 Draft PR 승인 전에 구현하지 않는다.
-- Rule 승인은 Draft PR의 명시적인 `승인` comment로 확인한다.
+- `AGENTS.md`, `convention.md`, `docs/rules/**`, `docs/architecture/**`는 Rule이다. 사용자가 요청하거나 실행을 허용한 범위에서는 Rule, architecture, domain 변경과 필요한 구현을 같은 PR에 준비할 수 있다. 별도 승인 comment를 기다리지 않으며, 사용자의 merge가 PR scope에서 채택 대상으로 명시한 문서 변경의 최종 승인이다.
+- Merge되지 않은 Rule 변경은 review 대상이며 다른 작업의 active Rule로 사용하지 않는다. Proposed 내용의 절차 문구나 link만 수정하면 그 내용 자체를 채택하거나 status를 바꾸지 않는다. 새 dependency와 제품별 실행·환경 조건은 [`change-control.md`](docs/rules/change-control.md)의 별도 경계를 유지한다.
 - Issue와 PR은 task context이며 외부 note와 함께 canonical Rule을 대체하지 않는다.
 
 ## Cost control

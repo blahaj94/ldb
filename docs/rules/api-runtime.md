@@ -6,13 +6,13 @@ scope: apps/api
 last-reviewed: 2026-09-05
 rationale: 검색 구현이 runtime과 검증 도구를 추측해 추가하지 않도록 승인 경계를 정한다.
 evidence: "PR #42 runtime 승인: https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698 ; PR #48 인증/DB 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519"
-exceptions: 사용자 승인 전에는 dependency 설치와 실행 기반 구현을 허용하지 않는다.
+exceptions: 사용자의 명시적인 실행 허용 전에는 dependency 설치와 실행 기반 구현을 허용하지 않는다.
 review-after: API 실행 기반의 첫 validation 완료 또는 지원 major 변경 시
 ---
 
 # API Runtime Contract
 
-이 문서는 [PR #42의 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)을 반영한 Rule이다. API runtime·아래 dependency·검증 계약이 승인 범위이며 인증/DB 추가 승인 범위는 아래 Authentication runtime contract를 따른다. 구현은 해당 Execution Issue와 [`change-control.md`](change-control.md)의 Red→Green 절차를 따른다. 승인 범위 밖 dependency·architecture 변경은 별도 승인 대상이다.
+이 문서는 [PR #42의 사용자 승인](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)을 반영한 Rule이다. API runtime·아래 dependency·검증 계약이 승인 범위이며 인증/DB 추가 승인 범위는 아래 Authentication runtime contract를 따른다. 구현은 해당 Execution Issue와 [`change-control.md`](change-control.md)의 Red→Green 절차를 따른다. 승인 범위 밖 dependency·architecture 변경은 별도 사용자 실행 범위로 다룬다.
 
 ## 결정의 상태
 
