@@ -262,6 +262,22 @@ describe('Desktop auth 고정 HTTP client', () => {
     expect(cancel).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['Infinity', 'not-a-number', '-1'])(
+    '유한하지 않거나 음수인 Content-Length 선언은 body 평가를 보정하지 않는다: %s',
+    async (contentLength) => {
+      const response = new Response(JSON.stringify(validTokens()), {
+        status: 200,
+        headers: { ...jsonHeaders, 'Content-Length': contentLength }
+      })
+      const fetch = vi.fn<typeof globalThis.fetch>(async () => response)
+      const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
+
+      await expect(client.refresh(REFRESH_0, new AbortController().signal)).resolves.toEqual(
+        validTokens()
+      )
+    }
+  )
+
   it('response header 뒤 body가 멈춰도 같은 deadline에 stream을 취소한다', async () => {
     vi.useFakeTimers()
     const cancel = vi.fn()
@@ -288,6 +304,7 @@ describe('Desktop auth 고정 HTTP client', () => {
     { accessTokenExpiresAt: '2026-02-30T12:00:00Z' },
     { accessTokenExpiresAt: '2026-09-06T12:00:00.1234Z' },
     { sessionExpiresAt: '2026-09-06T12:00:00+00:00' },
+    { sessionExpiresAt: '2026-02-30T12:00:00Z' },
     { refreshToken: `${REFRESH_1.slice(0, -1)}x` }
   ])('token field 경계 %j를 보정 없이 거절한다', async (override) => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () =>
@@ -298,6 +315,26 @@ describe('Desktop auth 고정 HTTP client', () => {
     await expect(client.refresh(REFRESH_0, new AbortController().signal)).rejects.toMatchObject({
       code: 'invalid-response'
     })
+  })
+
+  it('Date.parse가 non-finite면 toISOString 없이 정확히 invalid-response를 반환한다', async () => {
+    const parse = vi.spyOn(Date, 'parse').mockReturnValue(Number.NaN)
+    const toISOString = vi.spyOn(Date.prototype, 'toISOString').mockImplementation(() => {
+      throw new Error('toISOString must be skipped')
+    })
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => jsonResponse(validTokens()))
+    const client = createAuthHttpClient({ apiOrigin: API_ORIGIN, fetch })
+
+    try {
+      await expect(client.refresh(REFRESH_0, new AbortController().signal)).rejects.toMatchObject({
+        code: 'invalid-response'
+      })
+      expect(parse).toHaveBeenCalled()
+      expect(toISOString).not.toHaveBeenCalled()
+    } finally {
+      parse.mockRestore()
+      toISOString.mockRestore()
+    }
   })
 
   it.each(['', '.1', '.12', '.123'])(
