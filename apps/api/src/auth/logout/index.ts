@@ -52,9 +52,16 @@ export async function logoutSession(dataSource: DataSource, rawToken: unknown): 
 
       const hasSession = session != null
       const hasToken = token != null
-      const hasSameSessionOwner = hasSession && session.userId === user.id
-      const hasSameTokenOwner = hasToken && token.sessionId === session?.id
-      const hasSameTokenHash = hasToken && token.tokenHash.equals(presentedHash)
+      let hasSameSessionOwner: boolean | undefined
+      if (hasSession) {
+        hasSameSessionOwner = session.userId === user.id
+      }
+      let hasSameTokenOwner: boolean | undefined
+      let hasSameTokenHash: boolean | undefined
+      if (hasToken) {
+        hasSameTokenOwner = token.sessionId === session?.id
+        hasSameTokenHash = token.tokenHash.equals(presentedHash)
+      }
       const hasTrustedTarget =
         hasSession && hasToken && hasSameSessionOwner && hasSameTokenOwner && hasSameTokenHash
       if (!hasTrustedTarget) {

@@ -15,15 +15,20 @@ type RefreshCommitResult = { status: 'issued'; tokens: RefreshTokens } | { statu
 
 export function refreshTokenHash(rawToken: unknown): Buffer {
   const isTokenString = typeof rawToken === 'string'
-  const hasEncodedTokenFormat = isTokenString && /^[A-Za-z0-9_-]{43}$/.test(rawToken)
+  if (!isTokenString) {
+    throw new RefreshFailure(REFRESH_ERRORS.INVALID_REQUEST)
+  }
+  const hasEncodedTokenFormat = /^[A-Za-z0-9_-]{43}$/.test(rawToken)
   if (!hasEncodedTokenFormat) {
     throw new RefreshFailure(REFRESH_ERRORS.INVALID_REQUEST)
   }
   const bytes = Buffer.from(rawToken, REFRESH_TOKEN.encoding)
   const hasExpectedByteLength = bytes.length === REFRESH_TOKEN.byteLength
-  const isCanonicalToken =
-    hasExpectedByteLength && bytes.toString(REFRESH_TOKEN.encoding) === rawToken
-  if (!isCanonicalToken) {
+  if (!hasExpectedByteLength) {
+    throw new RefreshFailure(REFRESH_ERRORS.INVALID_REQUEST)
+  }
+  const hasCanonicalEncoding = bytes.toString(REFRESH_TOKEN.encoding) === rawToken
+  if (!hasCanonicalEncoding) {
     throw new RefreshFailure(REFRESH_ERRORS.INVALID_REQUEST)
   }
   return createHash(REFRESH_TOKEN.hashAlgorithm).update(bytes).digest()
@@ -51,10 +56,11 @@ async function rotate({
         // 잠금 없는 두 조회는 잠글 ID의 hint다. 아래 재조회 전에는 존재·소유·상태를 신뢰하지 않는다.
         const tokenHint = await refresh.findOneBy({ tokenHash: presentedHash })
         const hasTokenHint = tokenHint != null
-        const sessionHint = hasTokenHint
-          ? await sessions.findOneBy({ id: tokenHint.sessionId })
-          : tokenHint
-        const hasSessionHint = hasTokenHint && sessionHint != null
+        if (!hasTokenHint) {
+          throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
+        }
+        const sessionHint = await sessions.findOneBy({ id: tokenHint.sessionId })
+        const hasSessionHint = sessionHint != null
         if (!hasSessionHint) {
           throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
         }
@@ -83,19 +89,33 @@ async function rotate({
         const checkedAt = clock.now
 
         const hasSession = session != null
-        const hasToken = hasSession && token != null
-        const isSessionOwnedByUser = hasToken && session.userId === user.id
-        const isTokenOwnedBySession = isSessionOwnedByUser && token.sessionId === session.id
-        const hasPresentedHash = isTokenOwnedBySession && token.tokenHash.equals(presentedHash)
+        if (!hasSession) {
+          throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
+        }
+        const hasToken = token != null
+        if (!hasToken) {
+          throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
+        }
+        const isSessionOwnedByUser = session.userId === user.id
+        if (!isSessionOwnedByUser) {
+          throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
+        }
+        const isTokenOwnedBySession = token.sessionId === session.id
+        if (!isTokenOwnedBySession) {
+          throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
+        }
+        const hasPresentedHash = token.tokenHash.equals(presentedHash)
         if (!hasPresentedHash) {
           throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
         }
         const issuedAt = checkedAt.getTime() / 1000
         const idleDeadline = session.lastActiveAt.getTime() / 1000 + LOGIN.idleSeconds
         const isSessionRevoked = session.revokedAt !== null
-        const isIdleExpired = !isSessionRevoked && issuedAt >= idleDeadline
-        const isSessionInactive = isSessionRevoked || isIdleExpired
-        if (isSessionInactive) {
+        if (isSessionRevoked) {
+          throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
+        }
+        const isIdleExpired = issuedAt >= idleDeadline
+        if (isIdleExpired) {
           throw new RefreshFailure(REFRESH_ERRORS.AUTHENTICATION_REQUIRED)
         }
 
@@ -117,7 +137,10 @@ async function rotate({
         try {
           bytes = refreshBytes(REFRESH_TOKEN.byteLength)
           const isBuffer = Buffer.isBuffer(bytes)
-          const hasExpectedByteLength = isBuffer && bytes.length === REFRESH_TOKEN.byteLength
+          if (!isBuffer) {
+            throw new RefreshFailure(REFRESH_ERRORS.INTERNAL)
+          }
+          const hasExpectedByteLength = bytes.length === REFRESH_TOKEN.byteLength
           if (!hasExpectedByteLength) {
             throw new RefreshFailure(REFRESH_ERRORS.INTERNAL)
           }

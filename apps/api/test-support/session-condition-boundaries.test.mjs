@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { test } from 'node:test'
 
 const { rotateRefreshForTest } = await import('../dist/auth/refresh/index.js')
 const { logoutSession } = await import('../dist/auth/logout/index.js')
 
 const rawToken = randomBytes(32).toString('base64url')
-const presentedHash = createHash('sha256').update(Buffer.from(rawToken, 'base64url')).digest()
 const ids = { user: randomUUID(), session: randomUUID() }
 
 function repository(overrides = {}) {
@@ -58,9 +57,19 @@ for (const [name, session] of [
       findOne: async () => session
     })
     const refresh = repository({ findOneBy: async () => token, findOne: async () => token })
-    if (session) sessions.findOne = async () => ({ ...session, get userId() { return session.userId } })
+    if (session) {
+      sessions.findOne = async () => ({
+        ...session,
+        get userId() {
+          return session.userId
+        }
+      })
+    }
     await assert.rejects(
-      () => rotateRefreshForTest(dataSource({ users, sessions, refresh }), rawToken, () => Buffer.alloc(32)),
+      () =>
+        rotateRefreshForTest(dataSource({ users, sessions, refresh }), rawToken, () =>
+          Buffer.alloc(32)
+        ),
       (error) => ['AUTHENTICATION_REQUIRED', 'AUTH_UNAVAILABLE'].includes(error.code)
     )
   })
@@ -81,7 +90,12 @@ for (const [name, session, shouldInspect] of [
             ownerReads++
             return ids.session
           },
-          tokenHash: { equals() { hashCalls++; return false } }
+          tokenHash: {
+            equals() {
+              hashCalls++
+              return false
+            }
+          }
         }
       : null
     const users = repository({ findOne: async () => ({ id: ids.user }) })
@@ -89,7 +103,10 @@ for (const [name, session, shouldInspect] of [
       findOneBy: async () => ({ id: ids.session, userId: ids.user }),
       findOne: async () => sessionValue
     })
-    const refresh = repository({ findOneBy: async () => tokenValue, findOne: async () => tokenValue })
+    const refresh = repository({
+      findOneBy: async () => tokenValue,
+      findOne: async () => tokenValue
+    })
     await logoutSession(dataSource({ users, sessions, refresh }), rawToken)
     assert.equal(ownerReads, shouldInspect ? 2 : 0)
     assert.equal(hashCalls, shouldInspect ? 1 : 0)
