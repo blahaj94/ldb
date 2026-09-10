@@ -167,6 +167,23 @@ test('actual chunked stream cap and parser error priority run before auth servic
   assert.equal(calls, baseline)
 })
 
+test('extra or duplicate authorize tickets reject before service and valid ticket still works', async () => {
+  const baseline = calls
+  for (const query of [
+    `ticket=${opaque()}&extra=${opaque()}`,
+    `ticket=${opaque()}&ticket=${opaque()}`
+  ]) {
+    const response = await fetch(`${base}/auth/login/authorize?${query}`, { redirect: 'manual' })
+    assert.equal(response.status, 400)
+    assert.equal(calls, baseline)
+  }
+  const valid = await fetch(`${base}/auth/login/authorize?ticket=${opaque()}`, {
+    redirect: 'manual'
+  })
+  assert.equal(valid.status, 303)
+  assert.equal(calls, baseline + 1)
+})
+
 test('HTTP rejects client-provided identity/redirect fields before service and accepts UTF-8 media', async () => {
   const baseline = calls
   const body = creation(opaque())
