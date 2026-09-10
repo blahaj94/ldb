@@ -170,6 +170,24 @@ Issue 완료 후 연결된 내부 작업과 목표의 완료 판정은 승인된
 
 통합된 Draft PR은 관련 Issue pointer와 AC별 evidence, Worker별 채택 result, concise final diff, validation, 남은 risk, review finding과 escalation 여부를 제공한다. 현재 contract와 실제 변경·evidence의 기록 위치는 [`Execution Issue`](agent-workflow.md#execution-issue)를 따른다. 전체 reasoning과 shell history는 포함하지 않는다.
 
+### 리뷰 수정 후 재검토 요청
+
+[Issue #305](https://github.com/blahaj94/ldb/issues/305)의 사용자 요청을 반영합니다. 이 절을 채택 범위로 명시한 PR의 사용자 merge 후 적용하며, 사용자의 명시적인 다른 지시가 우선합니다.
+
+```yaml
+status: active
+enforcement: warning
+rationale: 리뷰 수정 후 사용자가 직접 재검토 댓글을 작성해야 하는 누락을 줄입니다.
+evidence: https://github.com/blahaj94/ldb/issues/305
+exceptions: 같은 head에 유효한 요청이나 완료된 리뷰가 있으면 중복 요청을 생략합니다.
+review-after: 리뷰 수정 후 재검토가 필요한 PR 3개에서 요청 누락과 중복을 확인합니다.
+```
+
+- 수정 담당자는 리뷰 지적을 검토하고 필요한 수정, 관련 검증과 원격 push를 마친 뒤 재검토 요청까지 처리합니다. 위임 수행에서는 원격 PR을 관리하는 통합 담당자가 댓글을 작성합니다. 매번 사용자에게 댓글 작성을 요청하거나 별도 허락을 받지 않습니다.
+- 댓글 작성 직전에 원격 PR의 최신 head와 기존 요청·리뷰 상태를 확인합니다. 같은 head에 유효한 요청이 있거나 리뷰가 진행 중 또는 완료됐으면 중복 댓글을 쓰지 않고 기존 요청이나 결과를 연결합니다. 로컬 검증 대상과 원격 head가 다르면 해당 차이를 확인한 뒤 진행합니다. 실패한 요청을 진행 중이나 완료된 리뷰로 취급하지 않습니다.
+- 재검토 댓글은 `@codex review`로 시작하고 최신 PR head의 검토를 요청합니다. 본문에는 이번 수정 요약, 검증 결과와 한국어로 리뷰해 달라는 요청을 포함합니다. 커밋마다 요청하지 않고 한 차례의 리뷰 수정분을 모아 요청합니다. 작성과 게시 후 본문 확인은 [writing.md](writing.md)를 따릅니다.
+- 수정 완료 보고에는 재검토 요청 댓글 또는 같은 head의 기존 요청·결과 링크를 포함합니다. 요청 게시를 리뷰 통과로 보고하지 않습니다. 수정이나 검증이 남았거나 요청이 실패했으면 남은 작업과 상태를 알리고 전체 수정을 완료했다고 보고하지 않습니다. 이 절은 지속적인 자동 재시도나 merge를 허용하지 않습니다.
+
 ## 기존 Issue에 도입
 
 이 기준을 기존 Open Issue에 도입할 때는 body·preflight·PR과 실제 담당을 확인해 현재 roster와 상태를 맞춘다. 확인하지 못한 작업을 미배정으로 간주하거나 실행 허용을 새로 만들지 않는다. 기존 `Ready`·`Blocked` label은 근거를 body에 옮기고 재조회한 뒤 제거한다.
