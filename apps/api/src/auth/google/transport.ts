@@ -134,9 +134,11 @@ export async function exchangeGoogleCode(
       }
       secret = await withAbort(secretResolution, signal)
       const isSecretString = typeof secret === 'string'
-      const hasSecret = isSecretString && secret.length > 0
-      const isValidSecret = isSecretString && hasSecret
-      if (!isValidSecret) {
+      if (!isSecretString) {
+        throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+      }
+      const isSecretNonEmpty = secret.length > 0
+      if (!isSecretNonEmpty) {
         throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
       }
       const isAbortedAfterSecret = signal.aborted
