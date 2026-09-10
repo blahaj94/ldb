@@ -89,7 +89,8 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
   function allowedWindow(window: BrowserWindow | null): window is BrowserWindow {
     const hasWindow = window != null
     const isRegistered = !disposed
-    if (!hasWindow || !isRegistered) {
+    const canInspectWindow = hasWindow && isRegistered
+    if (!canInspectWindow) {
       return false
     }
     const isWindowDestroyed = window.isDestroyed()
@@ -125,7 +126,8 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
     }
     const isSender = event.sender === expected.webContents
     const isMainFrame = event.senderFrame === expected.webContents.mainFrame
-    if (!isSender || !isMainFrame) {
+    const isAllowed = isSender && isMainFrame
+    if (!isAllowed) {
       throw new Error('AUTH_NOT_ALLOWED')
     }
     return expected
