@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { setImmediate } from 'node:timers/promises'
 import { test } from 'node:test'
 import { createGoogleProviderVerifier } from '../dist/auth/google/index.js'
+import { withAbort } from '../dist/auth/google/transport.js'
 import { registration } from './login-fixtures.mjs'
 import {
   adapterConfiguration,
@@ -14,6 +15,83 @@ import {
 } from './google-fixtures.mjs'
 
 const key = await signingKey()
+
+test('late fulfillment after abort skips a second signal read and discards in order', async () => {
+  const operation = Promise.withResolvers()
+  const trace = []
+  let abortListener
+  let abortedReads = 0
+  const signal = {
+    addEventListener(type, listener) {
+      assert.equal(type, 'abort')
+      abortListener = listener
+      trace.push('add')
+    },
+    removeEventListener(type, listener) {
+      assert.equal(type, 'abort')
+      assert.equal(listener, abortListener)
+      trace.push('remove')
+    },
+    get aborted() {
+      abortedReads += 1
+      trace.push('aborted')
+      return false
+    }
+  }
+  const value = { late: true }
+  const pending = withAbort(operation.promise, signal, (discarded) => {
+    assert.equal(discarded, value)
+    trace.push('discard')
+  })
+
+  abortListener()
+  await providerFailure(pending)
+  operation.resolve(value)
+  await setImmediate()
+
+  assert.equal(abortedReads, 1)
+  assert.deepEqual(trace, ['add', 'aborted', 'remove', 'remove', 'discard'])
+})
+
+test('reentrant abort during fulfillment read rejects and discards the same value', async () => {
+  const operation = Promise.withResolvers()
+  const trace = []
+  let abortListener
+  let abortedReads = 0
+  const signal = {
+    addEventListener(type, listener) {
+      assert.equal(type, 'abort')
+      abortListener = listener
+      trace.push('add')
+    },
+    removeEventListener(type, listener) {
+      assert.equal(type, 'abort')
+      assert.equal(listener, abortListener)
+      trace.push('remove')
+    },
+    get aborted() {
+      abortedReads += 1
+      trace.push('aborted')
+      if (abortedReads === 2) {
+        trace.push('abort')
+        abortListener()
+      }
+      return false
+    }
+  }
+  const value = { reentrant: true }
+  const pending = withAbort(operation.promise, signal, (discarded) => {
+    assert.equal(discarded, value)
+    trace.push('discard')
+  })
+
+  operation.resolve(value)
+  await providerFailure(pending)
+  await setImmediate()
+
+  assert.equal(abortedReads, 2)
+  assert.deepEqual(trace, ['add', 'aborted', 'remove', 'aborted', 'abort', 'remove', 'discard'])
+})
 
 test('historical version binds exact client, secret reference, callback, audience and trusted endpoints', async () => {
   const old = registration()
