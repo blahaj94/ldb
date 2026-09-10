@@ -40,6 +40,7 @@ describe('검색 전체 응답과 정제 실패', () => {
   })
 
   it.each([
+    { status: 500, body: null },
     { status: 500, body: { error: { code: 'NEOPLE_API_ERROR' } } },
     { status: 502, body: { error: { code: 'INTERNAL_SERVER_ERROR' } } },
     { status: 401, body: { error: { code: 'NEOPLE_API_ERROR' } } },

@@ -53,11 +53,17 @@ export class SearchHttpFailure extends Error {
 
 function parseRetryAfter(value: string | null): number | null {
   const hasValue = value != null
-  const isDecimal = hasValue && /^[0-9]+$/.test(value)
-  const seconds = isDecimal ? Number(value) : Number.NaN
+  let seconds: number
+  if (hasValue) {
+    const isDecimal = /^[0-9]+$/.test(value)
+    seconds = isDecimal ? Number(value) : Number.NaN
+  } else {
+    seconds = Number.NaN
+  }
+
   const isSafeInteger = Number.isSafeInteger(seconds)
   const isPositive = seconds > 0
-  const isValid = isDecimal && isSafeInteger && isPositive
+  const isValid = isSafeInteger && isPositive
   return isValid ? seconds : null
 }
 
@@ -115,7 +121,10 @@ export function createSearchHttp({
       const code = statusErrors[response.status]
       const hasKnownStatus = code != null
       const failure = failureSchema.safeParse(body)
-      const hasMatchingCode = failure.success && failure.data.error.code === code
+      if (!failure.success) {
+        throw new SearchHttpFailure('SEARCH_RESPONSE_INVALID')
+      }
+      const hasMatchingCode = failure.data.error.code === code
       const isValidFailure = hasKnownStatus && hasMatchingCode
       if (!isValidFailure) {
         throw new SearchHttpFailure('SEARCH_RESPONSE_INVALID')
@@ -130,13 +139,21 @@ export function createSearchHttp({
     }
     const value = body
     const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
-    const hasError = isObject && Object.hasOwn(value, 'error')
-    const parsed = responseSchema.safeParse(body)
-    const isValidResponse = !hasError && parsed.success
-    if (!isValidResponse) {
-      throw new SearchHttpFailure('SEARCH_RESPONSE_INVALID')
+    if (isObject) {
+      const hasError = Object.hasOwn(value, 'error')
+      const parsed = responseSchema.safeParse(body)
+      const isValidResponse = !hasError && parsed.success
+      if (!isValidResponse) {
+        throw new SearchHttpFailure('SEARCH_RESPONSE_INVALID')
+      }
+
+      return parsed.data.rows
     }
 
+    const parsed = responseSchema.safeParse(body)
+    if (!parsed.success) {
+      throw new SearchHttpFailure('SEARCH_RESPONSE_INVALID')
+    }
     return parsed.data.rows
   }
 }
