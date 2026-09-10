@@ -8,7 +8,7 @@ last-reviewed: 2026-09-08
 
 `apps/api/src/auth/login/http.ts`의 `createLoginHttpApp`은 선택적 네 번째 인자 `searchDependencies`로 `GET /characters`를 연결한다. 필수 주입 값은 기존 `dataSource`, `verifyAccessJwt`, `apiKey`다. 기존 login·refresh/logout·account 연결을 유지하며 기본 main도 이 factory를 사용한다. 설정·실행과 기본 entry의 후속 통합 검증은 [`api-start-development.md`](api-start-development.md)를 참고한다.
 
-Contract는 `docs/rules/character-search.md`, `docs/rules/auth-activity.md`, `docs/rules/auth-session.md`, `docs/rules/auth-database.md`, `docs/rules/auth-runtime.md`가 정의한다. Schema·Migration·JWT verifier·순수 Neople adapter는 기존 구현을 사용한다. 새 Development dependency `@types/pg 8.23.1`의 승인은 `docs/rules/auth-runtime.md`의 PR #118 evidence를 따른다.
+Contract는 `docs/rules/character-search.md`, `docs/rules/auth-activity.md`, `docs/rules/auth-session.md`, `docs/rules/auth-database.md`, `docs/rules/auth-runtime.md`가 정의한다. Schema·Migration·JWT verifier·순수 Neople adapter는 기존 구현을 사용한다. 요청별 pg 연결의 type은 `@types/pg`를 사용한다. 현재 선언과 해결 버전은 `apps/api/package.json`과 `pnpm-lock.yaml`에서, 도입 근거는 [PR #118의 승인 이력](https://github.com/blahaj94/ldb/pull/118#issuecomment-5570381432)에서 확인한다.
 
 ## 입력과 HTTP 경계
 
