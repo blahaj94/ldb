@@ -123,15 +123,22 @@ function captureResources(): {
 
 function loadVideoMetadata(
   video: HTMLMediaElement,
-  dimensions: { width?: number; height?: number } = {}
+  dimensions: { width?: number; height?: number } = {},
+  access?: string[]
 ): void {
   Object.defineProperty(video, 'videoWidth', {
     configurable: true,
-    value: dimensions.width ?? 1920
+    get: () => {
+      access?.push('videoWidth')
+      return dimensions.width ?? 1920
+    }
   })
   Object.defineProperty(video, 'videoHeight', {
     configurable: true,
-    value: dimensions.height ?? 1080
+    get: () => {
+      access?.push('videoHeight')
+      return dimensions.height ?? 1080
+    }
   })
   video.dispatchEvent(new Event('loadedmetadata'))
 }
@@ -287,10 +294,11 @@ describe('usePartyCapture', () => {
     { width: 1920, height: 900 }
   ])('rejects unsupported capture layout $width×$height before OCR starts', async (dimensions) => {
     const { stream, track } = captureResources()
+    const access: string[] = []
     vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(async function (
       this: HTMLMediaElement
     ) {
-      loadVideoMetadata(this, dimensions)
+      loadVideoMetadata(this, dimensions, access)
     })
     getDisplayMedia.mockResolvedValue(stream)
     const hook = await renderPartyCaptureHook()
@@ -305,6 +313,11 @@ describe('usePartyCapture', () => {
     expect(track.stop).toHaveBeenCalledOnce()
     expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
     expect(moduleMocks.runSerialLoop).not.toHaveBeenCalled()
+    expect(access).toEqual(
+      dimensions.width === 1920
+        ? ['videoWidth', 'videoHeight', 'videoWidth', 'videoHeight']
+        : ['videoWidth', 'videoWidth', 'videoHeight']
+    )
 
     await hook.unmount()
   })

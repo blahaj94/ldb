@@ -26,4 +26,60 @@ describe('파티 layout', () => {
     expect(isPartySlotPresent(matchingPixels)).toBe(true)
     expect(isPartySlotPresent(oneMatchingPixel)).toBe(false)
   })
+
+  it.each([
+    { name: 'red mismatch', values: [0, 121, 170], reads: ['red'] },
+    { name: 'green mismatch', values: [55, 0, 170], reads: ['red', 'green'] },
+    { name: 'all match', values: [55, 121, 170], reads: ['red', 'green', 'blue'] }
+  ])('$name reads only the required RGB channels', ({ values, reads }) => {
+    const access: string[] = []
+    const rgba = {
+      length: 4,
+      0: values[0],
+      1: values[1],
+      2: values[2],
+      3: 255
+    }
+    for (const [index, channel] of [
+      [0, 'red'],
+      [1, 'green'],
+      [2, 'blue']
+    ] as const) {
+      Object.defineProperty(rgba, index, {
+        configurable: true,
+        get: () => {
+          access.push(channel)
+          return values[index]
+        }
+      })
+    }
+
+    isPartySlotPresent(rgba as unknown as Uint8ClampedArray)
+
+    expect(access).toEqual(reads)
+  })
+
+  it('reads all matching RGB channels for every pixel needed to reach the threshold', () => {
+    const access: string[] = []
+    const rgba = { length: 60 * 4 } as Record<number | 'length', number>
+    for (let index = 0; index < rgba.length; index += 4) {
+      for (const [offset, channel] of [
+        [0, 'red'],
+        [1, 'green'],
+        [2, 'blue']
+      ] as const) {
+        Object.defineProperty(rgba, index + offset, {
+          configurable: true,
+          get: () => {
+            access.push(channel)
+            return PARTY_MANA_COLOR[offset]
+          }
+        })
+      }
+      rgba[index + 3] = 255
+    }
+
+    expect(isPartySlotPresent(rgba as unknown as Uint8ClampedArray)).toBe(true)
+    expect(access).toEqual(Array.from({ length: 50 }, () => ['red', 'green', 'blue']).flat())
+  })
 })
