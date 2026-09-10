@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import process from 'node:process'
 import { clearTimeout, setTimeout } from 'node:timers'
+import { pipeline } from 'node:stream/promises'
+import { Parser } from 'tar'
 
 export const POSTGRES_IMAGE =
   'docker.io/library/postgres:18.6-trixie@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280'
@@ -223,49 +225,64 @@ async function savedImageConfigDigest() {
 }
 
 export async function readArchiveConfigDigest(archivePath) {
+  const maxManifestBytes = 1024 * 1024
+  const parser = new Parser({ strict: true })
+  const chunks = []
+  let hasManifest = false
+  let manifestBytes = 0
+  parser.on('entry', (entry) => {
+    const isManifestEntry = entry.path === 'manifest.json'
+    if (!isManifestEntry) {
+      entry.resume()
+      return
+    }
+    if (hasManifest) {
+      parser.abort(new Error('Duplicate saved image manifest'))
+      return
+    }
+    hasManifest = true
+    const exceedsManifestLimit = entry.size > maxManifestBytes
+    if (exceedsManifestLimit) {
+      parser.abort(new Error('Saved image manifest exceeds byte limit'))
+      return
+    }
+    entry.on('data', (chunk) => {
+      manifestBytes += chunk.length
+      const exceedsManifestLimit = manifestBytes > maxManifestBytes
+      if (exceedsManifestLimit) {
+        parser.abort(new Error('Saved image manifest exceeds byte limit'))
+        return
+      }
+      chunks.push(chunk)
+    })
+    entry.resume()
+  })
+
   const archive = await open(archivePath, 'r')
   try {
-    let offset = 0
-    const header = Buffer.alloc(512)
-    while (true) {
-      const { bytesRead } = await archive.read(header, 0, header.length, offset)
-      const isHeaderIncomplete = bytesRead !== header.length
-      const isEndOfArchive = !isHeaderIncomplete && header.every((byte) => byte === 0)
-      const shouldStopReading = isHeaderIncomplete || isEndOfArchive
-      if (shouldStopReading) {
-        break
-      }
-      const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '')
-      const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim()
-      const size = Number.parseInt(sizeText, 8)
-      const isSizeSafeInteger = Number.isSafeInteger(size)
-      const isSizeNegative = isSizeSafeInteger && size < 0
-      const isSizeInvalid = !isSizeSafeInteger || isSizeNegative
-      if (isSizeInvalid) {
-        throw new Error('Saved image archive is invalid')
-      }
-      const isManifestEntry = name === 'manifest.json'
-      if (isManifestEntry) {
-        const content = Buffer.alloc(size)
-        const result = await archive.read(content, 0, size, offset + 512)
-        const isManifestIncomplete = result.bytesRead !== size
-        if (isManifestIncomplete) {
-          throw new Error('Saved image manifest is incomplete')
-        }
-        const manifest = JSON.parse(content.toString('utf8'))
-        const configPath = manifest[0]?.Config
-        const isConfigPathString = typeof configPath === 'string'
-        if (!isConfigPathString) {
-          throw new Error('Saved image config is missing')
-        }
-        return archiveConfigDigest(configPath)
-      }
-      offset += 512 + Math.ceil(size / 512) * 512
-    }
-    throw new Error('Saved image manifest is missing')
+    // Consume to parser completion: a valid manifest cannot hide later corruption.
+    // strict follows node-tar detection, not a guarantee of every missing end block.
+    await pipeline(archive.createReadStream(), parser)
+  } catch (error) {
+    // Parser is an EventEmitter, not a Node Writable; pipeline cannot destroy it.
+    // abort also closes a compressed archive's decompressor on failure.
+    parser.abort(error)
+    throw error
   } finally {
     await archive.close()
   }
+
+  if (!hasManifest) {
+    throw new Error('Saved image manifest is missing')
+  }
+  const content = Buffer.concat(chunks, manifestBytes)
+  const manifest = JSON.parse(content.toString('utf8'))
+  const configPath = manifest[0]?.Config
+  const isConfigPathString = typeof configPath === 'string'
+  if (!isConfigPathString) {
+    throw new Error('Saved image config is missing')
+  }
+  return archiveConfigDigest(configPath)
 }
 
 function validateRunId(runId) {

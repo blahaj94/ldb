@@ -292,15 +292,17 @@ test('rejects parser-detected header and body corruption across the whole archiv
 })
 
 test('closes the archive on read errors and reports open failures', async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), 'ldb-tar-read-error-'))
-  try {
-    await assert.rejects(postgres.readArchiveConfigDigest(join(directory, 'missing')), {
-      code: 'ENOENT'
-    })
-    await assert.rejects(postgres.readArchiveConfigDigest(directory), { code: 'EISDIR' })
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
+  await withArchive({
+    t,
+    bytes: Buffer.alloc(0),
+    check: async (path) => {
+      const directory = dirname(path)
+      await assert.rejects(postgres.readArchiveConfigDigest(join(directory, 'missing')), {
+        code: 'ENOENT'
+      })
+      await assert.rejects(postgres.readArchiveConfigDigest(directory), { code: 'EISDIR' })
+    }
+  })
 })
 
 test('removes the temporary saved archive on success, parser/JSON failure and Docker save failure', async (t) => {
