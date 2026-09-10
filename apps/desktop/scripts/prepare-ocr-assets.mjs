@@ -62,9 +62,13 @@ export async function prepareOcrAssets(destination = defaultDestination) {
 
 const invokedPath = process.argv[1]
 const hasInvokedPath = invokedPath != null
-const isInvokedPathNonempty = hasInvokedPath && invokedPath !== ''
-const isDirectInvocation =
-  isInvokedPathNonempty && import.meta.url === pathToFileURL(resolve(invokedPath)).href
-if (isDirectInvocation) {
-  await prepareOcrAssets()
+if (hasInvokedPath) {
+  const isInvokedPathNonempty = invokedPath !== ''
+  if (isInvokedPathNonempty) {
+    const isDirectInvocation =
+      import.meta.url === pathToFileURL(resolve(invokedPath)).href
+    if (isDirectInvocation) {
+      await prepareOcrAssets()
+    }
+  }
 }
