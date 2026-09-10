@@ -26,9 +26,11 @@ function readHeaderValues(request: Request, name: string): string[] {
   // 중복 header도 확인할 수 있도록 rawHeaders의 name/value pair를 읽는다.
   return request.rawHeaders.flatMap((value, index, headers) => {
     const isHeaderName = index % 2 === 0
-    const isMatchingHeader = isHeaderName && value.toLowerCase() === name
-    if (isMatchingHeader) {
-      return [headers[index + 1]]
+    if (isHeaderName) {
+      const isMatchingHeader = value.toLowerCase() === name
+      if (isMatchingHeader) {
+        return [headers[index + 1]]
+      }
     }
     return []
   })
@@ -64,32 +66,42 @@ export function loginJsonParser(request: Request, response: Response, next: Next
 
   // 1. Media/encoding 오류를 크기·JSON 오류보다 먼저 거절한다.
   const hasSingleContentType = contentTypes.length === 1
-  const isContentTypeSupported =
-    hasSingleContentType &&
-    /^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(contentTypes[0])
-  const hasDuplicateEncoding = isContentTypeSupported && contentEncodings.length > 1
-  const hasSingleEncoding =
-    isContentTypeSupported && !hasDuplicateEncoding && contentEncodings.length === 1
-  const isEncodingUnsupported = hasSingleEncoding && !/^identity$/i.test(contentEncodings[0])
-  const isMediaInvalid =
-    !hasSingleContentType ||
-    !isContentTypeSupported ||
-    hasDuplicateEncoding ||
-    isEncodingUnsupported
-  if (isMediaInvalid) {
+  if (!hasSingleContentType) {
     rejectPayloadAndClose(LOGIN_ERRORS.MEDIA)
     return
+  }
+  const isContentTypeSupported =
+    /^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(contentTypes[0])
+  if (!isContentTypeSupported) {
+    rejectPayloadAndClose(LOGIN_ERRORS.MEDIA)
+    return
+  }
+  const hasDuplicateEncoding = contentEncodings.length > 1
+  if (hasDuplicateEncoding) {
+    rejectPayloadAndClose(LOGIN_ERRORS.MEDIA)
+    return
+  }
+  const hasSingleEncoding = contentEncodings.length === 1
+  if (hasSingleEncoding) {
+    const isEncodingUnsupported = !/^identity$/i.test(contentEncodings[0])
+    if (isEncodingUnsupported) {
+      rejectPayloadAndClose(LOGIN_ERRORS.MEDIA)
+      return
+    }
   }
 
   // 2. 선언 길이로 조기 거절할 수 있지만 실제 byte 상한 검사는 아래 stream에서 수행한다.
   const contentLengths = readHeaderValues(request, 'content-length')
   const hasSingleContentLength = contentLengths.length === 1
-  const isContentLengthDecimal = hasSingleContentLength && /^\d+$/.test(contentLengths[0])
-  const isDeclaredPayloadTooLarge =
-    isContentLengthDecimal && Number(contentLengths[0]) > LOGIN.jsonBytes
-  if (isDeclaredPayloadTooLarge) {
-    rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
-    return
+  if (hasSingleContentLength) {
+    const isContentLengthDecimal = /^\d+$/.test(contentLengths[0])
+    if (isContentLengthDecimal) {
+      const isDeclaredPayloadTooLarge = Number(contentLengths[0]) > LOGIN.jsonBytes
+      if (isDeclaredPayloadTooLarge) {
+        rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
+        return
+      }
+    }
   }
 
   // request 자체의 error는 library 오류의 type/status와 관계없이 정제 400이다.

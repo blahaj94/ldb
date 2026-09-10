@@ -28,6 +28,23 @@ function authorizationScope(provider: AuthProvider): string {
   return isGoogleProvider ? 'openid profile' : 'identify'
 }
 
+function createProviderNonce(provider: AuthProvider): string | null {
+  const isGoogleProvider = provider === 'google'
+  if (!isGoogleProvider) {
+    return null
+  }
+  const nonce = newOpaque()
+  const hasNonce = nonce != null
+  if (!hasNonce) {
+    return null
+  }
+  const hasTruthyNonce = Boolean(nonce)
+  if (!hasTruthyNonce) {
+    return null
+  }
+  return nonce
+}
+
 export async function createLoginRequest(
   deps: LoginDependencies,
   input: unknown
@@ -95,10 +112,15 @@ export async function authorizeLogin(
         })
         const checkedAt = await freshTime(manager)
         const hasRequest = request != null
-        const isRequestTruthy = hasRequest && Boolean(request)
-        const isCreated = isRequestTruthy && request.status === 'created'
-        const isRequestInvalid = !hasRequest || !isCreated
-        if (isRequestInvalid) {
+        if (!hasRequest) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const isRequestTruthy = Boolean(request)
+        if (!isRequestTruthy) {
+          throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
+        }
+        const isCreated = request.status === 'created'
+        if (!isCreated) {
           throw new LoginFailure(LOGIN_ERRORS.REQUEST_INVALID)
         }
 
@@ -126,9 +148,8 @@ export async function authorizeLogin(
         const state = newOpaque()
         const browserBinding = newOpaque()
         const providerVerifier = newOpaque()
-        const shouldCreateNonce = request.provider === 'google'
-        const nonce = shouldCreateNonce ? newOpaque() : null
-        const hasNonce = nonce != null && Boolean(nonce)
+        const nonce = createProviderNonce(request.provider)
+        const hasNonce = nonce != null
 
         // Ticket 소비와 browser_started 전이를 함께 저장한다.
         await requests.update(

@@ -35,11 +35,19 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
         const checkedAt = await freshTime(manager)
 
         const hasRequest = request != null
-        const isRequestTruthy = hasRequest && Boolean(request)
-        const isConsumed = isRequestTruthy && request.status === 'consumed'
-        const isFailed = isRequestTruthy && !isConsumed && request.status === 'failed'
-        const isRequestInvalid = !hasRequest || !isRequestTruthy || isConsumed || isFailed
-        if (isRequestInvalid) {
+        if (!hasRequest) {
+          throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+        }
+        const isRequestTruthy = Boolean(request)
+        if (!isRequestTruthy) {
+          throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+        }
+        const isConsumed = request.status === 'consumed'
+        if (isConsumed) {
+          throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+        }
+        const isFailed = request.status === 'failed'
+        if (isFailed) {
           throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
         }
 
@@ -55,19 +63,23 @@ export async function exchangeLogin(deps: LoginDependencies, input: unknown): Pr
 
         // 2. 교환 자격을 확인한다. 잘못된 proof는 유효한 요청을 변경하지 않는다.
         const isExchangeReady = request.status === 'exchange_ready'
-        const hasSameClient = isExchangeReady && request.clientId === body.clientId
-        const hasSameMethod = hasSameClient && request.method === LOGIN.method
-        const hasValidChallenge =
-          hasSameMethod && request.codeChallenge === challenge(body.codeVerifier)
-        const hasValidCode =
-          hasValidChallenge && equalHash(request.exchangeCodeHash, opaqueHash(body.code))
-        const isExchangeInvalid =
-          !isExchangeReady ||
-          !hasSameClient ||
-          !hasSameMethod ||
-          !hasValidChallenge ||
-          !hasValidCode
-        if (isExchangeInvalid) {
+        if (!isExchangeReady) {
+          throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+        }
+        const hasSameClient = request.clientId === body.clientId
+        if (!hasSameClient) {
+          throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+        }
+        const hasSameMethod = request.method === LOGIN.method
+        if (!hasSameMethod) {
+          throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+        }
+        const hasValidChallenge = request.codeChallenge === challenge(body.codeVerifier)
+        if (!hasValidChallenge) {
+          throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
+        }
+        const hasValidCode = equalHash(request.exchangeCodeHash, opaqueHash(body.code))
+        if (!hasValidCode) {
           throw new LoginFailure(LOGIN_ERRORS.EXCHANGE_INVALID)
         }
 
