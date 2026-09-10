@@ -74,7 +74,7 @@ export async function runMigrationCommand(
     dataSource = createDataSource()
     await dataSource.initialize()
     const isUpCommand = command === 'up'
-    const isDownCommand = !isUpCommand && command === 'down'
+    const isDownCommand = command === 'down'
     if (isUpCommand) {
       const applied = await dataSource.runMigrations({ transaction: 'all' })
       result = `Database migration applied: ${applied.length}`
@@ -86,9 +86,7 @@ export async function runMigrationCommand(
         "SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"
       )) as Array<{ exists: boolean }>
       const migrationHistoryExists = relation[0]?.exists
-      const hasMigrationHistoryFlag = migrationHistoryExists != null
-      const isMigrationHistoryPresent = hasMigrationHistoryFlag && migrationHistoryExists
-      if (!isMigrationHistoryPresent) {
+      if (!migrationHistoryExists) {
         result = 'Database migrations pending'
       } else {
         const history = (await dataSource.query('SELECT name FROM "typeorm_migrations"')) as Array<{
@@ -107,9 +105,7 @@ export async function runMigrationCommand(
     failed = true
   }
   const dataSourceToClose = dataSource
-  const hasDataSource = dataSourceToClose != null
-  const isDataSourceInitialized = hasDataSource && dataSourceToClose.isInitialized
-  if (isDataSourceInitialized) {
+  if (dataSourceToClose?.isInitialized) {
     try {
       await dataSourceToClose.destroy()
     } catch {
