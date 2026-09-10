@@ -12,18 +12,22 @@ import type { ProviderPkceConfiguration } from '../../types/login.js'
 
 export function decodeOpaque(value: unknown): Buffer {
   const isValueString = typeof value === 'string'
-  const hasOpaqueFormat = isValueString && /^[A-Za-z0-9_-]{43}$/.test(value)
-  const isOpaqueInvalid = !isValueString || !hasOpaqueFormat
-  if (isOpaqueInvalid) {
+  if (!isValueString) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  const hasOpaqueFormat = /^[A-Za-z0-9_-]{43}$/.test(value)
+  if (!hasOpaqueFormat) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
   const bytes = Buffer.from(value, 'base64url')
   // Decode가 성공해도 같은 32 bytes의 canonical 표현인지 다시 확인한다.
   const hasExpectedByteLength = bytes.length === 32
-  const isCanonicalEncoding = hasExpectedByteLength && bytes.toString('base64url') === value
-  const isDecodedOpaqueInvalid = !hasExpectedByteLength || !isCanonicalEncoding
-  if (isDecodedOpaqueInvalid) {
+  if (!hasExpectedByteLength) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  const isCanonicalEncoding = bytes.toString('base64url') === value
+  if (!isCanonicalEncoding) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
   return bytes
@@ -153,9 +157,11 @@ export class ProviderPkceKeys {
     try {
       const key = this.#keys.get(row.providerPkceKeyId!)
       const hasKey = key != null
-      const hasSealedFields = hasKey && hasCompleteSealedPkce(row)
-      const isSealedPkceInvalid = !hasKey || !hasSealedFields
-      if (isSealedPkceInvalid) {
+      if (!hasKey) {
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+      }
+      const hasSealedFields = hasCompleteSealedPkce(row)
+      if (!hasSealedFields) {
         throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
 
