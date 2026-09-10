@@ -122,7 +122,7 @@ export function usePartyCaptureSession({
       await metadataLoaded
       signal.throwIfAborted()
       const hasSupportedWidth = video.videoWidth === SUPPORTED_WIDTH
-      const hasSupportedHeight = hasSupportedWidth && video.videoHeight === SUPPORTED_HEIGHT
+      const hasSupportedHeight = video.videoHeight === SUPPORTED_HEIGHT
       const hasSupportedLayout = hasSupportedWidth && hasSupportedHeight
       if (!hasSupportedLayout) {
         throw new Error(`Unsupported capture layout: ${video.videoWidth}×${video.videoHeight}.`)

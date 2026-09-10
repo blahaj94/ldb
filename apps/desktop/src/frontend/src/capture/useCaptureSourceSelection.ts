@@ -48,8 +48,10 @@ export function useCaptureSourceSelection(setStatus: (status: string) => void): 
       .selectCaptureSource(sourceId)
       .then(() => {
         const hasSourceId = sourceId.length > 0
-        const hasCurrentGeneration =
-          hasSourceId && selectionGeneration === selectionGenerationRef.current
+        if (!hasSourceId) {
+          return
+        }
+        const hasCurrentGeneration = selectionGeneration === selectionGenerationRef.current
         const hasCurrentSelection = hasCurrentGeneration && selectedSourceIdRef.current === sourceId
         if (hasCurrentSelection) {
           registeredSourceIdRef.current = sourceId
