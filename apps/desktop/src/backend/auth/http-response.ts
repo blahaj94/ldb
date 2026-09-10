@@ -150,7 +150,7 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
       hasUtf8Charset = parameters[0] === 'charset=utf-8'
     }
   }
-  const hasSupportedParameters = hasNoParameters || hasUtf8Charset
+  const hasSupportedParameters = hasNoParameters || hasUtf8Charset === true
   const hasSupportedContentType = hasJsonMediaType && hasSupportedParameters
   if (!hasSupportedContentType) {
     throw new AuthHttpFailure('invalid-response')
@@ -159,14 +159,15 @@ export async function readJson(response: Response, signal?: AbortSignal): Promis
   const declaredLength = response.headers.get('content-length')
   const hasDeclaredLength = declaredLength != null
   const declaredBytes = hasDeclaredLength ? Number(declaredLength) : null
+  const hasDeclaredBytes = declaredBytes != null
   let hasOversizeDeclaration: boolean | undefined
-  if (declaredBytes != null) {
+  if (hasDeclaredBytes) {
     const hasFiniteDeclaration = Number.isFinite(declaredBytes)
     if (hasFiniteDeclaration) {
       hasOversizeDeclaration = declaredBytes > AUTH_RESPONSE_MAX_BYTES
     }
   }
-  if (hasOversizeDeclaration) {
+  if (hasOversizeDeclaration === true) {
     try {
       await response.body?.cancel()
     } catch {
