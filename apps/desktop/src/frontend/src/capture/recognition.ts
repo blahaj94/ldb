@@ -15,10 +15,17 @@ type SerialLoopOptions = {
 export function hasColorMatch(pixels: Iterable<Rgb>, target: Rgb, tolerance: number): boolean {
   for (const pixel of pixels) {
     const hasMatchingRed = Math.abs(pixel[0] - target[0]) <= tolerance
-    const hasMatchingGreen = hasMatchingRed && Math.abs(pixel[1] - target[1]) <= tolerance
-    const hasMatchingBlue = hasMatchingGreen && Math.abs(pixel[2] - target[2]) <= tolerance
-    const isColorMatch = hasMatchingRed && hasMatchingGreen && hasMatchingBlue
-    if (isColorMatch) {
+    if (!hasMatchingRed) {
+      continue
+    }
+
+    const hasMatchingGreen = Math.abs(pixel[1] - target[1]) <= tolerance
+    if (!hasMatchingGreen) {
+      continue
+    }
+
+    const hasMatchingBlue = Math.abs(pixel[2] - target[2]) <= tolerance
+    if (hasMatchingBlue) {
       return true
     }
   }
@@ -35,14 +42,22 @@ export function updateSlotStability(
   nickname: string | null
 ): SlotStability {
   const hasNickname = nickname != null
-  const isNicknameEmpty = hasNickname && nickname.length === 0
-  const isNicknameMissingOrEmpty = !hasNickname || isNicknameEmpty
-  if (isNicknameMissingOrEmpty) {
+  if (!hasNickname) {
+    return { candidate: null, consecutiveCount: 0, stableNickname: null }
+  }
+
+  const isNicknameEmpty = nickname.length === 0
+  if (isNicknameEmpty) {
     return { candidate: null, consecutiveCount: 0, stableNickname: null }
   }
 
   const hasPrevious = previous != null
-  const hasSameCandidate = hasPrevious && previous.candidate === nickname
+  if (!hasPrevious) {
+    return { candidate: nickname, consecutiveCount: 1, stableNickname: null }
+  }
+
+  const previousCandidate = previous.candidate
+  const hasSameCandidate = previousCandidate === nickname
   if (hasSameCandidate) {
     const consecutiveCount = previous.consecutiveCount + 1
     const isStable = consecutiveCount >= 2
