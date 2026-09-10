@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react'
 import { expect, it, vi } from 'vitest'
-import type { SearchCommandResult } from '../../../preload/common/types/search'
+import type { SearchApi, SearchCommandResult } from '../../../preload/common/types/search'
 import { CAPTURE_ID, searchSnapshot, SEARCH_RUN } from '../../../preload/api/search-test-fixture'
 import { CaptureSearch } from './capture-search'
 import {
@@ -36,9 +36,8 @@ it('begin은 snapshot 비교와 signal을 원본 순서로 읽고 latest-only ca
       return false
     }
   } as AbortSignal
-  let listener: ((snapshot: typeof latest) => void) | null = null
-  const api = {
-    controlCharacterSearch: vi.fn(async (control) => {
+  const api: SearchApi = {
+    controlCharacterSearch: vi.fn<SearchApi['controlCharacterSearch']>(async (control) => {
       if (control.action === 'read') {
         return { ok: true, snapshot: searchSnapshot() }
       }
@@ -47,8 +46,7 @@ it('begin은 snapshot 비교와 signal을 원본 순서로 읽고 latest-only ca
       }
       throw new Error('unexpected control')
     }),
-    onCharacterSearchChanged: vi.fn((next) => {
-      listener = next
+    onCharacterSearchChanged: vi.fn(() => {
       return () => {}
     })
   }
