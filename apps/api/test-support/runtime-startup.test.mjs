@@ -19,7 +19,17 @@ const eventsOf = (runtime) => runtime.events.map(({ event }) => event)
 
 test('port parser preserves strict decimal and range validation', () => {
   const configurationError = 'Invalid server configuration'
-  for (const value of [undefined, '', '0', '65536', '1.5', 'abc', ' 1', '1e3']) {
+  for (const value of [
+    undefined,
+    '',
+    '0',
+    '65536',
+    '1.5',
+    'abc',
+    ' 1',
+    '1e3',
+    '9'.repeat(400)
+  ]) {
     assert.throws(() => parsePort(value), new Error(configurationError))
   }
   for (const [value, numericValue] of [
