@@ -2,17 +2,24 @@ const configurationError = 'Invalid server configuration'
 
 export function parsePort(value: string | undefined): number {
   const isValueMissing = value === undefined
-  const isAsciiDecimal = !isValueMissing && /^[0-9]+$/.test(value)
-  const isInputInvalid = isValueMissing || !isAsciiDecimal
-  if (isInputInvalid) {
+  if (isValueMissing) {
+    throw new Error(configurationError)
+  }
+
+  const isAsciiDecimal = /^[0-9]+$/.test(value)
+  if (!isAsciiDecimal) {
     throw new Error(configurationError)
   }
 
   const port = Number(value)
   const isPortInteger = Number.isInteger(port)
-  const isBelowMinimum = isPortInteger && port < 1
-  const isAboveMaximum = isPortInteger && !isBelowMinimum && port > 65_535
-  const isPortInvalid = !isPortInteger || isBelowMinimum || isAboveMaximum
+  if (!isPortInteger) {
+    throw new Error(configurationError)
+  }
+
+  const isBelowMinimum = port < 1
+  const isAboveMaximum = port > 65_535
+  const isPortInvalid = isBelowMinimum || isAboveMaximum
   if (isPortInvalid) {
     throw new Error(configurationError)
   }
