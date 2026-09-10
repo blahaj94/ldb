@@ -131,9 +131,11 @@ export async function withSearchServer(operation) {
       },
       async () => {
         const hasSource = source != null
-        const hasInitializedSource = hasSource && source.isInitialized
-        if (hasInitializedSource) {
-          await source.destroy()
+        if (hasSource) {
+          const hasInitializedSource = source.isInitialized
+          if (hasInitializedSource) {
+            await source.destroy()
+          }
         }
       },
       async () => {
