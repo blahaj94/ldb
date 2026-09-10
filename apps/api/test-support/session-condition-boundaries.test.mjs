@@ -76,6 +76,66 @@ for (const [name, session, token, expectedOwnerReads, expectedHashReads] of [
   })
 }
 
+test('refresh executes the locked hash comparison for matching owners', async () => {
+  let hashReads = 0
+  let equalsCalls = 0
+  let issueCalls = 0
+  let updateCalls = 0
+  let insertCalls = 0
+  const token = {
+    sessionId: ids.session,
+    consumedAt: null,
+    get tokenHash() {
+      hashReads++
+      return {
+        equals: () => {
+          equalsCalls++
+          return false
+        }
+      }
+    }
+  }
+  const session = {
+    id: ids.session,
+    userId: ids.user,
+    lastActiveAt: new Date('2026-01-01T00:00:00Z'),
+    revokedAt: null
+  }
+  const users = repository({ findOne: async () => ({ id: ids.user }) })
+  const sessions = repository({
+    findOneBy: async () => session,
+    findOne: async () => session,
+    update: async () => {
+      updateCalls++
+    }
+  })
+  const refresh = repository({
+    findOneBy: async () => ({ sessionId: ids.session }),
+    findOne: async () => token,
+    update: async () => {
+      updateCalls++
+    },
+    insert: async () => {
+      insertCalls++
+    }
+  })
+  const deps = {
+    dataSource: dataSource({ users, sessions, refresh }),
+    issueAccessJwt: async () => {
+      issueCalls++
+      throw new Error('issueAccessJwt must not run')
+    }
+  }
+  await assert.rejects(() => rotateRefreshForTest(deps, rawToken, () => Buffer.alloc(32)), {
+    code: 'AUTHENTICATION_REQUIRED'
+  })
+  assert.equal(hashReads, 1)
+  assert.equal(equalsCalls, 1)
+  assert.equal(issueCalls, 0)
+  assert.equal(updateCalls, 0)
+  assert.equal(insertCalls, 0)
+})
+
 for (const [name, session, token, expectedOwnerReads, expectedHashCalls] of [
   ['locked session absent', null, { sessionId: ids.session }, 1, 1],
   [
