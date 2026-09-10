@@ -12,18 +12,22 @@ import type { ProviderPkceConfiguration } from '../../types/login.js'
 
 export function decodeOpaque(value: unknown): Buffer {
   const isValueString = typeof value === 'string'
-  const hasOpaqueFormat = isValueString && /^[A-Za-z0-9_-]{43}$/.test(value)
-  const isOpaqueInvalid = !isValueString || !hasOpaqueFormat
-  if (isOpaqueInvalid) {
+  if (!isValueString) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  const hasOpaqueFormat = /^[A-Za-z0-9_-]{43}$/.test(value)
+  if (!hasOpaqueFormat) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
 
   const bytes = Buffer.from(value, 'base64url')
   // Decode가 성공해도 같은 32 bytes의 canonical 표현인지 다시 확인한다.
   const hasExpectedByteLength = bytes.length === 32
-  const isCanonicalEncoding = hasExpectedByteLength && bytes.toString('base64url') === value
-  const isDecodedOpaqueInvalid = !hasExpectedByteLength || !isCanonicalEncoding
-  if (isDecodedOpaqueInvalid) {
+  if (!hasExpectedByteLength) {
+    throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
+  }
+  const isCanonicalEncoding = bytes.toString('base64url') === value
+  if (!isCanonicalEncoding) {
     throw new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST)
   }
   return bytes
@@ -50,8 +54,14 @@ export function challenge(verifier: string): string {
 
 export function equalHash(storedHash: Buffer | null, candidateHash: Buffer): boolean {
   const hasStoredHash = storedHash !== null
-  const hasSameLength = hasStoredHash && storedHash.length === candidateHash.length
-  const isHashEqual = hasSameLength && timingSafeEqual(storedHash, candidateHash)
+  if (!hasStoredHash) {
+    return false
+  }
+  const hasSameLength = storedHash.length === candidateHash.length
+  if (!hasSameLength) {
+    return false
+  }
+  const isHashEqual = timingSafeEqual(storedHash, candidateHash)
   return isHashEqual
 }
 
@@ -66,11 +76,16 @@ function hasCompleteSealedPkce(row: SealedPkce): row is SealedPkce & {
   providerPkceIv: Buffer
   providerPkceTag: Buffer
 } {
-  const hasCiphertext = Boolean(row.providerPkceCiphertext)
-  const hasIv = hasCiphertext && Boolean(row.providerPkceIv)
-  const hasTag = hasIv && Boolean(row.providerPkceTag)
-  const isComplete = hasCiphertext && hasIv && hasTag
-  return isComplete
+  const isCiphertextTruthy = Boolean(row.providerPkceCiphertext)
+  if (!isCiphertextTruthy) {
+    return false
+  }
+  const isIvTruthy = Boolean(row.providerPkceIv)
+  if (!isIvTruthy) {
+    return false
+  }
+  const isTagTruthy = Boolean(row.providerPkceTag)
+  return isTagTruthy
 }
 
 function encodePkceContext({ id, provider, purpose }: PkceContext): Buffer {
@@ -86,12 +101,20 @@ export class ProviderPkceKeys {
     try {
       this.#activeKeyId = config.activeKeyId
       for (const { id, key } of config.keys) {
-        const hasKeyId = Boolean(id)
-        const isDuplicateKey = hasKeyId && this.#keys.has(id)
-        const isKeyBuffer = hasKeyId && !isDuplicateKey && Buffer.isBuffer(key)
-        const hasExpectedKeyLength = isKeyBuffer && key.length === 32
-        const isKeyInvalid = !hasKeyId || isDuplicateKey || !isKeyBuffer || !hasExpectedKeyLength
-        if (isKeyInvalid) {
+        const isKeyIdTruthy = Boolean(id)
+        if (!isKeyIdTruthy) {
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+        }
+        const isDuplicateKey = this.#keys.has(id)
+        if (isDuplicateKey) {
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+        }
+        const isKeyBuffer = Buffer.isBuffer(key)
+        if (!isKeyBuffer) {
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+        }
+        const hasExpectedKeyLength = key.length === 32
+        if (!hasExpectedKeyLength) {
           throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
         }
         // 호출자가 원본 Buffer를 바꿔도 등록된 key는 바뀌지 않는다.
@@ -134,9 +157,11 @@ export class ProviderPkceKeys {
     try {
       const key = this.#keys.get(row.providerPkceKeyId!)
       const hasKey = key != null
-      const hasSealedFields = hasKey && hasCompleteSealedPkce(row)
-      const isSealedPkceInvalid = !hasKey || !hasSealedFields
-      if (isSealedPkceInvalid) {
+      if (!hasKey) {
+        throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+      }
+      const hasSealedFields = hasCompleteSealedPkce(row)
+      if (!hasSealedFields) {
         throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
       }
 
