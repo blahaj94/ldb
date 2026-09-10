@@ -38,55 +38,9 @@ node scripts/format-date.mjs '2026-09-08T15:35:00Z'
 node scripts/format-date.mjs
 ```
 
-입력은 `YYYY-MM-DDTHH:mm:ssZ`이며 소수 초 1–3자리를 허용합니다. 잘못된 날짜나 시간대 없는 값은 오류로 거절합니다. `formatDate(timestamp)`를 import해 재사용할 수 있으며, 사용량 보고의 Markdown 집계 범위에도 적용합니다. 분 단위 표시는 원본 UTC 시각과 검증용 snapshot JSON의 정밀도를 바꾸지 않습니다.
+입력은 `YYYY-MM-DDTHH:mm:ssZ`이며 소수 초 1–3자리를 허용합니다. 잘못된 날짜나 시간대 없는 값은 오류로 거절합니다. `formatDate(timestamp)`를 import해 재사용할 수 있습니다.
 
 검증: `node --test scripts/test/format-date.test.mjs`, `node --check scripts/format-date.mjs`.
-
-## `agent-usage`
-
-Codex local usage record를 Issue 작업 범위로 집계하고, PR이 merge되면 연결된 Issue에 사용량과 실제 agent model/effort를 게시합니다. Node.js 22 이상, Git와 인증된 GitHub CLI를 사용하며 dependency install이나 model 호출은 없습니다.
-
-Issue worktree에서 작업을 시작할 때 아래 command를 실행합니다. Root task는 `CODEX_THREAD_ID`, 시작점은 현재 관측된 마지막 turn을 사용합니다. 이전 turn부터 시작한 작업이면 `turns`로 경계를 확인하고 `--from-turn`을 지정합니다.
-
-```bash
-node scripts/agent-usage.mjs begin --issue 123
-node scripts/agent-usage.mjs turns
-node scripts/agent-usage.mjs begin --issue 123 --thread ROOT_TASK_ID --from-turn START_TURN_ID
-```
-
-`begin`은 같은 시작 범위에 대해 재실행할 수 있지만 기존 범위를 덮어쓰지 않습니다. Manifest는 Git common directory 아래 `agent-usage/issue-123.json`에 저장하므로 worktree끼리 공유하며 tracked source에 포함되지 않습니다. 다른 Issue가 같은 root task를 재사용하면 새 시작 turn을 기록합니다. 한 turn에 여러 Issue 작업을 섞지 않고, 무관한 후속 turn은 종료 범위 또는 반복 가능한 `--exclude-turn`으로 제외합니다.
-
-최종 변경을 push하고 모든 subagent가 완료된 뒤 snapshot을 PR comment에 저장합니다. 대상 PR은 `Closes #123` 등으로 해당 Issue와 연결되어 있어야 하며, local HEAD와 PR head가 같아야 합니다.
-
-```bash
-node scripts/agent-usage.mjs snapshot --issue 123 --pr 124 --publish
-```
-
-`--publish`를 생략하면 GitHub 조회와 local snapshot 저장만 수행합니다. `--json`은 Markdown 대신 공개 가능한 aggregate JSON을 출력합니다. 게시할 Markdown과 검증용 JSON을 합친 snapshot comment가 GitHub의 65,536자 한도를 넘으면 local snapshot을 유지하고 게시 전에 크기 초과 오류를 반환합니다. 최초 종료 범위는 command 실행 시각까지의 마지막 root turn이며, `--through-turn END_TURN_ID`와 `--until UTC_TIMESTAMP`로 지정할 수 있습니다. 재실행은 저장된 종료 시각·turn·제외 turn을 유지합니다. 다른 Issue의 시작 범위를 포함하려 하면 실패하므로 앞선 Issue의 종료를 명시합니다.
-
-추가 작업 후 PR head가 변경되면 push 후 `snapshot --issue 123 --pr 124 --refresh --publish`로 현재까지 범위를 명시적으로 확장합니다. `--refresh`와 종료 옵션을 함께 주면 명시한 옵션이 우선합니다. Merge된 PR의 backfill 재시도에는 `--refresh` 없이 저장된 범위를 사용합니다.
-
-로그는 기본적으로 `$CODEX_HOME/sessions` 또는 `~/.codex/sessions`에서 읽으며 `--sessions-dir PATH`로 바꿀 수 있습니다. `--repo OWNER/REPO`와 `--thread ROOT_TASK_ID`로 repository와 root task를 명시할 수 있습니다. Repository는 대소문자를 구분하지 않으며 기존 mixed-case manifest도 재사용합니다. `turns`의 내부 ID 출력과 manifest는 local 경계 선택용이며 GitHub 보고에는 포함하지 않습니다.
-
-집계는 response별 delta를 dedup하고 root turn에 연결된 descendant만 재귀적으로 포함합니다. 입력·캐시 입력·출력·reasoning·전체·캐시 입력 제외를 구분하며, reasoning은 출력의 일부이므로 다시 더하지 않습니다. 모델 또는 기록 누락, 잘린 로그, 누적 counter 불일치, 미완료 subagent는 고정된 경고와 불완전 집계로 표시하고 exit code `1`을 반환합니다. 이는 snapshot 시점의 관측량으로, 이후 마무리 응답과 보고 command 자체를 포함한 최종 과금 총량이 아닙니다.
-
-`.github/workflows/agent-usage-report.yml`이 same-repository PR의 merge event를 처리합니다. Trusted default branch의 코드로 snapshot 작성자·schema·head·Issue 연결을 검증하고, PR별 marker가 있는 Issue comment를 게시하거나 갱신합니다. 단순 close와 fork PR은 제외합니다. Snapshot이 없거나 유효하지 않으면 수치 없이 사유를 게시하고 실행을 실패로 남겨 재시도할 수 있습니다. 다른 작성자의 comment는 덮어쓰지 않습니다.
-
-재시도는 workflow의 수동 실행(`pr_number`) 또는 아래 command로 수행합니다. 이미 merge된 PR을 backfill할 때는 작업 시작 turn을 먼저 지정하고 `snapshot --until`에 merge 시각 이하의 UTC 시각을 넘깁니다.
-
-```bash
-node scripts/agent-usage.mjs publish --repo OWNER/REPO --pr 124
-```
-
-Workflow가 default branch에 반영된 이후부터 자동 게시가 동작합니다. GitHub runner는 local Codex 로그를 읽을 수 없으므로 merge 전에 Worker가 snapshot command를 실행해야 합니다. 추가 Secret, 외부 서버, polling process는 사용하지 않습니다.
-
-```bash
-node --test scripts/agent-usage/test/*.test.mjs
-node --check scripts/agent-usage.mjs
-node --check scripts/agent-usage/collect.mjs
-node --check scripts/agent-usage/report.mjs
-node --check scripts/agent-usage/github.mjs
-```
 
 ## Native validation
 
@@ -100,7 +54,6 @@ node --check scripts/agent-usage/github.mjs
 | Web | `pnpm --filter @ldb/web run --sequential '/^(lint\|build)$/'` |
 | PR review tooling | `pnpm run --sequential '/^(test\|typecheck):pr-review$/'` |
 | Task 준비 tooling | 위 `node --test`와 `node --check` command |
-| Agent 사용량 tooling | 위 `agent-usage`의 `node --test`와 `node --check` command |
 
 Desktop `build`는 `typecheck`를 포함하므로 위 조합에서 별도로 반복하지 않습니다. Web `build`도 `tsc -b`를 포함합니다. 빠른 feedback이 필요할 때는 기존 개별 `test`, `lint`, `typecheck` command를 먼저 실행할 수 있습니다. 여러 범위를 변경했다면 해당 행을 함께 검증합니다.
 

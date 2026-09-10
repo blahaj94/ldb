@@ -224,7 +224,7 @@ exceptions: 직접 수행 조건이나 고정된 실행 입력이 충족되지 �
 review-after: canonical 반영 후 실제 Execution Issue 3개에서 직접 수행·실행 전담·PASS 재사용 사례와 누락을 검토한다. 사례가 없던 항목은 검증됐다고 간주하지 않는다.
 ```
 
-수행 모드 선택 이유, 위임·인계·review 추가 작업, 중복 command 생략, 재실행 이유, evidence 누락과 총사용량 snapshot을 검토한다. 기존 시각·사용량 기록만 활용하며 정밀 timing을 위한 새 wrapper·rerun은 하지 않는다. 누락·소유권 충돌·잘못된 PASS 채택이 있으면 해당 예외의 확대를 멈추고 수정 또는 폐기를 제안한다. 관측하지 못한 사례나 절감량은 추정하지 않는다.
+수행 모드 선택 이유, 위임·인계·review 추가 작업, 중복 command 생략, 재실행 이유, evidence 누락을 검토한다. 기존 실행 기록만 활용하며 정밀 timing을 위한 새 wrapper·rerun은 하지 않는다. 누락·소유권 충돌·잘못된 PASS 채택이 있으면 해당 예외의 확대를 멈추고 수정 또는 폐기를 제안한다. 관측하지 못한 사례나 절감량은 추정하지 않는다.
 
 공통 routing 판단·소유권·evidence 계약은 canonical Rule에서 관리한다. 향후 skill은 역할 선택과 필요한 Rule pointer만, custom-agent TOML은 model·effort·역할 제한 등 실행 설정만 담는 얇은 adapter로 둔다. 원문 지침을 여러 파일에 복제하지 않는다.
 

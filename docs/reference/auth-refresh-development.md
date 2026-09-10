@@ -46,7 +46,7 @@ Transaction의 commit·release 완료 뒤에만 body 없는 204를 보낸다. DB
 | 6 | `refresh-failures.mjs`: signing·entropy·실제 INSERT CHECK 실패·current/old/다른 기기 hash PK 충돌 6개 rollback group. UPDATE 뒤 INSERT 오류와 원래 current 유지, caller의 별도 새 시도 성공. Rotation/reuse 각각 실제 commit/rollback한 뒤 acknowledgement 오류 주입 4개 group에서 결과 미반환·자동 retry 없음 |
 | 7 | `refresh-rotation.mjs`: 정확 deadline 전 1초의 JWT cap, equality/초과 거절, 만료 consumed 이력의 폐기 쓰기 없음. 정확 equality는 실제 clock statement 응답을 test에서 고정하여 검증하며 위 실제 대기 만료 test와 구분 |
 | 8 | `refresh-rotation.mjs`: 40일 전 session 생성·refresh 발급에도 최근 활동이 있으면 허용, 4번 rotation 뒤 전체 이력 보존, 가장 오래된 consumed 재사용 탐지, 같은 user의 다른 기기와 다른 user snapshot 보존. `refresh-concurrency.mjs`: logout 선행/후행·늦은 결과, hint 뒤 user/session 삭제, 활동의 새 deadline 선commit |
-| 9 | Red→Green commit, 아래 필수 command, 독립 review·사용량 snapshot과 Draft PR handoff는 #70과 연결 PR에 기록 |
+| 9 | Red→Green commit, 아래 필수 command, 독립 review와 Draft PR handoff는 #70과 연결 PR에 기록 |
 
 기존 DB matrix는 rotation/history 2개, concurrency/TTL 12개, failure 10개 scenario group이다. 기존 core matrix를 그대로 실행한 뒤 `session-http-integration.mjs`의 HTTP→PostgreSQL 12개 scenario를 같은 disposable harness에서 실행한다. 정상 refresh, current/consumed·반복·unknown·물리 삭제 logout, 다른 기기와 이력·활동 보존을 확인한다. 양방향 경합은 첫 실제 HTTP transaction이 commit 전 row lock을 보유한 동안 반대 HTTP transaction을 시작하고 `pg_blocking_pids()`로 waiter를 관측한 뒤 lock을 해제한다. Refresh-first는 commit 이후 응답도 별도로 지연해 logout 완료 뒤 늦은 200과 그 token의 최종 무효를 확인한다. 양 endpoint의 commit 전 응답 금지와 실제 commit/rollback 뒤 acknowledgement 오류, transport/shape no-write도 검증한다. Commit 결과 불명은 QueryRunner fault injection이며 물리 network 단절 실험과 구분한다. 별도 process `login-log-probe.mjs`는 refresh/logout 성공·오류·media·oversize·body canary의 stdout/stderr 비노출을 검증하고, database integration의 canary capture는 같은 process 안의 관측으로 구분한다.
 
