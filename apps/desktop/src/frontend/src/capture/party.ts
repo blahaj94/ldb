@@ -41,7 +41,13 @@ export function isPartySlotPresent(rgba: Uint8ClampedArray): boolean {
 
   for (let index = 0; index < rgba.length; index += 4) {
     const hasMatchingRed = Math.abs(rgba[index] - PARTY_MANA_COLOR[0]) <= MANA_COLOR_TOLERANCE
+    if (!hasMatchingRed) {
+      continue
+    }
     const hasMatchingGreen = Math.abs(rgba[index + 1] - PARTY_MANA_COLOR[1]) <= MANA_COLOR_TOLERANCE
+    if (!hasMatchingGreen) {
+      continue
+    }
     const hasMatchingBlue = Math.abs(rgba[index + 2] - PARTY_MANA_COLOR[2]) <= MANA_COLOR_TOLERANCE
     const hasManaColor = hasMatchingRed && hasMatchingGreen && hasMatchingBlue
     if (hasManaColor) {
