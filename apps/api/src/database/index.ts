@@ -74,7 +74,7 @@ export async function runMigrationCommand(
     dataSource = createDataSource()
     await dataSource.initialize()
     const isUpCommand = command === 'up'
-    const isDownCommand = !isUpCommand && command === 'down'
+    const isDownCommand = command === 'down'
     if (isUpCommand) {
       const applied = await dataSource.runMigrations({ transaction: 'all' })
       result = `Database migration applied: ${applied.length}`
@@ -86,21 +86,27 @@ export async function runMigrationCommand(
         "SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"
       )) as Array<{ exists: boolean }>
       const migrationHistoryExists = relation[0]?.exists
-      const hasMigrationHistoryFlag = migrationHistoryExists != null
-      const isMigrationHistoryPresent = hasMigrationHistoryFlag && migrationHistoryExists
-      if (!isMigrationHistoryPresent) {
+      const hasMigrationHistoryExistenceResult = migrationHistoryExists != null
+      if (!hasMigrationHistoryExistenceResult) {
         result = 'Database migrations pending'
       } else {
-        const history = (await dataSource.query('SELECT name FROM "typeorm_migrations"')) as Array<{
-          name: string
-        }>
-        const applied = new Set(history.map(({ name }) => name))
-        const areAllMigrationsApplied = dataSource.migrations.every((migration) =>
-          applied.has(migration.name ?? migration.constructor.name)
-        )
-        result = areAllMigrationsApplied
-          ? 'Database migrations current'
-          : 'Database migrations pending'
+        const isMigrationHistoryPresent = migrationHistoryExists
+        if (!isMigrationHistoryPresent) {
+          result = 'Database migrations pending'
+        } else {
+          const history = (await dataSource.query(
+            'SELECT name FROM "typeorm_migrations"'
+          )) as Array<{
+            name: string
+          }>
+          const applied = new Set(history.map(({ name }) => name))
+          const areAllMigrationsApplied = dataSource.migrations.every((migration) =>
+            applied.has(migration.name ?? migration.constructor.name)
+          )
+          result = areAllMigrationsApplied
+            ? 'Database migrations current'
+            : 'Database migrations pending'
+        }
       }
     }
   } catch {
@@ -108,12 +114,14 @@ export async function runMigrationCommand(
   }
   const dataSourceToClose = dataSource
   const hasDataSource = dataSourceToClose != null
-  const isDataSourceInitialized = hasDataSource && dataSourceToClose.isInitialized
-  if (isDataSourceInitialized) {
-    try {
-      await dataSourceToClose.destroy()
-    } catch {
-      failed = true
+  if (hasDataSource) {
+    const isDataSourceInitialized = dataSourceToClose.isInitialized
+    if (isDataSourceInitialized) {
+      try {
+        await dataSourceToClose.destroy()
+      } catch {
+        failed = true
+      }
     }
   }
   const migrationResult = result
