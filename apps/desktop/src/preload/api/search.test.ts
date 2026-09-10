@@ -168,9 +168,11 @@ it('schema 성공 뒤 own field의 exact-shape get 예외를 그대로 전파한
   let characterReads = 0
   const row = new Proxy(searchRow, {
     get(target, property, receiver) {
-      if (property === 'characterId') {
+      const isCharacterId = property === 'characterId'
+      if (isCharacterId) {
         characterReads += 1
-        if (characterReads > 1) {
+        const isExactShapeRead = characterReads > 1
+        if (isExactShapeRead) {
           throw sentinel
         }
       }
