@@ -44,13 +44,15 @@ last-reviewed: 2026-09-08
 
 ## Google adapter 연결점
 
+Google adapter가 사용하는 `jose`의 선언 버전은 `apps/api/package.json`에서, 해결 버전은 `pnpm-lock.yaml`에서 확인합니다.
+
 `LoginDependencies.verifyProvider(ProviderVerificationInput)`만 서버의 검증 완료 identity를 반환한다. 입력은 저장된 `snapshot`, provider `code`, 복호화한 별도 `providerVerifier`, Google `nonceHash`, 단일 deadline의 `AbortSignal`이다. Public request의 provider/subject를 이 결과로 바꾸는 경로는 없다.
 
 `createGoogleProviderVerifier(configuration)`의 반환 함수를 `verifyProvider`에 주입한다. `configuration.registrations`는 서버가 신뢰하는 allowlist이며 각 항목은 공통 `snapshot`, `tokenEndpoint`, `jwksUri`를 가진다. Factory는 공통 registry 검증·복제·불변 snapshot을 재사용하고 URL의 exact HTTPS·userinfo/query/fragment 부재를 검사한다. 이 syntactic 검사는 arbitrary HTTPS host를 Google 소유로 인증하지 않는다. 실제 Google endpoint 선택과 registry 배포는 trusted server composition의 책임이며 public request나 token header로 설정하지 않는다.
 
 `resolveSecret({version,reference,signal})`은 저장 snapshot의 version과 secret 참조만 해석한다. Adapter factory는 resolver와 registration을 검증하고, 기본 entry는 `AUTH_CONFIG_FILE`을 한 번 읽어 모든 등록 version의 secret 연결을 listen 전에 확인한다. Callback에서 historical version을 제공할 수 없으면 정제 provider 실패이며 active secret으로 대체하지 않는다. 정확한 파일 입력은 [`auth-runtime.md`](../rules/auth-runtime.md), 현재 loader와 교체 경계는 [`api-start-development.md`](api-start-development.md)를 따른다. 실제 credential·저장소 운영 availability 점검은 별도다.
 
-Adapter는 snapshot의 client/secret 참조·callback으로 token을 한 번 교환한다. 승인된 `jose 6.2.12`가 Google RS256 signature·issuer·필수 claim·exp를 검증하며 adapter가 scalar exact aud/azp, iat, ASCII·case-sensitive·최대 255자 sub, transaction nonce와 선택적 at_hash를 추가 확인한다. Nonce는 공통 `opaqueHash`의 canonical base64url decoded 32-byte SHA-256을 재사용하고 PKCE의 ASCII S256과 구분한다. Name/email/photo·예상치 않은 refresh token·원문 응답은 전달하지 않고 `{provider,subject}`만 반환한다. 자체 ES256 JWT의 key/issuer/audience와 공유하지 않는다.
+Adapter는 snapshot의 client/secret 참조·callback으로 token을 한 번 교환한다. `jose`가 Google RS256 signature·issuer·필수 claim·exp를 검증하며 adapter가 scalar exact aud/azp, iat, ASCII·case-sensitive·최대 255자 sub, transaction nonce와 선택적 at_hash를 추가 확인한다. Nonce는 공통 `opaqueHash`의 canonical base64url decoded 32-byte SHA-256을 재사용하고 PKCE의 ASCII S256과 구분한다. Name/email/photo·예상치 않은 refresh token·원문 응답은 전달하지 않고 `{provider,subject}`만 반환한다. 자체 ES256 JWT의 key/issuer/audience와 공유하지 않는다.
 
 Token과 JWKS HTTP는 `redirect:error`이며 token의 `jku`/`x5u`를 해석하지 않는다. JWKS response의 public RSA field와 jose local resolver만 cache에 남긴다. `Cache-Control: max-age`와 `Age`를 적용하고 no-store/no-cache·수명 없음/만료는 재사용하지 않는다. Unknown kid는 cache 상태와 무관하게 한 번 refresh하고 여전히 없으면 실패한다. Cold/expired cache는 최초 fetch 뒤 추가 refresh 한 번으로 최대 두 번의 JWKS 요청을 수행한다. 이는 새 key 전파를 확인하는 bounded refresh이며 token 교환이나 실패한 network 요청의 자동 retry가 아니다. 동시 fetch의 늦은 이전 응답이 새 cache를 덮어쓰지 않으며 취소된 fetch의 결과를 cache에 넣지 않는다.
 
