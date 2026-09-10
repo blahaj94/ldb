@@ -120,7 +120,6 @@ Root의 `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`와 직접 dev
 - Unprivileged signal workflow: `.github/workflows/ai-pr-review.yml`
 - Trusted policy/provider workflow: `.github/workflows/ai-pr-review-trusted.yml`
 - Review contract: `.github/ai-review/prompts/review.md`
-- Provider-neutral result schema: `.github/ai-review/schemas/review-result.schema.json`
 - Runtime와 policy check: `scripts/pr-review/src`
 - Test: `scripts/pr-review/test`
 - Command:
@@ -136,6 +135,8 @@ Trusted workflow는 signal workflow가 완료된 뒤 `workflow_run`으로 실행
 Repository Secret `LDB_REVIEW_TRIGGER_TOKEN`은 2026-08-29에 등록했다. 같은 날 controlled pilot PR #5에서 signal, trusted Policy job, 사용자 identity provider trigger, Codex review, P1 inline finding, same-head deduplication E2E가 모두 통과했다. Pilot PR은 merge하지 않고 닫았다.
 
 Built-in Codex review는 `P0`와 `P1` finding만 발행하므로 `P2`와 `P3` summary publication은 향후 direct provider integration 범위다.
+
+현재 결과 정규화 schema와 validator는 없습니다. Provider-neutral review 목표는 유지하며, 향후 직접 provider 응답을 소비하는 실행 계약이 정해지면 실제 입력과 소비자를 기준으로 결과 계약을 다시 설계합니다.
 
 Workflow가 자체적으로 확인하는 policy는 linked Issue, Red-before-Green evidence, approximate logic budget이다. PR scope에서 채택 대상으로 명시한 Rule 변경은 별도 approval comment 검사 없이 사용자의 merge로 승인·활성화한다. 결과는 하나의 advisory summary comment로 유지되며 merge를 차단하지 않는다.
 
