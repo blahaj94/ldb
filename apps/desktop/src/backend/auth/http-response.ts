@@ -60,8 +60,11 @@ function isUtcIso(value: string): boolean {
   const normalized = `${match[1]}.${milliseconds}Z`
   const timestamp = Date.parse(normalized)
   const isValidDate = Number.isFinite(timestamp)
-  const hasExactDate = isValidDate ? new Date(timestamp).toISOString() === normalized : undefined
-  const isValidUtcIso = isValidDate && hasExactDate === true
+  if (!isValidDate) {
+    return false
+  }
+  const hasExactDate = new Date(timestamp).toISOString() === normalized
+  const isValidUtcIso = isValidDate && hasExactDate
 
   return isValidUtcIso
 }
