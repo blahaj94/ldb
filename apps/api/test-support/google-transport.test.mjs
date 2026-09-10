@@ -72,7 +72,8 @@ test('reentrant abort during fulfillment read rejects and discards the same valu
     get aborted() {
       abortedReads += 1
       trace.push('aborted')
-      if (abortedReads === 2) {
+      const isFulfillmentRead = abortedReads === 2
+      if (isFulfillmentRead) {
         trace.push('abort')
         abortListener()
       }
