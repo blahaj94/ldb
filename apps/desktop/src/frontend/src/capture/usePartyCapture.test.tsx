@@ -121,9 +121,25 @@ function captureResources(): {
   return { track, stream, worker }
 }
 
-function loadVideoMetadata(video: HTMLMediaElement): void {
-  Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1920 })
-  Object.defineProperty(video, 'videoHeight', { configurable: true, value: 1080 })
+function loadVideoMetadata(
+  video: HTMLMediaElement,
+  dimensions: { width?: number; height?: number } = {},
+  access?: string[]
+): void {
+  Object.defineProperty(video, 'videoWidth', {
+    configurable: true,
+    get: () => {
+      access?.push('videoWidth')
+      return dimensions.width ?? 1920
+    }
+  })
+  Object.defineProperty(video, 'videoHeight', {
+    configurable: true,
+    get: () => {
+      access?.push('videoHeight')
+      return dimensions.height ?? 1080
+    }
+  })
   video.dispatchEvent(new Event('loadedmetadata'))
 }
 
@@ -271,6 +287,39 @@ describe('usePartyCapture', () => {
     await hook.unmount()
     expect(track.stop).toHaveBeenCalledOnce()
     expect(worker.terminate).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    { width: 1600, height: 1080 },
+    { width: 1920, height: 900 }
+  ])('rejects unsupported capture layout $width×$height before OCR starts', async (dimensions) => {
+    const { stream, track } = captureResources()
+    const access: string[] = []
+    vi.mocked(HTMLMediaElement.prototype.play).mockImplementationOnce(async function (
+      this: HTMLMediaElement
+    ) {
+      loadVideoMetadata(this, dimensions, access)
+    })
+    getDisplayMedia.mockResolvedValue(stream)
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+
+    await act(async () => hook.getCurrent().startCapture())
+
+    expect(hook.getCurrent().status).toBe(
+      `Unsupported capture layout: ${dimensions.width}×${dimensions.height}.`
+    )
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(moduleMocks.createPartyOcrWorker).not.toHaveBeenCalled()
+    expect(moduleMocks.runSerialLoop).not.toHaveBeenCalled()
+    expect(access).toEqual(
+      dimensions.width === 1920
+        ? ['videoWidth', 'videoHeight', 'videoWidth', 'videoHeight']
+        : ['videoWidth', 'videoWidth', 'videoHeight']
+    )
+
+    await hook.unmount()
   })
 
   it.each(['unmount', 'new capture'] as const)(
