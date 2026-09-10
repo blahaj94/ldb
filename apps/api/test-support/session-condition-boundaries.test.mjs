@@ -5,110 +5,48 @@ import { test } from 'node:test'
 
 const { rotateRefreshForTest } = await import('../dist/auth/refresh/index.js')
 const { logoutSession } = await import('../dist/auth/logout/index.js')
-
 const rawToken = randomBytes(32).toString('base64url')
 const ids = { user: randomUUID(), session: randomUUID() }
-
-function repository(overrides = {}) {
-  return {
-    findOneBy: async () => null,
-    findOne: async () => null,
-    update: async () => undefined,
-    insert: async () => undefined,
-    ...overrides
-  }
-}
-
+const repository = (overrides = {}) => ({ findOneBy: async () => null, findOne: async () => null, update: async () => undefined, insert: async () => undefined, ...overrides })
 function dataSource({ users, sessions, refresh }) {
-  return {
-    transaction: async (_isolation, callback) =>
-      callback({
-        getRepository: (() => {
-          const repositories = [users, sessions, refresh]
-          let index = 0
-          return (schema) => {
-            const byName = { User: users, AuthSession: sessions, AuthRefreshToken: refresh }
-            return byName[schema.options.name] ?? repositories[index++]
-          }
-        })(),
-        query: async () => [{ now: new Date('2026-01-01T00:00:00Z') }]
-      })
-  }
+  const repositories = { User: users, AuthSession: sessions, AuthRefreshToken: refresh }
+  return { transaction: async (_isolation, callback) => callback({ getRepository: (schema) => repositories[schema.options.name], query: async () => [{ now: new Date('2026-01-01T00:00:00Z') }] }) }
 }
 
-function throwingToken() {
-  return {
-    sessionId: ids.session,
-    get tokenHash() {
-      throw new Error('hash property inspected')
-    }
-  }
-}
-
-for (const [name, session] of [
-  ['missing session', null],
-  ['session owner mismatch', { userId: randomUUID(), id: ids.session }]
+for (const [name, session, token, expectedOwnerReads, expectedHashReads] of [
+  ['locked session absent', null, { sessionId: ids.session }, 0, 0],
+  ['locked token absent', { id: ids.session, userId: ids.user }, null, 0, 0],
+  ['session owner mismatch', { id: ids.session, userId: randomUUID() }, { sessionId: ids.session }, 0, 0],
+  ['token owner mismatch', { id: ids.session, userId: ids.user }, { sessionId: randomUUID() }, 1, 0]
 ]) {
-  test(`refresh skips dependent properties after ${name}`, async () => {
-    const token = throwingToken()
+  test(`refresh preserves dependent evaluation after ${name}`, async () => {
+    let tokenOwnerReads = 0
+    let hashReads = 0
+    const inspectedToken = token && { get sessionId() { tokenOwnerReads++; return token.sessionId }, get tokenHash() { hashReads++; return { equals: () => true } } }
     const users = repository({ findOne: async () => ({ id: ids.user }) })
-    const sessions = repository({
-      findOneBy: async () => ({ userId: ids.user, id: ids.session }),
-      findOne: async () => session
-    })
-    const refresh = repository({ findOneBy: async () => token, findOne: async () => token })
-    if (session) {
-      sessions.findOne = async () => ({
-        ...session,
-        get userId() {
-          return session.userId
-        }
-      })
-    }
-    await assert.rejects(
-      () =>
-        rotateRefreshForTest(dataSource({ users, sessions, refresh }), rawToken, () =>
-          Buffer.alloc(32)
-        ),
-      (error) => ['AUTHENTICATION_REQUIRED', 'AUTH_UNAVAILABLE'].includes(error.code)
-    )
+    const sessions = repository({ findOneBy: async () => ({ id: ids.session, userId: ids.user }), findOne: async () => session })
+    const refresh = repository({ findOneBy: async () => inspectedToken, findOne: async () => inspectedToken })
+    await assert.rejects(() => rotateRefreshForTest(dataSource({ users, sessions, refresh }), rawToken, () => Buffer.alloc(32)), { code: 'AUTHENTICATION_REQUIRED' })
+    assert.equal(tokenOwnerReads, expectedOwnerReads)
+    assert.equal(hashReads, expectedHashReads)
   })
 }
 
-for (const [name, session, shouldInspect] of [
-  ['missing session', null, true],
-  ['session owner mismatch', { id: ids.session, userId: randomUUID() }, true],
-  ['missing token', { id: ids.session, userId: ids.user }, false]
+for (const [name, session, token, expectedOwnerReads, expectedHashCalls] of [
+  ['locked session absent', null, { sessionId: ids.session }, 1, 1],
+  ['session owner mismatch', { id: ids.session, userId: randomUUID() }, { sessionId: ids.session }, 1, 1],
+  ['token owner mismatch', { id: ids.session, userId: ids.user }, { sessionId: randomUUID() }, 1, 1],
+  ['locked token absent', { id: ids.session, userId: ids.user }, null, 0, 0]
 ]) {
-  test(`logout target inspection is preserved for ${name}`, async () => {
+  test(`logout target evaluation is preserved for ${name}`, async () => {
     let ownerReads = 0
     let hashCalls = 0
-    const sessionValue = session && { ...session }
-    const tokenValue = shouldInspect
-      ? {
-          get sessionId() {
-            ownerReads++
-            return ids.session
-          },
-          tokenHash: {
-            equals() {
-              hashCalls++
-              return false
-            }
-          }
-        }
-      : null
+    const inspectedToken = token && { get sessionId() { ownerReads++; return token.sessionId }, tokenHash: { equals() { hashCalls++; return false } } }
     const users = repository({ findOne: async () => ({ id: ids.user }) })
-    const sessions = repository({
-      findOneBy: async () => ({ id: ids.session, userId: ids.user }),
-      findOne: async () => sessionValue
-    })
-    const refresh = repository({
-      findOneBy: async () => tokenValue,
-      findOne: async () => tokenValue
-    })
+    const sessions = repository({ findOneBy: async () => ({ id: ids.session, userId: ids.user }), findOne: async () => session })
+    const refresh = repository({ findOneBy: async () => ({ sessionId: ids.session }), findOne: async () => inspectedToken })
     await logoutSession(dataSource({ users, sessions, refresh }), rawToken)
-    assert.equal(ownerReads, shouldInspect ? 2 : 0)
-    assert.equal(hashCalls, shouldInspect ? 1 : 0)
+    assert.equal(ownerReads, expectedOwnerReads)
+    assert.equal(hashCalls, expectedHashCalls)
   })
 }
