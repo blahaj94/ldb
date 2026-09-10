@@ -115,18 +115,6 @@ Root의 `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore`와 직접 dev
 - 작업 준비와 workspace별 native validation 예제: [`scripts/README.md`](../../scripts/README.md)
 - Root `test` script는 현재 placeholder이며 성공하는 validation command가 아니다.
 
-### Agent 사용량 보고
-
-- Local command: `scripts/agent-usage.mjs`의 `begin`, `turns`, `snapshot`, `publish`
-- 범위 집계: `scripts/agent-usage/collect.mjs`
-- Snapshot 검증과 Markdown 보고: `scripts/agent-usage/report.mjs`; 집계 범위 표시는 `scripts/format-date.mjs`를 재사용하며 snapshot JSON의 UTC 시각은 유지
-- PR snapshot과 Issue comment 갱신: `scripts/agent-usage/github.mjs`
-- Merge event와 수동 재시도: `.github/workflows/agent-usage-report.yml`
-- Test: `node --test scripts/agent-usage/test/*.test.mjs`
-- 실행 시점, 옵션과 syntax check: [`scripts/README.md`](../../scripts/README.md)
-
-Worker가 local manifest에 작업 시작 범위를 기록하고 handoff 전에 aggregate snapshot을 PR comment에 저장한다. Workflow는 merge된 same-repository PR의 유효한 snapshot으로 연결된 Issue에 사용량과 실제 agent model/effort를 게시한다. 내부 task/turn ID와 raw 로그는 GitHub에 전송하지 않으며, snapshot 이후 사용량은 보고에 포함되지 않을 수 있다.
-
 ### AI PR review
 
 - Unprivileged signal workflow: `.github/workflows/ai-pr-review.yml`
