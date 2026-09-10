@@ -19,14 +19,17 @@ describe('Desktop auth PKCE와 URL 경계', () => {
   )
 
   it('문자열이 아닌 Proxy 입력은 내부 접근 없이 거절한다', () => {
-    const value = new Proxy({}, {
-      get: () => {
-        throw new Error('unexpected get')
-      },
-      has: () => {
-        throw new Error('unexpected has')
+    const value = new Proxy(
+      {},
+      {
+        get: () => {
+          throw new Error('unexpected get')
+        },
+        has: () => {
+          throw new Error('unexpected has')
+        }
       }
-    })
+    )
 
     expect(isCanonicalOpaque(value)).toBe(false)
   })
