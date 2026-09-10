@@ -86,16 +86,58 @@ describe('search smoke protected evaluation', () => {
         }
       }
     ) as SearchUiObservation
+    const readCurrentRequests = vi.fn(() => {
+      throw new Error('request count must stay skipped')
+    })
 
     expect(
       isReloginReady({
         blank,
         afterLogin: { streams: 1, workers: 1 },
         stopped: { streams: 1, workers: 1 },
-        currentRequests: 1,
+        readCurrentRequests,
         expectedRequests: 1
       })
     ).toBe(false)
     expect(reads).toEqual(['captureId'])
+    expect(readCurrentRequests).not.toHaveBeenCalled()
+  })
+
+  it('relogin guard가 모두 통과하면 request count를 마지막에 한 번 읽는다', () => {
+    const reads: string[] = []
+    const slots = Array.from({ length: 4 }, () => ({
+      state: 'idle',
+      statusMatched: true
+    }))
+    const blank = Object.defineProperties(
+      {},
+      {
+        captureId: { get: () => (reads.push('captureId'), null) },
+        sourceSelected: { get: () => (reads.push('sourceSelected'), false) },
+        startDisabled: { get: () => (reads.push('startDisabled'), true) },
+        regionMask: { get: () => (reads.push('regionMask'), 15) },
+        slots: { get: () => (reads.push('slots'), slots) }
+      }
+    ) as SearchUiObservation
+    const readCurrentRequests = vi.fn(() => (reads.push('requests'), 3))
+
+    expect(
+      isReloginReady({
+        blank,
+        afterLogin: { streams: 2, workers: 4 },
+        stopped: { streams: 2, workers: 4 },
+        readCurrentRequests,
+        expectedRequests: 3
+      })
+    ).toBe(true)
+    expect(reads).toEqual([
+      'captureId',
+      'sourceSelected',
+      'startDisabled',
+      'regionMask',
+      'slots',
+      'requests'
+    ])
+    expect(readCurrentRequests).toHaveBeenCalledOnce()
   })
 })

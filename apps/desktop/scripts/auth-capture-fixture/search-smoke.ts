@@ -27,7 +27,7 @@ function sameRequest({ before, after }: { before: Slot; after: Slot }): boolean 
   const isSameRequest = hasSameId && hasSameObservation
   return isSameRequest
 }
-export function hasState(view: SearchUiObservation, state: string): boolean {
+function hasState(view: SearchUiObservation, state: string): boolean {
   const hasRegions = view.regionMask === 15
   const hasMatchingSlots = view.slots.every((slot) => {
     const isState = slot.state === state
@@ -82,13 +82,13 @@ export function isReloginReady({
   blank,
   afterLogin,
   stopped,
-  currentRequests,
+  readCurrentRequests,
   expectedRequests
 }: {
   blank: SearchUiObservation
   afterLogin: { streams: number; workers: number }
   stopped: { streams: number; workers: number }
-  currentRequests: number
+  readCurrentRequests: () => number
   expectedRequests: number
 }): boolean {
   const hasNoCapture = blank.captureId === null
@@ -115,7 +115,7 @@ export function isReloginReady({
   if (!hasUnchangedWorkers) {
     return false
   }
-  return currentRequests === expectedRequests
+  return readCurrentRequests() === expectedRequests
 }
 
 function createRetryScript({
@@ -457,7 +457,7 @@ export async function smokeCharacterSearch(
       blank,
       afterLogin,
       stopped,
-      currentRequests: search.counts.requests,
+      readCurrentRequests: () => search.counts.requests,
       expectedRequests: requestsBeforeQuiet
     })
     assert.equal(relogin, true)
