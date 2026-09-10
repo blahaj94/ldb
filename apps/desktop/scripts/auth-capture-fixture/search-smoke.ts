@@ -361,10 +361,8 @@ export async function smokeCharacterSearch(
     const hasBlockedWait = hasRetryWait(blockedSlot)
     const hasPositiveBlockedWait = hasBlockedWait && blockedSlot.retryAfterSeconds > 0
     assert.equal(hasPositiveBlockedWait, true)
-    {
-      const retryDisabled = blockedSlot.retryDisabled === true
-      assert.equal(retryDisabled, true)
-    }
+    const isStillWaiting = blockedSlot.retryDisabled === true
+    assert.equal(isStillWaiting, true)
     const beforeBlocked = search.counts.requests
     await retry({ slot: limitedSlot, allowDisabled: true })
     await read()
@@ -374,7 +372,7 @@ export async function smokeCharacterSearch(
       const isRetryEnabled = hasExpiredWait && view.slots[limitedSlot].retryDisabled === false
       return isRetryEnabled
     })
-    const hasObservedWait = hasPositiveWait
+    const hasObservedWait = hasPositiveWait && isStillWaiting
     let rateWait = false
     if (hasObservedWait) {
       const hasSameLimitedRequest = sameRequest({

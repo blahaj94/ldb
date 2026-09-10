@@ -30,9 +30,13 @@ export function isAcceptedParsedObservation(
   const hasRequestId = slot.requestId != null
   if (hasRequestId) {
     const isRequestActive = slot.state !== 'idle'
-    const hasRequest = isRequestActive
     const isAccepted =
-      hasSameCapture && hasSameSlot && hasSameRevision && hasSameNickname && hasRequest
+      hasSameCapture &&
+      hasSameSlot &&
+      hasSameRevision &&
+      hasSameNickname &&
+      hasRequestId &&
+      isRequestActive
     return isAccepted
   }
   return false
@@ -63,11 +67,11 @@ export function syntheticSlotMask(value: unknown): number {
   }
   const { slot, nickname } = value as { slot?: unknown; nickname?: unknown }
   const isSlotNumber = typeof slot === 'number'
+  const isExpectedNickname = nickname === 'ALICE'
   if (isSlotNumber) {
     const isSlotInteger = Number.isInteger(slot)
     if (isSlotInteger) {
       const isSlotInRange = slot >= 0 && slot < 4
-      const isExpectedNickname = nickname === 'ALICE'
       const isExpectedSlot = isSlotInRange && isExpectedNickname
       return isExpectedSlot ? 1 << slot : 0
     }
