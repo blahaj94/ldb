@@ -86,30 +86,42 @@ export async function runMigrationCommand(
         "SELECT to_regclass('public.typeorm_migrations') IS NOT NULL AS exists"
       )) as Array<{ exists: boolean }>
       const migrationHistoryExists = relation[0]?.exists
-      if (!migrationHistoryExists) {
+      const hasMigrationHistoryExistenceResult = migrationHistoryExists != null
+      if (!hasMigrationHistoryExistenceResult) {
         result = 'Database migrations pending'
       } else {
-        const history = (await dataSource.query('SELECT name FROM "typeorm_migrations"')) as Array<{
-          name: string
-        }>
-        const applied = new Set(history.map(({ name }) => name))
-        const areAllMigrationsApplied = dataSource.migrations.every((migration) =>
-          applied.has(migration.name ?? migration.constructor.name)
-        )
-        result = areAllMigrationsApplied
-          ? 'Database migrations current'
-          : 'Database migrations pending'
+        const isMigrationHistoryPresent = migrationHistoryExists
+        if (!isMigrationHistoryPresent) {
+          result = 'Database migrations pending'
+        } else {
+          const history = (await dataSource.query(
+            'SELECT name FROM "typeorm_migrations"'
+          )) as Array<{
+            name: string
+          }>
+          const applied = new Set(history.map(({ name }) => name))
+          const areAllMigrationsApplied = dataSource.migrations.every((migration) =>
+            applied.has(migration.name ?? migration.constructor.name)
+          )
+          result = areAllMigrationsApplied
+            ? 'Database migrations current'
+            : 'Database migrations pending'
+        }
       }
     }
   } catch {
     failed = true
   }
   const dataSourceToClose = dataSource
-  if (dataSourceToClose?.isInitialized) {
-    try {
-      await dataSourceToClose.destroy()
-    } catch {
-      failed = true
+  const hasDataSource = dataSourceToClose != null
+  if (hasDataSource) {
+    const isDataSourceInitialized = dataSourceToClose.isInitialized
+    if (isDataSourceInitialized) {
+      try {
+        await dataSourceToClose.destroy()
+      } catch {
+        failed = true
+      }
     }
   }
   const migrationResult = result
