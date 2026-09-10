@@ -149,6 +149,7 @@ Rule 문서를 Red보다 먼저 확정해야 실패 기대값을 정의할 수 �
 - Logic commit은 [`code-quality.md`](code-quality.md)의 logic budget을 따른다.
 - 최종 PR head는 Green 상태여야 한다.
 - AI는 PR을 Draft 또는 review-ready 상태로 만들 수 있지만 merge하지 않는다.
+- 리뷰 수정 후에는 [재검토 요청 절차](agent-execution.md#리뷰-수정-후-재검토-요청)에 따라 담당자가 검증·push와 재검토 요청까지 처리한다.
 - 사용자가 GitHub에서 squash merge한다.
 - PR은 하나의 Issue 목적에 집중한다. 새로운 목적이 필요하면 AI가 분리를 제안하고 사용자가 결정한다.
 
