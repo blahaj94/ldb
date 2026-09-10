@@ -51,20 +51,17 @@ review-after: Execution Issue 10개 적용 후
 - Low-cost first-pass review를 기본으로 하고 escalation 조건에 해당할 때만 high-capability reviewer 또는 사람에게 넘긴다.
 - Agent Reviewer는 Approve와 merge를 수행하지 않는다.
 
-#### Code review model proposal
+#### Code review 모델 선택
 
-사용자 승인에 따라 repository code Reviewer의 1차 검토·재검토·필요한 AI 최종 검토를 `gpt-6-astra`, reasoning effort `medium`으로 고정한다. 이 mapping은 사용자 승인 후 code review에 우선 적용하며, 다만 현재 task에서 사용자가 명시한 이 model·effort 선택은 기존 사용자 선택 우선 규칙에 따라 즉시 적용하고 같은 선택을 다시 승인받지 않는다. 코드가 없는 문서의 1차 review는 저비용 경로를 유지하고, [`Convention migration proposal`](#convention-migration-proposal)의 code 작성·조사·분할·통합 조정에는 적용하지 않는다.
+이전 고정 mapping의 결정 근거는 [PR #150의 승인 이력](https://github.com/blahaj94/ldb/pull/150#issuecomment-5580132558)에 보존합니다. 현재 선택 기준은 아래 내용을 따릅니다.
 
-```yaml
-status: active
-enforcement: approval-required
-rationale: repository code review의 설정과 검토 품질을 일관되게 확인한다.
-evidence: "https://github.com/blahaj94/ldb/pull/150#issuecomment-5580132558"
-exceptions: 사용자 선택 우선, 실제 설정 확인·가용성 보류, 사람 최종 판단과 사용자 merge 전 code 이행 금지는 이 문서의 해당 절을 따른다.
-review-after: 승인 후 서로 다른 code review 3건에서 설정 적용·누락·검토 품질을 확인한다.
-```
+코드 Reviewer의 1차 검토, 재검토와 필요한 AI 최종 검토에는 특정 모델이나 reasoning effort를 고정하지 않습니다. 사용자의 명시적 선택을 우선하고, 별도 선택이 없으면 현재 실행 환경의 설정을 사용합니다.
 
-배정·착수 전에 실제 model과 effort 선택을 확인한다. 사용할 수 없거나 확인할 수 없으면 해당 review 배정과 완료 판정을 보류하고 가용성 문제를 보고하며, 다른 설정으로 대체하거나 high·ultra로 상향하지 않는다. 외부 review나 model 설정을 확인할 수 없는 결과는 이 고정 mapping의 적용 evidence로 사용하지 않는다. 예상 밖 실패·범위 초과·검증 불가·retry 소진은 기존 retry와 escalation을 따르되 자동 상향하지 않고 사람에게 판단을 요청한다. 사용자가 다른 model 또는 effort를 명시하면 그 선택이 우선하며, validation·사람의 최종 판단·Rule 승인·사용자 merge 경계는 유지한다.
+특정 기본 모델의 부재나 모델명, effort의 확인만을 이유로 일반 리뷰 배정을 보류하지 않습니다. 외부 리뷰도 모델 일치 여부가 아니라 검토 대상 diff, 발견 사항과 근거로 평가합니다. 실제로 확인하지 못한 모델이나 effort를 사용했다고 보고하지 않습니다.
+
+리뷰 완료 판정은 [Escalation](#escalation)의 필수 최종 검토 조건을 충족해야 합니다. High-capability final review가 필요한 경우, 해당 capability tier를 확인할 수 있는 AI 리뷰 또는 사람 리뷰를 받아야 합니다. Capability가 낮거나 확인되지 않은 AI 리뷰를 필수 최종 검토로 채택하지 않으며, 적격한 최종 검토를 받을 때까지 해당 완료 조건을 보류합니다. 이 기준은 외부 리뷰에도 동일하게 적용합니다.
+
+저비용 1차 검토와 기존 retry, escalation, validation, 사람의 최종 판단 및 사용자 merge 경계는 유지합니다. Convention 이행의 별도 비용 제한과 사람 최종 검토는 [해당 절](#convention-migration-proposal)을 따릅니다.
 
 ## 수행 모드 선택
 
@@ -212,7 +209,7 @@ exceptions: 사용자 선택 우선, 실제 설정 확인·가용성 보류, 사
 review-after: 시범 PR 2~3개를 사용자 merge한 뒤 usage·재작업·검토 부담을 확인한다.
 ```
 
-이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 위 일반 Code Worker 모델 선택 기준에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. 단, code Reviewer에는 [Code review model proposal](#code-review-model-proposal)의 고정 mapping을 우선 적용한다. Rule·security의 최종 review는 사람 경로를 따른다.
+이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 위 일반 Code Worker 모델 선택 기준에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. Rule·security의 최종 review는 사람 경로를 따른다.
 
 기존 escalation의 고위험·Rule·architecture·security·API·schema·authentication, P0/P1 finding, 검증 불완전 조건은 그대로 적용하며 필수 최종 review를 생략하지 않는다. 이번 이행에서 해당 조건이 발생하면 자동으로 model이나 effort를 상향하지 않고 사람에게 최종 검토를 요청한다. 예상 밖 실패, 범위 초과, 검증 불가, retry 소진에도 같은 원칙을 적용한다. 후속 분할·배정·통합 조정에도 고비용 model을 자동 배정하지 않으며, 반복 구현을 이유로 별도 고비용 Planner를 만들지 않는다. 사용자가 model 또는 effort를 명시한 경우에는 기존 조항에 따라 그 선택을 우선한다.
 
@@ -229,9 +226,13 @@ review-after: canonical 반영 후 실제 Execution Issue 3개에서 직접 수�
 
 수행 모드 선택 이유, 위임·인계·review 추가 작업, 중복 command 생략, 재실행 이유, evidence 누락과 총사용량 snapshot을 검토한다. 기존 시각·사용량 기록만 활용하며 정밀 timing을 위한 새 wrapper·rerun은 하지 않는다. 누락·소유권 충돌·잘못된 PASS 채택이 있으면 해당 예외의 확대를 멈추고 수정 또는 폐기를 제안한다. 관측하지 못한 사례나 절감량은 추정하지 않는다.
 
-공통 routing 판단·소유권·evidence 계약은 canonical Rule에서 관리한다. 향후 skill은 역할 선택과 필요한 Rule pointer만, custom-agent TOML은 model·effort·역할 제한 등 실행 설정만 담는 얇은 adapter로 둔다. 원문 지침을 여러 파일에 복제하지 않는다. 이 계약은 Luna Xhigh나 Astra Low를 새 mapping으로 확정하지 않는다. Model 변경 실험은 별도 bounded 제안·승인·실제 실행 evidence가 필요하다. 실제 adapter 설치나 제품 구현 착수는 이 계약의 승인과 구분하고 후속 Issue에서 scope·실행 조건을 확인한다.
+공통 routing 판단·소유권·evidence 계약은 canonical Rule에서 관리한다. 향후 skill은 역할 선택과 필요한 Rule pointer만, custom-agent TOML은 model·effort·역할 제한 등 실행 설정만 담는 얇은 adapter로 둔다. 원문 지침을 여러 파일에 복제하지 않는다.
 
-Runtime이 요구한 custom role·model·effort를 지원하지 않거나 확인할 수 없으면 적용했다고 주장하거나 조용히 다른 model로 바꾸지 않는다. 가용성 문제를 알리고 기존 승인 설정의 허용된 owner가 실행하거나 새 선택을 요청한다.
+이 계약은 특정 모델이나 effort를 새 mapping으로 확정하지 않습니다. 저장소의 모델 mapping을 바꾸는 실험은 별도 bounded 제안, 사용자 merge와 실제 실행 evidence가 필요합니다. 위 Code Worker와 Reviewer의 기준에 따라 현재 실행 환경의 설정을 사용하는 것은 별도 모델 변경 실험으로 취급하지 않습니다.
+
+실제 adapter 설치나 제품 구현 착수는 이 계약의 승인과 구분하고 후속 Issue에서 scope·실행 조건을 확인한다.
+
+사용자가 명시한 설정이나 별도 mapping이 요구한 custom role, model, effort를 runtime이 지원하지 않거나 확인할 수 없으면 적용했다고 주장하거나 조용히 다른 model로 바꾸지 않습니다. 이 경우 가용성 문제를 알리고 허용된 owner가 실행하거나 새 선택을 요청합니다. 특정 모델을 지정하지 않는 일반 Code Worker와 Reviewer에는 위 모델 선택 기준을 적용합니다.
 
 ## Escalation
 
