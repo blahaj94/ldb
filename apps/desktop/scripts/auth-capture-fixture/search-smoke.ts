@@ -27,7 +27,7 @@ function sameRequest({ before, after }: { before: Slot; after: Slot }): boolean 
   const isSameRequest = hasSameId && hasSameObservation
   return isSameRequest
 }
-function hasState(view: SearchUiObservation, state: string): boolean {
+export function hasState(view: SearchUiObservation, state: string): boolean {
   const hasRegions = view.regionMask === 15
   const hasMatchingSlots = view.slots.every((slot) => {
     const isState = slot.state === state
@@ -36,6 +36,86 @@ function hasState(view: SearchUiObservation, state: string): boolean {
   })
   const hasMatchingView = hasRegions && hasMatchingSlots
   return hasMatchingView
+}
+
+export function inspectSandboxBoundary(window: { electron?: unknown; require?: unknown }): boolean {
+  const hasNoElectron = typeof window.electron === 'undefined'
+  if (!hasNoElectron) {
+    return false
+  }
+  const hasNoRequire = typeof window.require === 'undefined'
+  return hasNoRequire
+}
+
+export function inspectMixedReadiness(view: SearchUiObservation): {
+  ready: boolean
+  regionMask: number
+  statusesMatched: boolean
+  failureCount: number
+  pendingCount: number
+  limitedCount: number
+} {
+  const failureCount = view.slots.filter((slot) => slot.code === 'INTERNAL_SERVER_ERROR').length
+  const pendingCount = view.slots.filter((slot) => slot.state === 'pending').length
+  const limitedCount = view.slots.filter((slot) => slot.code === 'SEARCH_RATE_LIMITED').length
+  const regionMask = view.regionMask
+  const hasAllRegions = regionMask === 15
+  if (!hasAllRegions) {
+    return {
+      ready: false,
+      regionMask,
+      statusesMatched: false,
+      failureCount,
+      pendingCount,
+      limitedCount
+    }
+  }
+  const statusesMatched = view.slots.every((slot) => slot.statusMatched)
+  const hasExpectedFailures = failureCount === 2
+  const hasExpectedPending = pendingCount === 1
+  const hasExpectedLimited = limitedCount === 1
+  const ready = statusesMatched && hasExpectedFailures && hasExpectedPending && hasExpectedLimited
+  return { ready, regionMask, statusesMatched, failureCount, pendingCount, limitedCount }
+}
+
+export function isReloginReady({
+  blank,
+  afterLogin,
+  stopped,
+  currentRequests,
+  expectedRequests
+}: {
+  blank: SearchUiObservation
+  afterLogin: { streams: number; workers: number }
+  stopped: { streams: number; workers: number }
+  currentRequests: number
+  expectedRequests: number
+}): boolean {
+  const hasNoCapture = blank.captureId === null
+  if (!hasNoCapture) {
+    return false
+  }
+  const hasNoSelection = !blank.sourceSelected
+  if (!hasNoSelection) {
+    return false
+  }
+  const hasDisabledStart = blank.startDisabled === true
+  if (!hasDisabledStart) {
+    return false
+  }
+  const hasIdleView = hasState(blank, 'idle')
+  if (!hasIdleView) {
+    return false
+  }
+  const hasUnchangedStreams = afterLogin.streams === stopped.streams
+  if (!hasUnchangedStreams) {
+    return false
+  }
+  const hasUnchangedWorkers = afterLogin.workers === stopped.workers
+  if (!hasUnchangedWorkers) {
+    return false
+  }
+  return currentRequests === expectedRequests
 }
 
 function createRetryScript({
@@ -155,14 +235,7 @@ export async function smokeCharacterSearch(
     assert.equal(clicked, true)
   }
   try {
-    const sandboxInspectionSource = `(() => {
-      const hasNoElectron = typeof window.electron === "undefined";
-      if (!hasNoElectron) {
-        return false;
-      }
-      const hasNoRequire = typeof window.require === "undefined";
-      return hasNoRequire;
-    })()`
+    const sandboxInspectionSource = `(${inspectSandboxBoundary.toString()})(window)`
     assert.equal(await evaluate(sandboxInspectionSource), true)
     assert.equal(await evaluate(installObservation), true)
     search.selectScenario('empty')
@@ -195,32 +268,8 @@ export async function smokeCharacterSearch(
       expected: { started: true }
     }
     const mixed = await waitFor((view) => {
-      const failureCount = view.slots.filter((slot) => slot.code === 'INTERNAL_SERVER_ERROR').length
-      const pendingCount = view.slots.filter((slot) => slot.state === 'pending').length
-      const limitedCount = view.slots.filter((slot) => slot.code === 'SEARCH_RATE_LIMITED').length
-      const regionMask = view.regionMask
-      const hasAllRegions = regionMask === 15
-      if (!hasAllRegions) {
-        diagnostic = {
-          stage: 'mixed',
-          check: 'mixed-state-ready',
-          actual: { regionMask, statusesMatched: false, failureCount, pendingCount, limitedCount },
-          expected: {
-            regionMask: 15,
-            statusesMatched: true,
-            failureCount: 2,
-            pendingCount: 1,
-            limitedCount: 1
-          }
-        }
-        return false
-      }
-      const statusesMatched = view.slots.every((slot) => slot.statusMatched)
-      const hasExpectedFailures = failureCount === 2
-      const hasExpectedPending = pendingCount === 1
-      const hasExpectedLimited = limitedCount === 1
-      const hasExpectedMixed =
-        statusesMatched && hasExpectedFailures && hasExpectedPending && hasExpectedLimited
+      const { ready, regionMask, statusesMatched, failureCount, pendingCount, limitedCount } =
+        inspectMixedReadiness(view)
       diagnostic = {
         stage: 'mixed',
         check: 'mixed-state-ready',
@@ -239,7 +288,7 @@ export async function smokeCharacterSearch(
           limitedCount: 1
         }
       }
-      return hasExpectedMixed
+      return ready
     })
     // HTTP 도착 순서를 slot 번호로 가정하지 않고 실제 수용한 상태에서 역할을 찾는다.
     const failures = mixed.slots.flatMap((slot, index) =>
@@ -406,26 +455,13 @@ export async function smokeCharacterSearch(
     await enterHome()
     const blank = await read()
     const afterLogin = await observe()
-    const hasNoCapture = blank.captureId === null
-    let relogin = false
-    if (hasNoCapture) {
-      const hasNoSelection = !blank.sourceSelected
-      if (hasNoSelection) {
-        const hasDisabledStart = blank.startDisabled === true
-        if (hasDisabledStart) {
-          const hasIdleView = hasState(blank, 'idle')
-          if (hasIdleView) {
-            const hasUnchangedStreams = afterLogin.streams === stopped.streams
-            if (hasUnchangedStreams) {
-              const hasUnchangedWorkers = afterLogin.workers === stopped.workers
-              if (hasUnchangedWorkers) {
-                relogin = search.counts.requests === requestsBeforeQuiet
-              }
-            }
-          }
-        }
-      }
-    }
+    const relogin = isReloginReady({
+      blank,
+      afterLogin,
+      stopped,
+      currentRequests: search.counts.requests,
+      expectedRequests: requestsBeforeQuiet
+    })
     assert.equal(relogin, true)
     search.selectScenario('success')
     await selectSyntheticSource()

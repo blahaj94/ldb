@@ -12,21 +12,16 @@ export type CaptureObservation = {
   nicknameMatchedSlots: number
 }
 
-function isAcceptedObservation({
-  value,
-  response
-}: {
-  value: unknown
-  response: unknown
-}): boolean {
-  const observation = parseSearchObservation([value])
-  const result = parseSearchResult(response)
-  const hasObservation = observation != null
-  const isSuccessful = result?.ok === true
-  const canCompare = hasObservation && isSuccessful
-  if (!canCompare) {
-    return false
-  }
+type ParsedObservation = NonNullable<ReturnType<typeof parseSearchObservation>>
+type SuccessfulSearchResult = Extract<
+  NonNullable<ReturnType<typeof parseSearchResult>>,
+  { ok: true }
+>
+
+export function isAcceptedParsedObservation(
+  observation: ParsedObservation,
+  result: SuccessfulSearchResult
+): boolean {
   const slot = result.snapshot.slots[observation.slot]
   const hasSameCapture = result.snapshot.captureId === observation.captureId
   const hasSameSlot = slot.slot === observation.slot
@@ -43,7 +38,25 @@ function isAcceptedObservation({
   return false
 }
 
-function syntheticSlotMask(value: unknown): number {
+function isAcceptedObservation({
+  value,
+  response
+}: {
+  value: unknown
+  response: unknown
+}): boolean {
+  const observation = parseSearchObservation([value])
+  const result = parseSearchResult(response)
+  const hasObservation = observation != null
+  const isSuccessful = result?.ok === true
+  const canCompare = hasObservation && isSuccessful
+  if (!canCompare) {
+    return false
+  }
+  return isAcceptedParsedObservation(observation, result)
+}
+
+export function syntheticSlotMask(value: unknown): number {
   const isObject = value != null && typeof value === 'object'
   if (!isObject) {
     return 0

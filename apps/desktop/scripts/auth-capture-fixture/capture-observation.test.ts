@@ -2,13 +2,55 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthCoordinator } from '../../src/backend/auth/types'
 import { CAPTURE_ID, searchSlot, withSearchSlot } from '../../src/preload/api/search-test-fixture'
-import { registerObservedCapture } from './capture-observation'
+import {
+  isAcceptedParsedObservation,
+  registerObservedCapture,
+  syntheticSlotMask
+} from './capture-observation'
 
 const product = vi.hoisted(() => ({
   result: null as Electron.Streams | null,
   rejectNickname: false,
   commandResult: undefined as unknown
 }))
+
+describe('capture predicate protected evaluation', () => {
+  it('requestId가 없으면 nickname 뒤 state를 읽지 않는다', () => {
+    const reads: string[] = []
+    const slot = Object.defineProperties(searchSlot({ requestId: null, nickname: 'ALICE' }), {
+      nickname: { get: () => (reads.push('nickname'), 'ALICE') },
+      requestId: { get: () => (reads.push('requestId'), null) },
+      state: {
+        get: () => {
+          throw new Error('state must stay skipped')
+        }
+      }
+    })
+    const snapshot = withSearchSlot(slot)
+
+    expect(
+      isAcceptedParsedObservation(
+        { captureId: CAPTURE_ID, slot: 0, observationRevision: 1, nickname: 'ALICE' },
+        { ok: true, snapshot }
+      )
+    ).toBe(false)
+    expect(reads).toEqual(['nickname', 'requestId'])
+  })
+
+  it('slot type 실패에도 destructuring의 nickname getter를 한 번 읽는다', () => {
+    const reads: string[] = []
+    const value = Object.defineProperties(
+      {},
+      {
+        slot: { get: () => (reads.push('slot'), '0') },
+        nickname: { get: () => (reads.push('nickname'), 'ALICE') }
+      }
+    )
+
+    expect(syntheticSlotMask(value)).toBe(0)
+    expect(reads).toEqual(['slot', 'nickname'])
+  })
+})
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
 vi.mock('../../src/backend/capture/ipc-handler', () => ({
   registerCaptureIpc: () => {
