@@ -85,12 +85,7 @@ function logicBudgetCheck(files, commitFiles) {
   }
 }
 
-export function buildPolicyReport({
-  pullRequest,
-  files,
-  commits,
-  commitFiles
-}) {
+export function buildPolicyReport({ pullRequest, files, commits, commitFiles }) {
   return {
     advisory: true,
     checks: [
