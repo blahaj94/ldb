@@ -49,10 +49,13 @@ export function challenge(verifier: string): string {
 }
 
 export function equalHash(storedHash: Buffer | null, candidateHash: Buffer): boolean {
-  const hasStoredHash = storedHash !== null
-  const hasSameLength = hasStoredHash && storedHash.length === candidateHash.length
-  const isHashEqual = hasSameLength && timingSafeEqual(storedHash, candidateHash)
-  return isHashEqual
+  if (storedHash === null) {
+    return false
+  }
+  if (storedHash.length !== candidateHash.length) {
+    return false
+  }
+  return timingSafeEqual(storedHash, candidateHash)
 }
 
 type PkceContext = Pick<AuthLoginRequest, 'id' | 'provider' | 'purpose'>
@@ -66,11 +69,19 @@ function hasCompleteSealedPkce(row: SealedPkce): row is SealedPkce & {
   providerPkceIv: Buffer
   providerPkceTag: Buffer
 } {
-  const hasCiphertext = Boolean(row.providerPkceCiphertext)
-  const hasIv = hasCiphertext && Boolean(row.providerPkceIv)
-  const hasTag = hasIv && Boolean(row.providerPkceTag)
-  const isComplete = hasCiphertext && hasIv && hasTag
-  return isComplete
+  const isCiphertextTruthy = Boolean(row.providerPkceCiphertext)
+  if (!isCiphertextTruthy) {
+    return false
+  }
+  const isIvTruthy = Boolean(row.providerPkceIv)
+  if (!isIvTruthy) {
+    return false
+  }
+  const isTagTruthy = Boolean(row.providerPkceTag)
+  if (!isTagTruthy) {
+    return false
+  }
+  return true
 }
 
 function encodePkceContext({ id, provider, purpose }: PkceContext): Buffer {
@@ -86,12 +97,20 @@ export class ProviderPkceKeys {
     try {
       this.#activeKeyId = config.activeKeyId
       for (const { id, key } of config.keys) {
-        const hasKeyId = Boolean(id)
-        const isDuplicateKey = hasKeyId && this.#keys.has(id)
-        const isKeyBuffer = hasKeyId && !isDuplicateKey && Buffer.isBuffer(key)
-        const hasExpectedKeyLength = isKeyBuffer && key.length === 32
-        const isKeyInvalid = !hasKeyId || isDuplicateKey || !isKeyBuffer || !hasExpectedKeyLength
-        if (isKeyInvalid) {
+        const isKeyIdTruthy = Boolean(id)
+        if (!isKeyIdTruthy) {
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+        }
+        const isDuplicateKey = this.#keys.has(id)
+        if (isDuplicateKey) {
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+        }
+        const isKeyBuffer = Buffer.isBuffer(key)
+        if (!isKeyBuffer) {
+          throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+        }
+        const hasExpectedKeyLength = key.length === 32
+        if (!hasExpectedKeyLength) {
           throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
         }
         // 호출자가 원본 Buffer를 바꿔도 등록된 key는 바뀌지 않는다.
