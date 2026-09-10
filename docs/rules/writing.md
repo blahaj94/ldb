@@ -78,15 +78,15 @@ review-after: 승인 후 GitHub 글 3건을 작성했거나 사용자가 다시 
 | 제목 또는 소제목 | 로그인 후 대시보드로 이동하지 않는 문제 |
 | 원인 미확인 | 세션 만료 처리와 관련된 문제일 가능성이 있습니다. |
 
-## 문단과 개행 기준 보완 제안
+## 문단과 개행 기준
 
-이 절만 승인 대기인 제안입니다. 위의 active 기준은 유지하며, 이 추가 기준은 Draft PR의 명시적인 사용자 승인과 사용자 merge 후 적용합니다.
+이 절은 [PR #277의 사용자 승인](https://github.com/blahaj94/ldb/pull/277#issuecomment-5611094454)을 반영한 active Rule입니다. 기존 기준은 유지하며, 이 추가 기준은 사용자 merge 후 이 문서를 포함한 checkout에서 적용합니다.
 
 ```yaml
-status: proposed
+status: active
 enforcement: warning
 rationale: 리뷰 답글과 보충 댓글에서 수정 내용과 검증 결과를 한 문단에 압축하는 재발을 줄입니다.
-evidence: "PR #254 리뷰 답글: https://github.com/blahaj94/ldb/pull/254#discussion_r3973260986; PR #250 리뷰 답글: https://github.com/blahaj94/ldb/pull/250#discussion_r3972584259"
+evidence: "PR #277 사용자 승인: https://github.com/blahaj94/ldb/pull/277#issuecomment-5611094454; PR #254 리뷰 답글: https://github.com/blahaj94/ldb/pull/254#discussion_r3973260986; PR #250 리뷰 답글: https://github.com/blahaj94/ldb/pull/250#discussion_r3972584259"
 exceptions: 한 가지 사실이나 행동만 전달하는 짧은 글, 제목, 코드와 정확한 원문 인용은 불필요하게 나누지 않습니다.
 review-after: 승인 후 리뷰 답글, Issue 또는 PR 설명, 본문이 필요한 commit을 각각 1건 확인하거나 사용자가 다시 가독성을 지적하면 기준과 예시를 재검토합니다. 아직 작성하지 않은 유형은 검증됐다고 간주하지 않습니다.
 ```
