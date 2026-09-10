@@ -8,7 +8,7 @@ last-reviewed: 2026-09-06
 
 # Access JWT 개발과 연동
 
-`apps/api/src/auth/access-jwt/index.ts`는 DB·Nest·HTTP에 의존하지 않는 내부 factory를 제공한다. Behavior와 key lifecycle의 canonical Rule은 [`auth-session.md`](../rules/auth-session.md), exact dependency는 [`auth-runtime.md`](../rules/auth-runtime.md)다. 기본 `AppModule`에는 아직 연결하지 않는다.
+`apps/api/src/auth/access-jwt/index.ts`는 DB·Nest·HTTP에 의존하지 않는 내부 factory를 제공한다. Behavior와 key lifecycle의 canonical Rule은 [`auth-session.md`](../rules/auth-session.md), 사용 패키지와 버전은 `apps/api/package.json`과 `pnpm-lock.yaml`에서 확인한다. 기본 `AppModule`에는 아직 연결하지 않는다.
 
 ## 공개 함수
 

@@ -68,7 +68,9 @@ Cancel/provider 실패/만료/crash는 성공이 아니다. Provider code는 재
 
 ## Provider token과 revoke
 
-서명/JWT 검증은 승인된 `jose` library에 맡기고 자체 parser/crypto를 만들지 않는다. Provider token·raw 응답·provider code는 해당 callback 메모리에서만 사용하고 성공/실패/취소/timeout 모두 finally에서 참조를 해제한다. DB/log/file/queue에 쓰지 않고 JS string의 즉각 zeroization을 보장하지 않는다. Discord refresh와 예상치 않은 Google refresh도 보관/사용하지 않는다. Provider PKCE verifier만 별도 암호화 transient field에 둔다.
+서명/JWT 검증은 library에 맡기고 자체 parser/crypto를 만들지 않습니다. 패키지 선택과 버전 변경은 [API 의존성 관리 기준](api-runtime.md#의존성-관리)을 따르며, 이 문서의 서명·알고리즘·claim 검증 계약을 유지합니다. 현재 사용 패키지와 연결은 [Google adapter Reference](../reference/auth-login-development.md#google-adapter-연결점)에서 확인합니다.
+
+Provider token·raw 응답·provider code는 해당 callback 메모리에서만 사용하고 성공/실패/취소/timeout 모두 finally에서 참조를 해제한다. DB/log/file/queue에 쓰지 않고 JS string의 즉각 zeroization을 보장하지 않는다. Discord refresh와 예상치 않은 Google refresh도 보관/사용하지 않는다. Provider PKCE verifier만 별도 암호화 transient field에 둔다.
 
 로그인 직후나 기기 logout에 provider revoke를 자동 실행하지 않는다. 폐기와 grant revoke는 다르고 revoke는 다른 grant/token에도 영향을 줄 수 있다. Provider 설정에서 동의 철회가 발생해도 자체 JWT/session 자동 폐기를 추정하지 않는다. 자체 idle/logout/reuse 정책을 유지하고 다음 소셜 로그인에서 다시 provider 검증하는 정책이 승인됐다. 즉각 연동 폐기는 별도 event/계정 정책 대안이다.
 

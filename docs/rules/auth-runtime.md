@@ -3,46 +3,24 @@ type: rule
 status: active
 enforcement: approval-required
 scope: apps/api authentication dependencies and database operations
-last-reviewed: 2026-09-06
-rationale: 인증·DB dependency와 Migration을 승인된 API runtime에 연결하고 미확인 gate를 남긴다.
+last-reviewed: 2026-09-10
+rationale: 인증의 runtime 호환성, Migration과 DB 실행 조건을 정의한다.
 evidence: "PR #48 사용자 승인: https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519 ; 설계 근거: Issue #39 Proposal Revision 2 https://github.com/blahaj94/ldb/issues/39#issuecomment-5551313691"
-exceptions: Exact dependency 역할·version 승인과 별개로 사용자 지시에 따라 설치·lockfile 변경·DB 실행을 허용하지 않는다.
-review-after: 최초 engine·peer·ESM·DB validation 또는 승인된 version 변경 시
+exceptions: 문서 변경은 dependency 설치, lockfile 변경이나 DB 실행의 착수 허용이 아니다.
+review-after: runtime 호환성 또는 DB 실행 조건 변경 시
 ---
 
 # Authentication Runtime Contract
 
-이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 Rule이다. [`api-runtime.md`](api-runtime.md)의 승인된 Node 24/Nest 12/ESM/TypeScript 5.9·tsc→Node·내장 test runner 계약을 유지하며 아래 exact dependency 역할·version을 승인 목록에 추가한다. 현재 설치·구현·검증 성공을 뜻하지 않는다. 사용자의 미결정 gate 유지와 구현 금지 조건에 따라 후속 착수 지시 전에는 설치·구현하지 않으며 [`change-control.md`](change-control.md)를 따른다.
+이 문서는 [PR #48의 사용자 승인](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)을 반영한 인증 runtime과 DB 실행 계약입니다. [`api-runtime.md`](api-runtime.md)의 Node 24/Nest 12/ESM/TypeScript 5.9 및 tsc→Node 검증 계약을 유지합니다. 정책 승인과 실제 구현, 호환성 검증 및 운영 실행은 구분하며, 후속 작업은 [`change-control.md`](change-control.md)의 사용자 실행 허용 범위를 따릅니다.
 
-## 승인된 직접 dependency
+## 의존성 기록과 호환성
 
-**승인 범위는 아래 역할과 exact version**이다. 더 넓은 major/minor/patch 허용 범위는 #39에서 정하지 않았으므로 미결정이며 이번 승인으로 자동 확대하지 않는다. 실제 구현 시 승인된 범위를 확인하고 해결 version을 lockfile에 고정한다. Version·역할 변경이나 TypeScript/runtime 변경이 필요하면 다시 승인받는다.
+패키지 목록, 버전과 변경 절차는 [`API runtime의 의존성 관리`](api-runtime.md#의존성-관리)를 따릅니다. 인증 전용의 패키지 허용 목록이나 exact version별 재승인 조건은 두지 않습니다. 이 변경은 [Issue #302](https://github.com/blahaj94/ldb/issues/302)의 사용자 요청을 반영하며, 해당 문서 변경을 포함한 PR의 사용자 merge로 적용합니다.
 
-| Runtime / 승인된 exact version | 역할 | #39의 2026-09-05 metadata evidence와 남은 확인 |
-| --- | --- | --- |
-| `@nestjs/typeorm 12.0.1` | Nest lifecycle/DI 통합 | ESM, Node >=20.19, peer Nest ^10/11/12, TypeORM ^0.3 또는 ^1.0.0-dev, reflect-metadata ^0.1.13/0.2, rxjs ^7.2. 당시 Nest 12.0.1·Node >=24.15와 metadata상 양립. 실제 해결 peer 조합 확인 필요. |
-| `typeorm 1.1.1` | Entity/transaction/Migration | Engine `^20.19.0 \|\| ^22.13.0 \|\| >=24.11.0`, pg peer ^8.5.1. Node floor 충족. 0.3 API/CLI 예를 1.1에 복사하지 않고 release/API·TS5.9 compatibility 검증 필요. |
-| `pg 8.23.0` | PostgreSQL driver | Node >=16, TypeORM pg peer 충족. Optional pg-native를 설치하지 않고 직접 pg API import가 없으면 @types/pg를 추가하지 않음. |
-| `jose 6.2.12` | JWT/JWS/JWKS 검증·발급 | ESM, 직접 runtime dependency 없음, WebCrypto 지원. Node24 ES256/JWKS cache·TS5.9 실행 검증 필요. Nest JWT/Passport·Google SDK 중복 추가 없음. |
+기존 패키지 선택의 승인 이력은 [PR #48](https://github.com/blahaj94/ldb/pull/48#issuecomment-5551469519)과 [`@types/pg` 선택 PR #118](https://github.com/blahaj94/ldb/pull/118#issuecomment-5570381432)에 보존합니다. 실제 변경에서는 engine과 peer 조건, compiled ESM 및 TypeScript 호환성과 영향받는 인증·DB 동작을 검증합니다. 패키지 선택만으로 검증 성공을 주장하지 않습니다.
 
-Registry의 고정 version 근거: [@nestjs/typeorm](https://registry.npmjs.org/%40nestjs%2Ftypeorm/12.0.1), [typeorm](https://registry.npmjs.org/typeorm/1.1.1), [pg](https://registry.npmjs.org/pg/8.23.0), [jose](https://registry.npmjs.org/jose/6.2.12). 이 문서는 #39의 dated evidence를 옮겼으며 새 metadata 확인·설치/build/DB 검증을 수행했다는 뜻이 아니다. 구현 시 engine/peer와 실제 compiled ESM compatibility를 검증해야 한다. TypeORM 0.3 또는 Nest 통합 없이 DataSource 주입은 비용을 다시 비교할 대안이며 실패를 피하려 임의 채택하지 않는다.
-
-### 요청별 PostgreSQL 연결의 TypeScript 정의
-
-```yaml
-status: active
-enforcement: approval-required
-rationale: 기존 pg Client의 연결·종료 API를 TypeScript에서 직접 사용할 때 필요한 type을 명시한다.
-evidence: "PR #118 사용자 승인: https://github.com/blahaj94/ldb/pull/118#issuecomment-5570381432"
-exceptions: 승인된 type 역할 외 dependency 변경과 운영 활성화는 별도 승인·실행 경계를 유지한다.
-review-after: Node 24·TypeScript 5.9 compiled ESM과 실제 연결 취소 검증 완료 시
-```
-
-[Issue #117](https://github.com/blahaj94/ldb/issues/117)의 요청별 연결 선택에 필요한 **Development dependency `@types/pg 8.23.1`** 추가는 [PR #118의 사용자 승인](https://github.com/blahaj94/ldb/pull/118#issuecomment-5570381432)을 반영한다. 역할은 기존 `pg 8.23.0`의 `Client` 설정·연결·종료 API type이며 runtime driver의 version·역할이나 transaction·검색 deadline 정책을 변경하지 않는다. 위 Runtime 목록에 더해 승인된 Development dependency이며 실제 설치·검증 성공과 구분한다.
-
-[고정 version metadata](https://registry.npmjs.org/@types/pg/8.23.1)의 dependency는 `@types/node`, `pg-types`, `pg-protocol`이다. 기존 Node 24·TypeScript 5.9·pg 8.23.0 조합의 compile·ESM 연결과 TypeORM 1.1.1 QueryRunner 접합·실제 취소 검증은 구현 시 확인하며, type package 선택 자체를 compatibility 성공으로 표시하지 않는다. 상세 구현 선택과 비용·검증 evidence는 Issue와 PR에서 관리한다.
-
-로컬 DB는 승인된 기존 경계대로 Docker만 허용한다. PostgreSQL server·image·local validation 선택의 정확한 값과 승인 상태는 아래 구간만 canonical source로 사용한다.
+로컬 DB는 기존 Docker-only 조건을 유지합니다. PostgreSQL server, image와 local validation의 선택 및 승인 상태는 아래 구간을 따릅니다.
 
 ## PostgreSQL 선택과 Docker 검증
 
@@ -164,10 +142,10 @@ HTTP 합성은 기존 login/session/account/search factory를 사용한다. [`au
 
 ## 승인과 미결정 gate
 
-API/security/schema/보관·key 주기·활동 분류·admission/DB 장애·body/deadline 정책과 위 exact dependency 역할·version은 승인됐다. PostgreSQL server·image·local validation 선택의 상태와 evidence는 위 canonical 구간만 따른다. 선택 승인 여부와 별개로 다음 미정이 필요한 구현은 별도 결정/검증을 완료해야 한다.
+API/security/schema/보관·key 주기·활동 분류·admission/DB 장애·body/deadline 정책은 승인됐다. PostgreSQL server·image·local validation 선택의 상태와 evidence는 위 canonical 구간만 따른다. 선택 승인 여부와 별개로 다음 미정이 필요한 구현은 별도 결정/검증을 완료해야 한다.
 
 - 운영 deployment topology와 single process 조건, clock 동기화·역행 감지, 실제 cleanup 시각·key 운영 절차
-- 더 넓은 dependency 허용 범위, 승인된 version의 compiled ESM/TypeScript/runtime compatibility
+- 실제 선택한 dependency 조합의 compiled ESM/TypeScript/runtime compatibility
 - 실제 client/HTTPS callback/protocol 등록값·provider config snapshot, Electron OS 저장/IPC의 실제 구현·browser/OS 검증. Desktop 설계와 남은 platform gate는 승인된 [Desktop contract](desktop-auth.md)를 따름
 - Discord 일반 confidential OAuth PKCE의 공식 적용 근거와 후속 wrong/missing verifier·downgrade 거절 E2E
 - 공개 ingress/pending-request·인증 전 abuse·서비스 전체 limiter 수치와 기존 quota와의 통합 순서

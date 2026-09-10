@@ -46,7 +46,7 @@ A/B/C는 논리 이름이다. 실제 장비·주소·domain·TLS 인증서·운�
 
 B와 C도 PostgreSQL 18의 transaction·row lock·WAL을 재사용하는 설계가 승인됐다. B에는 기존 Node/pg 기반의 **단일 control 조정 process**를 별도 서비스로 둔다. API의 상호 TLS 신원을 확인하고, B transaction/연결을 유지한 채 C의 별도 연결로 예약·완료를 호출하는 주체다. PostgreSQL 저장 함수 자체가 다른 DB에 접속하는 것으로 가정하지 않는다.
 
-이 안은 승인된 driver version을 바꾸지 않는다. PostgreSQL·Node/pg의 새 운영 역할, 내부 인증 연결과 저장 protocol의 설계는 승인됐고 구현은 별도 착수 범위다. 조정 process는 원자적인 B/C 함수 호출·불명 결과 판정만 맡고 generation 검사·권한·잠금·멱등성은 저장소가 강제한다. 별도 합의 알고리즘·범용 journal library를 직접 만들지 않으며, 이 작은 protocol도 PostgreSQL만 설치하면 생기는 것은 아니다. 구현 규모가 커지면 [dependency 비용 기준](../rules/change-control.md#dependency-선택과-비용)에 따라 다시 비교한다.
+Driver의 선언 및 해결 버전은 `apps/api/package.json`과 `pnpm-lock.yaml`에서 확인하며, 패키지 변경은 [API 의존성 관리 기준](../rules/api-runtime.md#의존성-관리)을 따릅니다. PostgreSQL·Node/pg의 새 운영 역할, 내부 인증 연결과 저장 protocol의 설계는 승인됐고 구현은 별도 착수 범위다. 조정 process는 원자적인 B/C 함수 호출·불명 결과 판정만 맡고 generation 검사·권한·잠금·멱등성은 저장소가 강제한다. 별도 합의 알고리즘·범용 journal library를 직접 만들지 않으며, 이 작은 protocol도 PostgreSQL만 설치하면 생기는 것은 아니다. 구현 규모가 커지면 [dependency 비용 기준](../rules/change-control.md#dependency-선택과-비용)에 따라 다시 비교한다.
 
 Backup은 소규모 DB의 일별 `pg_dump`를 출발점으로 삼는 설계다. 데이터 증가에 따른 dump/restore 시간과 잠금 영향을 검증한 뒤 사용하며 PITR·WAL archive·standby는 이번 최소안에 추가하지 않는다. 원문 dump를 disk에 먼저 쓰지 않고 암호화 stream으로 전달한다. 파일 암호화의 `age` CLI 도입 후보 방향은 승인됐지만 exact version·binary 선택과 검증·복구키 관리의 구체 결정은 남아 있다. 직접 암호화 format을 만드는 비용을 피하는 후보이며 설치가 허용된 exact dependency로 간주하지 않는다. 기존 OS의 검증된 암호화 volume 안에서만 dump를 보관하는 대안은 dependency가 줄지만 외부로 파일이 복사될 때 암호화 경계가 사라지므로 모든 복사 경로를 더 좁혀야 한다. 이번 문서는 설치나 key 생성을 수행하지 않는다.
 
