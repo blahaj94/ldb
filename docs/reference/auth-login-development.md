@@ -23,6 +23,8 @@ last-reviewed: 2026-09-08
 
 ## Source pointer
 
+`json-parser.ts`는 API 직접 dependency인 `raw-body@3.0.2`에 encoding 없이 최대 16,384-byte Buffer 수집과 stream listener 정리를 맡긴다. Media와 선언 길이 사전 검사, fatal UTF-8/BOM 처리, JSON 구문 검사와 정제 HTTP 오류는 기존 adapter가 소유한다. 선언 길이를 library의 `length` 옵션에 전달하지 않는다. Request error는 정제 400, aborted는 무응답이며, abort/초과 뒤의 후속 error를 소비하는 guard만 close까지 유지한다. 선택 근거는 [Issue #266의 preflight](https://github.com/blahaj94/ldb/issues/266#issuecomment-5610705389), 해당 수명과 UTF-8 회귀 검증은 `apps/api/test-support/login-json-parser.test.mjs`에서 확인한다.
+
 | File | 책임 |
 | --- | --- |
 | `apps/api/src/constants/login.ts`, `apps/api/src/types/login.ts`, `apps/api/src/errors/login.ts` | 승인된 값·내부 입력/출력·정제 오류 |

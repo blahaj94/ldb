@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express'
+import getRawBody from 'raw-body'
 import { LOGIN, LOGIN_ERRORS } from '../../constants/login.js'
 import { LoginFailure } from '../../errors/login.js'
 import type { LoginErrorDefinition } from '../../types/login.js'
@@ -91,65 +92,48 @@ export function loginJsonParser(request: Request, response: Response, next: Next
     return
   }
 
-  const chunks: Buffer[] = []
-  let receivedBytes = 0
-  let finished = false
-
-  const clearPayload = (): void => {
-    finished = true
-    chunks.length = 0
-    request.off('data', onData)
-    request.off('end', onEnd)
+  // request 자체의 error는 library 오류의 type/status와 관계없이 정제 400이다.
+  let hasRequestError = false
+  const onRequestError = (): void => {
+    hasRequestError = true
   }
+  request.on('error', onRequestError)
+  // aborted/413 이후 Node가 내는 후속 error도 소비하고 close에서 guard를 해제한다.
+  request.once('close', () => request.off('error', onRequestError))
 
-  const onData = (chunk: Buffer): void => {
-    if (finished) {
-      return
-    }
+  // 선언 길이를 재검증하거나 느슨한 decoder를 사용하지 않고 실제 byte만 수집한다.
+  getRawBody(request, { limit: LOGIN.jsonBytes }, (error, payload) => {
+    const hasReadError = error != null
+    if (hasReadError) {
+      if (!hasRequestError) {
+        const isRequestAborted = request.aborted || error.type === 'request.aborted'
+        if (isRequestAborted) {
+          return
+        }
+        const isPayloadTooLarge = error.type === 'entity.too.large'
+        if (isPayloadTooLarge) {
+          rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
+          return
+        }
+      }
 
-    // 3. 초과 chunk는 저장하지 않고 body 종료 전에 연결을 닫는다.
-    receivedBytes += chunk.length
-    const isPayloadTooLarge = receivedBytes > LOGIN.jsonBytes
-    if (isPayloadTooLarge) {
-      clearPayload()
-      rejectPayloadAndClose(LOGIN_ERRORS.TOO_LARGE)
-      return
-    }
-    chunks.push(chunk)
-  }
-
-  const onEnd = (): void => {
-    if (finished) {
+      const hasSentHeaders = response.headersSent
+      const isResponseDestroyed = response.destroyed
+      const canSendError = !hasSentHeaders && !isResponseDestroyed
+      if (canSendError) {
+        jsonError(response, LOGIN_ERRORS.INVALID_REQUEST)
+      }
       return
     }
 
     try {
       // 4. 상한 이하의 전체 body만 strict UTF-8로 해석한 뒤 JSON을 읽는다.
-      const payload = Buffer.concat(chunks, receivedBytes)
       const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
       const decoded = decoder.decode(payload)
       request.body = JSON.parse(decoded) as unknown
-      clearPayload()
       next()
     } catch {
-      clearPayload()
       next(new LoginFailure(LOGIN_ERRORS.INVALID_REQUEST))
     }
-  }
-
-  request.on('data', onData)
-  request.once('end', onEnd)
-  request.once('error', () => {
-    if (finished) {
-      return
-    }
-    clearPayload()
-    const hasSentHeaders = response.headersSent
-    const isResponseDestroyed = !hasSentHeaders && response.destroyed
-    const canSendError = !hasSentHeaders && !isResponseDestroyed
-    if (canSendError) {
-      jsonError(response, LOGIN_ERRORS.INVALID_REQUEST)
-    }
   })
-  request.once('aborted', clearPayload)
 }
