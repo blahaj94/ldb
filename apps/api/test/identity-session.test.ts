@@ -225,6 +225,24 @@ test('transaction and isolation preconditions reject before writing', async () =
   }
 })
 
+test('invalid provider and subject reject before database access', async (t) => {
+  const { createIdentitySession } = await load()
+  for (const candidate of [
+    { provider: 'other', subject: 'test-subject' },
+    { provider: 'google', subject: 42 },
+    { provider: 'google', subject: '' }
+  ]) {
+    const state = fixture()
+    const query = t.mock.method(state.manager, 'query')
+    const getRepository = t.mock.method(state.manager, 'getRepository')
+    await failure(createIdentitySession(state.manager, candidate as Identity), 'AUTH_INTERNAL_ERROR')
+    assert.equal(query.mock.callCount(), 0)
+    assert.equal(getRepository.mock.callCount(), 0)
+    assert.deepEqual(state.sessions, [])
+    assert.deepEqual(state.refresh, [])
+  }
+})
+
 test('a conflict without a visible user requires whole-transaction restart and creates no session', async () => {
   const { createIdentitySession } = await load()
   const state = fixture({ missing: true })
