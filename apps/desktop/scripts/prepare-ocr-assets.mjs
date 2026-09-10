@@ -65,8 +65,7 @@ const hasInvokedPath = invokedPath != null
 if (hasInvokedPath) {
   const isInvokedPathNonempty = invokedPath !== ''
   if (isInvokedPathNonempty) {
-    const isDirectInvocation =
-      import.meta.url === pathToFileURL(resolve(invokedPath)).href
+    const isDirectInvocation = import.meta.url === pathToFileURL(resolve(invokedPath)).href
     if (isDirectInvocation) {
       await prepareOcrAssets()
     }
