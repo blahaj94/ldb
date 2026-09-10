@@ -33,7 +33,10 @@ function isAcceptedObservation({
   const hasSameRevision = slot.observationRevision === observation.observationRevision
   const hasSameNickname = slot.nickname === observation.nickname
   const hasRequestId = slot.requestId != null
-  const isRequestActive = hasRequestId && slot.state !== 'idle'
+  let isRequestActive = false
+  if (hasRequestId) {
+    isRequestActive = slot.state !== 'idle'
+  }
   const hasRequest = hasRequestId && isRequestActive
   const isAccepted =
     hasSameCapture && hasSameSlot && hasSameRevision && hasSameNickname && hasRequest
@@ -47,11 +50,17 @@ function syntheticSlotMask(value: unknown): number {
   }
   const { slot, nickname } = value as { slot?: unknown; nickname?: unknown }
   const isSlotNumber = typeof slot === 'number'
-  const isSlotInteger = isSlotNumber && Number.isInteger(slot)
-  const isSlotInRange = isSlotInteger && slot >= 0 && slot < 4
+  let isSlotInteger = false
+  if (isSlotNumber) {
+    isSlotInteger = Number.isInteger(slot as number)
+  }
+  let isSlotInRange = false
+  if (isSlotInteger) {
+    isSlotInRange = (slot as number) >= 0 && (slot as number) < 4
+  }
   const isExpectedNickname = nickname === 'ALICE'
   const isExpectedSlot = isSlotInRange && isExpectedNickname
-  return isExpectedSlot ? 1 << slot : 0
+  return isExpectedSlot ? 1 << (slot as number) : 0
 }
 
 export function registerObservedCapture(
