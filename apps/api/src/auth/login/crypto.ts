@@ -49,13 +49,16 @@ export function challenge(verifier: string): string {
 }
 
 export function equalHash(storedHash: Buffer | null, candidateHash: Buffer): boolean {
-  if (storedHash === null) {
+  const hasStoredHash = storedHash !== null
+  if (!hasStoredHash) {
     return false
   }
-  if (storedHash.length !== candidateHash.length) {
+  const hasSameLength = storedHash.length === candidateHash.length
+  if (!hasSameLength) {
     return false
   }
-  return timingSafeEqual(storedHash, candidateHash)
+  const isHashEqual = timingSafeEqual(storedHash, candidateHash)
+  return isHashEqual
 }
 
 type PkceContext = Pick<AuthLoginRequest, 'id' | 'provider' | 'purpose'>
@@ -78,10 +81,7 @@ function hasCompleteSealedPkce(row: SealedPkce): row is SealedPkce & {
     return false
   }
   const isTagTruthy = Boolean(row.providerPkceTag)
-  if (!isTagTruthy) {
-    return false
-  }
-  return true
+  return isTagTruthy
 }
 
 function encodePkceContext({ id, provider, purpose }: PkceContext): Buffer {
