@@ -36,6 +36,14 @@ test('app S256 and opaque code hashes have distinct exact inputs', () => {
   }
 })
 
+test('hash equality preserves null, length, byte mismatch and equal bytes', () => {
+  const candidate = Buffer.from([1, 2, 3])
+  assert.equal(crypto.equalHash(null, candidate), false)
+  assert.equal(crypto.equalHash(Buffer.from([1, 2]), candidate), false)
+  assert.equal(crypto.equalHash(Buffer.from([1, 2, 4]), candidate), false)
+  assert.equal(crypto.equalHash(Buffer.from(candidate), candidate), true)
+})
+
 test('strict creation/exchange shapes reject injected identity, redirect and noncanonical proofs', () => {
   const verifier = opaque()
   const body = creation(crypto.challenge(verifier))
@@ -305,6 +313,9 @@ test('provider PKCE encryption binds request/provider/purpose and supports retai
   assert.equal(keys.decrypt({ ...context, ...sealed }), verifier)
   assert.notDeepEqual(keys.encrypt(verifier, context).providerPkceIv, sealed.providerPkceIv)
   for (const patch of [
+    { providerPkceCiphertext: null },
+    { providerPkceIv: null },
+    { providerPkceTag: null },
     { id: randomUUID() },
     { provider: 'discord' },
     { purpose: 'other' },
