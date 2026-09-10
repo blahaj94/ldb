@@ -16,6 +16,7 @@ test('builds a provider-specific trigger behind a generic marker', () => {
 
   assert.match(body, /<!-- ldb-ai-review:codex:abc123 -->/)
   assert.match(body, /@codex review/)
+  assert.match(body, /리뷰 제목과 본문은 한국어 존댓말로 작성해 주세요\./)
 })
 
 test('finds an existing trigger for the reviewed head SHA', () => {
