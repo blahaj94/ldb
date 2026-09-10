@@ -194,18 +194,10 @@ Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전�
 
 ### Code Worker runtime mapping
 
-- Code 작성·수정에는 implementation, bug fix, refactor, test, script와 tooling code가 모두 포함된다.
-- Code를 직접 수행하는 parent도 이 mapping과 실제 model·effort 확인 의무를 따른다.
-- Code Worker의 기본 실행 설정은 `gpt-6-astra`, reasoning effort `medium`이다. `standard` tier의 일반 implementation은 이 설정에 매핑하며, 작업이 단순하다는 이유로 `low` tier나 더 낮은 effort에 배정하지 않는다.
-- `gpt-5.3-codex-spark`, reasoning effort `high`는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능한 bounded test와 fixture에 사용할 수 있다. Unit test와 parameterized test가 그 예이며, `test`라는 이름이나 `.py`·`.mjs` 확장자만으로 예외를 적용하지 않는다.
-- Spark High는 승인된 Rule 또는 합의된 acceptance criteria에서 입력·기대 결과·검증 방식이 확정되고 기존 pattern으로 작성 가능하며, 중요한 state를 바꾸지 않는 작은 `.py`·`.mjs` 보조 script에도 사용할 수 있다. 범위는 local file 읽기, JSON·CSV 변환, file 목록 검사와 결과 집계 등이며, 적용 근거는 Issue의 기존 context pointer와 validation command로 확인한다.
-- 일반 code, bug fix와 refactor, test 의미·경계 조건 설계, 인증·동시성·transaction·복잡한 integration harness에는 GPT-6 Astra Medium을 유지한다. 배포·database 변경·data 삭제 등 중요한 state를 바꾸는 script도 Spark 예외에서 제외한다.
-- Spark 작업도 [`testing.md`](testing.md)의 Red-Green과 test integrity를 따른다. 기대값은 승인된 Rule 또는 합의된 acceptance criteria에서 가져오며, assertion·validation을 약화하거나 test를 통과시키려고 제품 code를 수정하지 않는다.
-- Spark 작업에서 승인된 Rule 또는 합의된 acceptance criteria에 없는 기대값·설계 판단이나 scope 확대가 필요하면 실행을 중단하고 GPT-6 Astra Medium 전환 또는 아래 escalation 절차를 따른다. 예상하지 못한 실패에는 기존 최대 1회 retry를 적용하며 반복 실패 시 같은 절차를 따른다. 기대한 Red 실패는 작업 실패나 retry budget 소진으로 계산하지 않는다.
-- 실행 환경이 같은 Worker의 model 설정 변경을 지원하면 GPT-6 Astra Medium으로 재개한다. 새 Worker가 필요하면 기존 Worker의 중단 확인·인계·재배정 절차를 따르고 retry budget을 그대로 이관한다.
-- 사용자가 model 또는 effort를 명시하면 그 선택을 우선한다. 다른 model이나 더 높은 effort는 사용자의 명시적 선택 또는 승인된 runtime mapping에 따라 사용할 수 있지만, `gpt-6-astra`와 `medium` 요청을 자동으로 낮추지 않는다.
-- Planner와 Worker는 착수 전에 실제 model과 effort가 선택되었는지 확인한다. 선택한 설정을 사용할 수 없거나 확인할 수 없으면 조용히 다른 model이나 effort로 바꾸지 않고 가용성 문제를 알리며, 확인하지 못한 설정을 적용했다고 보고하지 않는다.
-- 이 mapping은 Issue의 capability tier metadata를 대체하지 않으며 Issue마다 provider/model 이름을 반복해 고정하지 않는다. Model 선택과 관계없이 [`../../convention.md`](../../convention.md), [`testing.md`](testing.md), 이 문서의 review·escalation 기준을 모두 적용한다.
+- Code 작성·수정에는 implementation, bug fix, refactor, test, script와 tooling code가 모두 포함됩니다.
+- 일반 Code Worker와 code를 직접 수행하는 parent의 모델·reasoning effort를 저장소에서 고정하지 않습니다. 사용자의 명시적 선택을 우선하고, 별도 선택이 없으면 현재 실행 환경의 설정을 사용합니다.
+- 특정 기본 모델·effort의 가용성이나 설정 확인만을 이유로 일반 코드 작업을 보류하지 않습니다. 실제로 확인하지 못한 설정을 적용했다고 보고하지 않습니다.
+- Issue의 capability tier, 작업 범위, 검증·review·승인 의무는 유지합니다. Convention 이행의 별도 범위와 실행 조건은 아래 절을 따릅니다.
 
 #### Convention migration proposal
 
@@ -220,7 +212,7 @@ exceptions: 사용자 선택 우선, 실제 설정 확인·가용성 보류, 사
 review-after: 시범 PR 2~3개를 사용자 merge한 뒤 usage·재작업·검토 부담을 확인한다.
 ```
 
-이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 기존 Astra/Spark 일반 규칙에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. 단, code Reviewer에는 [Code review model proposal](#code-review-model-proposal)의 고정 mapping을 우선 적용한다. Rule·security의 최종 review는 사람 경로를 따른다.
+이 예외는 해당 Rule이 사용자 승인·merge된 뒤에만 위 일반 Code Worker 모델 선택 기준에 우선해 실행 근거가 된다. 경계 판단·새 의미·범위 확장이 필요하면 적용하지 않는다. 착수 전에 실제 model과 effort를 확인하며, 확인 불가 시 자동 상향이나 effort 증가는 하지 않고 작업을 분할하거나 사람의 판단으로 넘긴다. 기존 최대 1회 retry 한도와 escalation을 유지하며 조사·구현·1차 검토에 고비용 model을 자동 배정하지 않는다. 단, code Reviewer에는 [Code review model proposal](#code-review-model-proposal)의 고정 mapping을 우선 적용한다. Rule·security의 최종 review는 사람 경로를 따른다.
 
 기존 escalation의 고위험·Rule·architecture·security·API·schema·authentication, P0/P1 finding, 검증 불완전 조건은 그대로 적용하며 필수 최종 review를 생략하지 않는다. 이번 이행에서 해당 조건이 발생하면 자동으로 model이나 effort를 상향하지 않고 사람에게 최종 검토를 요청한다. 예상 밖 실패, 범위 초과, 검증 불가, retry 소진에도 같은 원칙을 적용한다. 후속 분할·배정·통합 조정에도 고비용 model을 자동 배정하지 않으며, 반복 구현을 이유로 별도 고비용 Planner를 만들지 않는다. 사용자가 model 또는 effort를 명시한 경우에는 기존 조항에 따라 그 선택을 우선한다.
 
