@@ -22,7 +22,7 @@ export function buildProviderTriggerComment({ provider, headSha }) {
 
   const triggerCommentBody = [
     providerMarker(provider, headSha),
-    '@codex review',
+    '@codex review 리뷰 제목과 본문은 한국어 존댓말로 작성해 주세요.',
     '',
     `_Automated advisory review request for \`${headSha}\`._`
   ].join('\n')
