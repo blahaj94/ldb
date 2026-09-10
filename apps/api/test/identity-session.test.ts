@@ -235,7 +235,10 @@ test('invalid provider and subject reject before database access', async (t) => 
     const state = fixture()
     const query = t.mock.method(state.manager, 'query')
     const getRepository = t.mock.method(state.manager, 'getRepository')
-    await failure(createIdentitySession(state.manager, candidate as Identity), 'AUTH_INTERNAL_ERROR')
+    await failure(
+      createIdentitySession(state.manager, candidate as Identity),
+      'AUTH_INTERNAL_ERROR'
+    )
     assert.equal(query.mock.callCount(), 0)
     assert.equal(getRepository.mock.callCount(), 0)
     assert.deepEqual(state.sessions, [])
