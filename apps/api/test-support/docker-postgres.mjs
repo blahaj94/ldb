@@ -216,51 +216,55 @@ async function savedImageConfigDigest() {
   const archivePath = join(directory, 'image.tar')
   try {
     await docker(['image', 'save', '--output', archivePath, POSTGRES_IMAGE], { timeoutMs: 120_000 })
-    const archive = await open(archivePath, 'r')
-    try {
-      let offset = 0
-      const header = Buffer.alloc(512)
-      while (true) {
-        const { bytesRead } = await archive.read(header, 0, header.length, offset)
-        const isHeaderIncomplete = bytesRead !== header.length
-        const isEndOfArchive = !isHeaderIncomplete && header.every((byte) => byte === 0)
-        const shouldStopReading = isHeaderIncomplete || isEndOfArchive
-        if (shouldStopReading) {
-          break
-        }
-        const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '')
-        const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim()
-        const size = Number.parseInt(sizeText, 8)
-        const isSizeSafeInteger = Number.isSafeInteger(size)
-        const isSizeNegative = isSizeSafeInteger && size < 0
-        const isSizeInvalid = !isSizeSafeInteger || isSizeNegative
-        if (isSizeInvalid) {
-          throw new Error('Saved image archive is invalid')
-        }
-        const isManifestEntry = name === 'manifest.json'
-        if (isManifestEntry) {
-          const content = Buffer.alloc(size)
-          const result = await archive.read(content, 0, size, offset + 512)
-          const isManifestIncomplete = result.bytesRead !== size
-          if (isManifestIncomplete) {
-            throw new Error('Saved image manifest is incomplete')
-          }
-          const manifest = JSON.parse(content.toString('utf8'))
-          const configPath = manifest[0]?.Config
-          const isConfigPathString = typeof configPath === 'string'
-          if (!isConfigPathString) {
-            throw new Error('Saved image config is missing')
-          }
-          return archiveConfigDigest(configPath)
-        }
-        offset += 512 + Math.ceil(size / 512) * 512
-      }
-      throw new Error('Saved image manifest is missing')
-    } finally {
-      await archive.close()
-    }
+    return await readArchiveConfigDigest(archivePath)
   } finally {
     await rm(directory, { recursive: true, force: true })
+  }
+}
+
+export async function readArchiveConfigDigest(archivePath) {
+  const archive = await open(archivePath, 'r')
+  try {
+    let offset = 0
+    const header = Buffer.alloc(512)
+    while (true) {
+      const { bytesRead } = await archive.read(header, 0, header.length, offset)
+      const isHeaderIncomplete = bytesRead !== header.length
+      const isEndOfArchive = !isHeaderIncomplete && header.every((byte) => byte === 0)
+      const shouldStopReading = isHeaderIncomplete || isEndOfArchive
+      if (shouldStopReading) {
+        break
+      }
+      const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '')
+      const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim()
+      const size = Number.parseInt(sizeText, 8)
+      const isSizeSafeInteger = Number.isSafeInteger(size)
+      const isSizeNegative = isSizeSafeInteger && size < 0
+      const isSizeInvalid = !isSizeSafeInteger || isSizeNegative
+      if (isSizeInvalid) {
+        throw new Error('Saved image archive is invalid')
+      }
+      const isManifestEntry = name === 'manifest.json'
+      if (isManifestEntry) {
+        const content = Buffer.alloc(size)
+        const result = await archive.read(content, 0, size, offset + 512)
+        const isManifestIncomplete = result.bytesRead !== size
+        if (isManifestIncomplete) {
+          throw new Error('Saved image manifest is incomplete')
+        }
+        const manifest = JSON.parse(content.toString('utf8'))
+        const configPath = manifest[0]?.Config
+        const isConfigPathString = typeof configPath === 'string'
+        if (!isConfigPathString) {
+          throw new Error('Saved image config is missing')
+        }
+        return archiveConfigDigest(configPath)
+      }
+      offset += 512 + Math.ceil(size / 512) * 512
+    }
+    throw new Error('Saved image manifest is missing')
+  } finally {
+    await archive.close()
   }
 }
 
