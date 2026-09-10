@@ -190,6 +190,8 @@ Issue는 현재 실행 조건을, PR은 실제 변경과 AC별 evidence를 전�
 
 실행 전담 Runner는 [`agent-runner.md`](agent-runner.md)의 고정 command 실행·monitor·사실 보고만 맡는 검증 보조 역할이다. 구현·조사·판정 설계는 parent의 허용된 직접 scope 또는 판단 Worker가 맡는다. Runner의 기록과 count 경계는 [`실행 보조 기록`](agent-execution.md#실행-보조-기록)을 따른다.
 
+텍스트 작성 모델과 Planner의 판단 책임에 관한 제안은 [`텍스트 작성 모델 제안`](agent-text-writing.md)에서 관리합니다. 현재 작업의 사용자 선택과 영구 Rule 승인 상태를 구분합니다.
+
 ### Code Worker runtime mapping
 
 - Code 작성·수정에는 implementation, bug fix, refactor, test, script와 tooling code가 모두 포함된다.
