@@ -34,9 +34,11 @@ Nest runtime과 testing package는 동일한 12.x release로 맞추고, TypeScri
 
 ## 의존성 관리
 
-API workspace의 직접 의존성과 버전 범위는 `apps/api/package.json`에서, API도 사용하는 공통 lint·format 도구의 직접 의존성과 버전 범위는 루트 `package.json`에서 관리합니다. 공통 도구의 적용 설정은 루트 `eslint.config.mjs`와 `.prettierrc.json`에서 확인합니다. 두 manifest에서 해결된 버전과 전이 의존성은 `pnpm-lock.yaml`에서 관리합니다. 이 문서에는 별도의 패키지 허용·제외 목록이나 패키지별 버전 재승인 조건을 두지 않습니다. [Issue #302](https://github.com/blahaj94/ldb/issues/302)의 사용자 요청에 따른 이 변경은 해당 PR의 사용자 merge로 적용합니다.
+API workspace의 직접 의존성과 버전 범위는 `apps/api/package.json`에서, API도 사용하는 공통 lint·format 도구의 직접 의존성과 버전 범위는 루트 `package.json`에서 관리합니다. 공통 도구의 적용 설정은 루트 `eslint.config.mjs`와 `.prettierrc.json`에서 확인합니다. 두 manifest에서 해결된 버전과 전이 의존성은 `pnpm-lock.yaml`에서 확인합니다. 이 문서와 `auth-runtime.md`의 API·인증 패키지 허용·제외 목록 및 패키지별 버전 재승인 조건을 제거합니다. [Issue #302](https://github.com/blahaj94/ldb/issues/302)의 사용자 요청에 따른 이 변경은 해당 PR의 사용자 merge로 적용합니다.
 
-새 의존성 추가와 역할 변경은 [`change-control.md`](change-control.md#approval-required), 후보 비교와 선택은 [`코드 재사용 기준`](code-reuse.md)을 따릅니다. 선택 이유, 사용자 실행 허용 근거와 검증 결과는 해당 Issue와 PR에 기록합니다. 이 문서의 runtime·build·test 계약이나 API·보안 계약을 바꾸면 해당 Rule을 함께 변경하며, 패키지 목록이나 버전의 변경만으로 영구 Rule에 항목을 추가하지 않습니다.
+새 의존성 추가와 역할 변경은 [`change-control.md`](change-control.md#approval-required), 후보 비교와 선택은 [`코드 재사용 기준`](code-reuse.md)을 따릅니다. 선택 이유, 사용자 실행 허용 근거와 검증 결과는 해당 Issue와 PR에 기록합니다. 이 문서의 runtime·build·test 계약이나 API·보안 계약을 바꾸면 해당 Rule을 함께 변경하며, API·인증 패키지 목록이나 버전의 변경만으로 이 두 runtime Rule에 항목을 추가하지 않습니다.
+
+공통 lint·format 도구의 역할, 설정과 버전 변경은 [공통 도구 계약](convention-tooling.md#공통-설정-도입-기준)을 따릅니다. 루트 manifest 안내는 현재 선언 위치를 설명하며, 그 계약의 승인 조건을 해제하지 않습니다.
 
 실제 변경에서는 package의 engine과 peer 조건, ESM 및 TypeScript 호환성을 확인하고 영향받는 동작을 검증합니다. Registry metadata만으로 설치·build 성공을 주장하지 않습니다. 초기 패키지 선택의 근거는 [PR #42의 승인 이력](https://github.com/blahaj94/ldb/pull/42#issuecomment-5550598698)에 보존합니다.
 
