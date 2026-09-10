@@ -53,11 +53,11 @@ review-after: 동시에 진행한 첫 3개 PR이 사용자 merge된 뒤 실제 �
 
 이 subsection은 위 `작업 단위와 순서`의 다음 세 문장의 적용 범위만 대체한다. “구현 PR은 한 번에 하나씩 순서대로 진행한다”, “사용자가 앞선 PR을 merge한 뒤 다음 PR을 시작한다”, “한 구현 PR이 끝나기 전에는 다음 구현을 병렬로 시작하지 않는다”가 그 대상이다. 작업 단위·독립 검토·소유권·기준 revision·의존성 판단·검증·사용자 merge를 포함한 나머지 Rule은 바꾸지 않는다.
 
-동시에 열어 둘 구현 PR은 최대 3개로 한다. 각 PR은 별도 Issue, integration branch, 전용 worktree, 단일 owner를 갖고 같은 고정 base에서 시작한다. PR 간 변경 file과 public type·API·generated fixture·producer/consumer·shared mutable runtime·test를 서로 충돌하게 변경하지 않도록 packet에 기록한다. 같은 것을 읽거나 같은 검증 command를 사용하는 것만으로 독립성을 부정하지 않는다. 기존 `agent-execution.md`의 의미대로 같은 file·public contract·generated source·artifact·test fixture·snapshot·shared state를 상충하게 변경하거나 검증 환경을 격리할 수 없는 경우 병렬로 dispatch하지 않는다. Issue별 실행·사용량 수집 범위도 서로 독립적으로 구분할 수 있어야 한다. 현재 수집 도구로 분리할 수 없으면 먼저 분리된 실행 단위를 준비하거나 병렬 착수를 보류한다. 보고 의무 완화, 추정 분배, 새 collector 구현은 이 제안의 범위가 아니다.
+동시에 열어 둘 구현 PR은 최대 3개로 한다. 각 PR은 별도 Issue, integration branch, 전용 worktree, 단일 owner를 갖고 같은 고정 base에서 시작한다. PR 간 변경 file과 public type·API·generated fixture·producer/consumer·shared mutable runtime·test를 서로 충돌하게 변경하지 않도록 packet에 기록한다. 같은 것을 읽거나 같은 검증 command를 사용하는 것만으로 독립성을 부정하지 않는다. 기존 `agent-execution.md`의 의미대로 같은 file·public contract·generated source·artifact·test fixture·snapshot·shared state를 상충하게 변경하거나 검증 환경을 격리할 수 없는 경우 병렬로 dispatch하지 않는다.
 
 병렬 dispatch는 기존 [`agent-execution.md`](agent-execution.md)의 독립성·실행 slot·roster·handoff·소유권 계약을 따른다. 이 제안은 slot 증설, owner 간 checkout 공유, 통합 branch 직접 편집, 또는 오래된 result의 자동 채택을 허용하지 않는다. 결과가 반환된 뒤 integration head가 전진했으면 [`change-control.md`](change-control.md)의 rebase와 semantic 확인을 거치고 필요한 validation을 다시 실행한다.
 
-각 PR은 한 module·한 종류의 변경·작은 diff 원칙, 독립적인 최종 head validation·review·usage 기록을 유지한다. 여러 PR을 동시에 ready 상태로 준비할 수 있지만, 하나가 main에 merge된 뒤 남은 PR은 최신 main으로 rebase하고 semantic check와 전체 required validation을 다시 통과해야 ready·merge 대상이 된다. 병렬 사전 검증이 이 최종 확인을 대신하거나 일괄 면제를 만들지 않는다.
+각 PR은 한 module·한 종류의 변경·작은 diff 원칙, 독립적인 최종 head validation·review 기록을 유지한다. 여러 PR을 동시에 ready 상태로 준비할 수 있지만, 하나가 main에 merge된 뒤 남은 PR은 최신 main으로 rebase하고 semantic check와 전체 required validation을 다시 통과해야 ready·merge 대상이 된다. 병렬 사전 검증이 이 최종 확인을 대신하거나 일괄 면제를 만들지 않는다.
 
 main이 전진하면 아직 merge되지 않은 모든 관련 PR을 다시 대조한다.
 재검증 결과가 없으면 해당 PR을 ready로 표시하지 않는다.
@@ -79,11 +79,11 @@ review-after: 새 기준으로 처음 배정한 기능 PR 묶음이 사용자 me
 
 이 변경이 사용자 merge되면 이 기준이 위 병렬 실행의 “동시에 열어 둘 구현 PR은 최대 3개로 한다”와 첫 3개 PR을 기준으로 한 재검토 문구를 대체한다. 아래 `작업 단위 재계획 제안`의 “동시 최대 3개” 참조도 이 기준으로 대체한다. 다른 proposed Rule의 승인 상태나 구현 착수 조건은 바꾸지 않는다.
 
-Planner는 작업별 file과 계약 소유권, generated source, artifact, fixture, snapshot, process와 port, database, native 권한과 장치, 사용량 수집 범위를 배정 전에 표로 기록한다. 각 항목에는 owner, 격리 방법, 필요한 실행과 검토 slot, 해제 조건을 둔다. Host의 CPU, memory, I/O와 실제로 사용할 수 있는 slot, 독립 review 가능 여부를 확인한 작업만 배정한다. 표가 비어 있거나 소유권과 격리 근거가 없거나 자원 포화로 안정적인 검증을 기대할 수 없으면 해당 작업을 대기시킨다. 실제 배정 수와 판단 근거는 각 Execution Issue의 착수 기록에 남긴다.
+Planner는 작업별 file과 계약 소유권, generated source, artifact, fixture, snapshot, process와 port, database, native 권한과 장치를 배정 전에 표로 기록한다. 각 항목에는 owner, 격리 방법, 필요한 실행과 검토 slot, 해제 조건을 둔다. Host의 CPU, memory, I/O와 실제로 사용할 수 있는 slot, 독립 review 가능 여부를 확인한 작업만 배정한다. 표가 비어 있거나 소유권과 격리 근거가 없거나 자원 포화로 안정적인 검증을 기대할 수 없으면 해당 작업을 대기시킨다. 실제 배정 수와 판단 근거는 각 Execution Issue의 착수 기록에 남긴다.
 
 같은 file이나 계약, generated output을 상충하게 변경하거나 producer와 consumer를 동시에 바꾸는 작업은 병렬로 배정하지 않는다. 같은 mutable database, fixture, snapshot, runtime state를 공유하는 작업도 같다. 같은 source를 읽기만 하거나 같은 검증 command를 격리된 checkout과 자원에서 실행하는 것은 그 사실만으로 의존 작업이 되지 않는다. 공용 계약이 고정됐고 각 owner가 서로 다른 내부 구현과 산출물을 변경한다면 한 기능이 다른 기능을 소비한다는 관계만으로 merge 선행 조건을 만들지 않는다.
 
-단일 Planner, Issue별 단일 통합 owner, 별도 integration branch, Worker branch, worktree, 공개 roster, 작은 Worker 범위는 유지한다. 승인된 model mapping, 같은 접근의 retry, 독립 review, 오래된 result의 semantic 확인, 최종 exact head 검증과 사용량 기록도 유지한다. 하나의 PR이 main에 merge되면 아직 merge되지 않은 관련 PR은 최신 main으로 rebase하고 의미를 대조한 뒤 전체 required validation을 다시 통과해야 ready, merge 대상이 된다. merge는 사용자만 수행한다.
+단일 Planner, Issue별 단일 통합 owner, 별도 integration branch, Worker branch, worktree, 공개 roster, 작은 Worker 범위는 유지한다. 승인된 model mapping, 같은 접근의 retry, 독립 review, 오래된 result의 semantic 확인, 최종 exact head 검증도 유지한다. 하나의 PR이 main에 merge되면 아직 merge되지 않은 관련 PR은 최신 main으로 rebase하고 의미를 대조한 뒤 전체 required validation을 다시 통과해야 ready, merge 대상이 된다. merge는 사용자만 수행한다.
 
 이 기준은 실행 slot이나 host 용량을 무제한으로 간주하지 않는다. 자동 scheduler, 새 사용량 collector, 추정 사용량 분배, checkout 공유, 검증 면제, 자동 merge를 추가하지 않는다. 제품 code, test, dependency, 관련 없는 Rule activation은 별도 승인과 실행 범위를 따른다.
 
@@ -108,7 +108,7 @@ review-after: 첫 2개 기능 PR이 사용자 merge된 뒤 실제 검토 부담�
 
 작업 packet은 대상 기능·모듈, 남은 승인 항목, 관련 test와 필요한 callsite, 제외 범위, 기준 revision, 동작 보존 근거, 예상 diff와 검증 command를 기록한다. 같은 PR 안에서는 단계별 commit과 명시적인 범위를 유지한다. 숫자 목표를 맞추려고 무관한 기능을 묶지 않으며, PR 수를 줄이기 위해 기존 항목을 생략하거나 test를 약화하지 않는다.
 
-모듈의 모든 항목을 완료했는지, 또는 승인·판단이 필요한 항목을 남겼는지 검토해 같은 파일을 불필요하게 다시 방문하지 않는다. 범위가 크면 예상 diff 규모, 검토를 나눌 이유, 되돌리기 단위와 상호 의존성을 근거로 분리를 제안한다. 임의의 새 파일 수 hard cap은 두지 않는다. 작은 Worker scope와 약 300 logic 줄의 commit soft 기준, 동시 최대 3개, dependency·사용량·root 분리, 독립 review, 최종 head 전체 검증, 사용자 merge 권한은 유지한다.
+모듈의 모든 항목을 완료했는지, 또는 승인·판단이 필요한 항목을 남겼는지 검토해 같은 파일을 불필요하게 다시 방문하지 않는다. 범위가 크면 예상 diff 규모, 검토를 나눌 이유, 되돌리기 단위와 상호 의존성을 근거로 분리를 제안한다. 임의의 새 파일 수 hard cap은 두지 않는다. 작은 Worker scope와 약 300 logic 줄의 commit soft 기준, 동시 최대 3개, dependency·root 분리, 독립 review, 최종 head 전체 검증, 사용자 merge 권한은 유지한다.
 
 이 제안은 구체 작업 목록이나 일시적인 backlog를 Rule에 저장하지 않는다. 해당 목록과 현재 roster·의존성·base는 부모 Issue #196에서 관리한다. 모델 mapping 변경이나 scheduler·자동 merge 권한도 만들지 않는다.
 
