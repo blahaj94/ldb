@@ -20,6 +20,6 @@ review-after: agent-workflow.md의 실행 효율 계약의 재검토 조건을 �
 | 단독 parent의 Worker slot 1개·Issue 통합 checkout 예외, 위임 mode 격리·전환·소유권 | [`agent-execution.md`의 수행 모드와 소유권](agent-execution.md#수행-모드와-소유권), [`change-control.md`의 branch·worktree 규칙](change-control.md#branch-worktree-and-parallel-work) |
 | Worker count 밖의 실행 보조와 단일 job owner·입력 고정·handle·종료·취소·retry·고정 report | [`agent-execution.md`의 실행 보조 기록](agent-execution.md#실행-보조-기록), [`agent-runner.md`](agent-runner.md) |
 | 입력 근거가 있는 PASS 재사용·aggregate 중복 생략·실패 영향 범위 재검증, 필수 gate 유지 | [`testing.md`의 검증 evidence 재사용](testing.md#검증-evidence-재사용) |
-| Astra Medium·승인 mapping 유지, model 실험과 실제 adapter 설치 분리 | [`agent-workflow.md`의 Code Worker runtime mapping](agent-workflow.md#code-worker-runtime-mapping), [실행 효율 계약의 재검토](agent-workflow.md#실행-효율-계약의-재검토) |
+| 당시 모델 mapping 보존과 실험·adapter 설치 분리의 승인 이력. 현재 모델 선택은 연결된 canonical 기준 적용 | [`agent-workflow.md`의 Code Worker runtime mapping](agent-workflow.md#code-worker-runtime-mapping), [실행 효율 계약의 재검토](agent-workflow.md#실행-효율-계약의-재검토) |
 
 실제 Execution Issue 3개 후의 관측과 미검증 사례·효과를 추정하지 않는 기준도 위 canonical 재검토 절에서 관리한다.
