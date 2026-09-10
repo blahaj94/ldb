@@ -102,7 +102,7 @@ Code 작성·수정에서는 적용되는 convention 본문, approval boundary�
 - [`rules/backend-readability.md`](rules/backend-readability.md): 기존 Backend 가독성 Rule 경로, 공통 `convention.md`로 이전
 - [`rules/task-planning.md`](rules/task-planning.md): Discussion에서 목표별 Project와 실행 Issue로 이어지는 진입점, 분해와 완료 기준. PR #235의 사용자 승인 반영
 - [`rules/agent-workflow.md`](rules/agent-workflow.md): Planner, Worker, Reviewer의 GitHub handoff contract
-- [`rules/agent-text-writing.md`](rules/agent-text-writing.md): 이슈, PR, 댓글의 텍스트 작성 모델과 판단 책임 제안. 영구 활성화는 승인 대기
+- [`rules/agent-text-writing.md`](rules/agent-text-writing.md): 이슈, PR, 댓글의 텍스트 작성 모델과 판단 책임. PR #273의 사용자 승인 반영
 - [`rules/convention-migration.md`](rules/convention-migration.md): 승인된 기존 convention의 동작 보존 이행 기준(사용자 merge 전 code 이행 불가)과 후속 Execution Issue routing
 - [`rules/agent-execution.md`](rules/agent-execution.md): 수행 모드, Worker roster, context, 상태와 통합 계약
 - [`rules/agent-runner.md`](rules/agent-runner.md): 실행 전담의 입력·job owner·완료 evidence·취소·retry·보고 계약
