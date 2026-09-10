@@ -101,15 +101,9 @@ export class CaptureSearch {
     const completed = result?.snapshot
     const hasLatestSnapshot = latest != null
     const hasCompletedSnapshot = completed != null
-    const canCompareSnapshot = hasLatestSnapshot && hasCompletedSnapshot
-    const hasChangedRun = canCompareSnapshot && latest.runId !== completed.runId
-    const hasNewerSnapshot = canCompareSnapshot && latest.revision > completed.revision
-    const hasDifferentCapture = hasLatestSnapshot && latest.captureId !== captureId
-    const hasNewerDifferentCapture = hasNewerSnapshot && hasDifferentCapture
-    const isSuperseded = hasChangedRun || hasNewerDifferentCapture
     const isSignalAborted = signal.aborted
-    const isCancelled = isSignalAborted || !isCurrentTicket || isSuperseded
-    if (isCancelled) {
+
+    const cancelBegin = (): null => {
       if (isCurrentTicket) {
         ticket.active = false
         this.capture = null
@@ -121,6 +115,24 @@ export class CaptureSearch {
       }
       return null
     }
+
+    if (hasLatestSnapshot) {
+      const hasDifferentCapture = latest.captureId !== captureId
+      if (hasCompletedSnapshot) {
+        const hasChangedRun = latest.runId !== completed.runId
+        const hasNewerSnapshot = latest.revision > completed.revision
+        const hasNewerDifferentCapture = hasNewerSnapshot && hasDifferentCapture
+        const isSuperseded = hasChangedRun || hasNewerDifferentCapture
+        if (isSuperseded) {
+          return cancelBegin()
+        }
+      }
+    }
+
+    if (isSignalAborted || !isCurrentTicket) {
+      return cancelBegin()
+    }
+
     if (!hasCaptureId) {
       this.capture = null
       ticket.active = false
