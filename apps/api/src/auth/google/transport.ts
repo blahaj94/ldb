@@ -34,18 +34,21 @@ export function withAbort<T>(
     operation.then(
       (value) => {
         signal.removeEventListener('abort', aborted)
-        const isAbortRequested = !finished && signal.aborted
-        const isLateResult = finished || isAbortRequested
-        if (isLateResult) {
-          const canDiscard = discard != null
-          if (canDiscard) {
-            discard(value)
+        if (!finished) {
+          const isAbortRequested = signal.aborted
+          const isLateResult = finished || isAbortRequested
+          if (!isLateResult) {
+            finished = true
+            resolve(value)
+            return
           }
-          reject(new LoginFailure(LOGIN_ERRORS.PROVIDER))
-          return
         }
-        finished = true
-        resolve(value)
+        const canDiscard = discard != null
+        if (canDiscard) {
+          discard(value)
+        }
+        reject(new LoginFailure(LOGIN_ERRORS.PROVIDER))
+        return
       },
       (error: unknown) => {
         finished = true
