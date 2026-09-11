@@ -46,7 +46,7 @@ const mocks = vi.hoisted(() => ({
     | {
         coordinator: typeof mocks.coordinator
         apiOrigin: string
-        clock: object
+        searchClock: object
         start: ReturnType<typeof vi.fn>
       }
     | undefined
@@ -136,7 +136,7 @@ beforeEach(() => {
   mocks.runtime = {
     coordinator: mocks.coordinator,
     apiOrigin: 'https://api.synthetic.test',
-    clock: {},
+    searchClock: {},
     start: vi.fn(async () => undefined)
   }
   mocks.createEffects.mockReturnValue({})
@@ -255,10 +255,17 @@ it('profile 적용이 시작된 뒤 실패하면 부분 적용된 userData로 �
   vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
   vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
   vi.stubEnv('LDB_AUTH_USER_DATA_PATH', userDataPath)
+  const runtimeConfigModule = await import('./auth/runtime-config')
   const actual = await vi.importActual<typeof import('./auth/runtime-config')>(
     './auth/runtime-config'
   )
-  mocks.applyProfile.mockImplementationOnce(actual.applyAuthRuntimeProfile)
+  mocks.applyProfile.mockImplementationOnce((application, config) => {
+    try {
+      actual.applyAuthRuntimeProfile(application, config)
+    } catch {
+      throw new runtimeConfigModule.AuthRuntimeProfileApplicationFailure()
+    }
+  })
   mocks.setName.mockImplementationOnce(() => {
     throw new Error('Synthetic app identity failure')
   })
