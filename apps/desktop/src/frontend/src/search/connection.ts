@@ -52,16 +52,27 @@ export class SearchConnection {
         }
         const previousQueued = queued
         const hasQueued = previousQueued != null
-        const hasSameRun = hasQueued && previousQueued.runId === snapshot.runId
-        const isOlder = hasSameRun && snapshot.revision <= previousQueued.revision
+        if (!hasQueued) {
+          queued = snapshot
+          return
+        }
+        const hasSameRun = previousQueued.runId === snapshot.runId
+        if (!hasSameRun) {
+          queued = snapshot
+          return
+        }
+        const isOlder = snapshot.revision <= previousQueued.revision
         if (!isOlder) {
           queued = snapshot
         }
       })
       void this.read(expected).then((synchronized) => {
         const isCurrent = this.isCurrent(expected)
-        const canEstablish = isCurrent && synchronized
-        if (!canEstablish) {
+        if (!isCurrent) {
+          queued = null
+          return
+        }
+        if (!synchronized) {
           queued = null
           return
         }
@@ -111,7 +122,8 @@ export class SearchConnection {
 
   private isCurrent(expected: number): boolean {
     const hasSameEpoch = expected === this.epoch
-    const isCurrent = this.active && hasSameEpoch
+    const isActive = this.active
+    const isCurrent = isActive && hasSameEpoch
     return isCurrent
   }
 
@@ -130,7 +142,11 @@ export class SearchConnection {
       }
       this.synchronized = true
       this.accept(result.snapshot, expected)
-      const isSynchronized = this.isCurrent(expected) && this.synchronized
+      const isCurrentAfterAccept = this.isCurrent(expected)
+      if (!isCurrentAfterAccept) {
+        return false
+      }
+      const isSynchronized = this.synchronized
       return isSynchronized
     } catch {
       const isCurrent = this.isCurrent(expected)
@@ -151,15 +167,17 @@ export class SearchConnection {
     }
     const previous = this.current
     const hasPrevious = previous != null
-    const hasChangedRun = hasPrevious && previous.runId !== snapshot.runId
-    if (hasChangedRun) {
-      this.options.onRunChanged()
-      this.connect()
-      return
-    }
-    const isNewer = !hasPrevious || snapshot.revision > previous.revision
-    if (!isNewer) {
-      return
+    if (hasPrevious) {
+      const hasChangedRun = previous.runId !== snapshot.runId
+      if (hasChangedRun) {
+        this.options.onRunChanged()
+        this.connect()
+        return
+      }
+      const isNewer = snapshot.revision > previous.revision
+      if (!isNewer) {
+        return
+      }
     }
     this.current = snapshot
     this.options.onSnapshot(snapshot)

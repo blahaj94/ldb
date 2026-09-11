@@ -162,10 +162,15 @@ export class CaptureSearch {
     const ticket = this.capture
     const captureId = ticket?.captureId
     const hasTicket = ticket != null
-    const isTicketActive = hasTicket && ticket.active
+    if (!hasTicket) {
+      return
+    }
+    const isTicketActive = ticket.active
     const hasCaptureId = captureId != null
-    const canObserve = hasTicket && isTicketActive && hasCaptureId
-    if (!canObserve) {
+    if (!isTicketActive) {
+      return
+    }
+    if (!hasCaptureId) {
       return
     }
     ticket.revisions[slot] += 1
@@ -200,10 +205,15 @@ export class CaptureSearch {
     }
     const isRetryable = SEARCH_ERRORS[error.code].retryable
     const isRateLimit = error.code === 'SEARCH_RATE_LIMITED'
-    const hasRetryAfter = isRateLimit && error.retryAfterSeconds != null
-    const hasPositiveRetryAfter = hasRetryAfter && error.retryAfterSeconds > 0
-    const isWaiting = isRateLimit && hasRetryAfter && hasPositiveRetryAfter
-    const canRetry = isRetryable && !isWaiting
+    let canRetry = isRetryable
+    if (isRateLimit) {
+      const hasRetryAfter = error.retryAfterSeconds != null
+      if (hasRetryAfter) {
+        const hasPositiveRetryAfter = error.retryAfterSeconds > 0
+        const isWaiting = hasPositiveRetryAfter
+        canRetry = isRetryable && !isWaiting
+      }
+    }
     if (!canRetry) {
       return
     }
@@ -230,10 +240,12 @@ export class CaptureSearch {
       this.failed = false
     }
     const hasActiveId = this.capture?.captureId != null
-    const hasEnded = hasSnapshot && snapshot.captureId === null
-    const isInvalidated = hasActiveId && hasEnded
-    if (isInvalidated) {
-      this.invalidate()
+    if (hasSnapshot) {
+      const hasEnded = snapshot.captureId === null
+      const isInvalidated = hasActiveId && hasEnded
+      if (isInvalidated) {
+        this.invalidate()
+      }
     }
     this.publish()
   }
@@ -254,12 +266,22 @@ export class CaptureSearch {
     const ticket = this.capture
     const snapshot = this.snapshot
     const hasTicket = ticket != null
-    const isTicketActive = hasTicket && ticket.active
-    const hasCaptureId = isTicketActive && ticket.captureId != null
-    const hasActiveTicket = isTicketActive && hasCaptureId
+    if (!hasTicket) {
+      return emptySearchSlots()
+    }
+    const isTicketActive = ticket.active
+    if (!isTicketActive) {
+      return emptySearchSlots()
+    }
+    const hasCaptureId = ticket.captureId != null
+    if (!hasCaptureId) {
+      return emptySearchSlots()
+    }
     const hasSnapshot = snapshot != null
-    const canCompareCapture = hasActiveTicket && hasSnapshot
-    const hasSameCapture = canCompareCapture && ticket.captureId === snapshot.captureId
+    if (!hasSnapshot) {
+      return emptySearchSlots()
+    }
+    const hasSameCapture = ticket.captureId === snapshot.captureId
     if (!hasSameCapture) {
       return emptySearchSlots()
     }
