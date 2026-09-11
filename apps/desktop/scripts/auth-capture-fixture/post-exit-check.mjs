@@ -145,7 +145,7 @@ function readSearchDiagnostic(output) {
     const definition = searchDiagnosticDefinitions[value.check]
     const hasDefinition = definition != null
     const hasKnownKind = value.kind === 'assertion' || value.kind === 'deadline'
-    const hasAllowedKind = hasDefinition ? definition.kinds.includes(value.kind) : false
+    const hasAllowedKind = hasDefinition ? definition.kinds.includes(value.kind) : null
     const hasGeneratedMessage =
       (value.kind === 'assertion' && typeof value.generatedMessage === 'boolean') ||
       (value.kind === 'deadline' && value.generatedMessage === null)
@@ -155,32 +155,38 @@ function readSearchDiagnostic(output) {
     const actualKeys = Object.keys(definition.actual)
     const actualIsObject =
       value.actual != null && typeof value.actual === 'object' && !Array.isArray(value.actual)
-    const hasExactActualKeys = actualIsObject
-      ? Object.keys(value.actual).length === actualKeys.length
-      : false
-    const hasValidActual = actualIsObject
-      ? actualKeys.every((key) => isDiagnosticValue(value.actual[key], definition.actual[key]))
-      : false
+    const actualChecks = actualIsObject
+      ? {
+          hasExactKeys: Object.keys(value.actual).length === actualKeys.length,
+          hasValidValues: actualKeys.every((key) =>
+            isDiagnosticValue(value.actual[key], definition.actual[key])
+          )
+        }
+      : null
     const expectedKeys = Object.keys(definition.expected)
     const expectedIsObject =
       value.expected != null && typeof value.expected === 'object' && !Array.isArray(value.expected)
-    const hasExactExpectedKeys = expectedIsObject
-      ? Object.keys(value.expected).length === expectedKeys.length
-      : false
-    const hasExpectedValues = expectedIsObject
-      ? expectedKeys.every((key) => value.expected[key] === definition.expected[key])
-      : false
+    const expectedChecks = expectedIsObject
+      ? {
+          hasExactKeys: Object.keys(value.expected).length === expectedKeys.length,
+          hasExpectedValues: expectedKeys.every(
+            (key) => value.expected[key] === definition.expected[key]
+          )
+        }
+      : null
+    const hasValidActual =
+      actualChecks != null && actualChecks.hasExactKeys && actualChecks.hasValidValues
+    const hasValidExpected =
+      expectedChecks != null && expectedChecks.hasExactKeys && expectedChecks.hasExpectedValues
     const hasValidDiagnostic =
       hasExactKeys &&
       hasKnownStage &&
       hasDefinition &&
       hasKnownKind &&
-      hasAllowedKind &&
+      hasAllowedKind === true &&
       hasGeneratedMessage &&
-      hasExactActualKeys &&
       hasValidActual &&
-      hasExactExpectedKeys &&
-      hasExpectedValues
+      hasValidExpected
     if (!hasValidDiagnostic) {
       return null
     }
