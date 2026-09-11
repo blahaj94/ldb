@@ -192,6 +192,81 @@ describe('desktop auth runtime config', () => {
     }
   )
 
+  it.each(['.', '..'] as const)(
+    'rejects a %s segment before touching the profile filesystem',
+    (segment) => {
+      const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+      const child = join(root, 'child')
+      fs.mkdirSync(child, { mode: 0o700 })
+      const aliasedPath = `${child}${sep}${segment}${sep}profile`
+      const calls: string[] = []
+      const application = {
+        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        setName: (value: string) => calls.push(`name:${value}`),
+        setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+      }
+      const parsed = readAuthRuntimeConfig({
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: join(root, 'valid-profile')
+      })
+
+      try {
+        expect(parsed).not.toBeNull()
+        if (parsed == null) {
+          throw new Error('Synthetic runtime config should be available')
+        }
+
+        expect(
+          readAuthRuntimeConfig({
+            ...validEnvironment,
+            LDB_AUTH_USER_DATA_PATH: aliasedPath
+          })
+        ).toBeNull()
+        const config: AuthRuntimeConfig = { ...parsed, userDataPath: aliasedPath }
+        expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
+        expect(calls).toEqual([])
+        expect(fs.existsSync(join(root, 'profile'))).toBe(false)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it('uses the native separator so POSIX backslashes remain part of the profile name', () => {
+    if (sep !== '/') {
+      return
+    }
+
+    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const userDataPath = join(root, 'profile\\name')
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => {
+        fs.lstatSync(value)
+        calls.push(`path:${name}:${value}`)
+      },
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      expect(() => applyAuthRuntimeProfile(application, config)).not.toThrow()
+      expect(fs.lstatSync(userDataPath).isDirectory()).toBe(true)
+      expect(calls[0]).toBe(`path:userData:${userDataPath}`)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('syncs each newly created profile directory and its parent entry before setPath', () => {
     const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
     const parent = join(root, 'nested')
