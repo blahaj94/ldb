@@ -10,11 +10,15 @@ const configurationError = 'Invalid database configuration'
 
 function required(value: string | undefined): string {
   const isValueMissing = value === undefined
-  const isValueEmpty = !isValueMissing && value.length === 0
-  const isValueInvalid = isValueMissing || isValueEmpty
-  if (isValueInvalid) {
+  if (isValueMissing) {
     throw new Error(configurationError)
   }
+
+  const isValueEmpty = value.length === 0
+  if (isValueEmpty) {
+    throw new Error(configurationError)
+  }
+
   return value
 }
 
