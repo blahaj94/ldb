@@ -28,8 +28,19 @@ export class AuthRuntimeProfileApplicationFailure extends Error {
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
 type RuntimeProfileFilesystem = Readonly<
-  Pick<typeof fs, 'lstatSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'>
+  Pick<typeof fs, 'lstatSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'> & {
+    realpathSync(path: string): string
+  }
 >
+
+const nativeRuntimeProfileFilesystem: RuntimeProfileFilesystem = {
+  lstatSync: fs.lstatSync,
+  realpathSync: fs.realpathSync.native,
+  mkdirSync: fs.mkdirSync,
+  openSync: fs.openSync,
+  fsyncSync: fs.fsyncSync,
+  closeSync: fs.closeSync
+}
 
 function isAuthProvider(value: string): value is AuthProvider {
   const isSupported = value === 'google'
@@ -102,6 +113,13 @@ function assertDirectory(stat: Stats): void {
   }
 }
 
+function assertCanonicalPath(path: string, filesystem: RuntimeProfileFilesystem): void {
+  const canonicalPath = filesystem.realpathSync(path)
+  if (canonicalPath !== path) {
+    throw new Error('Trusted userData path must use its native canonical spelling.')
+  }
+}
+
 function splitNativePath(path: string): string[] {
   const separator = sep === '\\' ? /[\\/]/ : /\//
   return path.split(separator)
@@ -156,7 +174,9 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
       if (!isMissingPath) {
         throw error
       }
-      assertDirectory(filesystem.lstatSync(dirname(currentPath)))
+      const parentPath = dirname(currentPath)
+      assertDirectory(filesystem.lstatSync(parentPath))
+      assertCanonicalPath(parentPath, filesystem)
       try {
         filesystem.mkdirSync(currentPath, { mode: 0o700 })
       } catch (mkdirError) {
@@ -175,6 +195,7 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
     } else {
       assertDirectory(stat)
     }
+    assertCanonicalPath(currentPath, filesystem)
     if (created && !isFinalPath) {
       syncDirectory(currentPath, filesystem)
       syncDirectory(dirname(currentPath), filesystem)
@@ -236,7 +257,7 @@ export function readAuthRuntimeConfig(
 export function applyAuthRuntimeProfile(
   application: AuthRuntimeProfileApplication,
   config: AuthRuntimeConfig,
-  filesystem: RuntimeProfileFilesystem = fs
+  filesystem: RuntimeProfileFilesystem = nativeRuntimeProfileFilesystem
 ): void {
   prepareUserDataDirectory(config.userDataPath, filesystem)
   try {

@@ -171,7 +171,7 @@ describe('desktop auth runtime config', () => {
     const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
       statSync: fs.statSync,
-      realpathSync: fs.realpathSync,
+      realpathSync: fs.realpathSync.native,
       mkdirSync: (path, options) => {
         fs.mkdirSync(path, options)
         throw Object.assign(new Error('Synthetic concurrent creation'), { code: 'EEXIST' })
@@ -531,7 +531,7 @@ describe('desktop auth runtime config', () => {
     const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
       statSync: fs.statSync,
-      realpathSync: fs.realpathSync,
+      realpathSync: fs.realpathSync.native,
       mkdirSync: fs.mkdirSync,
       openSync: (path: string, flags: number) => {
         openedPaths.push(path)
@@ -596,7 +596,7 @@ describe('desktop auth runtime config', () => {
     const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
       statSync: fs.statSync,
-      realpathSync: fs.realpathSync,
+      realpathSync: fs.realpathSync.native,
       mkdirSync: fs.mkdirSync,
       openSync: (path: string, flags: number) => {
         openedPaths.push(path)
