@@ -26,6 +26,7 @@ export type AuthAppLifecycle = Readonly<{
   isShutdownCommitted(): boolean
   canReceiveProtocolIngress(): boolean
   waitForQuitOutcome(): Promise<boolean>
+  runBootstrap<T>(bootstrap: (isActive: () => boolean) => Promise<T | null>): Promise<T | null>
   runAfterQuitOutcome(action: () => Promise<void> | void): Promise<void> | void
   exitAfterOwnedAuthFailure(): void
 }>
@@ -69,14 +70,16 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
     if (!isCurrentWindow) {
       return
     }
-    if (closeState.activeAttempt != null) {
+    const hasActiveWindowCloseAttempt = closeState.activeAttempt != null
+    if (hasActiveWindowCloseAttempt) {
       closeState.hasPendingLoadFailure = true
       return
     }
     if (shutdownCommitted) {
       return
     }
-    if (activeQuitAttempt != null) {
+    const hasActiveQuitAttempt = activeQuitAttempt != null
+    if (hasActiveQuitAttempt) {
       quitCancellationActions.push(() => handleDocumentLoadFailure(window, closeState))
       return
     }
@@ -100,7 +103,8 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
     closeState: WindowCloseState,
     attempt: symbol
   ): void {
-    if (closeState.activeAttempt !== attempt) {
+    const isDifferentWindowCloseAttempt = closeState.activeAttempt !== attempt
+    if (isDifferentWindowCloseAttempt) {
       return
     }
 
@@ -150,7 +154,8 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
 
     window.webContents.on('will-prevent-unload', (event) => {
       const attempt = closeState.activeAttempt
-      if (attempt == null) {
+      const hasNoActiveWindowCloseAttempt = attempt == null
+      if (hasNoActiveWindowCloseAttempt) {
         return
       }
       queueMicrotask(() => {
@@ -203,7 +208,8 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
   }
 
   function cancelQuitAttempt(attempt: symbol): void {
-    if (shutdownCommitted || activeQuitAttempt !== attempt) {
+    const isStaleQuitAttempt = shutdownCommitted || activeQuitAttempt !== attempt
+    if (isStaleQuitAttempt) {
       return
     }
 
@@ -232,7 +238,8 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
 
   function cancelActiveQuitAttempt(): void {
     const attempt = activeQuitAttempt
-    if (attempt != null) {
+    const hasActiveQuitAttempt = attempt != null
+    if (hasActiveQuitAttempt) {
       cancelQuitAttempt(attempt)
     }
   }
@@ -254,7 +261,8 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
 
   function observeQuitAttempt(event: QuitEvent): void {
     const attempt = activeQuitAttempt
-    if (attempt == null) {
+    const hasNoActiveQuitAttempt = attempt == null
+    if (hasNoActiveQuitAttempt) {
       return
     }
 
@@ -269,7 +277,8 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
     if (shutdownCommitted) {
       return Promise.resolve(false)
     }
-    if (activeQuitAttempt == null) {
+    const hasNoActiveQuitAttempt = activeQuitAttempt == null
+    if (hasNoActiveQuitAttempt) {
       return Promise.resolve(true)
     }
 
@@ -278,11 +287,39 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
     })
   }
 
+  async function runBootstrap<T>(
+    bootstrap: (isActive: () => boolean) => Promise<T | null>
+  ): Promise<T | null> {
+    let bootstrapResult: T | null = null
+    let shouldRunBootstrap = true
+    while (shouldRunBootstrap) {
+      let bootstrapObservedQuitAttempt = false
+      bootstrapResult = await bootstrap(() => {
+        const isCancellableQuitActive = isQuitting && !shutdownCommitted
+        bootstrapObservedQuitAttempt ||= isCancellableQuitActive
+        return !isQuitting
+      })
+      if (shutdownCommitted) {
+        return null
+      }
+      if (isQuitting) {
+        const canResume = await waitForQuitOutcome()
+        if (!canResume) {
+          return null
+        }
+      }
+      const hasBootstrapResult = bootstrapResult != null
+      shouldRunBootstrap = bootstrapObservedQuitAttempt && !hasBootstrapResult
+    }
+    return bootstrapResult
+  }
+
   function runAfterQuitOutcome(action: () => Promise<void> | void): Promise<void> | void {
     if (shutdownCommitted) {
       return
     }
-    if (activeQuitAttempt == null) {
+    const hasNoActiveQuitAttempt = activeQuitAttempt == null
+    if (hasNoActiveQuitAttempt) {
       return action()
     }
 
@@ -298,7 +335,8 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
     if (shutdownCommitted || ownedAuthFailureExitRequested) {
       return
     }
-    if (activeQuitAttempt != null) {
+    const hasActiveQuitAttempt = activeQuitAttempt != null
+    if (hasActiveQuitAttempt) {
       hasPendingOwnedAuthFailure = true
       return
     }
@@ -344,6 +382,7 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
     isShutdownCommitted: () => shutdownCommitted,
     canReceiveProtocolIngress: () => !shutdownCommitted && !protocolIngressDisposed,
     waitForQuitOutcome,
+    runBootstrap,
     runAfterQuitOutcome,
     exitAfterOwnedAuthFailure
   }

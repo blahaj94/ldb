@@ -175,29 +175,15 @@ app.whenReady().then(async () => {
     if (runtimeConfig != null) {
       const effects = createAuthRuntimeEffects()
       authAppLifecycle.setPowerMonitorDisposer(effects.bindPowerMonitor(powerMonitor))
-      while (authRuntime == null) {
-        let bootstrapObservedQuitAttempt = false
-        authRuntime = await bootstrapAuthRuntime({
+      authRuntime = await authAppLifecycle.runBootstrap((isActive) =>
+        bootstrapAuthRuntime({
           config: runtimeConfig,
           effects,
-          isActive: () => {
-            bootstrapObservedQuitAttempt ||=
-              authAppLifecycle.isQuitting() && !authAppLifecycle.isShutdownCommitted()
-            return !authAppLifecycle.isQuitting()
-          }
+          isActive
         })
-        if (authAppLifecycle.isShutdownCommitted()) {
-          return
-        }
-        if (authAppLifecycle.isQuitting()) {
-          const canResume = await authAppLifecycle.waitForQuitOutcome()
-          if (!canResume) {
-            return
-          }
-        }
-        if (!bootstrapObservedQuitAttempt || authRuntime != null) {
-          break
-        }
+      )
+      if (authAppLifecycle.isShutdownCommitted()) {
+        return
       }
     }
 

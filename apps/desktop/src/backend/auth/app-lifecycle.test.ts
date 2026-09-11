@@ -107,6 +107,54 @@ it('committed quit resolves waiters as terminal and releases auth resources once
   expect(disposeIngress).toHaveBeenCalledOnce()
 })
 
+it('retries a null bootstrap only after a canceled quit was observed during bootstrap', async () => {
+  const { lifecycle, handlers } = createLifecycle()
+  const beforeQuit = handlers.get('before-quit')!
+  const willQuit = handlers.get('will-quit')!
+  let resolveFirstBootstrap!: (value: null) => void
+  const firstBootstrap = new Promise<null>((resolve) => {
+    resolveFirstBootstrap = resolve
+  })
+  let bootstrapCalls = 0
+
+  beforeQuit({ defaultPrevented: false } as never)
+  const runtimePromise = lifecycle.runBootstrap(async (isActive) => {
+    bootstrapCalls += 1
+    if (bootstrapCalls === 1) {
+      expect(isActive()).toBe(false)
+      return firstBootstrap
+    }
+    expect(isActive()).toBe(true)
+    return 'runtime'
+  })
+  await Promise.resolve()
+  resolveFirstBootstrap(null)
+  await Promise.resolve()
+  willQuit({ defaultPrevented: true } as never)
+  const runtime = await runtimePromise
+
+  expect(runtime).toBe('runtime')
+  expect(bootstrapCalls).toBe(2)
+})
+
+it('does not retry bootstrap after quit commits while bootstrap is pending', async () => {
+  const { lifecycle, handlers } = createLifecycle()
+  const beforeQuit = handlers.get('before-quit')!
+  const quit = handlers.get('quit')!
+  let bootstrapCalls = 0
+
+  beforeQuit({ defaultPrevented: false } as never)
+  const runtime = lifecycle.runBootstrap(async (isActive) => {
+    bootstrapCalls += 1
+    expect(isActive()).toBe(false)
+    return null
+  })
+  quit()
+
+  await expect(runtime).resolves.toBeNull()
+  expect(bootstrapCalls).toBe(1)
+})
+
 it('owned document load failure clears the window, IPC, ingress, and exits nonzero', async () => {
   const { lifecycle, disposeIngress, app } = createLifecycle()
   const { window, destroy } = createWindow()
