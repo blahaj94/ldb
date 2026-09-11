@@ -50,7 +50,7 @@ function cacheLifetime(headers: Headers): number {
   }
   const remaining = Number(maxAge) - Number(age)
   const isSafeLifetime = Number.isSafeInteger(remaining)
-  const isPositiveLifetime = isSafeLifetime && remaining > 0
+  const isPositiveLifetime = remaining > 0
   const canReuse = isSafeLifetime && isPositiveLifetime
   return canReuse ? remaining * 1000 : 0
 }
@@ -196,8 +196,13 @@ export function createGoogleJwks(jwksUri: string, fetchGoogle: typeof globalThis
     }
     const initialCache = cached
     const hasCache = initialCache != null
-    const isFreshCache = hasCache && Date.now() < initialCache.expiresAt
-    const keys = isFreshCache ? initialCache : await waitForLoad(signal)
+    let keys: PublicKeys
+    if (!hasCache) {
+      keys = await waitForLoad(signal)
+    } else {
+      const isFreshCache = Date.now() < initialCache.expiresAt
+      keys = isFreshCache ? initialCache : await waitForLoad(signal)
+    }
     try {
       return await withAbort(keys.resolver(header, token), signal)
     } catch (error) {
@@ -209,10 +214,18 @@ export function createGoogleJwks(jwksUri: string, fetchGoogle: typeof globalThis
       // 다른 waiter가 이미 새 generation을 받았다면 같은 unknown kid refresh를 반복하지 않는다.
       const latestCache = cached
       const hasLatestCache = latestCache != null
-      const isNewerGeneration = hasLatestCache && latestCache.generation > keys.generation
-      const isFreshGeneration = isNewerGeneration && Date.now() < latestCache.expiresAt
-      const canUseRefreshedCache = hasLatestCache && isNewerGeneration && isFreshGeneration
-      const refreshed = canUseRefreshedCache ? latestCache : await waitForLoad(signal)
+      let refreshed: PublicKeys
+      if (!hasLatestCache) {
+        refreshed = await waitForLoad(signal)
+      } else {
+        const isNewerGeneration = latestCache.generation > keys.generation
+        if (!isNewerGeneration) {
+          refreshed = await waitForLoad(signal)
+        } else {
+          const isFreshGeneration = Date.now() < latestCache.expiresAt
+          refreshed = isFreshGeneration ? latestCache : await waitForLoad(signal)
+        }
+      }
       try {
         // Cold/expired key miss도 이 한 번의 refresh 뒤에는 추가 fetch를 허용하지 않는다.
         return await withAbort(refreshed.resolver(header, token), signal)
@@ -225,11 +238,15 @@ export function createGoogleJwks(jwksUri: string, fetchGoogle: typeof globalThis
         // 닫힌 이전 refresh를 기다리는 사이 다른 caller가 받은 새 cache는 local lookup만 한다.
         const cacheAfterRefresh = cached
         const hasCacheAfterRefresh = cacheAfterRefresh != null
-        const isNewerThanRefresh =
-          hasCacheAfterRefresh && cacheAfterRefresh.generation > refreshed.generation
-        const isFreshAfterRefresh = isNewerThanRefresh && Date.now() < cacheAfterRefresh.expiresAt
-        const canRecheckCache = hasCacheAfterRefresh && isNewerThanRefresh && isFreshAfterRefresh
-        if (!canRecheckCache) {
+        if (!hasCacheAfterRefresh) {
+          throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
+        }
+        const isNewerThanRefresh = cacheAfterRefresh.generation > refreshed.generation
+        if (!isNewerThanRefresh) {
+          throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
+        }
+        const isFreshAfterRefresh = Date.now() < cacheAfterRefresh.expiresAt
+        if (!isFreshAfterRefresh) {
           throw loginFailure(error, LOGIN_ERRORS.PROVIDER)
         }
         try {
