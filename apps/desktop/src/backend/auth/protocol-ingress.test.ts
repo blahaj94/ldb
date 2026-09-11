@@ -164,21 +164,22 @@ describe('Desktop auth protocol ingress', () => {
     expect(activate).not.toHaveBeenCalled()
   })
 
-  it('one-letter scheme도 Windows absolute executable과 구분해 exact 복귀만 전달한다', () => {
-    const returnTarget = 'c://auth/return'
-    const rawReturnUrl = `${returnTarget}?code=${CODE}`
-    const app = createApp()
-    const dispatch = vi.fn()
-    const ingress = createProtocolIngress({
-      app,
-      argv: ['C:\\Program Files\\LDB\\ldb.exe', rawReturnUrl],
-      returnTarget
-    })
+  it.each(['c://auth/return', 'c:/auth/return'])(
+    'Windows drive prefix와 충돌하는 one-letter scheme %s는 lock 전에 거절한다',
+    (returnTarget) => {
+      const app = createApp()
 
-    ingress.attach(dispatch, vi.fn())
+      expect(() =>
+        createProtocolIngress({
+          app,
+          argv: ['C:\\Program Files\\LDB\\ldb.exe'],
+          returnTarget
+        })
+      ).toThrow()
 
-    expect(dispatch).toHaveBeenCalledExactlyOnceWith(rawReturnUrl)
-  })
+      expect(app.calls).toEqual([])
+    }
+  )
 
   it('second-instance malformed 또는 복수 복귀 후보는 auth와 일반 활성화를 모두 거절한다', () => {
     const app = createApp()
@@ -233,6 +234,10 @@ describe('Desktop auth protocol ingress', () => {
       ['electron', 'ma\tilto:user@example.test'],
       RETURN_TARGET
     )
+    const deletePrefixedOpaqueUrl = isOrdinarySecondInstanceInvocation(
+      ['electron', '\u007fmailto:user@example.test'],
+      RETURN_TARGET
+    )
     const windowsExecutable = isOrdinarySecondInstanceInvocation(
       ['C:\\Program Files\\LDB\\ldb.exe', '--new-window'],
       RETURN_TARGET
@@ -253,6 +258,7 @@ describe('Desktop auth protocol ingress', () => {
     expect(singleLetterScheme).toBe(false)
     expect(controlPrefixedOpaqueUrl).toBe(false)
     expect(internallyPaddedOpaqueUrl).toBe(false)
+    expect(deletePrefixedOpaqueUrl).toBe(false)
     expect(windowsExecutable).toBe(true)
     expect(windowsDriveRelativePath).toBe(false)
   })

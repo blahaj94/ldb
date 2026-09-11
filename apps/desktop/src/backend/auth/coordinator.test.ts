@@ -1374,14 +1374,10 @@ describe('Desktop AuthCoordinator login', () => {
   it('callback claim hook의 비동기 결과도 관찰하고 exchange와 분리한다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
-    let observed = false
     let calls = 0
-    const activation = Object.defineProperty({}, 'then', {
-      get: () => {
-        observed = true
-        return undefined
-      }
-    }) as Promise<void>
+    const activation = Promise.reject(new Error('window activation failed asynchronously'))
+    const guardedActivation = activation.catch(() => undefined)
+    const activationCatch = vi.spyOn(activation, 'catch')
     const onClaimed = () => {
       calls += 1
       return activation
@@ -1390,9 +1386,10 @@ describe('Desktop AuthCoordinator login', () => {
     await beginWaitingLogin(coordinator)
 
     await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, onClaimed)
+    await guardedActivation
 
     expect(calls).toBe(1)
-    expect(observed).toBe(true)
+    expect(activationCatch).toHaveBeenCalledTimes(1)
     expect(harness.http.exchange).toHaveBeenCalledTimes(1)
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn' })
   })
