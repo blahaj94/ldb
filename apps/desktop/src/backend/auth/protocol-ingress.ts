@@ -220,15 +220,12 @@ function looksLikeUrlInput(value: string): boolean {
   const projectedArgument = projectUrlDetectionInput(value)
   const structuredOption = readStructuredOptionPayload(projectedArgument.value)
   const projectedPayload =
-    structuredOption == null
-      ? projectedArgument
-      : projectUrlDetectionInput(structuredOption.value)
+    structuredOption == null ? projectedArgument : projectUrlDetectionInput(structuredOption.value)
   const projected = projectedPayload.value
   const hasInternalControl =
     projectedArgument.hasInternalControl || projectedPayload.hasInternalControl
   const isKnownAbsoluteWindowsPathOption =
-    structuredOption?.name === 'user-data-dir' &&
-    /^[A-Za-z]:[\\/](?![\\/])/.test(projected)
+    structuredOption?.name === 'user-data-dir' && /^[A-Za-z]:[\\/](?![\\/])/.test(projected)
 
   if (isKnownAbsoluteWindowsPathOption) {
     return hasInternalControl && projected.includes(':')
