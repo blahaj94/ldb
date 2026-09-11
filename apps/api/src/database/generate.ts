@@ -76,12 +76,14 @@ export async function generateMigration(
   } catch {
     const dataSourceToClose = dataSource
     const hasDataSource = dataSourceToClose != null
-    const isDataSourceInitialized = hasDataSource && dataSourceToClose.isInitialized
-    if (isDataSourceInitialized) {
-      try {
-        await dataSourceToClose.destroy()
-      } catch {
-        /* 정제된 동일 오류로 처리한다. */
+    if (hasDataSource) {
+      const isDataSourceInitialized = dataSourceToClose.isInitialized
+      if (isDataSourceInitialized) {
+        try {
+          await dataSourceToClose.destroy()
+        } catch {
+          /* 정제된 동일 오류로 처리한다. */
+        }
       }
     }
     const error = new Error('Database migration generation failed')
