@@ -1,5 +1,5 @@
 import * as fs from 'node:fs'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { applyAuthRuntimeProfile, readAuthRuntimeConfig } from './runtime-config'
@@ -145,4 +145,104 @@ describe('desktop auth runtime config', () => {
       }
     }
   )
+
+  it.each(['trailing-separator', 'dot-alias'] as const)(
+    'rejects a symlink profile with a %s leaf alias',
+    (kind) => {
+      const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+      const userDataPath = join(root, 'profile')
+      const target = join(root, 'target')
+      fs.mkdirSync(target, { mode: 0o700 })
+      fs.symlinkSync(target, userDataPath)
+      const aliasedPath =
+        kind === 'trailing-separator' ? `${userDataPath}${sep}` : `${userDataPath}${sep}.`
+      const calls: string[] = []
+      const application = {
+        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        setName: (value: string) => calls.push(`name:${value}`),
+        setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+      }
+      const parsed = readAuthRuntimeConfig({
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: userDataPath
+      })
+
+      try {
+        expect(parsed).not.toBeNull()
+        if (parsed == null) {
+          throw new Error('Synthetic runtime config should be available')
+        }
+
+        const config = { ...parsed, userDataPath: aliasedPath }
+        expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
+        expect(calls).toEqual([])
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it('syncs each newly created profile directory and its parent entry before setPath', () => {
+    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const parent = join(root, 'nested')
+    const userDataPath = join(parent, 'profile')
+    const openedPaths: string[] = []
+    const syncedFds: number[] = []
+    const closedFds: number[] = []
+    const filesystem = {
+      lstatSync: fs.lstatSync,
+      mkdirSync: fs.mkdirSync,
+      openSync: (path: string, flags: number) => {
+        openedPaths.push(path)
+        return fs.openSync(path, flags)
+      },
+      fsyncSync: (fd: number) => {
+        syncedFds.push(fd)
+        return fs.fsyncSync(fd)
+      },
+      closeSync: (fd: number) => {
+        closedFds.push(fd)
+        return fs.closeSync(fd)
+      }
+    }
+    let syncCountAtSetPath = 0
+    const application = {
+      setPath: (_name: 'userData', _value: string) => {
+        syncCountAtSetPath = syncedFds.length
+      },
+      setName: (_value: string) => undefined,
+      setAppUserModelId: (_value: string) => undefined
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+        application: typeof application,
+        config: typeof config,
+        filesystem: typeof filesystem
+      ) => void
+      applyWithFilesystem(application, config, filesystem)
+
+      const profileOpenIndex = openedPaths.indexOf(userDataPath)
+      const parentSyncIndex = openedPaths.findIndex(
+        (path, index) => index > profileOpenIndex && path === parent
+      )
+      expect(profileOpenIndex).toBeGreaterThanOrEqual(0)
+      expect(openedPaths).toContain(parent)
+      expect(parentSyncIndex).toBeGreaterThan(profileOpenIndex)
+      expect(syncCountAtSetPath).toBeGreaterThan(0)
+      expect(syncCountAtSetPath).toBe(syncedFds.length)
+      expect(closedFds.length).toBe(openedPaths.length)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
