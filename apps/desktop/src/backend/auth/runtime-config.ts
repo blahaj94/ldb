@@ -1,5 +1,5 @@
 import * as fs from 'node:fs'
-import { dirname, isAbsolute, join, parse, sep } from 'node:path'
+import { dirname, isAbsolute, join, normalize, parse, sep } from 'node:path'
 import type { Stats } from 'node:fs'
 import { validateApiOrigin, validateReturnTarget } from './protocol'
 import type { AuthProvider } from './types'
@@ -27,6 +27,14 @@ export class AuthRuntimeProfileApplicationFailure extends Error {
 }
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
+type RuntimePathSemantics = Readonly<{
+  dirname(path: string): string
+  isAbsolute(path: string): boolean
+  join(...paths: string[]): string
+  normalize(path: string): string
+  parse(path: string): ReturnType<typeof parse>
+  sep: string
+}>
 type RuntimeProfileFilesystem = Readonly<
   Pick<typeof fs, 'lstatSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'> & {
     realpathSync(path: string): string
@@ -40,6 +48,14 @@ const nativeRuntimeProfileFilesystem: RuntimeProfileFilesystem = {
   openSync: fs.openSync,
   fsyncSync: fs.fsyncSync,
   closeSync: fs.closeSync
+}
+const nativeRuntimePathSemantics: RuntimePathSemantics = {
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  parse,
+  sep
 }
 
 function isAuthProvider(value: string): value is AuthProvider {
@@ -120,25 +136,27 @@ function assertCanonicalPath(path: string, filesystem: RuntimeProfileFilesystem)
   }
 }
 
-function splitNativePath(path: string): string[] {
-  const separator = sep === '\\' ? /[\\/]/ : /\//
+function splitNativePath(path: string, pathSemantics: RuntimePathSemantics): string[] {
+  const separator = pathSemantics.sep === '\\' ? /[\\/]/ : /\//
   return path.split(separator)
 }
 
-function hasPathAlias(path: string): boolean {
-  const root = parse(path).root
-  const segments = splitNativePath(path.slice(root.length))
+function hasPathAlias(path: string, pathSemantics: RuntimePathSemantics): boolean {
+  const hasNonNativeSeparator = pathSemantics.sep === '\\' && path.includes('/')
+  const hasNonCanonicalSpelling = pathSemantics.normalize(path) !== path
+  const root = pathSemantics.parse(path).root
+  const segments = splitNativePath(path.slice(root.length), pathSemantics)
   const hasDotSegment = segments.some((segment) => segment === '.' || segment === '..')
   const hasEmptySegment = segments.some((segment) => segment.length === 0)
-  return hasDotSegment || hasEmptySegment
+  return hasNonNativeSeparator || hasNonCanonicalSpelling || hasDotSegment || hasEmptySegment
 }
 
-function directoryChain(path: string): string[] {
-  const root = parse(path).root
-  const segments = splitNativePath(path.slice(root.length)).filter(Boolean)
+function directoryChain(path: string, pathSemantics: RuntimePathSemantics): string[] {
+  const root = pathSemantics.parse(path).root
+  const segments = splitNativePath(path.slice(root.length), pathSemantics).filter(Boolean)
   let current = root
   return segments.map((segment) => {
-    current = join(current, segment)
+    current = pathSemantics.join(current, segment)
     return current
   })
 }
@@ -157,12 +175,16 @@ function syncDirectory(path: string, filesystem: RuntimeProfileFilesystem): void
   }
 }
 
-function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesystem): void {
-  if (hasPathAlias(path)) {
+function prepareUserDataDirectory(
+  path: string,
+  filesystem: RuntimeProfileFilesystem,
+  pathSemantics: RuntimePathSemantics
+): void {
+  if (hasPathAlias(path, pathSemantics)) {
     throw new Error('Trusted userData path must not use path aliases.')
   }
 
-  const paths = directoryChain(path)
+  const paths = directoryChain(path, pathSemantics)
   const finalPath = paths[paths.length - 1]
   for (const currentPath of paths) {
     let stat: Stats
@@ -174,7 +196,7 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
       if (!isMissingPath) {
         throw error
       }
-      const parentPath = dirname(currentPath)
+      const parentPath = pathSemantics.dirname(currentPath)
       assertDirectory(filesystem.lstatSync(parentPath))
       assertCanonicalPath(parentPath, filesystem)
       try {
@@ -198,17 +220,19 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
     assertCanonicalPath(currentPath, filesystem)
     if (created && !isFinalPath) {
       syncDirectory(currentPath, filesystem)
-      syncDirectory(dirname(currentPath), filesystem)
+      syncDirectory(pathSemantics.dirname(currentPath), filesystem)
     }
   }
 
-  assertDirectory(filesystem.lstatSync(dirname(finalPath)))
+  const finalParentPath = pathSemantics.dirname(finalPath)
+  assertDirectory(filesystem.lstatSync(finalParentPath))
   syncDirectory(finalPath, filesystem)
-  syncDirectory(dirname(finalPath), filesystem)
+  syncDirectory(finalParentPath, filesystem)
 }
 
 export function readAuthRuntimeConfig(
-  environment: RuntimeEnvironment = process.env
+  environment: RuntimeEnvironment = process.env,
+  pathSemantics: RuntimePathSemantics = nativeRuntimePathSemantics
 ): AuthRuntimeConfig | null {
   const apiOrigin = readRequiredText(environment, 'LDB_AUTH_API_ORIGIN')
   const returnTarget = readRequiredText(environment, 'LDB_AUTH_RETURN_TARGET')
@@ -236,10 +260,10 @@ export function readAuthRuntimeConfig(
     const code = character.charCodeAt(0)
     return code > 0x1f && code !== 0x7f
   })
-  const hasNoPathAlias = !hasPathAlias(userDataPath)
-  const isUserDataRoot = parse(userDataPath).root === userDataPath
+  const hasNoPathAlias = !hasPathAlias(userDataPath, pathSemantics)
+  const isUserDataRoot = pathSemantics.parse(userDataPath).root === userDataPath
   const hasValidUserDataPath =
-    isAbsolute(userDataPath) && !isUserDataRoot && hasNoControlPath && hasNoPathAlias
+    pathSemantics.isAbsolute(userDataPath) && !isUserDataRoot && hasNoControlPath && hasNoPathAlias
   if (!hasValidAppIdentity || !hasValidUserDataPath) {
     return null
   }
@@ -257,9 +281,10 @@ export function readAuthRuntimeConfig(
 export function applyAuthRuntimeProfile(
   application: AuthRuntimeProfileApplication,
   config: AuthRuntimeConfig,
-  filesystem: RuntimeProfileFilesystem = nativeRuntimeProfileFilesystem
+  filesystem: RuntimeProfileFilesystem = nativeRuntimeProfileFilesystem,
+  pathSemantics: RuntimePathSemantics = nativeRuntimePathSemantics
 ): void {
-  prepareUserDataDirectory(config.userDataPath, filesystem)
+  prepareUserDataDirectory(config.userDataPath, filesystem, pathSemantics)
   try {
     application.setPath('userData', config.userDataPath)
     application.setName(config.appIdentity)
