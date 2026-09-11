@@ -34,7 +34,7 @@ Coordinator 생성 시 enabled provider, API origin, 등록 return target과 Bro
 
 현재 process 설정 key는 `LDB_AUTH_API_ORIGIN`, `LDB_AUTH_RETURN_TARGET`, `LDB_AUTH_ENVIRONMENT`, `LDB_AUTH_PROVIDERS`, `LDB_AUTH_APP_IDENTITY`, `LDB_AUTH_USER_DATA_PATH`다. 여섯 값이 모두 exact contract를 통과해야 하며, 제품 provider는 Google만 허용한다. 누락·빈 값·잘못된 provider/URL·identity/profile에는 기본값을 적용하지 않는다. Discord는 공통 synthetic core type에 남아 있지만 미해소 gate가 있어 제품 runtime config에서 거절한다.
 
-`LDB_AUTH_USER_DATA_PATH`는 설정 검증 뒤 lock 이전에 lstat한다. 없는 trusted directory만 0700으로 만들고, 기존 POSIX directory는 현재 user 소유·0700인지 확인하며 권한을 임의로 변경하지 않는다. 비디렉터리·symlink·권한/파일시스템 오류는 fail closed한 뒤 `app.setPath('userData', ...)`를 호출하고, 그 다음 app identity를 적용한다. 이 tuple이 완전하지 않거나 profile 준비·적용이 실패하면 protocol lock·store·network를 활성화하지 않는다. 실제 배포 identity와 profile 값은 아직 결정하지 않는다.
+`LDB_AUTH_USER_DATA_PATH`는 설정 검증 뒤 lock 이전에 lstat한다. Leaf의 trailing separator·`.`·`..` alias는 거절하며, 없는 trusted directory와 필요한 parent만 0700으로 만들고 POSIX directory handle 및 parent entry durability sync를 확인한다. 기존 POSIX directory는 현재 user 소유·0700인지 확인하며 권한을 임의로 변경하지 않는다. 비디렉터리·symlink·권한/파일시스템 오류는 fail closed한 뒤 `app.setPath('userData', ...)`를 호출하고, 그 다음 app identity를 적용한다. 이 tuple이 완전하지 않거나 profile 준비·적용이 실패하면 protocol lock·store·network를 활성화하지 않는다. 실제 배포 identity와 profile 값은 아직 결정하지 않는다.
 
 등록 return target은 coordinator 생성 시 검사하며 원문에 `?` 또는 `#`가 있으면 내용이 비어 있어도 거절한다. 설정을 보정하지 않으며, percent-encoded path와 정상 target 뒤의 code-only callback query는 기존 exact 검사로 허용한다.
 
