@@ -23,7 +23,9 @@ function installObservationSource(): {
     }
   }
   class HTMLMediaElement {
-    async play(..._args: unknown[]): Promise<void> {}
+    async play(): Promise<void> {
+      return undefined
+    }
   }
   Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
     configurable: true,
@@ -55,7 +57,6 @@ describe('generated capture observation source', () => {
   it('nullish messages skip action access and still delegate postMessage', () => {
     const { window, delegatedMessages } = installObservationSource()
     const action = vi.fn(() => 'recognize')
-    const message = Object.defineProperty({}, 'action', { get: action })
     const worker = new window.Worker()
 
     expect(worker.postMessage(null)).toBe('delegated')
