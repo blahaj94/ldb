@@ -97,14 +97,24 @@ export class PendingLogin {
       checkedAt.monotonicMs - this.startedAt.monotonicMs >= LOGIN_REQUEST_MAX_AGE_MS
     const expiresAtMs = this.expiresAtMs
     const hasServerExpiry = expiresAtMs != null
-    const hasReachedServerExpiry = hasServerExpiry && checkedAt.wallMs >= expiresAtMs
-    const isExpired =
-      this.startedAt.discontinuous ||
-      checkedAt.discontinuous ||
-      isWallClockReversed ||
-      isMonotonicReversed ||
-      hasReachedMonotonicLimit ||
-      hasReachedServerExpiry
+    let isExpired: boolean
+    if (hasServerExpiry) {
+      const hasReachedServerExpiry = checkedAt.wallMs >= expiresAtMs
+      const hasExpiredClock =
+        this.startedAt.discontinuous ||
+        checkedAt.discontinuous ||
+        isWallClockReversed ||
+        isMonotonicReversed ||
+        hasReachedMonotonicLimit
+      isExpired = hasExpiredClock || hasReachedServerExpiry
+    } else {
+      isExpired =
+        this.startedAt.discontinuous ||
+        checkedAt.discontinuous ||
+        isWallClockReversed ||
+        isMonotonicReversed ||
+        hasReachedMonotonicLimit
+    }
 
     if (!isExpired) {
       this.lastAcceptedAt = checkedAt
