@@ -1,5 +1,5 @@
 import * as fs from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -861,7 +861,8 @@ it('does not activate product auth for the unresolved Discord provider gate', as
 })
 
 it('profile 적용이 시작된 뒤 실패하면 부분 적용된 userData로 시작하지 않는다', async () => {
-  const root = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'ldb-main-profile-')))
+  const root = fs.realpathSync(fs.mkdtempSync(join(homedir(), '.ldb-main-profile-')))
+  fs.chmodSync(root, 0o700)
   const userDataPath = join(root, 'profile')
   fs.mkdirSync(userDataPath, { mode: 0o700 })
   vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
