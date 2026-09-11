@@ -83,7 +83,7 @@ const electron = vi.hoisted(() => {
 vi.mock('electron', () => electron)
 
 const ocrWorker = vi.hoisted(() => ({
-  recognize: vi.fn(async () => ({ data: { text: '' } })),
+  recognize: vi.fn(async () => ({ data: { text: 'ALICE' } })),
   terminate: vi.fn(async () => undefined)
 }))
 
@@ -174,7 +174,20 @@ function installCanvasBoundary(): void {
     () =>
       ({
         drawImage: vi.fn(),
-        getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(105 * 5 * 4) }))
+        getImageData: vi.fn((x: number, y: number, width: number, height: number) => {
+          const isFirstSlotMana = x === 42 && y === 36 && width === 105 && height === 5
+          if (!isFirstSlotMana) {
+            return { data: new Uint8ClampedArray(width * height * 4) }
+          }
+          const data = new Uint8ClampedArray(width * height * 4)
+          for (let index = 0; index < data.length; index += 4) {
+            data[index] = 55
+            data[index + 1] = 121
+            data[index + 2] = 170
+            data[index + 3] = 255
+          }
+          return { data }
+        })
       }) as unknown as CanvasRenderingContext2D
   )
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function (
@@ -203,8 +216,17 @@ async function renderSettled(): Promise<void> {
   await act(async () => undefined)
 }
 
+async function waitForCondition(
+  assertion: () => void,
+  options?: { timeout?: number }
+): Promise<void> {
+  await act(async () => {
+    await vi.waitFor(assertion, options)
+  })
+}
+
 async function waitForText(container: HTMLDivElement, text: string): Promise<void> {
-  await vi.waitFor(() => expect(container.textContent).toContain(text))
+  await waitForCondition(() => expect(container.textContent).toContain(text))
 }
 
 beforeEach(() => {
@@ -220,12 +242,23 @@ afterEach(() => {
 
 it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재로그인을 한 계약으로 연결한다', async () => {
   const harness = createAuthHarness()
-  const pendingSearch = deferred<Response>()
+  const liveSearch = deferred<Response>()
+  const lateSearch = deferred<Response>()
+  const lateResponseDelivered = deferred<void>()
+  const observedRequests: Request[] = []
   const searchFetch = vi.fn<typeof fetch>(async (input, init) => {
     const request = new Request(input, init)
-    expect(request.url).toBe(`${config.apiOrigin}/characters?characterName=ALICE`)
-    expect(request.headers.get('authorization')).toBe('Bearer next.payload.signature')
-    return pendingSearch.promise
+    observedRequests.push(request)
+    if (observedRequests.length === 1) {
+      return liveSearch.promise
+    }
+    if (observedRequests.length === 2) {
+      return lateSearch.promise.then((response) => {
+        lateResponseDelivered.resolve()
+        return response
+      })
+    }
+    throw new Error('Unexpected third search request')
   })
   const runtime = await bootstrapAuthRuntime({
     config,
@@ -266,14 +299,16 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
     await waitForText(container, 'Google로 계속하기')
 
     await click(container, 'Google로 계속하기')
-    await vi.waitFor(() => expect(runtime.coordinator.getSnapshot().phase).toBe('waitingBrowser'))
+    await waitForCondition(() =>
+      expect(runtime.coordinator.getSnapshot().phase).toBe('waitingBrowser')
+    )
     await act(async () => {
       await runtime.coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
     })
     await waitForText(container, '시작하기')
 
     await click(container, '시작하기')
-    await vi.waitFor(() => {
+    await waitForCondition(() => {
       const source = container.querySelector('select') as HTMLSelectElement | null
       expect(source?.options).toHaveLength(2)
       expect(source?.options[1]?.textContent).toBe(RENDERER_SOURCE_NAME)
@@ -283,7 +318,7 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
       source.value = RENDERER_SOURCE_ID
       source.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    await vi.waitFor(() => expect(button(container, 'Start').disabled).toBe(false))
+    await waitForCondition(() => expect(button(container, 'Start').disabled).toBe(false))
 
     await click(container, 'Start')
     await waitForText(container, 'Capture ready at 1920×1080.')
@@ -296,22 +331,15 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
       throw new Error('Integrated capture should own a search capture')
     }
     const captureId = searchState.snapshot.captureId
-    let pending!: Awaited<ReturnType<typeof captureApi.notifyStableNicknameDetected>>
-    await act(async () => {
-      pending = await captureApi.notifyStableNicknameDetected({
-        captureId,
-        slot: 0,
-        observationRevision: 1,
-        nickname: 'ALICE'
-      })
-    })
-    expect(pending).toMatchObject({ ok: true, snapshot: { captureId } })
-    expect(pending.ok && pending.snapshot.slots[0]).toMatchObject({
-      slot: 0,
-      state: 'pending',
-      nickname: 'ALICE'
-    })
-    await vi.waitFor(() => expect(searchFetch).toHaveBeenCalledOnce())
+    await waitForCondition(
+      () => expect(ocrWorker.recognize.mock.calls.length).toBeGreaterThanOrEqual(2),
+      { timeout: 5_000 }
+    )
+    await waitForCondition(() => expect(observedRequests).toHaveLength(1), { timeout: 5_000 })
+    expect(observedRequests[0]?.url).toBe(`${config.apiOrigin}/characters?characterName=ALICE`)
+    expect(observedRequests[0]?.headers.get('authorization')).toBe('Bearer next.payload.signature')
+    await waitForText(container, 'ALICE')
+    await waitForText(container, '검색 중')
     const pendingSearchEvents = fixtureWindow.contents.send.mock.calls.filter(
       ([channel, value]) =>
         channel === 'characterSearchChanged' &&
@@ -321,6 +349,34 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
     )
     expect(pendingSearchEvents.length).toBeGreaterThan(0)
 
+    await act(async () => {
+      liveSearch.resolve(
+        new Response(
+          JSON.stringify({
+            rows: [
+              {
+                characterId: 'live-character',
+                characterName: 'ALICE',
+                serverId: 'cain',
+                serverName: '카인',
+                fame: 54321
+              }
+            ]
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+      await Promise.resolve()
+    })
+    await waitForText(container, 'live-character')
+
+    ocrWorker.recognize.mockResolvedValue({ data: { text: 'BOB' } })
+    await waitForCondition(() => expect(observedRequests).toHaveLength(2), { timeout: 10_000 })
+    expect(observedRequests[1]?.url).toBe(`${config.apiOrigin}/characters?characterName=BOB`)
+    expect(observedRequests[1]?.headers.get('authorization')).toBe('Bearer next.payload.signature')
+    await waitForText(container, 'BOB')
+    await waitForText(container, '검색 중')
+
     await click(container, '이 기기 로그아웃')
     await waitForText(container, 'Google로 계속하기')
     expect(runtime.coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut', notice: null })
@@ -329,8 +385,8 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
       expect.any(AbortSignal)
     )
     expect(harness.store.inspection).toEqual({ status: 'empty' })
-    await vi.waitFor(() => expect(track.stop).toHaveBeenCalledOnce())
-    await vi.waitFor(() => expect(ocrWorker.terminate).toHaveBeenCalledOnce())
+    await waitForCondition(() => expect(track.stop).toHaveBeenCalledOnce())
+    await waitForCondition(() => expect(ocrWorker.terminate).toHaveBeenCalledOnce())
     expect(fixtureWindow.contents.send.mock.calls.map(([channel]) => channel)).toContain(
       'authStateChanged'
     )
@@ -342,13 +398,13 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
     )
     expect(searchEvents.at(-1)?.[1]).toMatchObject({ captureId: null })
 
-    pendingSearch.resolve(
+    lateSearch.resolve(
       new Response(
         JSON.stringify({
           rows: [
             {
               characterId: 'late-character',
-              characterName: 'ALICE',
+              characterName: 'BOB',
               serverId: 'cain',
               serverName: '카인',
               fame: 12345
@@ -358,23 +414,29 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
     )
+    await act(async () => {
+      await lateResponseDelivered.promise
+    })
     await renderSettled()
     expect(container.textContent).not.toContain('late-character')
     expect(container.textContent).not.toContain('화면 캡처')
 
     await click(container, 'Google로 계속하기')
-    await vi.waitFor(() => expect(runtime.coordinator.getSnapshot().phase).toBe('waitingBrowser'))
+    await waitForCondition(() =>
+      expect(runtime.coordinator.getSnapshot().phase).toBe('waitingBrowser')
+    )
     await act(async () => {
       await runtime.coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`)
     })
     await waitForText(container, '시작하기')
     await click(container, '시작하기')
-    await vi.waitFor(() => {
+    await waitForCondition(() => {
       const nextSource = container.querySelector('select') as HTMLSelectElement | null
       expect(nextSource?.options).toHaveLength(2)
       expect(nextSource?.value).toBe('')
       expect(button(container, 'Start').disabled).toBe(true)
     })
+    expect(container.textContent).not.toContain('late-character')
     expect(media.getDisplayMedia).toHaveBeenCalledOnce()
     expect(harness.http.exchange).toHaveBeenCalledTimes(2)
   } finally {
@@ -384,4 +446,4 @@ it('제품 bootstrap부터 auth IPC, capture/search IPC, renderer logout과 재�
     disposeAuth()
     fixtureWindow.close()
   }
-})
+}, 20_000)
