@@ -21,7 +21,8 @@ export function registerFixtureMediaPermissions(
     const hasFrame = frame != null
     const isFrameAttached = hasFrame ? !frame.detached : undefined
     const isFrameAlive = hasFrame ? !frame.isDestroyed() : undefined
-    const hasCurrentDocument = hasFrame ? frame.url === documentUrl : undefined
+    const hasCurrentDocument =
+      isFrameAttached === true && isFrameAlive === true ? frame.url === documentUrl : undefined
     const isMainFrame = details.isMainFrame === true
     const hasRequestDocument = details.requestingUrl === documentUrl
     const isSignedIn = coordinator.captureGeneration() != null
