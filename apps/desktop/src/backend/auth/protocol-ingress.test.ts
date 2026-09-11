@@ -197,8 +197,20 @@ describe('Desktop auth protocol ingress', () => {
       ['electron', 'https://example.test/auth/return'],
       RETURN_TARGET
     )
+    const paddedWrongScheme = isOrdinarySecondInstanceInvocation(
+      ['electron', ' \tldb-wrong://auth/return'],
+      RETURN_TARGET
+    )
+    const malformedScheme = isOrdinarySecondInstanceInvocation(
+      ['electron', '1bad://auth/return'],
+      RETURN_TARGET
+    )
     const windowsExecutable = isOrdinarySecondInstanceInvocation(
       ['C:\\Program Files\\LDB\\ldb.exe', '--new-window'],
+      RETURN_TARGET
+    )
+    const windowsDriveRelativePath = isOrdinarySecondInstanceInvocation(
+      ['electron', 'C:relative-file.txt'],
       RETURN_TARGET
     )
 
@@ -208,7 +220,10 @@ describe('Desktop auth protocol ingress', () => {
     expect(multipleReturns).toBe(false)
     expect(wrongScheme).toBe(false)
     expect(webUrl).toBe(false)
+    expect(paddedWrongScheme).toBe(false)
+    expect(malformedScheme).toBe(false)
     expect(windowsExecutable).toBe(true)
+    expect(windowsDriveRelativePath).toBe(true)
   })
 
   it('일반 활성화 예외를 EventEmitter 밖으로 전파하지 않고 detach 뒤 요청도 하나만 보존한다', () => {
