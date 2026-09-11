@@ -7,7 +7,7 @@ last-reviewed: 2026-09-11
 
 # Desktop Auth Core
 
-Desktop main 인증 core는 `apps/desktop/src/backend/auth`에 있고, 제품 composition은 `apps/desktop/src/backend/main.ts`와 `auth/runtime-config.ts`, `auth/runtime-effects.ts`, `auth/bootstrap.ts`가 담당한다. 완전한 trusted runtime 설정이 없거나 유효하지 않으면 auth effects, protocol ingress, store, network를 만들지 않고 현재 renderer의 연결 실패 안내를 사용한다. 설정이 유효하면 main은 lock 전에 app identity와 userData profile을 적용하고, ready 뒤 안내 완료→dependency 생성으로 coordinator를 만든다. Runtime clock은 dependency 생성 시 실제 wall/monotonic 값을 기준점으로 잡아 coordinator의 첫 restore access 검사부터 시간 역행을 감지한다. 이후 window·auth/capture IPC·activate lifecycle을 먼저 연결한 뒤 `start()`로 restore를 시작하고, protocol return은 start 성공 뒤에만 전달해 restoring 중 cold callback이 유실되지 않게 한다. 실제 API/provider, OS protocol registry, safeStorage·file durability와 packaged native 성공은 여전히 별도 검증 범위다.
+Desktop main 인증 core는 `apps/desktop/src/backend/auth`에 있고, 제품 composition은 `apps/desktop/src/backend/main.ts`와 `auth/runtime-config.ts`, `auth/runtime-effects.ts`, `auth/bootstrap.ts`가 담당한다. 완전한 trusted runtime 설정이 없거나 유효하지 않으면 auth effects, protocol ingress, store, network를 만들지 않고 현재 renderer의 연결 실패 안내를 사용한다. 설정이 유효하면 main은 lock 전에 app identity와 userData profile을 적용하고, ready 뒤 안내 완료→dependency 생성으로 coordinator를 만든다. Runtime clock은 dependency 생성 시 실제 wall/monotonic 값을 기준점으로 잡아 coordinator의 첫 restore access 검사부터 관측된 시간 역행을 감지한다. 큰 순방향 불연속이나 suspend를 별도로 판정하는 정책은 정의하지 않았고, 실제 환경의 clock/native 검증도 후속 범위다. 이후 window·auth/capture IPC·activate lifecycle을 먼저 연결한 뒤 `start()`로 restore를 시작하고, protocol return은 start 성공 뒤에만 전달해 restoring 중 cold callback이 유실되지 않게 한다. 실제 API/provider, OS protocol registry, safeStorage·file durability와 packaged native 성공은 여전히 별도 검증 범위다.
 
 ## Module 경계
 

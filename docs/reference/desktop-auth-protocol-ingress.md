@@ -18,7 +18,7 @@ last-reviewed: 2026-09-11
 3. lock owner는 즉시 `open-url`과 `second-instance` listener를 등록한다. `open-url`은 항상 `preventDefault()`를 먼저 호출한다.
 4. 초기 `argv`와 두 event의 입력은 target의 scheme으로 보이는 문자열만 후보로 세고, 후보가 정확히 하나일 때만 기존 `parseReturnUrl`을 적용한다. canonical code-only raw URL 하나만 다음 단계로 전달한다.
 
-반환 객체의 `ownsInstance`는 lock 결과를 나타내며, `attach(dispatch)`는 dispatch를 연결하고 disposer를 반환한다. Main composition은 `attachProtocolIngressAfterStart(ingress, start, dispatch, isActive)`를 사용해 `start()` Promise가 성공적으로 끝난 뒤에만 buffered return을 dispatch한다. Start 실패는 ingress를 폐기하고, 그 사이 quit으로 `isActive()`가 false가 되면 callback도 폐기한다. `dispose()`는 두 Electron listener, 연결된 dispatch와 아직 전달하지 않은 초기 후보를 함께 정리한다. Adapter는 window를 만들거나 focus하지 않으므로 창이 없을 때도 동일하게 raw return을 dispatch하며, 창 복원·focus와 coordinator 상태 판정은 composition 및 coordinator의 책임이다.
+반환 객체의 `ownsInstance`는 lock 결과를 나타내며, `attach(dispatch)`는 dispatch를 연결하고 disposer를 반환한다. Main composition은 `attachProtocolIngressAfterStart(ingress, start, dispatch, isActive)`를 사용해 `start()` Promise가 성공적으로 끝난 뒤에만 실제 `attach`를 호출하고 buffered return을 dispatch한다. Start 대기 중에는 ingress의 기존 bounded pending 후보 보관 규칙을 유지하며, Start 실패는 ingress를 폐기한다. 그 사이 quit으로 `isActive()`가 false가 되거나 반환된 disposer가 먼저 실행되면 나중에 attach하지 않는다. `dispose()`는 두 Electron listener, 연결된 dispatch와 아직 전달하지 않은 초기 후보를 함께 정리한다. Adapter는 window를 만들거나 focus하지 않으므로 창이 없을 때도 동일하게 raw return을 dispatch하며, 창 복원·focus와 coordinator 상태 판정은 composition 및 coordinator의 책임이다.
 
 ## 입력과 수명
 
