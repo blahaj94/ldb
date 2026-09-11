@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
+import { parseNativeCredentialPhaseResult } from './credential-store-native/phase-result.mjs'
 
 const appDirectory = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(import.meta.url)
@@ -319,35 +320,12 @@ try {
         defaultChanged = true
         throw new Error('Default Keychain changed; native validation stopped.')
       }
-      const line = result.stdout.split('\n').find((line) => {
-        const hasResultPrefix = line.startsWith('LDB_CREDENTIAL_NATIVE:')
-        return hasResultPrefix
+      const phaseResult = parseNativeCredentialPhaseResult({
+        exitCode: result.code,
+        expectedPhase: phase,
+        stdout: result.stdout
       })
-      const hasResult = line != null
-      const parsed = hasResult ? JSON.parse(line.slice('LDB_CREDENTIAL_NATIVE:'.length)) : null
-      const hasSuccessfulExit = result.code === 0
-      const hasSuccessfulResult = parsed?.ok === true
-      const hasExpectedPhase = parsed?.phase === phase
-      const isDecryptCountInteger = Number.isSafeInteger(parsed?.decryptCalls)
-      const hasDecryptCount = isDecryptCountInteger && parsed.decryptCalls >= 0
-      const isAvailabilityCountInteger = Number.isSafeInteger(parsed?.encryptionAvailabilityCalls)
-      const hasAvailabilityCount =
-        isAvailabilityCountInteger && parsed.encryptionAvailabilityCalls >= 0
-      const succeeded =
-        hasSuccessfulExit &&
-        hasSuccessfulResult &&
-        hasExpectedPhase &&
-        hasDecryptCount &&
-        hasAvailabilityCount
-      if (!succeeded) {
-        throw new Error('Native credential phase failed; raw diagnostics were withheld.')
-      }
-      phaseResults.push({
-        phase,
-        ok: true,
-        decryptCalls: parsed.decryptCalls,
-        encryptionAvailabilityCalls: parsed.encryptionAvailabilityCalls
-      })
+      phaseResults.push(phaseResult)
       const isWritePhase = phase === 'write'
       const shouldInjectFailure = failAfterWrite && isWritePhase
       if (shouldInjectFailure) {
