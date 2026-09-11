@@ -105,6 +105,19 @@ describe('Desktop auth protocol ingress', () => {
     expect(dispatch).not.toHaveBeenCalled()
   })
 
+  it('scheme 대소문자 변형도 복귀 후보로 세되 exact parser가 alias를 허용하지 않는다', () => {
+    const app = createApp()
+    const dispatch = vi.fn()
+    const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+    const uppercaseScheme = returnUrl().replace('ldb-test:', 'LDB-TEST:')
+    ingress.attach(dispatch)
+
+    app.emit('second-instance', {}, ['electron', returnUrl(), uppercaseScheme], '/tmp')
+    app.emit('second-instance', {}, ['electron', uppercaseScheme], '/tmp')
+
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
   it('일반 argv와 잘못된 복귀 입력은 외부 side effect 없이 무시한다', () => {
     const app = createApp()
     const dispatch = vi.fn()
@@ -162,17 +175,31 @@ describe('Desktop auth protocol ingress', () => {
     const oversizedTarget = `${targetPrefix}${'a'.repeat(2_000 - targetPrefix.length)}`
     const exactRaw = returnUrl(CODE, exactTarget)
     const oversizedRaw = returnUrl(CODE, oversizedTarget)
-    const app = createApp()
-    const dispatch = vi.fn()
-    const ingress = createProtocolIngress({ app, argv: [], returnTarget: exactTarget })
-    ingress.attach(dispatch)
+    const exactApp = createApp()
+    const exactDispatch = vi.fn()
+    const exactIngress = createProtocolIngress({
+      app: exactApp,
+      argv: [],
+      returnTarget: exactTarget
+    })
+    exactIngress.attach(exactDispatch)
 
-    app.emit('second-instance', {}, ['electron', exactRaw], '/tmp')
-    app.emit('second-instance', {}, ['electron', oversizedRaw], '/tmp')
+    exactApp.emit('second-instance', {}, ['electron', exactRaw], '/tmp')
+
+    const oversizedApp = createApp()
+    const oversizedDispatch = vi.fn()
+    const oversizedIngress = createProtocolIngress({
+      app: oversizedApp,
+      argv: [],
+      returnTarget: oversizedTarget
+    })
+    oversizedIngress.attach(oversizedDispatch)
+    oversizedApp.emit('second-instance', {}, ['electron', oversizedRaw], '/tmp')
 
     expect(Buffer.byteLength(exactRaw, 'utf8')).toBe(2_048)
     expect(Buffer.byteLength(oversizedRaw, 'utf8')).toBe(2_049)
-    expect(dispatch).toHaveBeenCalledExactlyOnceWith(exactRaw)
+    expect(exactDispatch).toHaveBeenCalledExactlyOnceWith(exactRaw)
+    expect(oversizedDispatch).not.toHaveBeenCalled()
   })
 
   it('pending 없는 cold 복귀는 coordinator에 전달되지만 로그인 성공을 만들지 않는다', async () => {
