@@ -54,15 +54,13 @@ function installObservationSource(): {
 }
 
 describe('generated capture observation source', () => {
-  it('nullish messages skip action access and still delegate postMessage', () => {
+  it('nullish messages skip recognition inspection and still delegate postMessage', () => {
     const { window, delegatedMessages } = installObservationSource()
-    const action = vi.fn(() => 'recognize')
     const worker = new window.Worker()
 
     expect(worker.postMessage(null)).toBe('delegated')
     expect(worker.postMessage(undefined)).toBe('delegated')
 
-    expect(action).not.toHaveBeenCalled()
     expect(window.captureObservation().recognitionRequests).toBe(0)
     expect(delegatedMessages).toEqual([[null], [undefined]])
   })
