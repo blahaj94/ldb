@@ -12,16 +12,22 @@ const koreanDate = new Intl.DateTimeFormat('ko-KR', {
 
 export function formatDate(timestamp) {
   const isString = typeof timestamp === 'string'
-  const hasUtcIsoShape =
-    isString && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(timestamp)
+  if (!isString) {
+    throw new Error('Expected a valid UTC ISO timestamp ending in Z')
+  }
+
+  const hasUtcIsoShape = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(timestamp)
   if (!hasUtcIsoShape) {
     throw new Error('Expected a valid UTC ISO timestamp ending in Z')
   }
 
   const date = new Date(timestamp)
   const isValidInstant = Number.isFinite(date.getTime())
-  const hasOriginalCalendarFields =
-    isValidInstant && date.toISOString().slice(0, 19) === timestamp.slice(0, 19)
+  if (!isValidInstant) {
+    throw new Error('Expected a valid UTC ISO timestamp ending in Z')
+  }
+
+  const hasOriginalCalendarFields = date.toISOString().slice(0, 19) === timestamp.slice(0, 19)
   if (!hasOriginalCalendarFields) {
     throw new Error('Expected a valid UTC ISO timestamp ending in Z')
   }
