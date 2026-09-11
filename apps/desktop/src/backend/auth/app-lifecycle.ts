@@ -325,12 +325,20 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
       return action()
     }
 
-    return waitForQuitOutcome().then(async (canResume) => {
-      if (!canResume || shutdownCommitted) {
+    return (async () => {
+      while (true) {
+        const canResume = await waitForQuitOutcome()
+        if (!canResume || shutdownCommitted) {
+          return
+        }
+        const hasActiveQuitAttempt = activeQuitAttempt != null
+        if (hasActiveQuitAttempt) {
+          continue
+        }
+        await action()
         return
       }
-      await action()
-    })
+    })()
   }
 
   function exitAfterOwnedAuthFailure(): void {
