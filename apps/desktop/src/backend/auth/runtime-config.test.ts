@@ -635,6 +635,98 @@ describe('desktop auth runtime config', () => {
     }
   })
 
+  it('rejects a group-writable existing ancestor before applying the profile', () => {
+    const root = createRuntimeProfileRoot()
+    const parent = join(root, 'shared')
+    const userDataPath = join(parent, 'profile')
+    fs.mkdirSync(parent, { mode: 0o700 })
+    fs.mkdirSync(userDataPath, { mode: 0o700 })
+    fs.chmodSync(parent, 0o770)
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
+      expect(calls).toEqual([])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a foreign-owned existing ancestor before applying the profile', () => {
+    const currentUid = 1_000
+    const userDataPath = '/synthetic/unsafe/profile'
+    const directoryStat = (uid: number): fs.Stats =>
+      ({
+        isDirectory: () => true,
+        isSymbolicLink: () => false,
+        uid,
+        mode: 0o700
+      }) as fs.Stats
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: ((path: fs.PathLike) => {
+        const resolvedPath = String(path)
+        const uid = resolvedPath === '/synthetic/unsafe' ? currentUid + 1 : currentUid
+        return directoryStat(uid)
+      }) as typeof fs.lstatSync,
+      statSync: fs.statSync,
+      realpathSync: (path) => path,
+      mkdirSync: () => undefined,
+      openSync: () => 1,
+      fsyncSync: () => undefined,
+      closeSync: () => undefined
+    }
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config = readAuthRuntimeConfig(
+      { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: userDataPath },
+      posix
+    )
+    const originalGetUid = Object.getOwnPropertyDescriptor(process, 'getuid')
+    Object.defineProperty(process, 'getuid', { configurable: true, value: () => currentUid })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      const applyWithPathSemantics = applyAuthRuntimeProfile as unknown as (
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble,
+        pathSemantics: typeof posix
+      ) => void
+      expect(() => applyWithPathSemantics(application, config, filesystem, posix)).toThrow()
+      expect(calls).toEqual([])
+    } finally {
+      if (originalGetUid == null) {
+        Reflect.deleteProperty(process, 'getuid')
+      } else {
+        Object.defineProperty(process, 'getuid', originalGetUid)
+      }
+    }
+  })
+
   it('rejects a symlink above the direct profile parent', () => {
     const root = createRuntimeProfileRoot()
     const target = join(root, 'target')
