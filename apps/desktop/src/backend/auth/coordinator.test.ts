@@ -1969,6 +1969,57 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
   })
 
+  it('retry 첫 clock 신뢰 상실 뒤 전송 전 refresh가 멈추면 network pause를 유지하고 /me를 재개하지 않는다', async () => {
+    const harness = createAuthHarness()
+    harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+    harness.http.me.mockRejectedValueOnce(new AuthHttpFailure('network'))
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await coordinator.start()
+
+    const normalReading = harness.clock.read()
+    const readClock = vi.spyOn(harness.clock, 'read')
+    readClock
+      .mockReturnValueOnce({ ...normalReading, discontinuous: true })
+      .mockReturnValue(normalReading)
+    harness.http.refresh.mockRejectedValueOnce(new AuthHttpFailure('network', 'not-sent'))
+
+    await coordinator.retryAuth()
+
+    expect(harness.http.refresh).toHaveBeenCalledTimes(2)
+    expect(harness.http.me).toHaveBeenCalledTimes(1)
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'restorePaused',
+      notice: 'NETWORK_UNAVAILABLE'
+    })
+    readClock.mockRestore()
+  })
+
+  it('commit 경계의 clock 신뢰 상실은 finalize 뒤 정상 clock으로 돌아와도 restore를 pause한다', async () => {
+    const harness = createAuthHarness()
+    harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+    const commit = deferred<'confirmed'>()
+    const finalize = deferred<'confirmed'>()
+    harness.store.commitWaits.push(commit.promise)
+    harness.store.removeWaits.push(finalize.promise)
+    const coordinator = createAuthCoordinator(harness.dependencies)
+
+    const starting = coordinator.start()
+    await vi.waitFor(() => expect(harness.store.commitCredential).toHaveBeenCalledTimes(1))
+    harness.clock.discontinuous = true
+    commit.resolve('confirmed')
+    await vi.waitFor(() => expect(harness.store.removeTransition).toHaveBeenCalledTimes(1))
+    harness.clock.discontinuous = false
+    finalize.resolve('confirmed')
+    await starting
+
+    expect(harness.http.me).not.toHaveBeenCalled()
+    expect(harness.store.inspection).toEqual({ status: 'ready', refreshToken: REFRESH_1 })
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'restorePaused',
+      notice: 'RESTORE_RETRY_REQUIRED'
+    })
+  })
+
   it('corrupt/transition recovery는 credential을 사용하지 않고 clear 확인 뒤 재로그인을 요구한다', async () => {
     const harness = createAuthHarness()
     harness.store.inspection = { status: 'recovery-required' }
