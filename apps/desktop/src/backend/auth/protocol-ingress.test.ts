@@ -302,6 +302,30 @@ describe('Desktop auth protocol ingress', () => {
     expect(dispatch).toHaveBeenCalledExactlyOnceWith(initial)
   })
 
+  it('buffered dispatch가 disposer를 재진입 호출해도 이후 event를 전달하지 않는다', async () => {
+    const start = deferred<void>()
+    const app = createApp()
+    const initial = returnUrl()
+    const ingress = createProtocolIngress({
+      app,
+      argv: ['electron', initial],
+      returnTarget: RETURN_TARGET
+    })
+    const dispatch = vi.fn()
+    let stop: (() => void) | undefined
+    stop = attachProtocolIngressAfterStart(ingress, start.promise, (rawReturnUrl) => {
+      dispatch(rawReturnUrl)
+      stop?.()
+    })
+
+    start.resolve()
+    await settle()
+    app.emit('open-url', openUrlEvent(), returnUrl(OTHER_CODE))
+    await settle()
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith(initial)
+  })
+
   it('initial restore 실패 또는 quit 중에는 buffered cold return을 폐기한다', async () => {
     const harness = createAuthHarness()
     const startFailure = deferred<void>()
