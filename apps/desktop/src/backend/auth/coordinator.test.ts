@@ -1193,8 +1193,11 @@ describe('Desktop AuthCoordinator login', () => {
     expect(harness.browser.open).toHaveBeenCalledTimes(1)
     const revisionsIncrease = revisions.every((value, index) => {
       const isFirstRevision = index === 0
-      const isGreaterThanPrevious = isFirstRevision || value > revisions[index - 1]
+      if (isFirstRevision) {
+        return true
+      }
 
+      const isGreaterThanPrevious = value > revisions[index - 1]
       return isGreaterThanPrevious
     })
     expect(revisionsIncrease).toBe(true)
