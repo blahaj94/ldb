@@ -79,7 +79,7 @@ export async function assertLoginHttpIntegration(source, mark) {
       const html = await callback.text()
       const code = /ldb-test:\/\/login\/complete\?code=([A-Za-z0-9_-]{43})/.exec(html)?.[1]
       const hasCode = code != null
-      const isCodeEmpty = hasCode && code === ''
+      const isCodeEmpty = code === ''
       const hasExchangeCode = hasCode && !isCodeEmpty
       assert(hasExchangeCode)
       assert.doesNotMatch(

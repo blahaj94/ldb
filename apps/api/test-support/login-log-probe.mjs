@@ -184,7 +184,7 @@ try {
   process.stdout.write = stdout
   process.stderr.write = stderr
 }
-const hasCapturedOutput = !failed && captured.length > 0
+const hasCapturedOutput = captured.length > 0
 const hasProbeFailure = failed || hasCapturedOutput
 if (hasProbeFailure) {
   process.stderr.write('Login log probe failed\n')
