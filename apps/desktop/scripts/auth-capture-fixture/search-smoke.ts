@@ -20,7 +20,7 @@ function hasRetryWait(slot: Slot): slot is Slot & { retryAfterSeconds: number } 
   return hasWait
 }
 
-function sameRequest({ before, after }: { before: Slot; after: Slot }): boolean {
+export function sameRequest({ before, after }: { before: Slot; after: Slot }): boolean {
   const hasRequestId = before.requestId != null
   const hasSameId = hasRequestId && before.requestId === after.requestId
   const hasSameObservation = before.observationRevision === after.observationRevision
