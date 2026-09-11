@@ -2,7 +2,7 @@
 type: reference
 status: active
 scope: desktop authentication capture integration and isolated media fixture
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 ---
 
 # Desktop Auth Capture
@@ -16,7 +16,7 @@ last-reviewed: 2026-09-11
 | `apps/desktop/src/backend/auth/coordinator.ts`, `types.ts`                                                                  | `captureGeneration(): number \| null`로 현재 signedIn의 내부 auth generation만 반환한다. HTTP용 `authorization()`을 호출하거나 access expiry 때문에 refresh하지 않는다.                                         |
 | `apps/desktop/src/backend/capture/ipc-handler.ts`                                                                           | 실제 coordinator를 등록하고 source 열거·선택·media 완료의 auth/window/document 수명을 확인한다. 선택 무효화, trusted 빈 선택 cleanup, 안정화 통지의 현재 main 권한과 raw log 제거를 담당한다.                   |
 | `apps/desktop/src/backend/renderer-document.ts`                                                                             | 개발 URL은 HTTP(S)의 exact `localhost`, `127.0.0.1`, `[::1]`과 canonical 입력만 허용한다. Credential·공백·control·backslash·host alias를 거절하고 Electron Vite가 제공하는 slash 없는 bare origin만 정규화한다. |
-| `apps/desktop/src/backend/main.ts`                                                                                          | 검증한 renderer URL, sandbox·contextIsolation 활성화, nodeIntegration 비활성화와 navigation/popup 차단을 구성한다. Trusted auth runtime을 만들 때만 coordinator, auth/capture IPC와 exact document를 연결한다.  |
+| `apps/desktop/src/backend/main.ts`                                                                                          | 검증한 renderer URL, sandbox·contextIsolation 활성화, nodeIntegration 비활성화와 navigation/popup 차단을 구성한다. 모든 window에 exact document/capture 경계를 연결하고 capture IPC를 등록하되, trusted auth runtime이 있을 때만 auth IPC와 coordinator/search authority를 추가한다. |
 | `apps/desktop/src/backend/capture/permission-policy.ts`                                                                     | 제품 default session의 media permission check와 request를 모두 명시적으로 거절한다. Fixture 전용 빈 `mediaTypes` 예외는 이 module로 이전하지 않는다.                  |
 | `apps/desktop/src/preload/index.ts`, `index.d.ts`                                                                           | auth/capture와 검색 feature API만 노출한다. 범용 `window.electron`과 isolation-off fallback은 없다.                                                                                                             |
 | `apps/desktop/src/frontend/src/App.tsx`, `auth/AuthBridge.tsx`, `auth/AuthPresentation.tsx`                                 | 실제 제품 App이 AuthBridge의 home content로 기존 PartyCapture를 전달한다. Welcome·인증 처리·연결 실패 화면에서는 capture를 mount하지 않는다.                                                                    |

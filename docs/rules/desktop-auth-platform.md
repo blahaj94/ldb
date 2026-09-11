@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: apps/desktop secure storage protocol and validation
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-12
 rationale: 지원 환경의 관측 사실과 OS 보장·배포 gate를 구분하고 불명확한 token의 재사용을 차단한다.
 evidence: "PR #60 사용자 승인: https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475 ; 설계 근거: Issue #55; main a82547c; Electron 39.8.10 공식 문서"
 exceptions: 실제 credential/keychain·protocol registry·OAuth app 설정과 packaged E2E는 수행하지 않는다.
@@ -92,7 +92,7 @@ Claimed HTTPS는 domain association·OS별 배포 검증을 추가하고, loopba
 | 진입점 | 등록·처리 계약 | 미확인 gate |
 | --- | --- | --- |
 | macOS | main entry에서 ready 이전 `open-url` listener 등록 및 preventDefault. Bundle `CFBundleURLTypes`에 승인 target의 scheme 선언. OS event를 단일 validator로 전달 | Packaged/installed cold·warm·창 없음, 서명/업데이트, 여러 bundle의 association 충돌 |
-| Windows/Linux | 초기 `process.argv`와 `second-instance` argv를 동일 validator로 처리. Single-instance lock loser는 store/network 작업 없이 종료 | Install 경로 공백, URI 전달·중복, 실제 default handler와 OS별 focus |
+| Windows/Linux | Packaged executable 또는 Electron `defaultApp`의 executable·app path를 제거한 user argv를 검사한다. Lock loser가 bounded/versioned `additionalData`로 같은 user argv를 보내며 owner는 이를 재검증하고 mutable `second-instance` command line을 인증 판정에 쓰지 않는다. Single-instance loser는 store/network 작업 없이 종료 | Install 경로 공백, URI 전달·중복, 실제 default handler와 OS별 focus |
 | 공통 | Bootstrap에서 event handler와 single-instance ownership을 준비한 뒤 ready·store·window를 초기화. 초기 후보는 raw 2,048 byte 이하 1개만 일시 보유하고 추가 후보는 버림 | Cold start는 pending verifier가 없어 교환하지 않음. 정상 저장 session 복원과 독립적으로 안내 |
 
 Single-instance의 범위는 동일 app profile이며 서로 다른 dev/prod app은 별도 identity를 쓴다. macOS에서 창만 닫아 main이 살아 있으면 pending은 유지하고 유효 복귀 때 창을 다시 만든다. Windows/Linux의 마지막 창 닫힘은 현재 lifecycle상 main quit이므로 pending은 소실된다. Packaged 앱은 URL을 처리하기 위해 창에 URL을 load하지 않고 local renderer만 생성·restore·focus한다. Foreground 전환은 OS가 제한할 수 있어 상태 완료와 focus 성공을 구분한다.
@@ -100,7 +100,7 @@ Single-instance의 범위는 동일 app profile이며 서로 다른 dev/prod app
 ### 입력 검증
 
 - Browser launch URL은 string·2,048 byte 이하이며 exact trusted API HTTPS origin, `/auth/login/authorize` path, **ticket 하나**의 canonical 32-byte base64url query만 허용한다. Username/password·fragment·추가 query·path/port alias·redirect를 허용하지 않는다. URL parser 뒤 canonical 재구성한 값과 원문이 동일해야 하며 allowlist prefix 비교로 대체하지 않는다.
-- App 복귀 후보는 argv 전체 중 문자열 후보를 검사한다. 마지막 argument라는 가정, joined command line의 shell 재해석, arbitrary command 실행은 금지한다. 한 OS event에 복귀 후보가 2개 이상이면 전체 거절한다. `--`·executable path 등 일반 argument를 URL로 취급하지 않는다.
+- App 복귀 후보는 bootstrap argument를 제거한 초기 user argv 또는 exact version·shape·count·UTF-8 byte 경계를 다시 확인한 lock handoff의 모든 문자열에서 검사한다. `second-instance` command line의 순서·내용을 인증 입력으로 신뢰하거나 마지막 argument라고 가정하거나 joined command line을 shell로 재해석하거나 arbitrary command를 실행하지 않는다. 한 OS event에 복귀 후보가 2개 이상이면 전체 거절한다. 제거된 executable/app path와 단독 `--` 등 일반 argument를 URL로 취급하지 않는다. `--` 또는 slash prefix option이 `=`나 `:` 뒤에 payload를 가지면 그 payload도 URL-like 분류 대상으로 검사한다. 예외는 대소문자를 정규화한 option 이름이 정확히 `user-data-dir`이고 payload가 drive letter와 colon 뒤에 slash 또는 backslash가 정확히 하나인 absolute Windows drive 형태(`C:/...`, `C:\...`)일 때뿐이며, 이를 일반 argument로 취급한다. Well-formed scheme 또는 path/query/fragment 구분자 없는 prefix 뒤의 colon과 slash/backslash로 시작하는 형태는 protocol-like이다. Direct drive-shaped user argument와 이름을 알 수 없거나 다른 option의 drive-shaped payload처럼 one-letter URI와 구별할 수 없는 입력은 fail closed한다.
 - 복귀 URL도 2,048 byte 이하·control/공백/backslash 없음·정확한 등록 scheme/host/path여야 한다. Userinfo/port/fragment·추가 path·encoded 구분자·dot segment·unknown/duplicate query key를 거절한다. Canonical raw 값은 `<registered-return-target>?code=<canonical-code>`와 정확히 같아야 한다. 대상 target의 authority 유무까지 등록 형태를 따른다.
 - Code는 auth-oauth의 **43자 canonical unpadded base64url, decode 32byte, re-encode 동일**만 허용한다. Code를 URL decode 반복/coercion/trim으로 보정하지 않는다. 입력 code만으로 request/provider/user를 선택하지 않는다.
 - URL을 network로 따라가거나 renderer로 전달하지 않는다. Validation 실패·잘못된 scheme은 기존 pending/session·window navigation에 side effect가 없다. 정상 URL도 현재 pending이 없으면 교환 0이다. 동일 code의 중복·expired handling은 lifecycle을 따른다.
