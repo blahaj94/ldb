@@ -289,6 +289,45 @@ describe('usePartyCapture', () => {
     expect(worker.terminate).toHaveBeenCalledOnce()
   })
 
+  it('clears a stable nickname when OCR returns an empty nickname', async () => {
+    const { stream, worker } = captureResources()
+    const nicknameCrop = document.createElement('canvas')
+    let loopOptions: LoopOptions | undefined
+
+    getDisplayMedia.mockResolvedValue(stream)
+    moduleMocks.createPartyOcrWorker.mockResolvedValue(worker)
+    moduleMocks.capturePartyNicknameCrops.mockReturnValue([nicknameCrop, null, null, null])
+    worker.recognize
+      .mockResolvedValueOnce({ data: { text: 'Alice' } })
+      .mockResolvedValueOnce({ data: { text: 'Alice' } })
+      .mockResolvedValueOnce({ data: { text: '' } })
+    moduleMocks.runSerialLoop.mockImplementation((options: LoopOptions) => {
+      loopOptions = options
+      return new Promise<void>(() => undefined)
+    })
+
+    const hook = await renderPartyCaptureHook()
+    act(() => hook.getCurrent().selectSource('game'))
+    await flushPromises()
+    await act(async () => hook.getCurrent().startCapture())
+
+    await act(async () => loopOptions?.runCycle())
+    await act(async () => loopOptions?.runCycle())
+    expect(hook.getCurrent().stableNicknames[0]).toBe('Alice')
+
+    await act(async () => loopOptions?.runCycle())
+
+    expect(hook.getCurrent().stableNicknames[0]).toBeNull()
+    expect(search.controlCharacterSearch).toHaveBeenCalledWith({
+      action: 'clear',
+      captureId: CAPTURE_ID,
+      observationRevision: 2,
+      slot: 0
+    })
+
+    await hook.unmount()
+  })
+
   it.each([
     { width: 1600, height: 1080 },
     { width: 1920, height: 900 }

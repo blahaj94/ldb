@@ -43,9 +43,13 @@ export function usePartyRecognition(
         return
       }
       const hasNickname = nickname != null
-      const isNicknameEmpty = hasNickname && nickname.length === 0
-      const hasUsableNickname = hasNickname && !isNicknameEmpty
-      const recognizedNickname = hasUsableNickname ? nickname : null
+      let recognizedNickname: string | null = null
+      if (hasNickname) {
+        const isNicknameEmpty = nickname.length === 0
+        if (!isNicknameEmpty) {
+          recognizedNickname = nickname
+        }
+      }
       const stability = updateSlotStability(slotStabilityRef.current[slot], recognizedNickname)
       slotStabilityRef.current[slot] = stability
       const hasStableNickname = stability.stableNickname != null
