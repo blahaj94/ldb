@@ -15,11 +15,12 @@ async function assertExchangeRollback(source) {
     query: async ({ sql, parameters, run }) => {
       const result = await run()
       const isLoginRequestUpdate = sql.startsWith('UPDATE "auth_login_requests"')
-      const hasConsumedParameter = isLoginRequestUpdate && parameters.includes('consumed')
-      const isConsumedWrite = isLoginRequestUpdate && hasConsumedParameter
-      if (isConsumedWrite) {
-        consumedWrites++
-        throw new Error('fixture-secret SQL detail')
+      if (isLoginRequestUpdate) {
+        const hasConsumedParameter = parameters.includes('consumed')
+        if (hasConsumedParameter) {
+          consumedWrites++
+          throw new Error('fixture-secret SQL detail')
+        }
       }
       return result
     }

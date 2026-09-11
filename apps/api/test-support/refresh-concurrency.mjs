@@ -23,7 +23,7 @@ async function observeWaitingRefresh({ source, kind, fixture: f }, controller) {
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
         const isTargetTableQuery = sql.includes(`"${kind}"`)
-        const hasUpdateLock = isTargetTableQuery && sql.includes('FOR UPDATE')
+        const hasUpdateLock = sql.includes('FOR UPDATE')
         const isTargetTableLock = isTargetTableQuery && hasUpdateLock
         if (isTargetTableLock) {
           observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
@@ -53,7 +53,7 @@ async function concurrentR0(source) {
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
         const isUserQuery = sql.includes('"users"')
-        const hasUpdateLock = isUserQuery && sql.includes('FOR UPDATE')
+        const hasUpdateLock = sql.includes('FOR UPDATE')
         const isUserLock = isUserQuery && hasUpdateLock
         if (isUserLock) {
           pids.push((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
@@ -126,9 +126,13 @@ async function r2BeforeReuse(source) {
   const restore = instrument(source, {
     query: async ({ sql, run }) => {
       const canPauseReplay = !paused
-      const isUserQuery = canPauseReplay && sql.includes('"users"')
-      const hasUpdateLock = isUserQuery && sql.includes('FOR UPDATE')
-      const shouldPauseReplay = canPauseReplay && isUserQuery && hasUpdateLock
+      if (!canPauseReplay) {
+        return run()
+      }
+
+      const isUserQuery = sql.includes('"users"')
+      const hasUpdateLock = sql.includes('FOR UPDATE')
+      const shouldPauseReplay = isUserQuery && hasUpdateLock
       if (shouldPauseReplay) {
         paused = true
         replayReady.resolve()
