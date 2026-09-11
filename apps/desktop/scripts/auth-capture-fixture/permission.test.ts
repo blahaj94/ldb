@@ -184,6 +184,35 @@ it.each(['window', 'contents', 'frame'])('종료된 %s에서는 허용하지 않
   }
   expect(request()).toBe(false)
 })
+it('window 생존 실패가 contents 생존 조회를 생략하지 않는다', () => {
+  const window = fixture.windows[0]
+  window.isDestroyed = vi.fn(() => true)
+  const isContentsDestroyed = vi.spyOn(window.webContents, 'isDestroyed')
+
+  expect(request()).toBe(false)
+  expect(isContentsDestroyed).toHaveBeenCalledOnce()
+})
+it('frame 부착 실패가 생존 조회는 수행하고 document 조회는 보호한다', () => {
+  const frame = fixture.windows[0].webContents.mainFrame
+  frame.detached = true
+  const isFrameDestroyed = vi.spyOn(frame, 'isDestroyed')
+  const readUrl = vi.fn(() => fixture.documentUrl)
+  Object.defineProperty(frame, 'url', { configurable: true, get: readUrl })
+
+  expect(request()).toBe(false)
+  expect(isFrameDestroyed).toHaveBeenCalledOnce()
+  expect(readUrl).not.toHaveBeenCalled()
+})
+it('frame 종료 실패도 document 조회를 보호한다', () => {
+  const frame = fixture.windows[0].webContents.mainFrame
+  const isFrameDestroyed = vi.spyOn(frame, 'isDestroyed').mockReturnValue(true)
+  const readUrl = vi.fn(() => fixture.documentUrl)
+  Object.defineProperty(frame, 'url', { configurable: true, get: readUrl })
+
+  expect(request()).toBe(false)
+  expect(isFrameDestroyed).toHaveBeenCalledOnce()
+  expect(readUrl).not.toHaveBeenCalled()
+})
 it('permission check는 모든 mediaType에서 계속 거절한다', () => {
   const check = fixture.check.mock.calls[0][0]
   for (const mediaType of ['unknown', 'video', 'audio']) {

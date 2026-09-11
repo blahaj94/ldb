@@ -97,10 +97,12 @@ export async function smoke(
   assert.equal(mainObservation.displayRequests, 1)
   assert.equal(mainObservation.displayAllowed, 1)
   const isSafeWidth = Number.isSafeInteger(active.width)
-  const hasPositiveWidth = isSafeWidth && active.width > 0
+  const isPositiveWidth = active.width > 0
+  const hasPositiveWidth = isSafeWidth && isPositiveWidth
   assert.ok(hasPositiveWidth)
   const isSafeHeight = Number.isSafeInteger(active.height)
-  const hasPositiveHeight = isSafeHeight && active.height > 0
+  const isPositiveHeight = active.height > 0
+  const hasPositiveHeight = isSafeHeight && isPositiveHeight
   assert.ok(hasPositiveHeight)
   // 제품이 지원하는 기존 video frame geometry를 확인한다. Native track 크기는 별도 관측값이다.
   assert.equal(active.frameWidth, 1920)
@@ -123,7 +125,8 @@ export async function smoke(
   await until(async () => {
     const state = await observe()
     const hasOneStop = state.stops === 1
-    const hasStopped = hasOneStop && state.ended
+    const hasEnded = state.ended
+    const hasStopped = hasOneStop && hasEnded
     const hasTerminated = state.terminated === 1
     const hasCompletedCleanup = hasStopped && hasTerminated
     return hasCompletedCleanup
