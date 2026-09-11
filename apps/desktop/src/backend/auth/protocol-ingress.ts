@@ -47,7 +47,8 @@ function findReturnCandidate(
       continue
     }
 
-    const hasReturnProtocol = value.startsWith(returnProtocol)
+    const protocolPrefix = value.slice(0, returnProtocol.length).toLowerCase()
+    const hasReturnProtocol = protocolPrefix === returnProtocol
     if (!hasReturnProtocol) {
       continue
     }
@@ -57,7 +58,12 @@ function findReturnCandidate(
   }
 
   const hasSingleCandidate = candidateCount === 1
-  if (!hasSingleCandidate || candidate == null) {
+  if (!hasSingleCandidate) {
+    return null
+  }
+
+  const hasCandidate = candidate != null
+  if (!hasCandidate) {
     return null
   }
 
@@ -93,8 +99,10 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
 
   function deliver(rawReturnUrl: string): void {
     const currentDispatch = dispatch
-    if (currentDispatch == null) {
-      if (bufferedReturnUrl == null) {
+    const hasCurrentDispatch = currentDispatch != null
+    if (!hasCurrentDispatch) {
+      const hasBufferedReturnUrl = bufferedReturnUrl != null
+      if (!hasBufferedReturnUrl) {
         bufferedReturnUrl = rawReturnUrl
       }
       return
@@ -113,7 +121,8 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
     }
 
     const candidate = findReturnCandidate(values, returnProtocol, returnTarget)
-    if (candidate == null) {
+    const hasCandidate = candidate != null
+    if (!hasCandidate) {
       return
     }
 
@@ -136,12 +145,14 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
       return () => undefined
     }
 
-    if (dispatch != null) {
+    const hasDispatch = dispatch != null
+    if (hasDispatch) {
       throw new Error('Protocol ingress is already attached.')
     }
 
     dispatch = nextDispatch
     const pendingReturnUrl = bufferedReturnUrl
+    const hasPendingReturnUrl = pendingReturnUrl != null
     bufferedReturnUrl = null
     let isAttached = true
     const detach = (): void => {
@@ -156,7 +167,7 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
       }
     }
 
-    if (pendingReturnUrl != null) {
+    if (hasPendingReturnUrl) {
       deliver(pendingReturnUrl)
     }
 
