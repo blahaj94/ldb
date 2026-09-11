@@ -68,32 +68,60 @@ function destroyWindowBestEffort(window: BrowserWindow): void {
   }
 }
 
-function observeDocumentLoad(window: BrowserWindow, load: Promise<unknown>): void {
-  void Promise.resolve(load).catch(() => {
-    const isCurrentWindow = mainWindow === window
-    if (!isCurrentWindow || isQuitting) {
-      return
-    }
-    const isWindowDestroyed = window.isDestroyed()
-    const isContentsDestroyed = isWindowDestroyed || window.webContents.isDestroyed()
-    if (isContentsDestroyed) {
-      return
-    }
+type WindowCloseState = {
+  activeAttempt: symbol | null
+  hasPendingLoadFailure: boolean
+}
 
-    mainWindow = null
-    const dispose = disposeAuthIpc
-    disposeAuthIpc = undefined
-    try {
-      dispose?.()
-    } catch {
-      // Continue invalidating the failed document owner.
-    }
-    const ownsAuthProfile = protocolIngress?.ownsInstance === true
-    if (ownsAuthProfile) {
-      exitAfterOwnedAuthFailure()
-    }
-    destroyWindowBestEffort(window)
-  })
+function handleDocumentLoadFailure(window: BrowserWindow, closeState: WindowCloseState): void {
+  const isCurrentWindow = mainWindow === window
+  if (!isCurrentWindow || isQuitting) {
+    return
+  }
+  if (closeState.activeAttempt != null) {
+    closeState.hasPendingLoadFailure = true
+    return
+  }
+
+  mainWindow = null
+  const dispose = disposeAuthIpc
+  disposeAuthIpc = undefined
+  try {
+    dispose?.()
+  } catch {
+    // Continue invalidating the failed document owner.
+  }
+  const ownsAuthProfile = protocolIngress?.ownsInstance === true
+  if (ownsAuthProfile) {
+    exitAfterOwnedAuthFailure()
+  }
+  destroyWindowBestEffort(window)
+}
+
+function cancelWindowCloseAttempt(
+  window: BrowserWindow,
+  closeState: WindowCloseState,
+  attempt: symbol
+): void {
+  if (closeState.activeAttempt !== attempt) {
+    return
+  }
+
+  closeState.activeAttempt = null
+  if (!closeState.hasPendingLoadFailure) {
+    return
+  }
+
+  closeState.hasPendingLoadFailure = false
+  handleDocumentLoadFailure(window, closeState)
+}
+
+function observeDocumentLoad(
+  window: BrowserWindow,
+  closeState: WindowCloseState,
+  load: Promise<unknown>
+): void {
+  void Promise.resolve(load).catch(() => handleDocumentLoadFailure(window, closeState))
 }
 
 function createWindow(authRuntime: AuthRuntime | null): void {
@@ -128,6 +156,10 @@ function createWindow(authRuntime: AuthRuntime | null): void {
       nodeIntegration: false
     }
   })
+  const closeState: WindowCloseState = {
+    activeAttempt: null,
+    hasPendingLoadFailure: false
+  }
 
   let nextDisposeAuthIpc: (() => void) | undefined
   try {
@@ -141,7 +173,19 @@ function createWindow(authRuntime: AuthRuntime | null): void {
       })
     }
 
+    window.on('close', (event) => {
+      const attempt = Symbol('main-window-close-attempt')
+      closeState.activeAttempt = attempt
+      queueMicrotask(() => {
+        if (event.defaultPrevented) {
+          cancelWindowCloseAttempt(window, closeState, attempt)
+        }
+      })
+    })
+
     window.on('closed', () => {
+      closeState.activeAttempt = null
+      closeState.hasPendingLoadFailure = false
       const isCurrentWindow = mainWindow === window
       if (isCurrentWindow) {
         disposeAuthIpc?.()
@@ -156,11 +200,22 @@ function createWindow(authRuntime: AuthRuntime | null): void {
 
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     window.webContents.on('will-navigate', (event) => event.preventDefault())
+    window.webContents.on('will-prevent-unload', (event) => {
+      const attempt = closeState.activeAttempt
+      if (attempt == null) {
+        return
+      }
+      queueMicrotask(() => {
+        if (!event.defaultPrevented) {
+          cancelWindowCloseAttempt(window, closeState, attempt)
+        }
+      })
+    })
 
     if (shouldLoadDevUrl) {
-      observeDocumentLoad(window, window.loadURL(rendererDocumentUrl))
+      observeDocumentLoad(window, closeState, window.loadURL(rendererDocumentUrl))
     } else {
-      observeDocumentLoad(window, window.loadFile(entry))
+      observeDocumentLoad(window, closeState, window.loadFile(entry))
     }
   } catch (error) {
     try {

@@ -361,7 +361,7 @@ it('Electron defaultApp은 executable과 app path를 제외한 user argv만 lock
   }
 })
 
-it('packaged document의 closed 정리 뒤 activate에서 같은 runtime과 IPC를 다시 연결한다', async () => {
+it('file document의 closed 정리 뒤 activate에서 같은 runtime과 IPC를 다시 연결한다', async () => {
   stubTrustedRuntimeEnvironment()
   const expectedDocumentUrl = pathToFileURL(join(__dirname, '../frontend/index.html')).href
 
@@ -486,9 +486,41 @@ it('교체된 이전 window의 늦은 load rejection은 현재 window owner를 �
   expect(mocks.exit).not.toHaveBeenCalled()
 })
 
-it.each(['window', 'webContents'] as const)(
-  '정상 %s destruction 뒤의 load rejection은 owned fatal로 바꾸지 않는다',
-  async (destroyedOwner) => {
+it('진행 중인 close와 겹친 load rejection은 closed가 실제 종료를 확정할 때 폐기한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const pendingLoad = deferred<void>()
+  mocks.loadFile.mockReturnValueOnce(pendingLoad.promise)
+
+  await import('./main')
+  await mocks.bootstrap
+  const window = mocks.windows[0] as {
+    on: ReturnType<typeof vi.fn>
+    destroy: ReturnType<typeof vi.fn>
+  }
+  const close = window.on.mock.calls.find(([event]) => event === 'close')?.[1] as (event: {
+    defaultPrevented: boolean
+  }) => void
+  const closed = window.on.mock.calls.find(([event]) => event === 'closed')?.[1] as () => void
+
+  close({ defaultPrevented: false })
+  pendingLoad.reject(new Error('Synthetic load rejection during close'))
+  await pendingLoad.promise.catch(() => undefined)
+  await Promise.resolve()
+
+  expect(window.destroy).not.toHaveBeenCalled()
+  expect(mocks.disposeIngress).not.toHaveBeenCalled()
+  expect(mocks.exit).not.toHaveBeenCalled()
+
+  closed()
+
+  expect(window.destroy).not.toHaveBeenCalled()
+  expect(mocks.disposeIngress).not.toHaveBeenCalled()
+  expect(mocks.exit).not.toHaveBeenCalled()
+})
+
+it.each(['close event', 'renderer beforeunload'] as const)(
+  '%s가 close를 취소하면 보류한 load rejection을 owned fatal로 다시 처리한다',
+  async (cancellationSource) => {
     stubTrustedRuntimeEnvironment()
     const pendingLoad = deferred<void>()
     mocks.loadFile.mockReturnValueOnce(pendingLoad.promise)
@@ -496,25 +528,97 @@ it.each(['window', 'webContents'] as const)(
     await import('./main')
     await mocks.bootstrap
     const window = mocks.windows[0] as {
-      isDestroyed: ReturnType<typeof vi.fn>
-      webContents: { isDestroyed: ReturnType<typeof vi.fn> }
+      on: ReturnType<typeof vi.fn>
+      webContents: { on: ReturnType<typeof vi.fn> }
       destroy: ReturnType<typeof vi.fn>
     }
-    if (destroyedOwner === 'window') {
-      window.isDestroyed.mockReturnValue(true)
+    const close = window.on.mock.calls.find(([event]) => event === 'close')?.[1] as (event: {
+      defaultPrevented: boolean
+    }) => void
+    const willPreventUnload = window.webContents.on.mock.calls.find(
+      ([event]) => event === 'will-prevent-unload'
+    )?.[1] as (event: { defaultPrevented: boolean }) => void
+
+    if (cancellationSource === 'close event') {
+      pendingLoad.reject(new Error('Synthetic load rejection before canceled close'))
+      let defaultPrevented = false
+      const closeEvent = {
+        get defaultPrevented() {
+          return defaultPrevented
+        },
+        preventDefault() {
+          defaultPrevented = true
+        }
+      }
+      close(closeEvent)
+      closeEvent.preventDefault()
+      await pendingLoad.promise.catch(() => undefined)
+      await Promise.resolve()
     } else {
-      window.webContents.isDestroyed.mockReturnValue(true)
+      close({ defaultPrevented: false })
+      await Promise.resolve()
+      pendingLoad.reject(new Error('Synthetic load rejection during renderer beforeunload'))
+      await pendingLoad.promise.catch(() => undefined)
+      await Promise.resolve()
+      expect(mocks.exit).not.toHaveBeenCalled()
+      willPreventUnload({ defaultPrevented: false })
+      await Promise.resolve()
     }
 
-    pendingLoad.reject(new Error('Synthetic load rejection after normal destruction'))
-    await pendingLoad.promise.catch(() => undefined)
-    await Promise.resolve()
-
-    expect(window.destroy).not.toHaveBeenCalled()
-    expect(mocks.disposeIngress).not.toHaveBeenCalled()
-    expect(mocks.exit).not.toHaveBeenCalled()
+    expect(mocks.exit).toHaveBeenCalledExactlyOnceWith(1)
+    expect(mocks.disposeIngress).toHaveBeenCalledOnce()
+    expect(window.destroy).toHaveBeenCalledOnce()
   }
 )
+
+it('will-prevent-unload override가 unload를 허용하면 closed까지 load rejection을 보류한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const pendingLoad = deferred<void>()
+  mocks.loadFile.mockReturnValueOnce(pendingLoad.promise)
+
+  await import('./main')
+  await mocks.bootstrap
+  const window = mocks.windows[0] as {
+    on: ReturnType<typeof vi.fn>
+    webContents: { on: ReturnType<typeof vi.fn> }
+    destroy: ReturnType<typeof vi.fn>
+  }
+  const close = window.on.mock.calls.find(([event]) => event === 'close')?.[1] as (event: {
+    defaultPrevented: boolean
+  }) => void
+  const closed = window.on.mock.calls.find(([event]) => event === 'closed')?.[1] as () => void
+  const willPreventUnload = window.webContents.on.mock.calls.find(
+    ([event]) => event === 'will-prevent-unload'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+
+  close({ defaultPrevented: false })
+  await Promise.resolve()
+  pendingLoad.reject(new Error('Synthetic load rejection during allowed renderer unload'))
+  await pendingLoad.promise.catch(() => undefined)
+  await Promise.resolve()
+  let defaultPrevented = false
+  const willPreventUnloadEvent = {
+    get defaultPrevented() {
+      return defaultPrevented
+    },
+    preventDefault() {
+      defaultPrevented = true
+    }
+  }
+  willPreventUnload(willPreventUnloadEvent)
+  willPreventUnloadEvent.preventDefault()
+  await Promise.resolve()
+
+  expect(window.destroy).not.toHaveBeenCalled()
+  expect(mocks.disposeIngress).not.toHaveBeenCalled()
+  expect(mocks.exit).not.toHaveBeenCalled()
+
+  closed()
+
+  expect(window.destroy).not.toHaveBeenCalled()
+  expect(mocks.disposeIngress).not.toHaveBeenCalled()
+  expect(mocks.exit).not.toHaveBeenCalled()
+})
 
 it('정상 quit 뒤의 늦은 document load rejection은 nonzero 종료로 바꾸지 않는다', async () => {
   stubTrustedRuntimeEnvironment()
