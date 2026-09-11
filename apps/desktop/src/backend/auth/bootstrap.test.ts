@@ -15,6 +15,30 @@ const config: AuthRuntimeConfig = {
 }
 
 describe('desktop auth bootstrap', () => {
+  it('uses the trusted bootstrap config as the sole dependency tuple provenance', async () => {
+    const harness = createAuthHarness()
+    const effectsConfig: AuthRuntimeConfig = {
+      ...config,
+      apiOrigin: 'https://other-api.example.test'
+    }
+    const createDependencies = vi.fn((selectedConfig: AuthRuntimeConfig = effectsConfig) => ({
+      ...harness.dependencies,
+      apiOrigin: selectedConfig.apiOrigin
+    }))
+
+    const runtime = await bootstrapAuthRuntime({
+      config,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies,
+        createSearchClock: () => harness.clock
+      }
+    })
+
+    expect(createDependencies).toHaveBeenCalledExactlyOnceWith(config)
+    expect(runtime?.apiOrigin).toBe(config.apiOrigin)
+  })
+
   it('completes the access notice before store inspection and coordinator start', async () => {
     const harness = createAuthHarness()
     const operations = harness.operations

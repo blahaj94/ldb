@@ -186,10 +186,11 @@ describe('Desktop auth PKCE와 URL 경계', () => {
     }
   )
 
-  it.each(['x://auth/return', 'x:/auth/return'])(
-    'Windows drive prefix와 충돌하는 one-letter private scheme %s을 거절한다',
+  it.each(['x://auth/return', 'x:/auth/return', 'x:opaque-return'])(
+    'one-letter private scheme %s도 기존 exact parser 계약대로 허용한다',
     (target) => {
-      expect(() => validateReturnTarget(target)).toThrow(AuthProtocolFailure)
+      expect(validateReturnTarget(target)).toBe(target)
+      expect(parseReturnUrl(`${target}?code=${CODE}`, target)).toEqual({ code: CODE })
     }
   )
 })

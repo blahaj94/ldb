@@ -12,7 +12,11 @@ const DOCUMENT_URL = 'file:///fixture/index.html'
 const CHANNELS = ['getAuthState', 'beginLogin', 'cancelLogin', 'retryAuth', 'logout']
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => Promise<unknown>
 
-type FixtureFrame = { url: string; detached: boolean }
+type FixtureFrame = {
+  url: string
+  detached: boolean
+  isDestroyed: ReturnType<typeof vi.fn<() => boolean>>
+}
 type FixtureContents = {
   mainFrame: FixtureFrame
   isDestroyed: ReturnType<typeof vi.fn<() => boolean>>
@@ -35,7 +39,7 @@ async function setup(): Promise<IpcFixture> {
   const coordinator = createAuthCoordinator(effects.dependencies)
   await coordinator.start()
   effects.operations.length = 0
-  const frame = { url: DOCUMENT_URL, detached: false }
+  const frame = { url: DOCUMENT_URL, detached: false, isDestroyed: vi.fn(() => false) }
   const contents = { mainFrame: frame, isDestroyed: vi.fn(() => false), send: vi.fn() }
   const window = { webContents: contents, isDestroyed: vi.fn(() => false) }
   // Electron identity만 대체하며 coordinator와 effect orchestration은 실제 구현을 사용한다.
@@ -75,6 +79,32 @@ async function setup(): Promise<IpcFixture> {
 beforeEach(() => vi.clearAllMocks())
 
 describe('auth IPC trust boundary', () => {
+  it('handler 등록이 중간에 실패하면 이미 등록한 channel을 rollback한다', async () => {
+    const effects = createAuthHarness()
+    const coordinator = createAuthCoordinator(effects.dependencies)
+    await coordinator.start()
+    let registrationCount = 0
+    electron.handle.mockImplementation(() => {
+      registrationCount += 1
+      if (registrationCount === 3) {
+        throw new Error('Synthetic IPC registration failure')
+      }
+    })
+
+    expect(() =>
+      registerAuthIpc({
+        coordinator,
+        getWindow: () => null,
+        documentUrl: DOCUMENT_URL
+      })
+    ).toThrow('Synthetic IPC registration failure')
+
+    expect(electron.removeHandler.mock.calls.map(([channel]) => channel)).toEqual([
+      'getAuthState',
+      'beginLogin'
+    ])
+  })
+
   it('5 invoke만 등록하며 local snapshot 조회는 effect가 없다', async () => {
     const fixture = await setup()
 
@@ -90,7 +120,9 @@ describe('auth IPC trust boundary', () => {
     'subframe',
     'null-frame',
     'detached',
-    'destroyed',
+    'frame-destroyed',
+    'window-destroyed',
+    'contents-destroyed',
     'no-window',
     'navigation',
     'prefix-url'
@@ -103,7 +135,9 @@ describe('auth IPC trust boundary', () => {
     }
     const isSubframe = kind === 'subframe'
     if (isSubframe) {
-      invalidEvent.senderFrame = { ...fixture.frame } as IpcMainInvokeEvent['senderFrame']
+      invalidEvent.senderFrame = {
+        ...fixture.frame
+      } as unknown as IpcMainInvokeEvent['senderFrame']
     }
     const isNullFrame = kind === 'null-frame'
     if (isNullFrame) {
@@ -113,8 +147,16 @@ describe('auth IPC trust boundary', () => {
     if (isDetached) {
       fixture.frame.detached = true
     }
-    const isDestroyed = kind === 'destroyed'
-    if (isDestroyed) {
+    const isFrameDestroyed = kind === 'frame-destroyed'
+    if (isFrameDestroyed) {
+      fixture.frame.isDestroyed.mockReturnValue(true)
+    }
+    const isWindowDestroyed = kind === 'window-destroyed'
+    if (isWindowDestroyed) {
+      fixture.window.isDestroyed.mockReturnValue(true)
+    }
+    const isContentsDestroyed = kind === 'contents-destroyed'
+    if (isContentsDestroyed) {
       fixture.contents.isDestroyed.mockReturnValue(true)
     }
     const hasNoWindow = kind === 'no-window'

@@ -1378,7 +1378,7 @@ describe('Desktop AuthCoordinator login', () => {
     const activation = Promise.reject(new Error('window activation failed asynchronously'))
     const guardedActivation = activation.catch(() => undefined)
     const activationCatch = vi.spyOn(activation, 'catch')
-    const onClaimed = () => {
+    const onClaimed = (): Promise<never> => {
       calls += 1
       return activation
     }

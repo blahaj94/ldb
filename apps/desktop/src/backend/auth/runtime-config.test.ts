@@ -1,5 +1,5 @@
 import * as fs from 'node:fs'
-import { join, sep, win32 } from 'node:path'
+import { dirname, join, posix, sep, win32 } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import {
@@ -58,6 +58,20 @@ describe('desktop auth runtime config', () => {
     { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: 'relative/profile' },
     { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: '/' }
   ])('rejects incomplete or invalid values without a production fallback: %j', (environment) => {
+    expect(readAuthRuntimeConfig(environment)).toBeNull()
+  })
+
+  it.each([
+    'LDB_AUTH_API_ORIGIN',
+    'LDB_AUTH_RETURN_TARGET',
+    'LDB_AUTH_ENVIRONMENT',
+    'LDB_AUTH_PROVIDERS',
+    'LDB_AUTH_APP_IDENTITY',
+    'LDB_AUTH_USER_DATA_PATH'
+  ] as const)('rejects a trusted tuple missing required key %s', (missingKey) => {
+    const environment: Record<string, string | undefined> = { ...validEnvironment }
+    delete environment[missingKey]
+
     expect(readAuthRuntimeConfig(environment)).toBeNull()
   })
 
@@ -203,39 +217,57 @@ describe('desktop auth runtime config', () => {
     }
   })
 
-  it('classifies an identity failure after setPath as a fatal partial application', () => {
-    const root = createRuntimeProfileRoot()
-    const userDataPath = join(root, 'profile')
-    fs.mkdirSync(userDataPath, { mode: 0o700 })
-    const calls: string[] = []
-    const application = {
-      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
-      getPath: () => userDataPath,
-      setName: (value: string) => {
-        calls.push(`name:${value}`)
-        throw new Error('Synthetic identity failure')
-      },
-      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
-    }
-    const config = readAuthRuntimeConfig({
-      ...validEnvironment,
-      LDB_AUTH_USER_DATA_PATH: userDataPath
-    })
-
-    try {
-      expect(config).not.toBeNull()
-      if (config == null) {
-        throw new Error('Synthetic runtime config should be available')
+  it.each(['setName', 'setAppUserModelId'] as const)(
+    'classifies an Electron %s failure after setPath as a fatal partial application',
+    (failurePoint) => {
+      const root = createRuntimeProfileRoot()
+      const userDataPath = join(root, 'profile')
+      fs.mkdirSync(userDataPath, { mode: 0o700 })
+      const calls: string[] = []
+      const application = {
+        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        getPath: () => userDataPath,
+        setName: (value: string) => {
+          calls.push(`name:${value}`)
+          if (failurePoint === 'setName') {
+            throw new Error('Synthetic identity failure')
+          }
+        },
+        setAppUserModelId: (value: string) => {
+          calls.push(`identity:${value}`)
+          if (failurePoint === 'setAppUserModelId') {
+            throw new Error('Synthetic identity failure')
+          }
+        }
       }
+      const config = readAuthRuntimeConfig({
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: userDataPath
+      })
 
-      expect(() => applyAuthRuntimeProfile(application, config)).toThrow(
-        AuthRuntimeProfileApplicationFailure
-      )
-      expect(calls).toEqual([`path:userData:${userDataPath}`, 'name:com.synthetic.ldb'])
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
+      try {
+        expect(config).not.toBeNull()
+        if (config == null) {
+          throw new Error('Synthetic runtime config should be available')
+        }
+
+        expect(() => applyAuthRuntimeProfile(application, config)).toThrow(
+          AuthRuntimeProfileApplicationFailure
+        )
+        const expectedCalls =
+          failurePoint === 'setName'
+            ? [`path:userData:${userDataPath}`, 'name:com.synthetic.ldb']
+            : [
+                `path:userData:${userDataPath}`,
+                'name:com.synthetic.ldb',
+                'identity:com.synthetic.ldb'
+              ]
+        expect(calls).toEqual(expectedCalls)
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
     }
-  })
+  )
 
   it('classifies an Electron userData readback mismatch as a fatal partial application', () => {
     const root = createRuntimeProfileRoot()
@@ -309,8 +341,16 @@ describe('desktop auth runtime config', () => {
     const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'new-profile')
     const calls: string[] = []
+    const openedPaths: string[] = []
+    const syncedFds: number[] = []
+    let openedPathsAtSetPath: string[] = []
+    let syncCountAtSetPath = 0
     const application = {
-      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      setPath: (name: 'userData', value: string) => {
+        openedPathsAtSetPath = [...openedPaths]
+        syncCountAtSetPath = syncedFds.length
+        calls.push(`path:${name}:${value}`)
+      },
       getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
@@ -323,8 +363,14 @@ describe('desktop auth runtime config', () => {
         fs.mkdirSync(path, options)
         throw Object.assign(new Error('Synthetic concurrent creation'), { code: 'EEXIST' })
       },
-      openSync: fs.openSync,
-      fsyncSync: fs.fsyncSync,
+      openSync: (path: string, flags: number) => {
+        openedPaths.push(path)
+        return fs.openSync(path, flags)
+      },
+      fsyncSync: (fd: number) => {
+        syncedFds.push(fd)
+        return fs.fsyncSync(fd)
+      },
       closeSync: fs.closeSync
     }
     const config = readAuthRuntimeConfig({
@@ -349,6 +395,10 @@ describe('desktop auth runtime config', () => {
         'name:com.synthetic.ldb',
         'identity:com.synthetic.ldb'
       ])
+      expect(openedPathsAtSetPath).toEqual(
+        expect.arrayContaining([userDataPath, root, dirname(root)])
+      )
+      expect(syncCountAtSetPath).toBe(openedPathsAtSetPath.length)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -445,6 +495,65 @@ describe('desktop auth runtime config', () => {
       }
     }
   )
+
+  it('rejects a profile owned by a different POSIX uid before changing app identity', () => {
+    const currentUid = 1_000
+    const userDataPath = '/synthetic/profile'
+    const directoryStat = (uid: number): fs.Stats =>
+      ({
+        isDirectory: () => true,
+        isSymbolicLink: () => false,
+        uid,
+        mode: 0o700
+      }) as fs.Stats
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: ((path: fs.PathLike) =>
+        directoryStat(
+          String(path) === userDataPath ? currentUid + 1 : currentUid
+        )) as typeof fs.lstatSync,
+      statSync: fs.statSync,
+      realpathSync: (path) => path,
+      mkdirSync: () => undefined,
+      openSync: () => 1,
+      fsyncSync: () => undefined,
+      closeSync: () => undefined
+    }
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config = readAuthRuntimeConfig(
+      { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: userDataPath },
+      posix
+    )
+    const originalGetUid = Object.getOwnPropertyDescriptor(process, 'getuid')
+    Object.defineProperty(process, 'getuid', { configurable: true, value: () => currentUid })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+      const applyWithPathSemantics = applyAuthRuntimeProfile as unknown as (
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble,
+        pathSemantics: typeof posix
+      ) => void
+
+      expect(() => applyWithPathSemantics(application, config, filesystem, posix)).toThrow()
+      expect(calls).toEqual([])
+    } finally {
+      if (originalGetUid == null) {
+        Reflect.deleteProperty(process, 'getuid')
+      } else {
+        Object.defineProperty(process, 'getuid', originalGetUid)
+      }
+    }
+  })
 
   it('rejects a symlink above the direct profile parent', () => {
     const root = createRuntimeProfileRoot()
@@ -654,40 +763,68 @@ describe('desktop auth runtime config', () => {
     }
   })
 
-  it('uses the native separator so POSIX backslashes remain part of the profile name', () => {
-    if (sep !== '/') {
-      return
-    }
+  it('uses POSIX path semantics so backslashes remain part of the profile name', () => {
+    const root = '/synthetic'
+    const userDataPath = posix.join(root, 'profile\\name')
+    const existingPaths = new Set(['/', root])
+    const createdPaths: string[] = []
+    const directoryStat = {
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+      uid: process.getuid?.() ?? 0,
+      mode: 0o700
+    } as fs.Stats
+    const lstatSync = ((path: fs.PathLike) => {
+      const resolvedPath = String(path)
+      if (!existingPaths.has(resolvedPath)) {
+        throw Object.assign(new Error('Synthetic missing path'), { code: 'ENOENT' })
+      }
 
-    const root = createRuntimeProfileRoot()
-    const userDataPath = join(root, 'profile\\name')
+      return directoryStat
+    }) as typeof fs.lstatSync
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync,
+      statSync: fs.statSync,
+      realpathSync: (path) => path,
+      mkdirSync: (path) => {
+        existingPaths.add(path)
+        createdPaths.push(path)
+      },
+      openSync: () => 1,
+      fsyncSync: () => undefined,
+      closeSync: () => undefined
+    }
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => {
-        fs.lstatSync(value)
         calls.push(`path:${name}:${value}`)
       },
       getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
-    const config = readAuthRuntimeConfig({
-      ...validEnvironment,
-      LDB_AUTH_USER_DATA_PATH: userDataPath
-    })
+    const config = readAuthRuntimeConfig(
+      {
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: userDataPath
+      },
+      posix
+    )
 
-    try {
-      expect(config).not.toBeNull()
-      if (config == null) {
-        throw new Error('Synthetic runtime config should be available')
-      }
-
-      expect(() => applyAuthRuntimeProfile(application, config)).not.toThrow()
-      expect(fs.lstatSync(userDataPath).isDirectory()).toBe(true)
-      expect(calls[0]).toBe(`path:userData:${userDataPath}`)
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true })
+    expect(config).not.toBeNull()
+    if (config == null) {
+      throw new Error('Synthetic runtime config should be available')
     }
+
+    const applyWithPathSemantics = applyAuthRuntimeProfile as unknown as (
+      application: AuthRuntimeProfileApplication,
+      config: AuthRuntimeConfig,
+      filesystem: RuntimeProfileFilesystemDouble,
+      pathSemantics: typeof posix
+    ) => void
+    expect(() => applyWithPathSemantics(application, config, filesystem, posix)).not.toThrow()
+    expect(createdPaths).toEqual([userDataPath])
+    expect(calls[0]).toBe(`path:userData:${userDataPath}`)
   })
 
   it('syncs each newly created profile directory and its parent entry before setPath', () => {
@@ -865,6 +1002,62 @@ describe('desktop auth runtime config', () => {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it.each(['open', 'fsync'] as const)(
+    'does not apply the profile when existing-directory %s durability fails',
+    (failurePoint) => {
+      const root = createRuntimeProfileRoot()
+      const userDataPath = join(root, 'profile')
+      fs.mkdirSync(userDataPath, { mode: 0o700 })
+      const calls: string[] = []
+      const filesystem: RuntimeProfileFilesystemDouble = {
+        lstatSync: fs.lstatSync,
+        statSync: fs.statSync,
+        realpathSync: fs.realpathSync.native,
+        mkdirSync: fs.mkdirSync,
+        openSync: (path: string, flags: number) => {
+          if (failurePoint === 'open') {
+            throw new Error('Synthetic directory open failure')
+          }
+          return fs.openSync(path, flags)
+        },
+        fsyncSync: (fd: number) => {
+          if (failurePoint === 'fsync') {
+            throw new Error('Synthetic directory sync failure')
+          }
+          return fs.fsyncSync(fd)
+        },
+        closeSync: fs.closeSync
+      }
+      const application = {
+        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        getPath: () => userDataPath,
+        setName: (value: string) => calls.push(`name:${value}`),
+        setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+      }
+      const config = readAuthRuntimeConfig({
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: userDataPath
+      })
+
+      try {
+        expect(config).not.toBeNull()
+        if (config == null) {
+          throw new Error('Synthetic runtime config should be available')
+        }
+        const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+          application: AuthRuntimeProfileApplication,
+          config: AuthRuntimeConfig,
+          filesystem: RuntimeProfileFilesystemDouble
+        ) => void
+
+        expect(() => applyWithFilesystem(application, config, filesystem)).toThrow()
+        expect(calls).toEqual([])
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
 
   it('rejects a direct symlink parent before creating the profile directory', () => {
     const root = createRuntimeProfileRoot()
