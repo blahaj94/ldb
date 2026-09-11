@@ -11,7 +11,7 @@ export type AuthBootstrapInput = Readonly<{
 export type AuthRuntime = Readonly<{
   coordinator: AuthCoordinator
   apiOrigin: string
-  clock: AuthClock
+  searchClock: AuthClock
   start(): Promise<AuthSnapshot>
 }>
 
@@ -24,6 +24,7 @@ export async function bootstrapAuthRuntime(input: AuthBootstrapInput): Promise<A
   try {
     await input.effects.announceCredentialAccess()
     const dependencies = input.effects.createDependencies()
+    const searchClock = input.effects.createSearchClock()
     const coordinator = createAuthCoordinator(dependencies)
     let startPromise: Promise<AuthSnapshot> | null = null
     const start = (): Promise<AuthSnapshot> => {
@@ -35,7 +36,7 @@ export async function bootstrapAuthRuntime(input: AuthBootstrapInput): Promise<A
       startPromise = started
       return started
     }
-    return { coordinator, apiOrigin: dependencies.apiOrigin, clock: dependencies.clock, start }
+    return { coordinator, apiOrigin: dependencies.apiOrigin, searchClock, start }
   } catch {
     return null
   }

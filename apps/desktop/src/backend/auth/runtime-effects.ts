@@ -30,6 +30,7 @@ type RuntimeEffectsOptions = Readonly<{
 export type AuthRuntimeEffects = Readonly<{
   announceCredentialAccess(): Promise<void>
   createDependencies(): AuthCoordinatorDependencies
+  createSearchClock(): AuthClock
 }>
 
 function createClock(readWallMs: () => number, readMonotonicMs: () => number): AuthClock {
@@ -115,6 +116,10 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRu
         http,
         store
       }
+    },
+
+    createSearchClock(): AuthClock {
+      return createClock(readWallMs, readMonotonicMs)
     }
   }
 }

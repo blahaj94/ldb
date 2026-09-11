@@ -19,6 +19,13 @@ export type AuthRuntimeProfileApplication = Readonly<{
   setAppUserModelId(id: string): void
 }>
 
+export class AuthRuntimeProfileApplicationFailure extends Error {
+  constructor() {
+    super('Trusted runtime profile could not be applied.')
+    this.name = 'AuthRuntimeProfileApplicationFailure'
+  }
+}
+
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
 type RuntimeProfileFilesystem = Readonly<
   Pick<typeof fs, 'lstatSync' | 'statSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'>
@@ -101,10 +108,11 @@ function splitNativePath(path: string): string[] {
 }
 
 function hasPathAlias(path: string): boolean {
-  const segments = splitNativePath(path)
-  const leaf = segments[segments.length - 1]
+  const root = parse(path).root
+  const segments = splitNativePath(path.slice(root.length))
   const hasDotSegment = segments.some((segment) => segment === '.' || segment === '..')
-  return hasDotSegment || leaf == null || leaf.length === 0
+  const hasEmptySegment = segments.some((segment) => segment.length === 0)
+  return hasDotSegment || hasEmptySegment
 }
 
 function directoryChain(path: string): string[] {
@@ -149,6 +157,7 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
       if (!isMissingPath) {
         throw error
       }
+      assertDirectory(filesystem.lstatSync(dirname(currentPath)))
       try {
         filesystem.mkdirSync(currentPath, { mode: 0o700 })
       } catch (mkdirError) {
@@ -167,11 +176,15 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
     } else {
       assertDirectory(stat)
     }
-    if (created) {
+    if (created && !isFinalPath) {
       syncDirectory(currentPath, filesystem)
       syncDirectory(dirname(currentPath), filesystem)
     }
   }
+
+  assertDirectory(filesystem.lstatSync(dirname(finalPath)))
+  syncDirectory(finalPath, filesystem)
+  syncDirectory(dirname(finalPath), filesystem)
 }
 
 export function readAuthRuntimeConfig(
@@ -227,7 +240,11 @@ export function applyAuthRuntimeProfile(
   filesystem: RuntimeProfileFilesystem = fs
 ): void {
   prepareUserDataDirectory(config.userDataPath, filesystem)
-  application.setPath('userData', config.userDataPath)
-  application.setName(config.appIdentity)
-  application.setAppUserModelId(config.appIdentity)
+  try {
+    application.setPath('userData', config.userDataPath)
+    application.setName(config.appIdentity)
+    application.setAppUserModelId(config.appIdentity)
+  } catch {
+    throw new AuthRuntimeProfileApplicationFailure()
+  }
 }

@@ -10,10 +10,15 @@ import { registerAuthIpc } from './auth/ipc-handler'
 import { attachProtocolIngressAfterStart, createProtocolIngress } from './auth/protocol-ingress'
 import { bootstrapAuthRuntime, type AuthRuntime } from './auth/bootstrap'
 import { createAuthRuntimeEffects } from './auth/runtime-effects'
-import { applyAuthRuntimeProfile, readAuthRuntimeConfig } from './auth/runtime-config'
+import {
+  applyAuthRuntimeProfile,
+  AuthRuntimeProfileApplicationFailure,
+  readAuthRuntimeConfig
+} from './auth/runtime-config'
 
 let mainWindow: BrowserWindow | null = null
 let disposeAuthIpc: (() => void) | undefined
+let runtimeProfileApplicationFailed = false
 const parsedRuntimeConfig = readAuthRuntimeConfig()
 const runtimeConfig = (() => {
   if (parsedRuntimeConfig == null) {
@@ -22,7 +27,9 @@ const runtimeConfig = (() => {
   try {
     applyAuthRuntimeProfile(app, parsedRuntimeConfig)
     return parsedRuntimeConfig
-  } catch {
+  } catch (error) {
+    const isApplicationFailure = error instanceof AuthRuntimeProfileApplicationFailure
+    runtimeProfileApplicationFailed = isApplicationFailure
     return null
   }
 })()
@@ -31,6 +38,10 @@ const protocolIngress =
     ? null
     : createProtocolIngress({ app, argv: process.argv, returnTarget: runtimeConfig.returnTarget })
 let protocolIngressDisposed = false
+
+if (runtimeProfileApplicationFailed) {
+  app.exit(1)
+}
 
 function createWindow(authRuntime: AuthRuntime | null): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -92,6 +103,18 @@ function createWindow(authRuntime: AuthRuntime | null): void {
   }
 }
 
+function showOrCreateMainWindow(authRuntime: AuthRuntime | null): void {
+  const window = mainWindow
+  const hasWindow = window != null && !window.isDestroyed()
+  if (!hasWindow) {
+    createWindow(authRuntime)
+    return
+  }
+
+  window.show()
+  window.focus()
+}
+
 function disposeProtocolIngress(): void {
   protocolIngressDisposed = true
   protocolIngress?.dispose()
@@ -99,6 +122,10 @@ function disposeProtocolIngress(): void {
 
 // This method will be called when Electron has finished initialization and is ready to create windows.
 app.whenReady().then(async () => {
+  if (runtimeProfileApplicationFailed) {
+    return
+  }
+
   const hasOwnedInstance = protocolIngress == null || protocolIngress.ownsInstance
   if (!hasOwnedInstance) {
     return
@@ -131,7 +158,7 @@ app.whenReady().then(async () => {
       ? undefined
       : {
           apiOrigin: authRuntime.apiOrigin,
-          clock: authRuntime.clock
+          clock: authRuntime.searchClock
         }
   registerCaptureIpc(authRuntime?.coordinator, searchConfiguration)
 
@@ -144,6 +171,9 @@ app.whenReady().then(async () => {
     if (hasNoOpenWindows) {
       createWindow(authRuntime)
     }
+  })
+  app.on('second-instance', () => {
+    showOrCreateMainWindow(authRuntime)
   })
   app.on('window-all-closed', () => {
     const shouldQuit = process.platform !== 'darwin'
@@ -159,15 +189,12 @@ app.whenReady().then(async () => {
       protocolIngress,
       startAuthRuntime,
       async (rawReturnUrl) => {
-        const window = mainWindow
-        const hasWindow = window != null && !window.isDestroyed()
-        if (!hasWindow) {
-          createWindow(authRuntime)
-        } else {
-          window.show()
-          window.focus()
+        const handlingReturnUrl = authRuntime.coordinator.handleReturnUrl(rawReturnUrl)
+        try {
+          showOrCreateMainWindow(authRuntime)
+        } finally {
+          await handlingReturnUrl
         }
-        await authRuntime.coordinator.handleReturnUrl(rawReturnUrl)
       },
       () => !protocolIngressDisposed
     )
