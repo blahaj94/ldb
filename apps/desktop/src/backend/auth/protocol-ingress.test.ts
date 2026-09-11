@@ -281,6 +281,27 @@ describe('Desktop auth protocol ingress', () => {
     expect(harness.http.exchange).not.toHaveBeenCalled()
   })
 
+  it('start 대기 중 protocol event는 기존 bounded pending 후보 하나만 보존한다', async () => {
+    const start = deferred<void>()
+    const app = createApp()
+    const initial = returnUrl()
+    const ingress = createProtocolIngress({
+      app,
+      argv: ['electron', initial],
+      returnTarget: RETURN_TARGET
+    })
+    const dispatch = vi.fn()
+
+    attachProtocolIngressAfterStart(ingress, start.promise, dispatch)
+    app.emit('open-url', openUrlEvent(), returnUrl(OTHER_CODE))
+    app.emit('open-url', openUrlEvent(), returnUrl(OTHER_CODE))
+
+    start.resolve()
+    await settle()
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith(initial)
+  })
+
   it('initial restore 실패 또는 quit 중에는 buffered cold return을 폐기한다', async () => {
     const harness = createAuthHarness()
     const startFailure = deferred<void>()
