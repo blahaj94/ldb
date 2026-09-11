@@ -10,7 +10,8 @@ import { registerAuthIpc } from './auth/ipc-handler'
 import {
   attachProtocolIngressAfterStart,
   createProtocolIngress,
-  isOrdinarySecondInstanceInvocation
+  isOrdinarySecondInstanceInvocation,
+  selectProtocolIngressArguments
 } from './auth/protocol-ingress'
 import { bootstrapAuthRuntime, type AuthRuntime } from './auth/bootstrap'
 import { createAuthRuntimeEffects } from './auth/runtime-effects'
@@ -44,13 +45,55 @@ const runtimeConfig = runtimeProfileState.status === 'applied' ? runtimeProfileS
 const protocolIngress =
   runtimeConfig == null
     ? null
-    : createProtocolIngress({ app, argv: process.argv, returnTarget: runtimeConfig.returnTarget })
+    : createProtocolIngress({
+        app,
+        argv: selectProtocolIngressArguments(process.argv, process.defaultApp === true),
+        returnTarget: runtimeConfig.returnTarget
+      })
 let protocolIngressDisposed = false
 let isQuitting = false
 let ownedAuthFailureExitRequested = false
 
 if (runtimeProfileState.status === 'application-failed') {
   app.exit(1)
+}
+
+function destroyWindowBestEffort(window: BrowserWindow): void {
+  try {
+    if (!window.isDestroyed()) {
+      window.destroy()
+    }
+  } catch {
+    // The composition or load failure remains the owning failure.
+  }
+}
+
+function observeDocumentLoad(window: BrowserWindow, load: Promise<unknown>): void {
+  void Promise.resolve(load).catch(() => {
+    const isCurrentWindow = mainWindow === window
+    if (!isCurrentWindow || isQuitting) {
+      return
+    }
+    const isWindowDestroyed = window.isDestroyed()
+    const isContentsDestroyed = isWindowDestroyed || window.webContents.isDestroyed()
+    if (isContentsDestroyed) {
+      return
+    }
+
+    mainWindow = null
+    const dispose = disposeAuthIpc
+    disposeAuthIpc = undefined
+    try {
+      dispose?.()
+    } catch {
+      // Continue invalidating the failed document owner.
+    }
+    const ownsAuthProfile = protocolIngress?.ownsInstance === true
+    if (ownsAuthProfile) {
+      exitAfterOwnedAuthFailure()
+    }
+    destroyWindowBestEffort(window)
+  })
 }
 
 function createWindow(authRuntime: AuthRuntime | null): void {
@@ -62,6 +105,14 @@ function createWindow(authRuntime: AuthRuntime | null): void {
   const rendererDocumentUrl = shouldLoadDevUrl
     ? validateDevRendererUrl(devUrl)
     : pathToFileURL(entry).href
+  const previousWindow = mainWindow
+  const hasReusableWindow = previousWindow != null && !previousWindow.isDestroyed()
+  if (hasReusableWindow) {
+    throw new Error('Main window already exists.')
+  }
+  disposeAuthIpc?.()
+  disposeAuthIpc = undefined
+  mainWindow = null
   const isLinux = process.platform === 'linux'
   const window = new BrowserWindow({
     width: 900,
@@ -78,39 +129,51 @@ function createWindow(authRuntime: AuthRuntime | null): void {
     }
   })
 
-  mainWindow = window
-  registerCapturePermissions(session.defaultSession)
-  registerCaptureWindow(window, rendererDocumentUrl)
-  if (authRuntime != null) {
-    disposeAuthIpc?.()
-    disposeAuthIpc = registerAuthIpc({
-      coordinator: authRuntime.coordinator,
-      getWindow: () => mainWindow,
-      documentUrl: rendererDocumentUrl
-    })
-  }
-
-  window.on('closed', () => {
-    const isCurrentWindow = mainWindow === window
-    if (isCurrentWindow) {
-      disposeAuthIpc?.()
-      disposeAuthIpc = undefined
-      mainWindow = null
+  let nextDisposeAuthIpc: (() => void) | undefined
+  try {
+    registerCapturePermissions(session.defaultSession)
+    registerCaptureWindow(window, rendererDocumentUrl)
+    if (authRuntime != null) {
+      nextDisposeAuthIpc = registerAuthIpc({
+        coordinator: authRuntime.coordinator,
+        getWindow: () => (mainWindow === window ? window : null),
+        documentUrl: rendererDocumentUrl
+      })
     }
-  })
 
-  window.on('ready-to-show', () => {
-    window.show()
-  })
+    window.on('closed', () => {
+      const isCurrentWindow = mainWindow === window
+      if (isCurrentWindow) {
+        disposeAuthIpc?.()
+        disposeAuthIpc = undefined
+        mainWindow = null
+      }
+    })
 
-  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  window.webContents.on('will-navigate', (event) => event.preventDefault())
+    window.on('ready-to-show', () => {
+      window.show()
+    })
 
-  if (shouldLoadDevUrl) {
-    void window.loadURL(rendererDocumentUrl)
-  } else {
-    void window.loadFile(entry)
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    window.webContents.on('will-navigate', (event) => event.preventDefault())
+
+    if (shouldLoadDevUrl) {
+      observeDocumentLoad(window, window.loadURL(rendererDocumentUrl))
+    } else {
+      observeDocumentLoad(window, window.loadFile(entry))
+    }
+  } catch (error) {
+    try {
+      nextDisposeAuthIpc?.()
+    } catch {
+      // Continue rolling back the unpublished window.
+    }
+    destroyWindowBestEffort(window)
+    throw error
   }
+
+  disposeAuthIpc = nextDisposeAuthIpc
+  mainWindow = window
 }
 
 function showOrCreateMainWindow(authRuntime: AuthRuntime | null): void {
@@ -183,7 +246,7 @@ app.whenReady().then(async () => {
 
     let authRuntime: AuthRuntime | null = null
     if (runtimeConfig != null) {
-      const effects = createAuthRuntimeEffects({ config: runtimeConfig })
+      const effects = createAuthRuntimeEffects()
       authRuntime = await bootstrapAuthRuntime({
         config: runtimeConfig,
         effects,
@@ -231,10 +294,10 @@ app.whenReady().then(async () => {
       }
     })
     if (authRuntime == null) {
-      app.on('second-instance', (_event, commandLine) => {
+      app.on('second-instance', (_event, _commandLine, _workingDirectory, additionalData) => {
         const isOrdinaryInvocation =
           runtimeConfig == null ||
-          isOrdinarySecondInstanceInvocation(commandLine, runtimeConfig.returnTarget)
+          isOrdinarySecondInstanceInvocation(additionalData, runtimeConfig.returnTarget)
         if (isOrdinaryInvocation) {
           activateWindowSafely(authRuntime)
         }

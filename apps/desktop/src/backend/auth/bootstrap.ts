@@ -34,7 +34,7 @@ export async function bootstrapAuthRuntime(input: AuthBootstrapInput): Promise<A
     return null
   }
 
-  const dependencies = input.effects.createDependencies()
+  const dependencies = input.effects.createDependencies(config)
   const searchClock = input.effects.createSearchClock()
   const coordinator = createAuthCoordinator(dependencies)
   let startPromise: Promise<AuthSnapshot> | null = null

@@ -6,6 +6,7 @@ import {
   attachProtocolIngressAfterStart,
   createProtocolIngress,
   isOrdinarySecondInstanceInvocation as classifyOrdinarySecondInstanceInvocation,
+  selectProtocolIngressArguments,
   type ProtocolIngressApp,
   type ProtocolOpenUrlEvent
 } from './protocol-ingress'
@@ -281,11 +282,65 @@ describe('Desktop auth protocol ingress', () => {
     expect(observe(Array.from({ length: 65 }, () => 'arg'))).not.toHaveBeenCalled()
     expect(observe(['é'.repeat(2_048)])).toHaveBeenCalledOnce()
     expect(observe(['é'.repeat(2_049)])).not.toHaveBeenCalled()
+    expect(observe(['a'.repeat(4_097)])).not.toHaveBeenCalled()
     expect(observe(Array.from({ length: 4 }, () => 'é'.repeat(2_048)))).toHaveBeenCalledOnce()
     expect(
       observe([...Array.from({ length: 4 }, () => 'é'.repeat(2_048)), 'é'])
     ).not.toHaveBeenCalled()
+    expect(
+      observe([...Array.from({ length: 4 }, () => 'a'.repeat(4_096)), 'a'])
+    ).not.toHaveBeenCalled()
   })
+
+  it.each(['count', 'argument', 'total'] as const)(
+    'owner는 직접 받은 %s 초과 handoff도 다시 검증해 fail closed한다',
+    (kind) => {
+      const app = createApp()
+      const dispatch = vi.fn()
+      const activate = vi.fn()
+      const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+      ingress.attach(dispatch, activate)
+      const argv =
+        kind === 'count'
+          ? Array.from({ length: 65 }, () => 'arg')
+          : kind === 'argument'
+            ? ['a'.repeat(4_097)]
+            : [...Array.from({ length: 4 }, () => 'a'.repeat(4_096)), 'a']
+
+      app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp', {
+        version: 1,
+        argv
+      })
+
+      expect(dispatch).not.toHaveBeenCalled()
+      expect(activate).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['count', 'argument', 'total'] as const)(
+    '초기 user argv의 %s 상한 초과는 유효 callback이 섞여도 전달하지 않는다',
+    (kind) => {
+      const raw = returnUrl()
+      const totalOverflowTailBytes = 16_385 - Buffer.byteLength(raw, 'utf8') - 3 * 4_096
+      const argv =
+        kind === 'count'
+          ? [...Array.from({ length: 64 }, () => 'arg'), raw]
+          : kind === 'argument'
+            ? [raw, 'a'.repeat(4_097)]
+            : [
+                raw,
+                ...Array.from({ length: 3 }, () => 'a'.repeat(4_096)),
+                'a'.repeat(totalOverflowTailBytes)
+              ]
+      const app = createApp()
+      const dispatch = vi.fn()
+
+      const ingress = createProtocolIngress({ app, argv, returnTarget: RETURN_TARGET })
+      ingress.attach(dispatch)
+
+      expect(dispatch).not.toHaveBeenCalled()
+    }
+  )
 
   it.each(['c://auth/return', 'c:/auth/return', 'c:opaque-return'])(
     'one-letter private scheme %s도 기존 exact callback 계약대로 전달한다',
@@ -320,7 +375,10 @@ describe('Desktop auth protocol ingress', () => {
     '1bad:/auth/return',
     '+bad:/auth/return',
     '--return-url=1bad:/auth/return',
-    '1bad:////auth/return'
+    '1bad:////auth/return',
+    String.raw`1bad:\auth\return`,
+    String.raw`:\auth\return`,
+    String.raw`--return-url=1bad:\auth\return`
   ])('malformed hierarchical URL-like 입력 %s은 일반 실행으로 활성화하지 않는다', (value) => {
     const app = createApp()
     const dispatch = vi.fn()
@@ -398,7 +456,15 @@ describe('Desktop auth protocol ingress', () => {
       RETURN_TARGET
     )
     const colonBearingOrdinaryArguments = isOrdinarySecondInstanceInvocation(
-      ['electron', '/tmp/report:2026.txt', '--label=12:30', 'meeting at: noon'],
+      [
+        'electron',
+        '/tmp/report:2026.txt',
+        '/tmp/report:/2026.txt',
+        String.raw`/tmp/report:\2026.txt`,
+        '--path=/tmp/report:/2026',
+        '--label=12:30',
+        'meeting at: noon'
+      ],
       RETURN_TARGET
     )
 
@@ -420,6 +486,32 @@ describe('Desktop auth protocol ingress', () => {
     expect(windowsAbsolutePath).toBe(false)
     expect(windowsDriveRelativePath).toBe(false)
     expect(colonBearingOrdinaryArguments).toBe(true)
+  })
+
+  it('packaged와 Electron defaultApp bootstrap argv를 user handoff에서 제거한다', () => {
+    const executable = 'C:\\Program Files\\Electron\\electron.exe'
+    const appPath = 'C:\\workspace\\ldb'
+    const callback = returnUrl()
+
+    expect(selectProtocolIngressArguments([executable, callback], false)).toEqual([callback])
+    expect(selectProtocolIngressArguments([executable, appPath, callback], true)).toEqual([
+      callback
+    ])
+
+    const owner = createApp()
+    const dispatch = vi.fn()
+    const ingress = createProtocolIngress({ app: owner, argv: [], returnTarget: RETURN_TARGET })
+    ingress.attach(dispatch)
+    const secondary = createApp()
+    secondary.lockResult = false
+    createProtocolIngress({
+      app: secondary,
+      argv: selectProtocolIngressArguments([executable, appPath, callback], true),
+      returnTarget: RETURN_TARGET
+    })
+    owner.emit('second-instance', {}, [appPath, executable, callback], '/tmp', secondary.lockData)
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith(callback)
   })
 
   it('일반 활성화 예외를 EventEmitter 밖으로 전파하지 않고 detach 뒤 요청도 하나만 보존한다', () => {

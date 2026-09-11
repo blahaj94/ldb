@@ -7,7 +7,6 @@ import type { AuthClock, AuthCoordinatorDependencies } from './types'
 import type { AuthRuntimeConfig } from './runtime-config'
 
 type RuntimeEffectsOptions = Readonly<{
-  config: AuthRuntimeConfig
   safeStorage?: Pick<SafeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'>
   platform?: NodeJS.Platform
   fetch?: typeof globalThis.fetch
@@ -21,7 +20,7 @@ type RuntimeEffectsOptions = Readonly<{
 
 export type AuthRuntimeEffects = Readonly<{
   announceCredentialAccess(): Promise<void>
-  createDependencies(): AuthCoordinatorDependencies
+  createDependencies(config: AuthRuntimeConfig): AuthCoordinatorDependencies
   createSearchClock(): AuthClock
 }>
 
@@ -51,7 +50,7 @@ function createClock(readWallMs: () => number, readMonotonicMs: () => number): A
   }
 }
 
-export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRuntimeEffects {
+export function createAuthRuntimeEffects(options: RuntimeEffectsOptions = {}): AuthRuntimeEffects {
   const safeStorage = options.safeStorage ?? electronSafeStorage
   const platform = options.platform ?? process.platform
   const createStore = options.createStore ?? createMacOsCredentialStore
@@ -79,13 +78,13 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRu
       await showMessageBox()
     },
 
-    createDependencies(): AuthCoordinatorDependencies {
-      const apiOrigin = options.config.apiOrigin
+    createDependencies(config: AuthRuntimeConfig): AuthCoordinatorDependencies {
+      const apiOrigin = config.apiOrigin
       const http = createHttp({ apiOrigin, fetch: options.fetch })
       const store = createStore({
-        userDataPath: options.config.userDataPath,
+        userDataPath: config.userDataPath,
         context: {
-          environment: options.config.environment,
+          environment: config.environment,
           apiOrigin,
           clientId: 'desktop'
         },
@@ -95,9 +94,9 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRu
       const clock = createClock(readWallMs, readMonotonicMs)
 
       return {
-        providers: options.config.providers,
+        providers: config.providers,
         apiOrigin,
-        returnTarget: options.config.returnTarget,
+        returnTarget: config.returnTarget,
         browser: { open: openExternal },
         clock,
         entropy: {

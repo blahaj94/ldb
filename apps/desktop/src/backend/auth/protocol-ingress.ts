@@ -8,11 +8,12 @@ type ProtocolOpenUrlListener = (event: ProtocolOpenUrlEvent, url: unknown) => vo
 type ProtocolSecondInstanceListener = (
   event: unknown,
   commandLine: readonly unknown[],
-  workingDirectory: unknown
+  workingDirectory: unknown,
+  additionalData: unknown
 ) => void
 
 export interface ProtocolIngressApp {
-  requestSingleInstanceLock(): boolean
+  requestSingleInstanceLock(additionalData: Record<string, unknown>): boolean
   quit(): void
   on(event: 'open-url', listener: ProtocolOpenUrlListener): void
   on(event: 'second-instance', listener: ProtocolSecondInstanceListener): void
@@ -98,6 +99,107 @@ type ReturnCandidateClassification =
   | Readonly<{ status: 'invalid' }>
   | Readonly<{ status: 'valid'; rawReturnUrl: string }>
 
+type BoundedArguments =
+  Readonly<{ status: 'invalid' }> | Readonly<{ status: 'valid'; values: readonly string[] }>
+
+const SECOND_INSTANCE_HANDOFF_VERSION = 1
+const MAX_HANDOFF_ARGUMENTS = 64
+const MAX_HANDOFF_ARGUMENT_BYTES = 4_096
+const MAX_HANDOFF_TOTAL_BYTES = 16_384
+
+function readBoundedArguments(value: unknown): BoundedArguments {
+  if (!Array.isArray(value) || value.length > MAX_HANDOFF_ARGUMENTS) {
+    return { status: 'invalid' }
+  }
+
+  const values: string[] = []
+  let totalBytes = 0
+  for (const argument of value) {
+    if (typeof argument !== 'string') {
+      return { status: 'invalid' }
+    }
+    const bytes = Buffer.byteLength(argument, 'utf8')
+    totalBytes += bytes
+    const isWithinBounds =
+      bytes <= MAX_HANDOFF_ARGUMENT_BYTES && totalBytes <= MAX_HANDOFF_TOTAL_BYTES
+    if (!isWithinBounds) {
+      return { status: 'invalid' }
+    }
+    values.push(argument)
+  }
+
+  return { status: 'valid', values }
+}
+
+function createSecondInstanceHandoff(argv: readonly unknown[]): Record<string, unknown> {
+  const bounded = readBoundedArguments(argv)
+  return {
+    version: SECOND_INSTANCE_HANDOFF_VERSION,
+    argv: bounded.status === 'valid' ? [...bounded.values] : null
+  }
+}
+
+function readSecondInstanceHandoff(value: unknown): BoundedArguments {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return { status: 'invalid' }
+  }
+  const keys = Reflect.ownKeys(value)
+  const hasExactKeys = keys.length === 2 && keys.includes('version') && keys.includes('argv')
+  if (!hasExactKeys) {
+    return { status: 'invalid' }
+  }
+  const version = Object.getOwnPropertyDescriptor(value, 'version')?.value
+  const argv = Object.getOwnPropertyDescriptor(value, 'argv')?.value
+  if (version !== SECOND_INSTANCE_HANDOFF_VERSION) {
+    return { status: 'invalid' }
+  }
+  return readBoundedArguments(argv)
+}
+
+export function selectProtocolIngressArguments(
+  argv: readonly unknown[],
+  isDefaultApp: boolean
+): readonly unknown[] {
+  const bootstrapArgumentCount = isDefaultApp ? 2 : 1
+  return argv.slice(bootstrapArgumentCount)
+}
+
+function looksLikeUrlInput(value: string): boolean {
+  const characters = Array.from(value)
+  let first = 0
+  let last = characters.length
+  const isEdgeIgnored = (character: string): boolean => {
+    const codePoint = character.codePointAt(0)!
+    const isWhitespace = character.trim().length === 0
+    const isControl = codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)
+    return isWhitespace || isControl
+  }
+  while (first < last && isEdgeIgnored(characters[first]!)) {
+    first += 1
+  }
+  while (last > first && isEdgeIgnored(characters[last - 1]!)) {
+    last -= 1
+  }
+
+  let projected = ''
+  let hasInternalControl = false
+  for (const character of characters.slice(first, last)) {
+    const codePoint = character.codePointAt(0)!
+    const isParserIgnoredInternal = codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d
+    const isOtherControl =
+      (codePoint <= 0x1f && !isParserIgnoredInternal) || (codePoint >= 0x7f && codePoint <= 0x9f)
+    hasInternalControl ||= isOtherControl
+    if (!isParserIgnoredInternal) {
+      projected += character
+    }
+  }
+
+  const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(projected)
+  const hasMalformedHierarchicalScheme = /^[^/?#]*:[\\/]+/.test(projected)
+  const hasControlBeforeDelimiter = hasInternalControl && projected.includes(':')
+  return hasScheme || hasMalformedHierarchicalScheme || hasControlBeforeDelimiter
+}
+
 function classifyReturnCandidate(
   values: readonly unknown[],
   returnProtocol: string,
@@ -112,23 +214,10 @@ function classifyReturnCandidate(
       continue
     }
 
-    const hasUrlDelimiter = value.includes('://')
-    const isWindowsAbsoluteDrivePath = /^[A-Za-z]:[\\/](?![\\/])/.test(value)
-    if (isWindowsAbsoluteDrivePath && !hasUrlDelimiter) {
-      continue
-    }
-
     const protocolPrefix = value.slice(0, returnProtocol.length).toLowerCase()
     const hasReturnProtocol = protocolPrefix === returnProtocol
     if (!hasReturnProtocol) {
-      let hasParsedUrl = false
-      try {
-        new URL(value)
-        hasParsedUrl = true
-      } catch {
-        hasParsedUrl = false
-      }
-      if (hasUrlDelimiter || hasParsedUrl) {
+      if (looksLikeUrlInput(value)) {
         hasUnexpectedUrl = true
       }
       continue
@@ -163,12 +252,16 @@ function classifyReturnCandidate(
 }
 
 export function isOrdinarySecondInstanceInvocation(
-  values: readonly unknown[],
+  additionalData: unknown,
   returnTarget: string
 ): boolean {
   const validatedReturnTarget = validateReturnTarget(returnTarget)
   const returnProtocol = new URL(validatedReturnTarget).protocol
-  const candidate = classifyReturnCandidate(values, returnProtocol, validatedReturnTarget)
+  const handoff = readSecondInstanceHandoff(additionalData)
+  if (handoff.status === 'invalid') {
+    return false
+  }
+  const candidate = classifyReturnCandidate(handoff.values, returnProtocol, validatedReturnTarget)
   const hasNoReturnCandidate = candidate.status === 'none'
 
   return hasNoReturnCandidate
@@ -184,14 +277,18 @@ function createInactiveIngress(): ProtocolIngress {
 
 export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngress {
   const returnTarget = validateReturnTarget(input.returnTarget)
-  const ownsInstance = input.app.requestSingleInstanceLock()
+  const initialArguments = readBoundedArguments(input.argv)
+  const ownsInstance = input.app.requestSingleInstanceLock(createSecondInstanceHandoff(input.argv))
   if (!ownsInstance) {
     input.app.quit()
     return createInactiveIngress()
   }
 
   const returnProtocol = new URL(returnTarget).protocol
-  const initialCandidate = classifyReturnCandidate(input.argv, returnProtocol, returnTarget)
+  const initialCandidate =
+    initialArguments.status === 'valid'
+      ? classifyReturnCandidate(initialArguments.values, returnProtocol, returnTarget)
+      : { status: 'invalid' as const }
   const hasValidInitialCandidate = initialCandidate.status === 'valid'
   let bufferedReturnUrl = hasValidInitialCandidate ? initialCandidate.rawReturnUrl : null
   let bufferedActivation = false
@@ -268,8 +365,17 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
     event.preventDefault()
     receiveReturn([url])
   }
-  const handleSecondInstance: ProtocolSecondInstanceListener = (_event, commandLine) => {
-    receiveSecondInstance(commandLine)
+  const handleSecondInstance: ProtocolSecondInstanceListener = (
+    _event,
+    _commandLine,
+    _workingDirectory,
+    additionalData
+  ) => {
+    const handoff = readSecondInstanceHandoff(additionalData)
+    if (handoff.status === 'invalid') {
+      return
+    }
+    receiveSecondInstance(handoff.values)
   }
 
   input.app.on('open-url', handleOpenUrl)

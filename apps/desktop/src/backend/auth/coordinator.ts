@@ -636,7 +636,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return Promise.resolve(state.success(cancelled))
   }
 
-  function handleReturnUrl(raw: unknown, onClaimed?: () => void): Promise<void> {
+  function handleReturnUrl(raw: unknown, onClaimed?: () => Promise<void> | void): Promise<void> {
     let parsed: Readonly<{ code: string }>
     try {
       parsed = parseReturnUrl(raw, dependencies.returnTarget)
@@ -678,7 +678,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     value.trackExchange(writer.completion)
     const exchange = writer.execute(() => exchangeLogin(value, claim, writer))
     try {
-      onClaimed?.()
+      const activation = onClaimed?.()
+      void Promise.resolve(activation).catch(() => undefined)
     } catch {
       // Window activation is best-effort and must not interrupt the claimed exchange.
     }
