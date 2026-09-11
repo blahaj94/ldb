@@ -21,7 +21,8 @@ async function startLoopback(
   })
   const address = server.address()
   const hasAddress = Boolean(address)
-  const isAddressObject = hasAddress && typeof address !== 'string'
+  assert(hasAddress)
+  const isAddressObject = typeof address !== 'string'
   assert(isAddressObject)
   return { origin: `http://127.0.0.1:${(address as { port: number }).port}`, server }
 }
@@ -203,10 +204,11 @@ test('deadline aborts native fetch while the loopback body is still incomplete',
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
         const isSignalNotNull = init?.signal !== null
-        const isSignalDefined = isSignalNotNull && init?.signal !== undefined
-        const hasSignal = isSignalNotNull && isSignalDefined
-        if (hasSignal) {
-          captured.signal = init.signal as AbortSignal
+        if (isSignalNotNull) {
+          const isSignalDefined = init?.signal !== undefined
+          if (isSignalDefined) {
+            captured.signal = init.signal as AbortSignal
+          }
         }
         const response = await fetch(request, init)
         return {
@@ -271,10 +273,11 @@ test('clock deadline aborts an unfinished native body before its timer callback 
     const search = createNeopleCharacterSearchForTest('obvious-placeholder-key', {
       fetch: async (request, init) => {
         const isSignalNotNull = init?.signal !== null
-        const isSignalDefined = isSignalNotNull && init?.signal !== undefined
-        const hasSignal = isSignalNotNull && isSignalDefined
-        if (hasSignal) {
-          captured.signal = init.signal as AbortSignal
+        if (isSignalNotNull) {
+          const isSignalDefined = init?.signal !== undefined
+          if (isSignalDefined) {
+            captured.signal = init.signal as AbortSignal
+          }
         }
         const response = await fetch(request, init)
         now = 5_000
