@@ -759,9 +759,10 @@ describe('desktop auth runtime config', () => {
 
   it('repairs an observed concurrent parent entry before applying its missing profile child', () => {
     const root = createRuntimeProfileRoot()
-    const parent = join(root, 'nested')
+    const observedParent = join(root, 'observed')
+    const parent = join(observedParent, 'nested')
     const userDataPath = join(parent, 'profile')
-    fs.mkdirSync(parent, { mode: 0o700 })
+    fs.mkdirSync(observedParent, { mode: 0o700 })
     const openedPaths: string[] = []
     let openedPathsAtProfileApplication: string[] = []
     const filesystem: RuntimeProfileFilesystemDouble = {
@@ -802,7 +803,7 @@ describe('desktop auth runtime config', () => {
       ) => AuthRuntimeConfig
       applyWithFilesystem(application, config, filesystem)
 
-      expect(openedPathsAtProfileApplication).toContain(parent)
+      expect(openedPathsAtProfileApplication).toContain(observedParent)
       expect(openedPathsAtProfileApplication).toContain(root)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
