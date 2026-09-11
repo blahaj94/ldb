@@ -64,6 +64,19 @@ Path는 main이 고정한 `app.getPath('userData')/auth/<environment>/` 아래�
 - `transition.v1`: secret 없는 durable marker. Version, local operation ID, 종류(`exchange`, `refresh`, `clear`)만 가진다. Marker가 있으면 credential file의 값은 **어느 version이든 사용 불가**다. Local operation ID는 서버 credential/ID와 별개다.
 - File IO는 main 전용이며 directory ownership과 regular file 여부를 확인한다. Symlink/예상 밖 type·권한 오류는 fail closed다. POSIX directory/file 권한은 0700/0600, Windows는 해당 user의 private profile ACL을 검증한다. Temporary file은 동일 directory에서 exclusive 생성하고 같은 제한을 적용한다. Backup/이전 token 사본을 recovery source로 남기지 않는다.
 
+### POSIX profile ancestor permissions
+
+```yaml
+status: active
+enforcement: approval-required
+rationale: 최종 profile이 private이어도 교체 가능한 상위 directory를 통해 profile과 credential 경로가 훼손되는 경계를 보수적으로 제한한다.
+evidence: Issue #425, PR #422 review discussion_r3992882587
+exceptions: sticky bit를 이용한 group/other write 예외를 두지 않으며, POSIX mode bits로 확장 ACL이나 Windows ACL을 보장하지 않는다.
+review-after: Issue #425 구현 PR의 사용자 merge와 POSIX·native profile 검증 후
+```
+
+이 절의 substantive contract는 Issue #425 구현 PR의 채택 대상이며 사용자 merge 후부터 active Rule로 적용한다. Merge 전에는 다른 작업의 active Rule로 사용하지 않으며, 이 경계를 위해 별도 승인 대기를 만들지 않는다. POSIX UID를 조회할 수 있는 경우, existing profile ancestor와 final direct parent는 root UID `0` 또는 현재 process UID가 소유하고 `mode & 0o022 === 0`이어야 한다. Final profile directory의 기존 current-UID `0700` 검사와 missing component의 `0700` 생성은 유지한다. 이 조건을 확인하기 전에는 `mkdir`, Electron `setPath`, app name, app identity setter를 시작하지 않는다. POSIX UID를 조회할 수 없는 환경과 Windows는 mode bits로 owner/ACL 안전성을 추정하지 않으며 native ACL·reparse-point 검증을 별도 gate로 남긴다.
+
 네트워크 transaction과 disk write를 원자적으로 묶을 수 없으므로 **결과 불명 token은 사용하지 않는 marker 방식**을 선택한다. 순서는 다음과 같다.
 
 1. 필요하면 기존 ready refresh를 main memory에 읽는다. Single writer 안에서 marker를 durable 생성/교체하고 성공을 확인한다. 실패하면 exchange/refresh를 보내지 않으며 storageBlocked다. 이미 남은 marker를 무시하고 덮어쓴 token으로 재시도하지 않는다.
