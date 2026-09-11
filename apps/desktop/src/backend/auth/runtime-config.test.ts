@@ -218,11 +218,11 @@ describe('desktop auth runtime config', () => {
     }
     let syncCountAtSetPath = 0
     const application = {
-      setPath: (_name: 'userData', _value: string) => {
+      setPath: () => {
         syncCountAtSetPath = syncedFds.length
       },
-      setName: (_value: string) => undefined,
-      setAppUserModelId: (_value: string) => undefined
+      setName: () => undefined,
+      setAppUserModelId: () => undefined
     }
     const config = readAuthRuntimeConfig({
       ...validEnvironment,
