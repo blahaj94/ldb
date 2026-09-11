@@ -22,7 +22,7 @@ last-reviewed: 2026-09-11
 
 ## 입력과 수명
 
-- 초기 `argv`는 전체 배열을 검사한다. executable path, `--`와 일반 argument는 protocol scheme 후보가 아니므로 무시한다.
+- 초기 `argv`는 전체 배열을 검사한다. executable path, `--`와 일반 argument는 protocol scheme 후보가 아니므로 무시한다. Scheme 대소문자 변형도 다중 후보 판정에는 포함하지만, 실제 전달은 기존 exact parser를 통과한 raw 값만 허용한다.
 - `second-instance`의 command line도 마지막 argument라고 가정하지 않고 전체를 검사한다.
 - 하나의 event/초기 배열에 trusted scheme 후보가 두 개 이상이면 모두 거절한다. 잘못된 code가 섞여 있어도 후보가 여러 개면 dispatch하지 않는다.
 - 후보 하나가 2,048-byte를 넘거나 exact target·canonical 32-byte base64url code가 아니면 dispatch하지 않는다. 입력을 trim, coerce, URL-decode하거나 재구성하지 않는다.
