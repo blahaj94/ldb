@@ -11,6 +11,7 @@ const notices: Record<AuthNotice, string> = {
   BROWSER_OPEN_FAILED: '브라우저를 열지 못했습니다. 새 로그인을 시작해 주세요.',
   NETWORK_UNAVAILABLE: '네트워크 연결을 확인해 주세요.',
   AUTH_SERVICE_UNAVAILABLE: '인증 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  RESTORE_RETRY_REQUIRED: '로그인 상태 확인을 마치지 못했습니다. 다시 시도해 주세요.',
   REAUTH_REQUIRED: '다시 로그인이 필요합니다.',
   SECURE_STORAGE_UNAVAILABLE:
     '이 기기의 안전한 저장소를 사용할 수 없습니다. 저장소를 확인한 뒤 다시 시도해 주세요.',

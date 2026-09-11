@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: apps/desktop authentication process IPC and screens
-last-reviewed: 2026-09-06
+last-reviewed: 2026-09-11
 rationale: renderer가 credential이나 인증 성공을 소유하지 않고 후속 구현자가 process 경계를 추측하지 않도록 한다.
 evidence: "PR #60 사용자 승인: https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475 ; 설계 근거: Issue #55; 서버 기반 PR #48 승인, PR #53 merge"
 exceptions: 설계 승인은 제품 구현 착수·실제 OAuth 및 OS 등록·credential 저장소 변경을 포함하지 않는다.
@@ -16,7 +16,7 @@ review-after: 최초 Desktop 인증 구현 및 packaged platform validation 시
 
 아래 [OCR 검색 연결 제안](#ocr-검색-연결-제안)은 기존 승인에 포함되지 않는 `proposed` 절이다. 문서의 active metadata를 이 제안의 승인으로 사용하지 않는다.
 
-[저장 확정 뒤 복원 안내 제안](#저장-확정-뒤-복원-안내-제안)은 별도의 `proposed` 변경이다. 기존 notice allowlist의 승인이나 제품 구현 완료로 간주하지 않는다.
+[저장 확정 뒤 복원 안내 제안](#저장-확정-뒤-복원-안내-제안)은 PR #139의 사용자 승인·merge로 채택된 변경이다. 제품 구현과 실제 환경 검증은 별도다.
 
 [인증 준비 미완료 검색 종료 제안](#인증-준비-미완료-검색-종료-제안)은 현재 인증을 유지한 검색 실패의 계약이며 PR #149에서 승인된 `active` Rule이다.
 
@@ -78,7 +78,7 @@ AuthSnapshot의 전체 allowlist는 다음과 같다. Optional 임의 field를 �
 | `entry` | signedIn에서 `welcome` 또는 `home`, 그 밖은 null. 서버 exchange의 isNewUser로 최초 진입을 정하고 복원은 home |
 | `notice` | null 또는 아래 고정 enum. UI는 자체 고정 한국어 문구를 사용 |
 
-`notice`는 `LOGIN_CANCELLED`, `LOGIN_EXPIRED`, `LOGIN_RETURN_INVALID`, `LOGIN_RESTART_REQUIRED`, `BROWSER_OPEN_FAILED`, `NETWORK_UNAVAILABLE`, `AUTH_SERVICE_UNAVAILABLE`, `REAUTH_REQUIRED`, `SECURE_STORAGE_UNAVAILABLE`, `TOKEN_SAVE_FAILED`, `LOCAL_CLEAR_UNCONFIRMED`, `LOGOUT_SERVER_UNCONFIRMED`만 허용한다. `phase`가 허용 action을 결정한다. Server logout·local 삭제 둘 다 실패하면 `storageBlocked/LOCAL_CLEAR_UNCONFIRMED`가 우선이고 문구에서 서버 완료도 미확인임을 함께 안내한다.
+`notice`는 `LOGIN_CANCELLED`, `LOGIN_EXPIRED`, `LOGIN_RETURN_INVALID`, `LOGIN_RESTART_REQUIRED`, `BROWSER_OPEN_FAILED`, `NETWORK_UNAVAILABLE`, `AUTH_SERVICE_UNAVAILABLE`, `RESTORE_RETRY_REQUIRED`, `REAUTH_REQUIRED`, `SECURE_STORAGE_UNAVAILABLE`, `TOKEN_SAVE_FAILED`, `LOCAL_CLEAR_UNCONFIRMED`, `LOGOUT_SERVER_UNCONFIRMED`만 허용한다. `phase`가 허용 action을 결정한다. Server logout·local 삭제 둘 다 실패하면 `storageBlocked/LOCAL_CLEAR_UNCONFIRMED`가 우선이고 문구에서 서버 완료도 미확인임을 함께 안내한다.
 
 Preload event는 고정 channel 하나에서 DTO만 전달하고 개별 wrapper를 제거한다. Renderer는 먼저 subscribe한 뒤 `getAuthState`를 호출한다. 같은 runId에서는 큰 revision만 적용하므로 늦은 invoke 응답이 새 event를 덮지 않는다. Reload는 새 구독 후 조회하고 unmount 때 해제한다. Main 재연결로 runId가 달라지면 이전 bridge/subscription을 버린 뒤 새 조회로 기준을 세운다.
 
@@ -100,7 +100,7 @@ Preload event는 고정 channel 하나에서 DTO만 전달하고 개별 wrapper�
 | signedOut | 서비스 로그인, enable된 Google/Discord 버튼, 정제 실패 안내. 회원가입 별도 form 없음. 같은 email의 다른 provider가 별개 계정이라는 안내 |
 | startingLogin / waitingBrowser | 브라우저에서 계속하라는 안내·현재 attempt 취소. 대기 화면에 만료 안내, 다시 로그인은 취소 완료 뒤 새 beginLogin. 사용한 launch URL 재열기 버튼 없음 |
 | exchanging / restoring | 로그인 처리/복원 중 표시. 복원 중 보호 화면 노출 없음. Exchange 취소는 서버 rollback을 뜻하지 않는다는 lifecycle 동작 적용 |
-| restorePaused | 연결 실패 안내·retryAuth·현재 기기 logout. 저장된 credential을 검증 완료로 표시하지 않음 |
+| restorePaused | 연결·시간 확인 실패 안내·retryAuth·현재 기기 logout. 저장된 credential을 검증 완료로 표시하지 않음 |
 | signedIn + welcome | 새 회원 환영, 서버 기본 nickname을 text로 표시, “시작하기”로 기존 capture 화면 진입. 추가 개인정보·필수 nickname 입력 없음 |
 | signedIn + home | 기존 capture UI와 nickname/현재 기기 logout. 기존 회원과 앱 재시작은 바로 이 화면 |
 | signingOut / storageBlocked | 정리 중 또는 안전한 저장/삭제 실패 안내. storageBlocked는 retryAuth만 허용하고 새 로그인·보호 기능을 차단 |
@@ -116,18 +116,18 @@ Capture component는 signedIn home에서 mount한다. 로그인 이탈 시 unmou
 ## 저장 확정 뒤 복원 안내 제안
 
 ```yaml
-status: proposed
+status: active
 enforcement: approval-required
 rationale: 저장이 확정돼도 access를 안전하게 사용할 수 없는 복원을 종료하고 사용자 재시도를 제공한다.
-evidence: "https://github.com/blahaj94/ldb/issues/137 ; https://github.com/blahaj94/ldb/issues/84#issuecomment-5569253103"
+evidence: "PR #139 사용자 승인: https://github.com/blahaj94/ldb/pull/139#issuecomment-5577289923 ; merge: cfb1fa7a9e1ce6e6ac9b704842be5d02183cbfbd ; 설계 근거: https://github.com/blahaj94/ldb/issues/137"
 exceptions: 기존 저장 실패·결과 불명·인증 상실 안내와 IPC shape를 바꾸지 않는다.
-review-after: 승인 후 초기 restore·paused retry의 저장 지연·clock 회귀와 화면 검증 시
+review-after: 초기 restore·paused retry의 저장 지연·clock 회귀와 화면 검증 후
 ```
 
-- [저장 확정 뒤 복원 종료 제안](desktop-auth-lifecycle.md#저장-확정-뒤-복원-종료-제안)의 시간 문제로 복원을 마치지 못하면 `restorePaused`로 안내한다. Notice 후보는 `RESTORE_RETRY_REQUIRED`이며, 승인되면 기존 notice allowlist에 추가한다. 현재 승인된 enum으로 취급하지 않는다.
-- 고정 문구는 “로그인 상태 확인을 마치지 못했습니다. 다시 시도해 주세요.”로 제안한다. Network·서버·저장 장애나 인증 상실을 뜻하지 않는다. `user`와 `entry`는 null이고 보호 화면·capture는 열지 않는다.
+- [저장 확정 뒤 복원 종료 제안](desktop-auth-lifecycle.md#저장-확정-뒤-복원-종료-제안)의 시간 문제로 복원을 마치지 못하면 `restorePaused/RESTORE_RETRY_REQUIRED`로 안내한다.
+- 고정 문구는 “로그인 상태 확인을 마치지 못했습니다. 다시 시도해 주세요.”다. Network·서버·저장 장애나 인증 상실을 뜻하지 않는다. `user`와 `entry`는 null이고 보호 화면·capture는 열지 않는다.
 - 처리 종료 뒤 “다시 시도”(`retryAuth`)와 현재 기기 logout을 제공한다. 진행 중에는 복원 중 표시와 중복 실행 차단을 유지하고, 다시 pause로 끝나면 다음 수동 재시도를 제공한다. 저장된 credential만으로 로그인 성공을 표시하지 않는다.
-- 기존 `retryAuth`의 인자 0개·`AuthCommandResult`·snapshot/event 순서와 `ok:true`의 명령 처리 의미를 유지한다. 새 IPC, snapshot field, browser login 또는 자동 재시도를 추가하지 않는다. 이 절과 연결된 lifecycle 제안은 현재 Issue가 substantive contract의 채택과 구현을 허용할 때 같은 PR에 구현할 수 있으며, 그 범위를 명시한 PR의 사용자 merge로 승인·활성화한다. 절차 문구나 link만 수정하면 제안 상태를 유지한다.
+- 기존 `retryAuth`의 인자 0개·`AuthCommandResult`·snapshot/event 순서와 `ok:true`의 명령 처리 의미를 유지한다. 새 IPC, snapshot field, browser login 또는 자동 재시도를 추가하지 않는다. 이 절과 연결된 lifecycle 절은 PR #139의 substantive contract 채택·merge로 active가 됐으며, 제품 구현은 별도 실행 Issue에서 수행한다.
 
 ## 승인된 선택과 서버 별도 결정
 

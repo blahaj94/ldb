@@ -292,6 +292,31 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return false
   }
 
+  function ensureRestoreAccessUsable(
+    credential: SessionCredential,
+    operationGeneration: number
+  ): boolean {
+    const isCurrentGeneration = generation === operationGeneration
+    const hasSameCredential = session.current === credential
+    const canCheckAccess = isCurrentGeneration && hasSameCredential
+    if (!canCheckAccess) {
+      return false
+    }
+
+    const checkedAt = dependencies.clock.read()
+    const isClockTrusted = !checkedAt.discontinuous
+    const isAccessCurrent = checkedAt.wallMs < credential.accessTokenExpiresAtMs
+    const isAccessTrusted = session.isAccessTrusted(credential)
+    const canUseAccess = isClockTrusted && isAccessCurrent && isAccessTrusted
+    if (!canUseAccess) {
+      session.markAccessUntrusted(credential)
+      state.restorePaused('RESTORE_RETRY_REQUIRED')
+      return false
+    }
+
+    return true
+  }
+
   function finishPendingFailure(value: PendingLogin, notice: AuthNotice): void {
     const isCurrent = isCurrentPending(value)
     if (!isCurrent) {
@@ -715,6 +740,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!hasCurrentCredential) {
       return
     }
+    const canUseAccessBeforeVerification = ensureRestoreAccessUsable(
+      currentCredential,
+      operationGeneration
+    )
+    if (!canUseAccessBeforeVerification) {
+      return
+    }
 
     const operation = verification.reserve()
     try {
@@ -725,6 +757,14 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
       const hasSameCredential = session.current === currentCredential
       if (!hasSameCredential) {
+        return
+      }
+
+      const canUseAccessAfterVerification = ensureRestoreAccessUsable(
+        currentCredential,
+        operationGeneration
+      )
+      if (!canUseAccessAfterVerification) {
         return
       }
 
@@ -770,8 +810,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isCurrentAfterRotation) {
       return
     }
-    const hasCurrentCredential = session.current != null
+    const currentCredential = session.current
+    const hasCurrentCredential = currentCredential != null
     if (!hasCurrentCredential) {
+      return
+    }
+    const canUseAccess = ensureRestoreAccessUsable(currentCredential, operationGeneration)
+    if (!canUseAccess) {
       return
     }
     await verifyRestoredUser(operationGeneration)
@@ -1003,7 +1048,10 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
       const checkedAt = dependencies.clock.read()
       const step = selectCredentialRecoveryStep(checkedAt, currentCredential.accessTokenExpiresAtMs)
-      const requiresRefresh = step === 'refresh-credential'
+      const isAccessTrusted = session.isAccessTrusted(currentCredential)
+      const requiresRefreshForTime = step === 'refresh-credential'
+      const requiresRefreshForTrust = !isAccessTrusted
+      const requiresRefresh = requiresRefreshForTime || requiresRefreshForTrust
       if (requiresRefresh) {
         await session.runWriter(async (writer) => {
           await rotateCredential(currentCredential.refreshToken, operationGeneration, writer)

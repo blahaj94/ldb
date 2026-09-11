@@ -1891,6 +1891,84 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut', user: null })
   })
 
+  it.each([
+    ['commit', 'expired'],
+    ['finalize', 'discontinuous']
+  ] as const)(
+    '초기 restore의 %s 대기 뒤 %s이면 확정 R1을 보존하고 시간 문제 retry로 멈춘다',
+    async (stage, clockFailure) => {
+      const harness = createAuthHarness()
+      harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+      const storage = deferred<'confirmed'>()
+      const isCommit = stage === 'commit'
+      if (isCommit) {
+        harness.store.commitWaits.push(storage.promise)
+      } else {
+        harness.store.removeWaits.push(storage.promise)
+      }
+      const coordinator = createAuthCoordinator(harness.dependencies)
+
+      const starting = coordinator.start()
+      const blockedMutation = isCommit
+        ? harness.store.commitCredential
+        : harness.store.removeTransition
+      await vi.waitFor(() => expect(blockedMutation).toHaveBeenCalledTimes(1))
+
+      const isExpired = clockFailure === 'expired'
+      if (isExpired) {
+        harness.clock.elapseWithoutTimers(16 * 60_000)
+      } else {
+        harness.clock.discontinuous = true
+      }
+      storage.resolve('confirmed')
+      await starting
+
+      expect(coordinator.getSnapshot()).toMatchObject({
+        phase: 'restorePaused',
+        notice: 'RESTORE_RETRY_REQUIRED',
+        user: null,
+        entry: null
+      })
+      expect(harness.http.refresh).toHaveBeenCalledTimes(1)
+      expect(harness.http.me).not.toHaveBeenCalled()
+      expect(harness.http.logout).not.toHaveBeenCalled()
+      expect(harness.store.clearCredential).not.toHaveBeenCalled()
+      expect(harness.store.inspection).toEqual({ status: 'ready', refreshToken: REFRESH_1 })
+    }
+  )
+
+  it('restore /me 응답 뒤 clock 신뢰를 잃으면 user를 발행하지 않고 다음 retry에서 R1을 rotation한다', async () => {
+    const harness = createAuthHarness()
+    harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+    const response = deferred<Awaited<ReturnType<typeof harness.http.value.me>>>()
+    harness.http.me.mockImplementationOnce(() => response.promise)
+    const coordinator = createAuthCoordinator(harness.dependencies)
+
+    const starting = coordinator.start()
+    await vi.waitFor(() => expect(harness.http.me).toHaveBeenCalledTimes(1))
+    harness.clock.discontinuous = true
+    response.resolve({ user: { id: USER_ID, nickname: '모험가000001' } })
+    await starting
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'restorePaused',
+      notice: 'RESTORE_RETRY_REQUIRED'
+    })
+    expect(harness.store.inspection).toEqual({ status: 'ready', refreshToken: REFRESH_1 })
+
+    harness.clock.discontinuous = false
+    harness.http.refresh.mockResolvedValueOnce(
+      tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 })
+    )
+    await coordinator.retryAuth()
+
+    expect(harness.http.refresh).toHaveBeenCalledTimes(2)
+    expect(harness.http.refresh).toHaveBeenLastCalledWith(REFRESH_1, expect.any(AbortSignal))
+    expect(harness.http.me).toHaveBeenCalledTimes(2)
+    expect(harness.http.me).toHaveBeenLastCalledWith(ACCESS_2, expect.any(AbortSignal))
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
+  })
+
   it('corrupt/transition recovery는 credential을 사용하지 않고 clear 확인 뒤 재로그인을 요구한다', async () => {
     const harness = createAuthHarness()
     harness.store.inspection = { status: 'recovery-required' }

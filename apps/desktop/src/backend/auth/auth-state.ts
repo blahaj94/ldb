@@ -112,7 +112,9 @@ export class AuthState {
     return this.publishInactive('restoring', null)
   }
 
-  restorePaused(notice: 'NETWORK_UNAVAILABLE' | 'AUTH_SERVICE_UNAVAILABLE'): AuthSnapshot {
+  restorePaused(
+    notice: 'NETWORK_UNAVAILABLE' | 'AUTH_SERVICE_UNAVAILABLE' | 'RESTORE_RETRY_REQUIRED'
+  ): AuthSnapshot {
     this.recovery = 'resume-credential'
     return this.publishInactive('restorePaused', notice)
   }
