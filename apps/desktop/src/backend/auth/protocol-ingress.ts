@@ -40,25 +40,23 @@ export function attachProtocolIngressAfterStart(
   dispatch: ProtocolIngressDispatch,
   isActive: () => boolean = () => true
 ): () => void {
-  let attached = true
-  const startResult = start.then(
-    () => true,
+  let active = true
+  let detach: (() => void) | undefined
+  void start.then(
+    () => {
+      if (!active || !isActive()) {
+        return
+      }
+      detach = ingress.attach(dispatch)
+    },
     () => {
       ingress.dispose()
-      return false
     }
   )
-  const detach = ingress.attach(async (rawReturnUrl) => {
-    const didStart = await startResult
-    if (!didStart || !attached || !isActive()) {
-      return
-    }
-    await dispatch(rawReturnUrl)
-  })
 
   return () => {
-    attached = false
-    detach()
+    active = false
+    detach?.()
   }
 }
 

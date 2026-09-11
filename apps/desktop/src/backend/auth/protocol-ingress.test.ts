@@ -341,8 +341,9 @@ describe('Desktop auth protocol ingress', () => {
     const quitDispatch = vi.fn()
     let active = true
     const start = runtime.start()
-    attachProtocolIngressAfterStart(quitIngress, start, quitDispatch, () => active)
+    const detach = attachProtocolIngressAfterStart(quitIngress, start, quitDispatch, () => active)
     active = false
+    detach()
     quitIngress.dispose()
 
     inspection.resolve({ status: 'empty' })
