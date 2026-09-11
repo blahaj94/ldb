@@ -12,22 +12,31 @@ import {
 function requiredEnvironment(name) {
   const value = process.env[name]
   const hasEnvironmentValue = value != null
-  const isEnvironmentValueEmpty = hasEnvironmentValue && value.length === 0
-  const isEnvironmentValueMissingOrEmpty = !hasEnvironmentValue || isEnvironmentValueEmpty
-  if (isEnvironmentValueMissingOrEmpty) {
+  if (!hasEnvironmentValue) {
     throw new Error(`Missing required environment variable: ${name}`)
   }
+
+  const isEnvironmentValueEmpty = value.length === 0
+  if (isEnvironmentValueEmpty) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+
   return value
 }
 
 async function writeStepSummary(content) {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY
   const hasSummaryPath = summaryPath != null
-  const isSummaryPathEmpty = hasSummaryPath && summaryPath.length === 0
-  const canWriteSummary = hasSummaryPath && !isSummaryPathEmpty
-  if (canWriteSummary) {
-    await appendFile(process.env.GITHUB_STEP_SUMMARY, `${content}\n`)
+  if (!hasSummaryPath) {
+    return
   }
+
+  const isSummaryPathEmpty = summaryPath.length === 0
+  if (isSummaryPathEmpty) {
+    return
+  }
+
+  await appendFile(process.env.GITHUB_STEP_SUMMARY, `${content}\n`)
 }
 
 async function main() {

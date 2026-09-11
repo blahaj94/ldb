@@ -14,11 +14,15 @@ const PROVIDERS = new Map([[codexProvider.id, codexProvider]])
 function requiredEnvironment(name) {
   const value = process.env[name]
   const hasEnvironmentValue = value != null
-  const isEnvironmentValueEmpty = hasEnvironmentValue && value.length === 0
-  const isEnvironmentValueMissingOrEmpty = !hasEnvironmentValue || isEnvironmentValueEmpty
-  if (isEnvironmentValueMissingOrEmpty) {
+  if (!hasEnvironmentValue) {
     throw new Error(`Missing required environment variable: ${name}`)
   }
+
+  const isEnvironmentValueEmpty = value.length === 0
+  if (isEnvironmentValueEmpty) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+
   return value
 }
 
