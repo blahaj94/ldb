@@ -531,6 +531,26 @@ it('profile owner의 예상 밖 restore rejection은 ingress를 닫고 nonzero�
   expect(mocks.disposeIngress).toHaveBeenCalledOnce()
 })
 
+it('정상 quit 뒤의 늦은 restore rejection은 nonzero 종료로 바꾸지 않는다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const pendingStart = deferred<void>()
+  mocks.runtime!.start = vi.fn(() => pendingStart.promise)
+
+  await import('./main')
+  await mocks.bootstrap
+  const beforeQuitRegistration = mocks.appOn.mock.calls.find(([event]) => event === 'before-quit')
+  expect(beforeQuitRegistration).toBeDefined()
+  const beforeQuit = beforeQuitRegistration?.[1] as () => void
+
+  beforeQuit()
+  pendingStart.reject(new Error('Synthetic late restore failure'))
+  await pendingStart.promise.catch(() => undefined)
+  await Promise.resolve()
+
+  expect(mocks.disposeIngress).toHaveBeenCalledOnce()
+  expect(mocks.exit).not.toHaveBeenCalled()
+})
+
 it('profile owner의 post-bootstrap composition 예외는 ingress를 닫고 nonzero로 종료한다', async () => {
   stubTrustedRuntimeEnvironment()
   mocks.registerCapture.mockImplementationOnce(() => {
