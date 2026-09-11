@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   registerWindow: vi.fn(),
   permissionCheck: vi.fn(),
   permissionRequest: vi.fn(),
+  registerCapture: vi.fn(),
   bootstrap: undefined as Promise<void> | undefined,
   createIngress: vi.fn(),
   attachIngress: vi.fn(),
@@ -98,7 +99,7 @@ vi.mock('@electron-toolkit/utils', () => ({
   is: { dev: true }
 }))
 vi.mock('./capture/ipc-handler', () => ({
-  registerCaptureIpc: vi.fn(),
+  registerCaptureIpc: mocks.registerCapture,
   registerCaptureWindow: mocks.registerWindow
 }))
 vi.mock('./auth/protocol-ingress', () => ({
@@ -215,6 +216,10 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
     coordinator: mocks.coordinator,
     getWindow: expect.any(Function),
     documentUrl: 'http://localhost:5173/'
+  })
+  expect(mocks.registerCapture).toHaveBeenCalledExactlyOnceWith(mocks.coordinator, {
+    apiOrigin: 'https://api.synthetic.test',
+    clock: mocks.runtime?.searchClock
   })
   expect(mocks.registerWindow).toHaveBeenCalledExactlyOnceWith(
     expect.anything(),

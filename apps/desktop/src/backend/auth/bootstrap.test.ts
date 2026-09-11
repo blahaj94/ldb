@@ -3,6 +3,7 @@ import { bootstrapAuthRuntime } from './bootstrap'
 import { createAuthHarness, CODE, deferred, REFRESH_0, settle } from './auth-test-fixtures'
 import { AuthHttpFailure } from './http'
 import type { AuthRuntimeConfig } from './runtime-config'
+import type { AuthClock } from './types'
 
 const config: AuthRuntimeConfig = {
   apiOrigin: 'https://api.example.test',
@@ -24,7 +25,11 @@ describe('desktop auth bootstrap', () => {
       operations.push('dependencies:create')
       return harness.dependencies
     })
-    const createSearchClock = vi.fn(() => harness.clock)
+    const searchClock = {
+      read: vi.fn(() => ({ wallMs: 1, monotonicMs: 1, discontinuous: false })),
+      schedule: vi.fn(() => () => undefined)
+    } satisfies AuthClock
+    const createSearchClock = vi.fn(() => searchClock)
     const runtime = await bootstrapAuthRuntime({
       config,
       effects: { announceCredentialAccess, createDependencies, createSearchClock }
@@ -35,7 +40,8 @@ describe('desktop auth bootstrap', () => {
     expect(announceCredentialAccess).toHaveBeenCalledOnce()
     expect(createDependencies).toHaveBeenCalledOnce()
     expect(createSearchClock).toHaveBeenCalledOnce()
-    expect(runtime?.searchClock).toBe(harness.clock)
+    expect(runtime?.searchClock).toBe(searchClock)
+    expect(runtime?.searchClock).not.toBe(harness.dependencies.clock)
 
     await runtime?.start()
     expect(operations).toEqual(['notice:complete', 'dependencies:create', 'store:inspect'])
