@@ -474,6 +474,12 @@ describe('desktop auth runtime config', () => {
         uid: currentUid + uidOffset,
         mode
       } as fs.Stats
+      const trustedAncestorStat = {
+        isDirectory: () => true,
+        isSymbolicLink: () => false,
+        uid: currentUid,
+        mode: 0o700
+      } as fs.Stats
       const application = {
         setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
         getPath: () => userDataPath,
@@ -483,7 +489,7 @@ describe('desktop auth runtime config', () => {
       const filesystem: RuntimeProfileFilesystemDouble = {
         lstatSync: ((path: fs.PathLike) => {
           if (String(path) !== userDataPath) {
-            return fs.lstatSync(path)
+            return trustedAncestorStat
           }
           finalPathReads += 1
           if (finalPathReads === 1) {

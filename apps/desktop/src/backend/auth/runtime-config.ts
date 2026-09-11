@@ -123,9 +123,14 @@ function assertPrivateUserDataDirectory(stat: Stats): void {
   }
 }
 
-function assertDirectory(stat: Stats): void {
+function assertTrustedAncestorDirectory(stat: Stats): void {
   const isDirectory = stat.isDirectory()
-  if (!isDirectory) {
+  const isSymlink = stat.isSymbolicLink()
+  const uid = process.getuid?.()
+  const hasPrivatePosixProtection =
+    uid == null || ((stat.uid === 0 || stat.uid === uid) && (stat.mode & 0o022) === 0)
+  const isTrustedDirectory = isDirectory && !isSymlink && hasPrivatePosixProtection
+  if (!isTrustedDirectory) {
     throw new Error('Trusted userData directory is unavailable.')
   }
 }
@@ -206,7 +211,7 @@ function prepareUserDataDirectory(
         throw error
       }
       const parentPath = pathSemantics.dirname(currentPath)
-      assertDirectory(filesystem.lstatSync(parentPath))
+      assertTrustedAncestorDirectory(filesystem.lstatSync(parentPath))
       assertCanonicalPath(parentPath, filesystem)
       try {
         filesystem.mkdirSync(currentPath, { mode: 0o700 })
@@ -224,7 +229,7 @@ function prepareUserDataDirectory(
     if (isFinalPath) {
       assertPrivateUserDataDirectory(stat)
     } else {
-      assertDirectory(stat)
+      assertTrustedAncestorDirectory(stat)
     }
     assertCanonicalPath(currentPath, filesystem)
     if (created) {
@@ -239,7 +244,7 @@ function prepareUserDataDirectory(
   }
 
   const finalParentPath = pathSemantics.dirname(finalPath)
-  assertDirectory(filesystem.lstatSync(finalParentPath))
+  assertTrustedAncestorDirectory(filesystem.lstatSync(finalParentPath))
   syncDirectory(finalPath, filesystem)
   syncDirectory(finalParentPath, filesystem)
 }
