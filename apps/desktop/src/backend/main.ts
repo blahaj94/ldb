@@ -139,7 +139,7 @@ function beginShutdown(): void {
 }
 
 function exitAfterOwnedAuthFailure(): void {
-  if (ownedAuthFailureExitRequested) {
+  if (isQuitting || ownedAuthFailureExitRequested) {
     return
   }
 

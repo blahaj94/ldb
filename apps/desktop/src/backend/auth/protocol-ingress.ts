@@ -119,7 +119,7 @@ function classifyReturnCandidate(
       const hasUriScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(classificationValue)
       const hasUrlDelimiter = classificationValue.includes('://')
       const isWindowsDrivePath = /^[A-Za-z]:/.test(classificationValue)
-      if ((hasUriScheme || hasUrlDelimiter) && !isWindowsDrivePath) {
+      if (hasUrlDelimiter || (hasUriScheme && !isWindowsDrivePath)) {
         hasUnexpectedUrl = true
       }
       continue
