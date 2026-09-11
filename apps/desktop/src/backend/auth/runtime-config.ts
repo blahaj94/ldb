@@ -148,7 +148,15 @@ function hasPathAlias(path: string, pathSemantics: RuntimePathSemantics): boolea
   const segments = splitNativePath(path.slice(root.length), pathSemantics)
   const hasDotSegment = segments.some((segment) => segment === '.' || segment === '..')
   const hasEmptySegment = segments.some((segment) => segment.length === 0)
-  return hasNonNativeSeparator || hasNonCanonicalSpelling || hasDotSegment || hasEmptySegment
+  const hasWin32NormalizedSegment =
+    pathSemantics.sep === '\\' && segments.some((segment) => /[ .]$/.test(segment))
+  return (
+    hasNonNativeSeparator ||
+    hasNonCanonicalSpelling ||
+    hasDotSegment ||
+    hasEmptySegment ||
+    hasWin32NormalizedSegment
+  )
 }
 
 function directoryChain(path: string, pathSemantics: RuntimePathSemantics): string[] {
