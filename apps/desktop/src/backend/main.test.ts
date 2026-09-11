@@ -146,6 +146,15 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllEnvs())
 
+function stubTrustedRuntimeEnvironment(): void {
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', '/synthetic/ldb-test-profile')
+}
+
 it.each([
   'https://example.test/',
   'data:text/html,synthetic',
@@ -311,6 +320,32 @@ it('single-instance loser는 auth/store/window 초기화 없이 종료한다', a
   expect(mocks.constructWindow).not.toHaveBeenCalled()
 })
 
+it('profile owner의 runtime 구성 실패는 unauthenticated window로 계속하지 않고 종료한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  mocks.bootstrapAuth.mockResolvedValueOnce(null)
+
+  await import('./main')
+  await mocks.bootstrap
+
+  expect(mocks.disposeIngress).toHaveBeenCalledOnce()
+  expect(mocks.exit).toHaveBeenCalledExactlyOnceWith(1)
+  expect(mocks.registerAuth).not.toHaveBeenCalled()
+  expect(mocks.constructWindow).not.toHaveBeenCalled()
+})
+
+it('profile owner의 예상 밖 restore rejection은 ingress를 닫고 nonzero로 종료한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  mocks.runtime!.start = vi.fn(async () => {
+    throw new Error('Synthetic unexpected restore failure')
+  })
+
+  await import('./main')
+  await mocks.bootstrap
+  await vi.waitFor(() => expect(mocks.exit).toHaveBeenCalledExactlyOnceWith(1))
+
+  expect(mocks.disposeIngress).toHaveBeenCalledOnce()
+})
+
 it('URL 없는 second-instance는 기존 창을 표시하고 focus한다', async () => {
   vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
   vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
@@ -337,6 +372,26 @@ it('URL 없는 second-instance는 기존 창을 표시하고 focus한다', async
 
   expect(window.show).toHaveBeenCalledOnce()
   expect(window.focus).toHaveBeenCalledOnce()
+})
+
+it('일반 second-instance의 window 활성화 실패를 Electron event 경계 밖으로 던지지 않는다', async () => {
+  stubTrustedRuntimeEnvironment()
+
+  await import('./main')
+  await mocks.bootstrap
+  const registration = mocks.appOn.mock.calls.find(([event]) => event === 'second-instance')
+  expect(registration).toBeDefined()
+  const listener = registration?.[1] as (
+    event: unknown,
+    commandLine: readonly string[],
+    workingDirectory: string
+  ) => void
+  const window = mocks.windows[0] as { show: ReturnType<typeof vi.fn> }
+  window.show.mockImplementationOnce(() => {
+    throw new Error('Synthetic persistent window activation failure')
+  })
+
+  expect(() => listener({}, ['electron'], '/tmp')).not.toThrow()
 })
 
 it('warm return은 현재 창을 focus하고, 창이 없으면 같은 auth runtime으로 재생성한다', async () => {

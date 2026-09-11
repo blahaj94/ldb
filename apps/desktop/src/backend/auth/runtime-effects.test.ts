@@ -23,7 +23,7 @@ describe('desktop auth runtime effects', () => {
     const store = vi.fn(() => harness.store)
     const effects = createAuthRuntimeEffects({
       config,
-      app: { getPath: () => '/synthetic/user-data' },
+      app: { getPath: () => '/synthetic/later-electron-profile' },
       safeStorage: {
         isEncryptionAvailable: () => true,
         encryptString: (value) => Buffer.from(value),
@@ -44,7 +44,7 @@ describe('desktop auth runtime effects', () => {
     expect(http).toHaveBeenCalledWith({ apiOrigin: config.apiOrigin, fetch })
     expect(store).toHaveBeenCalledWith(
       expect.objectContaining({
-        userDataPath: '/synthetic/user-data',
+        userDataPath: config.userDataPath,
         context: {
           environment: config.environment,
           apiOrigin: config.apiOrigin,

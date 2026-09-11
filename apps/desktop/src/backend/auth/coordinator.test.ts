@@ -2273,8 +2273,8 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
           accessTokenExpiresAt: nextExpiry
         })
       )
-      const nextAuthorization = coordinator.authorization()
       harness.clock.discontinuous = false
+      const nextAuthorization = coordinator.authorization()
       const nextResult = await nextAuthorization
 
       expect(nextResult).toMatchObject({ status: 'available', accessToken: ACCESS_1 })

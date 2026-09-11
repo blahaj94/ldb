@@ -234,6 +234,41 @@ describe('desktop auth runtime config', () => {
     }
   })
 
+  it('classifies an Electron userData readback mismatch as a fatal partial application', () => {
+    const root = createRuntimeProfileRoot()
+    const userDataPath = join(root, 'profile')
+    const otherUserDataPath = join(root, 'other-profile')
+    fs.mkdirSync(userDataPath, { mode: 0o700 })
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: (name: 'userData') => {
+        calls.push(`get-path:${name}`)
+        return otherUserDataPath
+      },
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      expect(() => applyAuthRuntimeProfile(application, config)).toThrow(
+        AuthRuntimeProfileApplicationFailure
+      )
+      expect(calls).toEqual([`path:userData:${userDataPath}`, 'get-path:userData'])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('creates a missing trusted userData directory before setPath', () => {
     const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'new-profile')
