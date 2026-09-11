@@ -209,6 +209,10 @@ describe('Desktop auth protocol ingress', () => {
       ['electron', 'x://auth/return'],
       RETURN_TARGET
     )
+    const controlPrefixedOpaqueUrl = isOrdinarySecondInstanceInvocation(
+      ['electron', '\u0001mailto:user@example.test'],
+      RETURN_TARGET
+    )
     const windowsExecutable = isOrdinarySecondInstanceInvocation(
       ['C:\\Program Files\\LDB\\ldb.exe', '--new-window'],
       RETURN_TARGET
@@ -227,6 +231,7 @@ describe('Desktop auth protocol ingress', () => {
     expect(paddedWrongScheme).toBe(false)
     expect(malformedScheme).toBe(false)
     expect(singleLetterScheme).toBe(false)
+    expect(controlPrefixedOpaqueUrl).toBe(false)
     expect(windowsExecutable).toBe(true)
     expect(windowsDriveRelativePath).toBe(true)
   })
