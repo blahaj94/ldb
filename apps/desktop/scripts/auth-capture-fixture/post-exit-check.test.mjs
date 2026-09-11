@@ -256,7 +256,8 @@ it('actual 진단이 부적합해도 expected 검사를 수행한다', async () 
     kind: 'assertion',
     actual: { started: 'invalid' },
     expected: {},
-    generatedMessage: false
+    generatedMessage: false,
+    extra: 'synthetic-extra-field'
   }
   Object.defineProperty(parsedDiagnostic.expected, 'started', {
     enumerable: true,
