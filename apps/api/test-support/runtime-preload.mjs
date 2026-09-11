@@ -46,8 +46,7 @@ DataSource.prototype.initialize = async function () {
     throw new Error('fixture-sensitive-partial-connect')
   }
   const shouldWaitDuringInitialization = fault === 'initialize-signal'
-  const shouldWaitAndHoldAfterCleanup =
-    !shouldWaitDuringInitialization && fault === 'initialize-signal-hold'
+  const shouldWaitAndHoldAfterCleanup = fault === 'initialize-signal-hold'
   const shouldWaitForSignal = shouldWaitDuringInitialization || shouldWaitAndHoldAfterCleanup
   if (shouldWaitForSignal) {
     // 실제 connecting socket을 대신하는 ref를 유지해야 Node가 await 중 종료하지 않는다.
