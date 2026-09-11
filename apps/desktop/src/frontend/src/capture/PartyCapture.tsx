@@ -25,19 +25,27 @@ function PartyCapture(): React.JSX.Element {
     status,
     ...stableNicknames.map((nickname, slot) => {
       const hasNickname = nickname != null
-      const isNicknameEmpty = hasNickname && nickname.length === 0
-      const shouldDisplayNickname = hasNickname && !isNicknameEmpty
+      if (!hasNickname) {
+        return null
+      }
 
-      return shouldDisplayNickname ? `Slot ${slot + 1}: ${nickname}` : null
+      const isNicknameEmpty = nickname.length === 0
+      if (isNicknameEmpty) {
+        return null
+      }
+
+      return `Slot ${slot + 1}: ${nickname}`
     })
   ]
   const statusText = displayLines
     .filter((line): line is string => {
       const hasLine = line != null
-      const isLineEmpty = hasLine && line.length === 0
-      const shouldDisplayLine = hasLine && !isLineEmpty
+      if (!hasLine) {
+        return false
+      }
 
-      return shouldDisplayLine
+      const isLineEmpty = line.length === 0
+      return !isLineEmpty
     })
     .join('\n')
 
