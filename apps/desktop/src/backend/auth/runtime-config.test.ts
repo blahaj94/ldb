@@ -67,7 +67,32 @@ describe('desktop auth runtime config', () => {
       pathSemantics: typeof win32
     ) => AuthRuntimeConfig | null
     const nativePath = String.raw`C:\Users\Alice\LdbProfile`
-    const separatorAlias = 'C:/Users/Alice/LdbProfile'
+    const separatorAliases = [
+      'C:/Users/Alice/LdbProfile',
+      String.raw`C:/Users\Alice\LdbProfile`,
+      String.raw`C:\Users/Alice\LdbProfile`
+    ]
+
+    expect(
+      readWithPathSemantics({ ...validEnvironment, LDB_AUTH_USER_DATA_PATH: nativePath }, win32)
+    ).toMatchObject({ userDataPath: nativePath })
+    for (const separatorAlias of separatorAliases) {
+      expect(
+        readWithPathSemantics(
+          { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: separatorAlias },
+          win32
+        )
+      ).toBeNull()
+    }
+  })
+
+  it('rejects repeated separators absorbed into a Windows UNC root', () => {
+    const readWithPathSemantics = readAuthRuntimeConfig as unknown as (
+      environment: Record<string, string | undefined>,
+      pathSemantics: typeof win32
+    ) => AuthRuntimeConfig | null
+    const nativePath = String.raw`\\server\share\LdbProfile`
+    const separatorAlias = String.raw`\\server\\share\LdbProfile`
 
     expect(
       readWithPathSemantics({ ...validEnvironment, LDB_AUTH_USER_DATA_PATH: nativePath }, win32)
@@ -80,22 +105,24 @@ describe('desktop auth runtime config', () => {
   it('rejects a Windows separator alias before touching the profile filesystem', () => {
     const touchedPaths: string[] = []
     const calls: string[] = []
+    const rejectFilesystemAccess = (operation: string, target: fs.PathLike | number): never => {
+      touchedPaths.push(`${operation}:${String(target)}`)
+      throw new Error('Synthetic filesystem access')
+    }
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
     const filesystem: RuntimeProfileFilesystemDouble = {
-      lstatSync: ((path: fs.PathLike) => {
-        touchedPaths.push(String(path))
-        throw new Error('Synthetic filesystem access')
-      }) as typeof fs.lstatSync,
-      statSync: fs.statSync,
-      realpathSync: fs.realpathSync.native,
-      mkdirSync: fs.mkdirSync,
-      openSync: fs.openSync,
-      fsyncSync: fs.fsyncSync,
-      closeSync: fs.closeSync
+      lstatSync: ((path: fs.PathLike) =>
+        rejectFilesystemAccess('lstat', path)) as typeof fs.lstatSync,
+      statSync: ((path: fs.PathLike) => rejectFilesystemAccess('stat', path)) as typeof fs.statSync,
+      realpathSync: (path) => rejectFilesystemAccess('realpath', path),
+      mkdirSync: (path) => rejectFilesystemAccess('mkdir', path),
+      openSync: (path) => rejectFilesystemAccess('open', path),
+      fsyncSync: (fd) => rejectFilesystemAccess('fsync', fd),
+      closeSync: (fd) => rejectFilesystemAccess('close', fd)
     }
     const config: AuthRuntimeConfig = {
       apiOrigin: validEnvironment.LDB_AUTH_API_ORIGIN,
