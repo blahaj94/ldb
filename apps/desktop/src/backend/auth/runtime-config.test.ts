@@ -795,6 +795,61 @@ describe('desktop auth runtime config', () => {
     }
   })
 
+  it('repairs an observed concurrent parent entry before creating its missing profile child', () => {
+    const root = createRuntimeProfileRoot()
+    const parent = join(root, 'nested')
+    const userDataPath = join(parent, 'profile')
+    fs.mkdirSync(parent, { mode: 0o700 })
+    const openedPaths: string[] = []
+    let openedPathsAtProfileCreation: string[] = []
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: fs.lstatSync,
+      statSync: fs.statSync,
+      realpathSync: fs.realpathSync.native,
+      mkdirSync: (path, options) => {
+        if (path === userDataPath) {
+          openedPathsAtProfileCreation = [...openedPaths]
+        }
+        fs.mkdirSync(path, options)
+      },
+      openSync: (path, flags) => {
+        openedPaths.push(path)
+        return fs.openSync(path, flags)
+      },
+      fsyncSync: fs.fsyncSync,
+      closeSync: fs.closeSync
+    }
+    const application = {
+      setPath: () => undefined,
+      getPath: () => userDataPath,
+      setName: () => undefined,
+      setAppUserModelId: () => undefined
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble
+      ) => AuthRuntimeConfig
+      applyWithFilesystem(application, config, filesystem)
+
+      expect(openedPathsAtProfileCreation).toContain(parent)
+      expect(openedPathsAtProfileCreation).toContain(root)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('syncs an existing profile directory and its parent before setPath', () => {
     const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'profile')
