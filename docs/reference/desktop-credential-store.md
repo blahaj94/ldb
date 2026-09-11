@@ -3,12 +3,12 @@ type: reference
 status: active
 enforcement: autonomous
 scope: desktop macOS credential adapter and isolated validation
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-11
 ---
 
 # Desktop credential store
 
-`apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`의 `createMacOsCredentialStore`는 기존 `CredentialStore`를 구현한다. Production bootstrap에는 연결하지 않았다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
+`apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`의 `createMacOsCredentialStore`는 기존 `CredentialStore`를 구현한다. 제품 main은 완전하고 유효한 trusted runtime 설정이 있을 때 이 adapter를 auth HTTP, coordinator와 같은 tuple로 구성한다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
 
 Main이 `userDataPath`, trusted `context`와 Electron `safeStorage`를 주입한다. Context는 `environment`, exact HTTPS `apiOrigin`, `clientId:"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. 실제 환경값은 build 설정이 고정하며 renderer에서 받지 않는다. 기본 host가 macOS가 아니면 암호화·파일 작업 전에 거절한다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
 
@@ -51,7 +51,7 @@ Native runner의 `--prepare-only`는 bundle 생성·정리만 하며 Electron/Ke
 
 ## Bootstrap 연결 조건과 남은 gate
 
-단일 main ownership·writer가 확립되고 `app.ready` 이후 접근 안내를 표시한 뒤 실제 safeStorage를 주입해야 한다. 고정된 dev/test/prod profile·API origin·배포 identity와 private root 권한을 확인한다. OS prompt는 동기 safeStorage 호출을 막을 수 있으며 JavaScript timer로 취소된다고 가정하지 않는다. 실제 OAuth와 production 저장 활성화는 별도 통합 범위다.
+제품 main은 single-instance lock 전에 app identity와 private userData profile을 적용하고, `app.ready` 이후 접근 안내를 표시한 뒤 실제 safeStorage를 주입한다. 설정이 없거나 잘못되면 adapter, auth HTTP와 coordinator를 생성하지 않는다. 고정된 dev/test/prod profile·API origin·배포 identity와 private root 권한의 실제 값은 아직 확인하지 않았다. OS prompt는 동기 safeStorage 호출을 막을 수 있으며 JavaScript timer로 취소된다고 가정하지 않는다. 실제 OAuth, packaged app과 production 저장 검증은 별도 통합 범위다.
 
 확인한 고정 조합은 Electron **39.8.10**, Node **22.22.1**, libuv **1.51.0**이다. [Electron DEPS](https://raw.githubusercontent.com/electron/electron/v39.8.10/DEPS)와 설치 runtime을 대조했다. [Node의 libuv Apple 구현](https://raw.githubusercontent.com/nodejs/node/v22.22.1/deps/uv/src/unix/fs.c)은 `FileHandle.sync()` 경로에서 `F_FULLFSYNC`, 실패 시 `F_BARRIERFSYNC`, 다시 실패 시 `fsync`를 사용한다. JavaScript 성공은 선택된 fallback을 알려 주지 않으므로 실제 filesystem의 directory durability·전원 손실 보장을 증명하지 않는다.
 

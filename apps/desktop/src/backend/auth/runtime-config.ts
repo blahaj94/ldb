@@ -67,6 +67,15 @@ function isMissing(error: unknown): boolean {
   return error.code === 'ENOENT'
 }
 
+function isAlreadyExists(error: unknown): boolean {
+  const hasError = error != null
+  if (!hasError || typeof error !== 'object' || !('code' in error)) {
+    return false
+  }
+
+  return error.code === 'EEXIST'
+}
+
 function assertPrivateUserDataDirectory(stat: Stats): void {
   const isDirectory = stat.isDirectory()
   const isSymlink = stat.isSymbolicLink()
@@ -140,7 +149,14 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
       if (!isMissingPath) {
         throw error
       }
-      filesystem.mkdirSync(currentPath, { mode: 0o700 })
+      try {
+        filesystem.mkdirSync(currentPath, { mode: 0o700 })
+      } catch (mkdirError) {
+        const wasCreatedConcurrently = isAlreadyExists(mkdirError)
+        if (!wasCreatedConcurrently) {
+          throw mkdirError
+        }
+      }
       stat = filesystem.lstatSync(currentPath)
       created = true
     }
