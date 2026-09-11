@@ -68,8 +68,11 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       }
       const isSignedIn = snapshot.phase === 'signedIn'
       // React가 여러 auth event를 한 render로 합쳐도 이전 home을 재사용하지 않는다.
-      if (wasSignedIn === true && !isSignedIn) {
-        presentationEpochRef.current += 1
+      if (hasCurrent) {
+        const hasLeftSignedIn = wasSignedIn === true && !isSignedIn
+        if (hasLeftSignedIn) {
+          presentationEpochRef.current += 1
+        }
       }
       current = snapshot
       setState({
