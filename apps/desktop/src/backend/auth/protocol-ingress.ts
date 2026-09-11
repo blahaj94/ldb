@@ -105,6 +105,7 @@ function classifyReturnCandidate(
 ): ReturnCandidateClassification {
   let candidate = ''
   let candidateCount = 0
+  let hasUnexpectedUrl = false
   for (const value of values) {
     const isString = typeof value === 'string'
     if (!isString) {
@@ -114,11 +115,20 @@ function classifyReturnCandidate(
     const protocolPrefix = value.slice(0, returnProtocol.length).toLowerCase()
     const hasReturnProtocol = protocolPrefix === returnProtocol
     if (!hasReturnProtocol) {
+      const hasUriScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
+      const isWindowsDrivePath = /^[A-Za-z]:[\\/]/.test(value)
+      if (hasUriScheme && !isWindowsDrivePath) {
+        hasUnexpectedUrl = true
+      }
       continue
     }
 
     candidateCount += 1
     candidate = value
+  }
+
+  if (hasUnexpectedUrl) {
+    return { status: 'invalid' }
   }
 
   const hasNoCandidate = candidateCount === 0
