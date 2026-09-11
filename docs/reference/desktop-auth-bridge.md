@@ -62,4 +62,4 @@ git diff --check
 
 Unit 경계 검증, 실제 Electron smoke, 수동 UI 확인은 별도 evidence다. Build에는 기존 node/web typecheck가 포함되며 fixture의 전용 TypeScript/build는 별도로 실행한다. 실행한 exact revision·결과와 review는 Issue #116과 해당 PR에서 관리한다.
 
-미결정 restore 종료 정책을 fixture로 선택하거나 새 notice를 만들지 않는다. Fake store는 빈 상태로 시작하며 복원 경로를 제공하지 않는다. 안전한 실제 저장소·protocol·서버/provider·capture 통합과 다른 OS/package 검증은 후속 작업이다. Sandbox fixture 성공으로 production capture/OCR 호환성이나 native 인증 완료를 주장하지 않는다.
+Fixture는 제품 restore 종료 정책을 다시 선택하거나 새 notice를 만들지 않는다. Fake store는 빈 상태로 시작하므로 제품 main에 연결된 profile·store restore·protocol·capture composition의 native 성공을 검증하지 않는다. 실제 저장소 durability와 ACL, OS protocol registry, 서버/provider 및 다른 OS/package 검증은 후속 gate다. Sandbox fixture 성공으로 production capture/OCR 호환성이나 native 인증 완료를 주장하지 않는다.

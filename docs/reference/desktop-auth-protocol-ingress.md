@@ -63,7 +63,7 @@ detachProtocol?.()
 ingress.dispose()
 ```
 
-실제 composition에서는 `returnTarget`, coordinator의 시작과 window 초기화 사이의 입력 보관을 유지해야 한다. 초기 restore가 실패하거나 quit이 시작되면 보관된 return을 전달하지 않는다. lock loser 경로에서 store/network/window를 만들지 않고, cold input을 pending login의 증거로 승격하지 않으며, warm 또는 창 없는 복귀를 임의 navigation으로 바꾸지 않는다. `app.whenReady()`를 기다리기 전 listener 등록은 macOS `open-url` 유실을 줄이지만 packaged cold/warm·다중 instance·실제 OS association 성공을 증명하지 않는다.
+실제 composition에서는 `returnTarget`, coordinator의 시작과 window 초기화 사이의 입력 보관을 유지해야 한다. 초기 restore가 실패하거나 quit이 시작되면 보관된 return을 전달하지 않는다. lock loser 경로에서 store/network/window를 만들지 않고, cold input을 pending login의 증거로 승격하지 않으며, warm 또는 창 없는 복귀를 임의 navigation으로 바꾸지 않는다. URL 없는 정상 `second-instance`도 기존 local window를 표시하고 focus하며, protocol return dispatch는 coordinator 처리를 먼저 시작한 뒤 window를 표시·focus한다. Window 활성화가 실패해도 이미 시작한 callback 처리는 기다리므로 유효 return을 UI side effect 때문에 버리지 않는다. `app.whenReady()`를 기다리기 전 listener 등록은 macOS `open-url` 유실을 줄이지만 packaged cold/warm·다중 instance·실제 OS association 성공을 증명하지 않는다.
 
 ## 검증 범위
 

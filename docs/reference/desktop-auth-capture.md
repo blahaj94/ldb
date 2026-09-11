@@ -33,7 +33,7 @@ Renderer는 accepted signedIn 이탈을 별도 presentation epoch로 기록하�
 
 Main은 auth 이탈 알림에서 선택을 직접 지우며 trusted renderer의 빈 source 선택은 인증 phase와 무관하게 허용한다. 다른 window/frame/document의 cleanup 요청은 거절한다. 재로그인은 source와 Start를 다시 요구한다. Capture의 이전 AbortSignal이 취소되면 늦은 OCR은 새 instance의 상태를 변경하거나 안정화 통지를 보내지 않는다. IPC 발송 뒤 main 권한이 이탈해 생긴 통지 거절도 raw error log 없이 회수한다.
 
-`notifyStableNicknameDetected`는 captureId·slot·observationRevision·nickname을 받아 현재 수명의 검색으로 연결한다. Main의 HTTP/전체 응답 검증과 renderer의 네 슬롯 후보·retry 구현은 [캐릭터 검색](desktop-character-search.md)을 참고한다. Raw OCR nickname은 log에 남기지 않는다. Profile과 [남은 restore/native 정책](desktop-auth-core.md)은 별도 작업이다.
+`notifyStableNicknameDetected`는 captureId·slot·observationRevision·nickname을 받아 현재 수명의 검색으로 연결한다. Main의 HTTP/전체 응답 검증과 renderer의 네 슬롯 후보·retry 구현은 [캐릭터 검색](desktop-character-search.md)을 참고한다. Raw OCR nickname은 log에 남기지 않는다. 제품 main은 trusted profile·auth restore·capture/search composition을 연결하며, 실제 API/provider와 profile ACL·durability를 포함한 남은 native gate는 [Desktop auth core](desktop-auth-core.md)를 따른다.
 
 ## 격리 Electron fixture
 
