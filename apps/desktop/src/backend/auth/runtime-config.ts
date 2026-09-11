@@ -1,4 +1,6 @@
+import * as fs from 'node:fs'
 import { isAbsolute, parse } from 'node:path'
+import type { Stats } from 'node:fs'
 import { validateApiOrigin, validateReturnTarget } from './protocol'
 import type { AuthProvider } from './types'
 
@@ -53,6 +55,42 @@ function readProviders(environment: RuntimeEnvironment): readonly AuthProvider[]
   return providers
 }
 
+function isMissing(error: unknown): boolean {
+  const hasError = error != null
+  if (!hasError || typeof error !== 'object' || !('code' in error)) {
+    return false
+  }
+
+  return error.code === 'ENOENT'
+}
+
+function assertPrivateUserDataDirectory(stat: Stats): void {
+  const isDirectory = stat.isDirectory()
+  const isSymlink = stat.isSymbolicLink()
+  const uid = process.getuid?.()
+  const hasPrivatePosixProtection =
+    uid == null || (stat.uid === uid && (stat.mode & 0o7777) === 0o700)
+  const isTrustedDirectory = isDirectory && !isSymlink && hasPrivatePosixProtection
+  if (!isTrustedDirectory) {
+    throw new Error('Trusted userData directory is unavailable.')
+  }
+}
+
+function prepareUserDataDirectory(path: string): void {
+  let stat: Stats
+  try {
+    stat = fs.lstatSync(path)
+  } catch (error) {
+    const isMissingPath = isMissing(error)
+    if (!isMissingPath) {
+      throw error
+    }
+    fs.mkdirSync(path, { recursive: true, mode: 0o700 })
+    stat = fs.lstatSync(path)
+  }
+  assertPrivateUserDataDirectory(stat)
+}
+
 export function readAuthRuntimeConfig(
   environment: RuntimeEnvironment = process.env
 ): AuthRuntimeConfig | null {
@@ -102,6 +140,7 @@ export function applyAuthRuntimeProfile(
   application: AuthRuntimeProfileApplication,
   config: AuthRuntimeConfig
 ): void {
+  prepareUserDataDirectory(config.userDataPath)
   application.setPath('userData', config.userDataPath)
   application.setName(config.appIdentity)
   application.setAppUserModelId(config.appIdentity)

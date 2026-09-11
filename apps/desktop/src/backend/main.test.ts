@@ -14,6 +14,20 @@ const mocks = vi.hoisted(() => ({
   disposeIngress: vi.fn(),
   createEffects: vi.fn(),
   bootstrapAuth: vi.fn(),
+  applyProfile: vi.fn(
+    (
+      application: {
+        setPath(name: 'userData', path: string): void
+        setName(name: string): void
+        setAppUserModelId(id: string): void
+      },
+      config: { userDataPath: string; appIdentity: string }
+    ) => {
+      application.setPath('userData', config.userDataPath)
+      application.setName(config.appIdentity)
+      application.setAppUserModelId(config.appIdentity)
+    }
+  ),
   registerAuth: vi.fn(),
   setPath: vi.fn(),
   setName: vi.fn(),
@@ -88,6 +102,11 @@ vi.mock('./auth/protocol-ingress', () => ({
 vi.mock('./auth/runtime-effects', () => ({
   createAuthRuntimeEffects: mocks.createEffects
 }))
+vi.mock('./auth/runtime-config', async () => {
+  const actual =
+    await vi.importActual<typeof import('./auth/runtime-config')>('./auth/runtime-config')
+  return { ...actual, applyAuthRuntimeProfile: mocks.applyProfile }
+})
 vi.mock('./auth/bootstrap', () => ({
   bootstrapAuthRuntime: mocks.bootstrapAuth
 }))
