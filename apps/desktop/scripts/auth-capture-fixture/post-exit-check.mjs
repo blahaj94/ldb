@@ -107,12 +107,27 @@ function isDiagnosticValue(value, type) {
     return false
   }
   if (type === 'mask') {
-    return value >= 0 && value <= 15
+    const isNonnegative = value >= 0
+    if (!isNonnegative) {
+      return false
+    }
+    return value <= 15
   }
   if (type === 'slot-count') {
-    return value >= 0 && value <= 4
+    const isNonnegative = value >= 0
+    if (!isNonnegative) {
+      return false
+    }
+    return value <= 4
   }
-  return type === 'request-delta' && value >= -20 && value <= 20
+  if (type !== 'request-delta') {
+    return false
+  }
+  const hasMinimum = value >= -20
+  if (!hasMinimum) {
+    return false
+  }
+  return value <= 20
 }
 
 /** @returns {Record<string, unknown> | null} */
@@ -127,13 +142,16 @@ function readSearchDiagnostic(output) {
   try {
     const value = JSON.parse(lines[0].slice(prefix.length))
     const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
+    if (!isObject) {
+      return null
+    }
     const keys = ['stage', 'check', 'kind', 'actual', 'expected', 'generatedMessage']
-    const hasExactKeys = isObject && Object.keys(value).length === keys.length
-    const hasKnownStage = hasExactKeys && value.stage === 'mixed'
+    const hasExactKeys = Object.keys(value).length === keys.length
+    const hasKnownStage = hasExactKeys ? value.stage === 'mixed' : false
     const definition = hasKnownStage ? searchDiagnosticDefinitions[value.check] : null
     const hasDefinition = definition != null
     const hasKnownKind = value.kind === 'assertion' || value.kind === 'deadline'
-    const hasAllowedKind = hasDefinition && definition.kinds.includes(value.kind)
+    const hasAllowedKind = hasDefinition ? definition.kinds.includes(value.kind) : false
     const hasGeneratedMessage =
       (value.kind === 'assertion' && typeof value.generatedMessage === 'boolean') ||
       (value.kind === 'deadline' && value.generatedMessage === null)
@@ -143,19 +161,21 @@ function readSearchDiagnostic(output) {
     const actualKeys = Object.keys(definition.actual)
     const actualIsObject =
       value.actual != null && typeof value.actual === 'object' && !Array.isArray(value.actual)
-    const hasExactActualKeys =
-      actualIsObject && Object.keys(value.actual).length === actualKeys.length
-    const hasValidActual =
-      hasExactActualKeys &&
-      actualKeys.every((key) => isDiagnosticValue(value.actual[key], definition.actual[key]))
+    const hasExactActualKeys = actualIsObject
+      ? Object.keys(value.actual).length === actualKeys.length
+      : false
+    const hasValidActual = hasExactActualKeys
+      ? actualKeys.every((key) => isDiagnosticValue(value.actual[key], definition.actual[key]))
+      : false
     const expectedKeys = Object.keys(definition.expected)
     const expectedIsObject =
       value.expected != null && typeof value.expected === 'object' && !Array.isArray(value.expected)
-    const hasExactExpectedKeys =
-      expectedIsObject && Object.keys(value.expected).length === expectedKeys.length
-    const hasExpectedValues =
-      hasExactExpectedKeys &&
-      expectedKeys.every((key) => value.expected[key] === definition.expected[key])
+    const hasExactExpectedKeys = expectedIsObject
+      ? Object.keys(value.expected).length === expectedKeys.length
+      : false
+    const hasExpectedValues = hasExactExpectedKeys
+      ? expectedKeys.every((key) => value.expected[key] === definition.expected[key])
+      : false
     if (!hasValidActual || !hasExpectedValues) {
       return null
     }
@@ -186,10 +206,14 @@ function readSearchEvidence(output) {
   try {
     const value = JSON.parse(lines[0].slice(prefix.length))
     const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
+    if (!isObject) {
+      return null
+    }
     const keys = Object.keys(expectedSearchEvidence)
-    const hasExactCount = isObject && Object.keys(value).length === keys.length
-    const hasRequiredValues =
-      hasExactCount && keys.every((key) => value[key] === expectedSearchEvidence[key])
+    const hasExactCount = Object.keys(value).length === keys.length
+    const hasRequiredValues = hasExactCount
+      ? keys.every((key) => value[key] === expectedSearchEvidence[key])
+      : false
     if (!hasRequiredValues) {
       return null
     }
@@ -227,15 +251,24 @@ function reportSearchStages(output, { reportDiagnostic }) {
       const value = JSON.parse(line.slice(prefix.length))
       const keys = ['samples', 'overflowCount', 'themeMismatchCount']
       const isObject = value != null && typeof value === 'object' && !Array.isArray(value)
-      const hasExactKeys = isObject && Object.keys(value).length === keys.length
-      const hasCounts =
-        hasExactKeys &&
-        keys.every((key) => {
-          const isSafeInteger = Number.isSafeInteger(value[key])
-          const isNonnegative = isSafeInteger && value[key] >= 0
-          const isWithinSampleLimit = isNonnegative && value[key] <= 4
-          return isWithinSampleLimit
-        })
+      if (!isObject) {
+        continue
+      }
+      const hasExactKeys = Object.keys(value).length === keys.length
+      const hasCounts = hasExactKeys
+        ? keys.every((key) => {
+            const isSafeInteger = Number.isSafeInteger(value[key])
+            if (!isSafeInteger) {
+              return false
+            }
+            const isNonnegative = value[key] >= 0
+            if (!isNonnegative) {
+              return false
+            }
+            const isWithinSampleLimit = value[key] <= 4
+            return isWithinSampleLimit
+          })
+        : false
       if (hasCounts) {
         const counts = Object.fromEntries(keys.map((key) => [key, value[key]]))
         console.log(`Capture fixture layout evidence: ${JSON.stringify(counts)}`)
