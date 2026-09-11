@@ -89,6 +89,8 @@ vi.mock('electron', () => ({
     }
     loadURL = mocks.loadURL
     loadFile = mocks.loadFile
+    isMinimized = vi.fn(() => false)
+    restore = vi.fn()
     show = vi.fn()
     focus = vi.fn()
   }
@@ -372,6 +374,36 @@ it('URL 없는 second-instance는 기존 창을 표시하고 focus한다', async
 
   expect(window.show).toHaveBeenCalledOnce()
   expect(window.focus).toHaveBeenCalledOnce()
+})
+
+it('URL 없는 second-instance는 최소화된 기존 창을 복원한 뒤 표시하고 focus한다', async () => {
+  stubTrustedRuntimeEnvironment()
+
+  await import('./main')
+  await mocks.bootstrap
+  const registration = mocks.appOn.mock.calls.find(([event]) => event === 'second-instance')
+  expect(registration).toBeDefined()
+  const listener = registration?.[1] as (
+    event: unknown,
+    commandLine: readonly string[],
+    workingDirectory: string
+  ) => void
+  const window = mocks.windows[0] as {
+    isMinimized: ReturnType<typeof vi.fn>
+    restore: ReturnType<typeof vi.fn>
+    show: ReturnType<typeof vi.fn>
+    focus: ReturnType<typeof vi.fn>
+  }
+  window.isMinimized.mockReturnValue(true)
+
+  listener({}, ['electron'], '/tmp')
+
+  expect(window.restore).toHaveBeenCalledOnce()
+  expect(window.show).toHaveBeenCalledOnce()
+  expect(window.focus).toHaveBeenCalledOnce()
+  expect(window.restore.mock.invocationCallOrder[0]).toBeLessThan(
+    window.show.mock.invocationCallOrder[0]
+  )
 })
 
 it('일반 second-instance의 window 활성화 실패를 Electron event 경계 밖으로 던지지 않는다', async () => {
