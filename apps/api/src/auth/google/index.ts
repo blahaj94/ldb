@@ -100,9 +100,11 @@ function verifyGoogleClaims(
     throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
   }
   const hasAuthorizedParty = payload.azp !== undefined
-  const hasWrongAuthorizedParty = hasAuthorizedParty && payload.azp !== snapshot.expectedAudience
-  if (hasWrongAuthorizedParty) {
-    throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+  if (hasAuthorizedParty) {
+    const isAuthorizedPartyMismatch = payload.azp !== snapshot.expectedAudience
+    if (isAuthorizedPartyMismatch) {
+      throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+    }
   }
 
   const checkedAt = Math.floor(Date.now() / 1000)
@@ -279,8 +281,13 @@ export function createGoogleProviderVerifier(
           }
           const resolvedRegistration = registrations.get(providerInput.snapshot.version)
           const hasRegistration = resolvedRegistration != null
-          const hasMatchingSnapshot =
-            hasRegistration && sameSnapshot(resolvedRegistration.snapshot, providerInput.snapshot)
+          if (!hasRegistration) {
+            throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
+          }
+          const hasMatchingSnapshot = sameSnapshot(
+            resolvedRegistration.snapshot,
+            providerInput.snapshot
+          )
           if (!hasMatchingSnapshot) {
             throw new LoginFailure(LOGIN_ERRORS.PROVIDER)
           }
