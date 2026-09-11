@@ -1371,6 +1371,32 @@ describe('Desktop AuthCoordinator login', () => {
     expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn' })
   })
 
+  it('callback claim hook의 비동기 결과도 관찰하고 exchange와 분리한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    let observed = false
+    let calls = 0
+    const activation = Object.defineProperty({}, 'then', {
+      get: () => {
+        observed = true
+        return undefined
+      }
+    }) as Promise<void>
+    const onClaimed = () => {
+      calls += 1
+      return activation
+    }
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, onClaimed)
+
+    expect(calls).toBe(1)
+    expect(observed).toBe(true)
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn' })
+  })
+
   it.each(['success', 'cancel-recover'] as const)(
     '거절 clear 완료의 동기 listener에서 다른 callback으로 writer를 인계한다: %s',
     async (outcome) => {
