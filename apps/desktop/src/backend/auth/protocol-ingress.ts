@@ -112,14 +112,23 @@ function classifyReturnCandidate(
       continue
     }
 
+    const hasUrlDelimiter = value.includes('://')
+    const isWindowsAbsoluteDrivePath = /^[A-Za-z]:[\\/](?![\\/])/.test(value)
+    if (isWindowsAbsoluteDrivePath && !hasUrlDelimiter) {
+      continue
+    }
+
     const protocolPrefix = value.slice(0, returnProtocol.length).toLowerCase()
     const hasReturnProtocol = protocolPrefix === returnProtocol
     if (!hasReturnProtocol) {
-      const classificationValue = value.trimStart()
-      const hasUriScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(classificationValue)
-      const hasUrlDelimiter = classificationValue.includes('://')
-      const isWindowsDrivePath = /^[A-Za-z]:/.test(classificationValue)
-      if (hasUrlDelimiter || (hasUriScheme && !isWindowsDrivePath)) {
+      let hasParsedUrl = false
+      try {
+        new URL(value)
+        hasParsedUrl = true
+      } catch {
+        hasParsedUrl = false
+      }
+      if (hasUrlDelimiter || hasParsedUrl) {
         hasUnexpectedUrl = true
       }
       continue

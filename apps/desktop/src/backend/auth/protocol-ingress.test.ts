@@ -164,6 +164,22 @@ describe('Desktop auth protocol ingress', () => {
     expect(activate).not.toHaveBeenCalled()
   })
 
+  it('one-letter scheme도 Windows absolute executable과 구분해 exact 복귀만 전달한다', () => {
+    const returnTarget = 'c://auth/return'
+    const rawReturnUrl = `${returnTarget}?code=${CODE}`
+    const app = createApp()
+    const dispatch = vi.fn()
+    const ingress = createProtocolIngress({
+      app,
+      argv: ['C:\\Program Files\\LDB\\ldb.exe', rawReturnUrl],
+      returnTarget
+    })
+
+    ingress.attach(dispatch, vi.fn())
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith(rawReturnUrl)
+  })
+
   it('second-instance malformed 또는 복수 복귀 후보는 auth와 일반 활성화를 모두 거절한다', () => {
     const app = createApp()
     const dispatch = vi.fn()
@@ -238,7 +254,7 @@ describe('Desktop auth protocol ingress', () => {
     expect(controlPrefixedOpaqueUrl).toBe(false)
     expect(internallyPaddedOpaqueUrl).toBe(false)
     expect(windowsExecutable).toBe(true)
-    expect(windowsDriveRelativePath).toBe(true)
+    expect(windowsDriveRelativePath).toBe(false)
   })
 
   it('일반 활성화 예외를 EventEmitter 밖으로 전파하지 않고 detach 뒤 요청도 하나만 보존한다', () => {

@@ -185,8 +185,4 @@ describe('Desktop auth PKCE와 URL 경계', () => {
       expect(() => parseReturnUrl(`${target}?code=${CODE}`, target)).toThrow()
     }
   )
-
-  it('Windows drive prefix와 충돌하는 one-letter private scheme을 거절한다', () => {
-    expect(() => validateReturnTarget('x://auth/return')).toThrow(AuthProtocolFailure)
-  })
 })
