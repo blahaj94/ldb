@@ -34,9 +34,10 @@ last-reviewed: 2026-09-11
 
 ## Composition 인계 예시
 
-제품 `main.ts`는 다음 순서를 유지한다. Trusted return target이 있을 때만 ready 이전에 ingress를 만들고, owner 확인 뒤 저장소 접근 안내와 coordinator 시작을 수행한다.
+제품 `main.ts`는 다음 순서를 유지한다. 완전한 trusted identity/profile tuple을 ready 이전에 적용하고 그 다음 ingress를 만든다. Owner 확인 뒤 ready에서 저장소 접근 안내와 coordinator dependency를 구성하며, window·IPC·activate를 연결한 다음 restore `start()`를 호출한다.
 
 ```ts
+applyAuthRuntimeProfile(app, config)
 const ingress = createProtocolIngress({ app, argv: process.argv, returnTarget })
 if (!ingress.ownsInstance) {
   return
@@ -44,13 +45,13 @@ if (!ingress.ownsInstance) {
 
 await app.whenReady()
 const runtime = await bootstrapAuthRuntime({ config, effects })
-if (runtime == null) {
-  return
-}
-const detachProtocol = ingress.attach(dispatchReturnUrlAndFocusWindow)
+registerWindowAndIpc(runtime)
+registerActivateLifecycle(runtime)
+void runtime?.start()
+const detachProtocol = runtime == null ? undefined : ingress.attach(dispatchReturnUrlAndFocusWindow)
 
 // window·IPC composition이 끝난 뒤 종료 시 다음을 실행한다.
-detachProtocol()
+detachProtocol?.()
 ingress.dispose()
 ```
 
