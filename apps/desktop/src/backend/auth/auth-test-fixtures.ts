@@ -101,7 +101,11 @@ export class FakeClock implements AuthClock {
 
     const dueTasks = this.scheduled.filter((task) => {
       const isActive = !task.cancelled
-      const hasReachedRunTime = isActive && task.at <= this.monotonicMs
+      if (!isActive) {
+        return false
+      }
+
+      const hasReachedRunTime = task.at <= this.monotonicMs
 
       return hasReachedRunTime
     })
