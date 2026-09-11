@@ -668,6 +668,8 @@ it('actual ingress는 malformed, 복수, pending 없는 callback에 window side 
     ['electron', returnUrl, `ldb-synthetic://auth/return?code=${otherCode}`],
     '/tmp'
   )
+  secondInstance({}, ['electron', 'ldb-wrong://auth/return'], '/tmp')
+  secondInstance({}, ['electron', 'https://example.test/auth/return'], '/tmp')
   await Promise.resolve()
 
   expect(mocks.coordinator.handleReturnUrl).not.toHaveBeenCalled()

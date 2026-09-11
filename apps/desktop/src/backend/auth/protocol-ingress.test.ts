@@ -189,11 +189,21 @@ describe('Desktop auth protocol ingress', () => {
       ['electron', returnUrl(), returnUrl(OTHER_CODE)],
       RETURN_TARGET
     )
+    const wrongScheme = isOrdinarySecondInstanceInvocation(
+      ['electron', 'ldb-wrong://auth/return'],
+      RETURN_TARGET
+    )
+    const webUrl = isOrdinarySecondInstanceInvocation(
+      ['electron', 'https://example.test/auth/return'],
+      RETURN_TARGET
+    )
 
     expect(ordinary).toBe(true)
     expect(validReturn).toBe(false)
     expect(malformedReturn).toBe(false)
     expect(multipleReturns).toBe(false)
+    expect(wrongScheme).toBe(false)
+    expect(webUrl).toBe(false)
   })
 
   it('일반 활성화 예외를 EventEmitter 밖으로 전파하지 않고 detach 뒤 요청도 하나만 보존한다', () => {
@@ -245,12 +255,9 @@ describe('Desktop auth protocol ingress', () => {
     const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
     ingress.attach(dispatch, activate)
 
-    app.emit(
-      'second-instance',
-      {},
-      ['electron', '--', '/Applications/ldb.app', 'https://example.test'],
-      '/tmp'
-    )
+    app.emit('second-instance', {}, ['electron', '--', '/Applications/ldb.app'], '/tmp')
+    app.emit('second-instance', {}, ['electron', 'https://example.test'], '/tmp')
+    app.emit('second-instance', {}, ['electron', 'ldb-wrong://auth/return'], '/tmp')
     app.emit('second-instance', {}, ['electron', `${RETURN_TARGET}?code=short`], '/tmp')
     app.emit(
       'second-instance',
