@@ -6,9 +6,12 @@ import { installObservation } from './observe'
 import type { CaptureObservation } from './capture-observation'
 import { createCaptureActions, until, type Observation } from './actions'
 
-const sandboxInspectionSource = `(() => {
+export const sandboxInspectionSource = `(() => {
   const hasNoElectron = typeof window.electron === "undefined";
-  const hasNoRequire = hasNoElectron && typeof window.require === "undefined";
+  if (!hasNoElectron) {
+    return false;
+  }
+  const hasNoRequire = typeof window.require === "undefined";
   return hasNoRequire;
 })()`
 
