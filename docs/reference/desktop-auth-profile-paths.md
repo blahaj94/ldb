@@ -27,4 +27,4 @@ POSIX UID를 조회할 수 없는 환경에서는 mode bits로 owner·ACL을 추
 
 이 검사는 관측 시점의 path entry와 POSIX owner/mode 조건을 보수적으로 제한하고 기존 native canonical·leaf `0700`·directory durability 검사를 유지한다. 확장 ACL, macOS inherited ACL, Windows ACL/reparse point, 다른 process가 검증 후 inode를 교체하는 경쟁, 모든 filesystem의 power-loss durability를 mode bits나 주입 filesystem test만으로 증명하지 않는다. 실제 OS와 packaged profile의 native 검증은 release gate다.
 
-관련 보수적 POSIX 정책의 채택안은 [Desktop Authentication Platform](../rules/desktop-auth-platform.md#posix-profile-ancestor-permissions-proposed)에서 관리한다.
+관련 보수적 POSIX 정책과 사용자 merge 후 적용 경계는 [Desktop Authentication Platform](../rules/desktop-auth-platform.md#posix-profile-ancestor-permissions)에서 관리한다.
