@@ -182,13 +182,23 @@ export class CaptureSearchLifetime {
     const error = slot.error
     const isFailure = slot.state === 'failure'
     const hasError = error != null
-    const canRetry = isFailure && hasError && SEARCH_ERRORS[error.code].retryable
-    if (!canRetry) {
+    if (!isFailure) {
+      return this.result('SEARCH_RETRY_NOT_READY')
+    }
+    if (!hasError) {
+      return this.result('SEARCH_RETRY_NOT_READY')
+    }
+    const isRetryable = SEARCH_ERRORS[error.code].retryable
+    if (!isRetryable) {
       return this.result('SEARCH_RETRY_NOT_READY')
     }
     const wait = this.rateWaits[input.slot]
     const hasWait = wait != null
-    const isWaiting = hasWait && remainingRetryAfter(wait) > 0
+    let isWaiting = false
+    if (hasWait) {
+      const remaining = remainingRetryAfter(wait)
+      isWaiting = remaining > 0
+    }
     if (isWaiting) {
       return this.result('SEARCH_RETRY_NOT_READY')
     }
@@ -226,9 +236,15 @@ export class CaptureSearchLifetime {
     this.cancelSlot(input.slot)
     const binding = this.binding
     const hasBinding = binding != null
-    const hasSameCapture = hasBinding && binding.captureId === input.captureId
-    const canStart = hasSameCapture && this.options.isCurrent(binding)
-    if (!canStart) {
+    if (!hasBinding) {
+      return this.result('STALE_SEARCH')
+    }
+    const hasSameCapture = binding.captureId === input.captureId
+    if (!hasSameCapture) {
+      return this.result('STALE_SEARCH')
+    }
+    const hasPermission = this.options.isCurrent(binding)
+    if (!hasPermission) {
       return this.result('STALE_SEARCH')
     }
     const requestId = randomUUID()
@@ -272,8 +288,14 @@ export class CaptureSearchLifetime {
   private isCurrentSlot(request: RequestIdentity): boolean {
     const binding = this.binding
     const hasBinding = binding != null
-    const hasPermission = hasBinding && this.options.isCurrent(binding)
-    const hasSameCapture = hasBinding && binding.captureId === request.captureId
+    let hasPermission = false
+    if (hasBinding) {
+      hasPermission = this.options.isCurrent(binding)
+    }
+    let hasSameCapture = false
+    if (hasBinding) {
+      hasSameCapture = binding.captureId === request.captureId
+    }
     const hasSameRequestId = this.slots[request.slot].requestId === request.requestId
     const isCurrent = hasPermission && hasSameCapture && hasSameRequestId
     return isCurrent
@@ -338,13 +360,26 @@ export class CaptureSearchLifetime {
       const receivedAt = result.retryAfterReceivedAt
       const isRateLimited = result.error.code === 'SEARCH_RATE_LIMITED'
       const hasRetryAfter = seconds != null
-      const hasPositiveRetryAfter = hasRetryAfter && seconds > 0
       const hasReceivedAt = receivedAt != null
-      const hasWait = hasPositiveRetryAfter && hasReceivedAt
-      const shouldWait = isRateLimited && hasWait && this.isCurrentSlot(request)
-      if (shouldWait) {
-        this.startRateWait(request, { clock: runtime.clock, seconds, receivedAt })
+      let retryAfter: { seconds: number; receivedAt: number } | null = null
+      if (hasRetryAfter) {
+        const hasPositiveRetryAfter = seconds > 0
+        const hasWait = hasPositiveRetryAfter && hasReceivedAt
+        if (hasWait) {
+          retryAfter = { seconds, receivedAt }
+        }
       }
+      if (!isRateLimited) {
+        return
+      }
+      if (retryAfter == null) {
+        return
+      }
+      const isCurrentSlot = this.isCurrentSlot(request)
+      if (!isCurrentSlot) {
+        return
+      }
+      this.startRateWait(request, { clock: runtime.clock, ...retryAfter })
     }
   }
 
@@ -378,10 +413,13 @@ export class CaptureSearchLifetime {
   private emit(): void {
     const binding = this.binding
     const hasBinding = binding != null
-    const isInvalidated = hasBinding && !this.options.isCurrent(binding)
-    if (isInvalidated) {
-      this.invalidate()
-      return
+    if (hasBinding) {
+      const hasPermission = this.options.isCurrent(binding)
+      const isInvalidated = !hasPermission
+      if (isInvalidated) {
+        this.invalidate()
+        return
+      }
     }
     this.revision += 1
     this.options.publish(this.snapshot())
