@@ -23,7 +23,7 @@ last-reviewed: 2026-09-12
 ## 입력과 수명
 
 - 초기 `argv`는 전체 배열을 검사한다. executable path, `--`와 일반 argument는 protocol scheme 후보가 아니므로 무시한다. Scheme 대소문자 변형도 다중 후보 판정에는 포함하지만, 실제 전달은 기존 exact parser를 통과한 raw 값만 허용한다.
-- `second-instance`의 command line도 마지막 argument라고 가정하지 않고 전체를 검사한다. URI scheme 형태의 입력이 전혀 없으면 일반 실행으로 분류해 activation만 호출하고, exact valid 후보 하나면 auth dispatch만 호출한다. Trusted scheme 후보가 malformed·여러 개이거나 다른 URI scheme 입력이 있으면 둘 다 호출하지 않는다. Windows absolute drive path는 URI scheme으로 오인하지 않는다. 이 세 분류는 단일 Electron listener가 소유한다.
+- `second-instance`의 command line도 마지막 argument라고 가정하지 않고 전체를 검사한다. URI scheme 형태의 입력이 전혀 없으면 일반 실행으로 분류해 activation만 호출하고, exact valid 후보 하나면 auth dispatch만 호출한다. Trusted scheme 후보가 malformed·여러 개이거나 앞쪽 whitespace/control 뒤를 포함한 다른 URL-like 입력이 있으면 둘 다 호출하지 않는다. 이 분류는 raw 값을 허용 가능한 형태로 보정하지 않으며 Windows drive path는 URI scheme으로 오인하지 않는다. 이 세 분류는 단일 Electron listener가 소유한다.
 - 하나의 event/초기 배열에 trusted scheme 후보가 두 개 이상이면 모두 거절한다. 잘못된 code가 섞여 있어도 후보가 여러 개면 dispatch하지 않는다.
 - 후보 하나가 2,048-byte를 넘거나 exact target·canonical 32-byte base64url code가 아니면 dispatch하지 않는다. 입력을 trim, coerce, URL-decode하거나 재구성하지 않는다.
 - dispatch가 아직 연결되지 않았을 때는 유효한 후보 하나와 일반 활성화 여부 하나만 임시 보관한다. 이후 후보와 일반 실행을 queue하지 않는다. `attach`는 보관한 두 종류를 각각 최대 한 번 전달한 뒤 비운다.
