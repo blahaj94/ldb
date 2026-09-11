@@ -208,6 +208,11 @@ function prepareUserDataDirectory(
       const parentPath = pathSemantics.dirname(currentPath)
       assertDirectory(filesystem.lstatSync(parentPath))
       assertCanonicalPath(parentPath, filesystem)
+      syncDirectory(parentPath, filesystem)
+      const grandparentPath = pathSemantics.dirname(parentPath)
+      if (grandparentPath !== parentPath) {
+        syncDirectory(grandparentPath, filesystem)
+      }
       try {
         filesystem.mkdirSync(currentPath, { mode: 0o700 })
       } catch (mkdirError) {
