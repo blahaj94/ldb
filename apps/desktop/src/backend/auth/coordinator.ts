@@ -241,7 +241,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
 
     const accessTokenExpiresAtMs = Date.parse(tokens.accessTokenExpiresAt)
-    const hasUnusableAccessTime = shouldTrackAccessTrust && !isAccessTimeUsable(accessTokenExpiresAtMs)
+    const hasUnusableAccessTime =
+      shouldTrackAccessTrust && !isAccessTimeUsable(accessTokenExpiresAtMs)
 
     let finalized: Awaited<ReturnType<typeof session.finalize>>
     try {
