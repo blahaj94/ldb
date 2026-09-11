@@ -55,7 +55,11 @@ describe('credential-store-native phase result validation', () => {
       },
       {
         get(target, property, receiver) {
-          if (property === 'decryptCalls' || property === 'encryptionAvailabilityCalls') {
+          const isDecryptCounter = property === 'decryptCalls'
+          const isAvailabilityCounter = property === 'encryptionAvailabilityCalls'
+          const isCounterProperty = isDecryptCounter || isAvailabilityCounter
+
+          if (isCounterProperty) {
             accesses.push(property)
           }
           return Reflect.get(target, property, receiver)
