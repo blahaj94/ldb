@@ -28,6 +28,14 @@ review-after: 출시 OS 및 package 선택, Electron 변경, 최초 저장·prot
 
 근거: [Electron 39.8.10 README](https://raw.githubusercontent.com/electron/electron/v39.8.10/README.md), [safeStorage](https://raw.githubusercontent.com/electron/electron/v39.8.10/docs/api/safe-storage.md), [app lifecycle/path](https://raw.githubusercontent.com/electron/electron/v39.8.10/docs/api/app.md), [pinned Deep Links guide](https://raw.githubusercontent.com/electron/electron/v39.8.10/docs/tutorial/launch-app-from-url-in-another-app.md). 문서 확인을 실제 LDB E2E 결과로 표시하지 않는다. 출시 전 Electron/OS 지원 상태도 다시 확인하며 version 교체는 별도 변경 범위다.
 
+## Clock과 절전 관측
+
+시간 신뢰 판정과 수치 예산은 [lifecycle의 로컬 clock 신뢰](desktop-auth-lifecycle.md#로컬-clock-신뢰)를 따릅니다. 제품 main은 ready와 단일 인스턴스 ownership 확인 뒤 인증 dependency 생성 전에 `powerMonitor`의 `suspend`와 `resume`을 연결합니다. 취소 가능한 quit 동안 listener를 유지하고, 확정 종료·fatal 초기화 실패 또는 auth runtime을 만들지 않는 fallback에서 해제합니다. Listener는 clock 구간을 무효화하며 credential을 삭제하거나 자동 refresh하지 않습니다.
+
+Node `performance.now()`는 process 기준의 monotonic 값이고 서버 시간이 아닙니다. Wall clock 조정과 두 clock의 drift는 별개로 다뤄야 합니다. Electron의 이벤트 API도 실제 package에서 이벤트가 제때 도착하거나 모든 절전을 포착했다는 증거는 아닙니다. 두 시계가 같은 만큼 이동하고 OS 이벤트도 관측하지 못한 경우를 상대 차이 검사만으로 절전이라고 판별할 수 없습니다. 실제 OS clock을 변경하는 검증은 이번 주입 테스트 범위에 포함하지 않습니다.
+
+출시 OS·architecture·package마다 절전 진입/복귀, 긴 main thread 중단, 시계 조정, 장기 drift와 이벤트 전달 순서를 별도로 검증합니다. 주입된 읽기 함수와 EventEmitter의 테스트 성공은 이 native gate를 해소하지 않습니다. 1,000 ms 정책 예산의 가용성 비용도 실제 환경에서 확인하고, 변경이 필요하면 같은 Rule 변경 절차를 따릅니다.
+
 ## OS 저장 선택
 
 **권장: main 전용 Electron `safeStorage` 암복호화 + app 전용 암호문 file.** 기존 Electron 기능이라 새 native dependency가 필요 없고 선언된 세 OS 계열을 다룰 수 있다. safeStorage 자체는 credential file 저장·atomic replacement·삭제를 제공하지 않는다. 아래 file protocol을 함께 구현해야 한다.

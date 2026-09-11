@@ -1,10 +1,12 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
+import type { EventEmitter } from 'node:events'
 import { dialog, safeStorage as electronSafeStorage, shell, type SafeStorage } from 'electron'
 import { createAuthHttpClient } from './http'
 import { createMacOsCredentialStore } from './credential-store/macos-credential-store'
 import type { AuthClock, AuthCoordinatorDependencies } from './types'
 import type { AuthRuntimeConfig } from './runtime-config'
+import { createRuntimeClock, type ClockPowerState } from './runtime-clock'
 
 type RuntimeEffectsOptions = Readonly<{
   safeStorage?: Pick<SafeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'>
@@ -24,33 +26,13 @@ export type AuthRuntimeEffects = Readonly<{
   createSearchClock(): AuthClock
 }>
 
-function createClock(readWallMs: () => number, readMonotonicMs: () => number): AuthClock {
-  let previousWallMs = readWallMs()
-  let previousMonotonicMs = readMonotonicMs()
+type RuntimePowerEffects = Readonly<{
+  bindPowerMonitor(powerMonitor: Pick<EventEmitter, 'on' | 'removeListener'>): () => void
+}>
 
-  return {
-    read: () => {
-      const wallMs = readWallMs()
-      const monotonicMs = readMonotonicMs()
-      const movedWallBack = previousWallMs != null && wallMs < previousWallMs
-      const movedMonotonicBack = previousMonotonicMs != null && monotonicMs < previousMonotonicMs
-      previousWallMs = wallMs
-      previousMonotonicMs = monotonicMs
-
-      return {
-        wallMs,
-        monotonicMs,
-        discontinuous: movedWallBack || movedMonotonicBack
-      }
-    },
-    schedule: (delayMs, callback) => {
-      const timeout = setTimeout(callback, delayMs)
-      return () => clearTimeout(timeout)
-    }
-  }
-}
-
-export function createAuthRuntimeEffects(options: RuntimeEffectsOptions = {}): AuthRuntimeEffects {
+export function createAuthRuntimeEffects(
+  options: RuntimeEffectsOptions = {}
+): AuthRuntimeEffects & RuntimePowerEffects {
   const safeStorage = options.safeStorage ?? electronSafeStorage
   const platform = options.platform ?? process.platform
   const createStore = options.createStore ?? createMacOsCredentialStore
@@ -63,6 +45,7 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions = {}): A
     })
   const readWallMs = options.readWallMs ?? Date.now
   const readMonotonicMs = options.readMonotonicMs ?? (() => performance.now())
+  const powerState: ClockPowerState = { suspended: false, revision: 0 }
   const showMessageBox =
     options.showMessageBox ??
     (() =>
@@ -74,6 +57,29 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions = {}): A
       }))
 
   return {
+    bindPowerMonitor(powerMonitor): () => void {
+      const suspend = (): void => {
+        powerState.suspended = true
+        powerState.revision += 1
+      }
+      const resume = (): void => {
+        powerState.suspended = false
+        powerState.revision += 1
+      }
+      const dispose = (): void => {
+        powerMonitor.removeListener('suspend', suspend)
+        powerMonitor.removeListener('resume', resume)
+      }
+      try {
+        powerMonitor.on('suspend', suspend)
+        powerMonitor.on('resume', resume)
+      } catch (error) {
+        dispose()
+        throw error
+      }
+      return dispose
+    },
+
     async announceCredentialAccess(): Promise<void> {
       await showMessageBox()
     },
@@ -91,7 +97,7 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions = {}): A
         safeStorage,
         platform
       })
-      const clock = createClock(readWallMs, readMonotonicMs)
+      const clock = createRuntimeClock({ readWallMs, readMonotonicMs, powerState })
 
       return {
         providers: config.providers,
@@ -109,7 +115,7 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions = {}): A
     },
 
     createSearchClock(): AuthClock {
-      return createClock(readWallMs, readMonotonicMs)
+      return createRuntimeClock({ readWallMs, readMonotonicMs, powerState })
     }
   }
 }

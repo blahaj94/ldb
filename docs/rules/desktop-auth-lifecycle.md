@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: apps/desktop authentication lifecycle and recovery
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 rationale: callback·재시작·rotation·취소 경합에서 중복 credential 사용과 거짓 로그인 성공을 막는다.
 evidence: "PR #60 사용자 승인: https://github.com/blahaj94/ldb/pull/60#issuecomment-5553807475 ; 설계 근거: Issue #55; docs/rules/auth-api.md, auth-oauth.md, auth-session.md"
 exceptions: 설계 승인은 구현 착수가 아니며 서버 grace·취소/status endpoint 또는 session 정책을 추가하지 않는다.
@@ -96,6 +96,19 @@ sequenceDiagram
 6. 보호 기능의 401은 caller가 쓴 access generation을 확인한다. 이미 교체된 access라면 최신 access로, 아니면 한 번의 shared refresh 후에 **허용된 요청만 최대 한 번** 재호출한다. `/me` 같은 read만 자동 재호출한다. Mutation/검색의 replay 정책은 각 feature 계약에서 별도로 정하며 범용 interceptor로 POST/PATCH를 재전송하지 않는다. 두 번째 401은 local 인증 상실이다.
 7. Refresh 401, 응답 유실/timeout/5xx·commit 불명, 새 token parsing/저장 실패는 R0 재사용 금지·marker 유지·보호 요청 중단·새 로그인이다. 원인을 공격으로 단정하지 않는다. 모든 대기 caller는 같은 실패를 받고 별도 refresh를 시작하지 않는다. 확실한 서버 rollback일 수 있어도 client에 확정 evidence가 없으면 재시도하지 않는 권장안이다.
 
+## 로컬 clock 신뢰
+
+이 절은 [Issue #414의 clock 후속 범위](https://github.com/blahaj94/ldb/issues/414#issuecomment-5639942825)에 따라 같은 PR의 구현과 함께 채택할 정책입니다. 해당 PR의 사용자 merge부터 적용합니다. 서버 시간, JWT 권한 판정, access 만료 시각과 refresh 회전 규칙은 바꾸지 않습니다.
+
+- 인증 clock은 신뢰 구간의 최초 wall/monotonic 관계를 고정하고 이후 관측의 상대 차이를 비교합니다. 두 시계가 모두 증가해도 상대 차이가 허용 범위를 벗어나면 신뢰를 잃습니다. 매번 비교 기준을 옮기지 않으므로 같은 방향의 작은 drift도 누적됩니다. 여기서 누적은 고정 기준에서의 순편차이며 모든 움직임의 절댓값 합계가 아닙니다.
+- 허용 예산은 양방향 **1,000 ms 이하**이며 읽기 표본의 불확실성도 이 안에 포함합니다. 이는 짧은 표본 오차를 수용하면서 보고된 5초 상대 차이를 거절하기 위한 클라이언트 정책 선택입니다. 측정된 OS 정확도, 서버 시간과의 일치 또는 만료 뒤 1초의 grace를 보장하지 않습니다. 경과 시간에 비례해 예산을 늘리지 않으므로 정상적인 장기 drift도 조기 pause를 일으킬 수 있습니다.
+- Wall 읽기를 monotonic 읽기 두 번 사이에 둡니다. 최초 표본과 현재 표본에서 가능한 offset 차이의 양 끝이 모두 ±1,000 ms 안이어야 신뢰합니다. 표본 폭을 예산에 더하지 않습니다. 단일 표본 폭이 1,000 ms를 넘거나 읽기 실패, 비유한 수치, 표본 내부 또는 관측 사이의 monotonic 역행, 관측된 wall 역행은 신뢰 상실입니다. 비동기 HTTP·저장 대기 사이에 두 시계가 같은 만큼 전진한 것은 표본 폭이 아니며, 기존 만료 검사와 함께 처리합니다.
+- `suspend` 또는 `resume`을 관측하면 두 시계의 차이와 관계없이 현재 신뢰 구간을 무효화합니다. 다음 pending timer·복귀·HTTP 완료·access 검사에서 이 사실을 소비하며, 일반 clock 읽기나 다른 consumer의 읽기로 지우지 않습니다. 기존 pending은 다음 검사에서 만료되고, 기존 access는 해당 credential generation에서 계속 신뢰 불가입니다. 즉시 OS 이벤트 전달이나 서버 요청 취소를 보장하는 정책은 아닙니다.
+- 최초 restore는 dependency 생성 시 기준을 유지합니다. 새 사용자 login attempt와 이후의 새 refresh 요청 전송 직전에만 새 기준을 만들 수 있습니다. Refresh에서 기준을 바꾸기 전에 기존 access를 신뢰 불가로 고정합니다. 전송 전 실패나 정상 read는 그 access를 되살리지 않으며, 새 응답의 credential 저장 확정과 시간 재검사를 통과해야 새 access를 쓸 수 있습니다. `/me`만 재시도하거나 새 credential을 commit하는 행위 자체로 clock 기준을 바꾸지 않습니다.
+- 새 기준도 유효하고 폭이 제한된 표본으로만 수립하며, 관측된 suspend 상태에서는 수립하지 않습니다. HTTP·commit·finalize·`/me`를 기다리는 동안 발생한 신뢰 상실은 같은 구간에 남습니다. 저장 확정 뒤 시간 문제의 pause, credential 보존, 사용자 retry당 정상 refresh 한 번과 같은 호출의 자동 추가 rotation 0회는 아래 정책을 따릅니다.
+
+절대 wall 역행만 비교하면 두 시계가 모두 증가하는 상대 역행을 놓칩니다. Delta의 완전 일치는 표본 오차를 허용하지 않고, 매번 기준을 갱신하거나 시간에 비례한 예산을 쓰면 누적 변경의 고정 상한이 사라집니다. 선택한 정책은 서버 시간 증명 대신 로컬 access의 사용을 보수적으로 중단하며, 실제 clock과 절전 이벤트의 검증 한계는 [platform](desktop-auth-platform.md#clock과-절전-관측)에 둡니다.
+
 ## 저장 확정 뒤 복원 종료 제안
 
 ```yaml
@@ -103,12 +116,12 @@ status: active
 enforcement: approval-required
 rationale: 저장 대기 중 access 만료·clock 불연속으로 복원이 끝나지 않거나 안전하지 않은 access를 사용하는 일을 막는다.
 evidence: "PR #139 사용자 승인: https://github.com/blahaj94/ldb/pull/139#issuecomment-5577289923 ; merge: cfb1fa7a9e1ce6e6ac9b704842be5d02183cbfbd ; 설계 근거: https://github.com/blahaj94/ldb/issues/137"
-exceptions: platform의 저장 확정·실패·crash 복구와 기존 401 처리는 유지하며 새 clock 임계값을 정하지 않는다.
+exceptions: platform의 저장 확정·실패·crash 복구와 기존 401 처리는 유지하며 clock 판정은 이 문서의 로컬 clock 신뢰 절을 따른다.
 review-after: 초기 restore·paused retry의 commit/finalize 지연과 후속 수동 재시도 검증 후
 ```
 
 1. 초기 restore와 `restorePaused`에서 시작한 `retryAuth` 모두에 적용한다. **저장 확정은 R1 credential commit과 marker 삭제 각각의 durability 확인까지**이며 [platform의 저장 순서](desktop-auth-platform.md#credential-file과-crash-복구)를 생략하지 않는다. Commit 또는 finalize 대기 중 시간 문제가 관측돼도 그 이유만으로 저장을 취소하지 않는다. 저장이 정상 확정되고 현재 generation인 경우에만 아래 pause 정책을 적용한다.
-2. 복원의 access 사용 가능 판정, `/me` 전송 직전과 signedIn 발행 직전에 현재 auth generation·credential, access 만료 시각과 clock 신뢰를 다시 검사한다. Commit/finalize 및 `/me` 응답·body 처리 등 비동기 대기 뒤도 포함한다. 이미 만료됐거나 clock 불연속을 관측해 신뢰를 잃은 access는 이후 clock 읽기가 정상이라는 이유로 되살리지 않는다. 새 임계값이나 JWT 기반 권한 판정은 추가하지 않는다.
+2. 복원의 access 사용 가능 판정, `/me` 전송 직전과 signedIn 발행 직전에 현재 auth generation·credential, access 만료 시각과 clock 신뢰를 다시 검사한다. Commit/finalize 및 `/me` 응답·body 처리 등 비동기 대기 뒤도 포함한다. 이미 만료됐거나 clock 불연속을 관측해 신뢰를 잃은 access는 이후 clock 읽기가 정상이라는 이유로 되살리지 않는다. Clock 판정은 위 로컬 clock 신뢰 정책을 사용하며 JWT 기반 권한 판정은 추가하지 않는다.
 3. 저장이 확정된 R1의 access가 만료됐거나 clock 때문에 유효성을 신뢰할 수 없으면, 같은 복원 호출에서 **이 시간 문제를 이유로 한 자동 추가 rotation은 0회**다. R1은 보존하고 `restorePaused`와 [notice·문구](desktop-auth.md#저장-확정-뒤-복원-안내-제안)로 끝낸다. 이 사유만으로 clear·logout·marker 재생성·R0 재사용을 하지 않는다. `/me` 전 검사에 실패하면 전송 0회, 성공 응답 뒤 검사에 실패하면 받은 user를 발행하지 않으며 둘 다 signedIn은 0회다. 지연 뒤에도 모든 검사가 유효하면 정상 `/me`와 signedIn/home을 계속한다.
 4. 다음 사용자 `retryAuth`는 현재 access가 유효하고 clock 신뢰를 잃지 않았으면 `/me`만 재개한다. Access가 없거나 만료·신뢰 상실 상태면 **현재 저장 확정 credential**로 정상 shared refresh를 한 번 수행한 뒤 같은 검사와 `/me`를 거친다. 이전에 소비된 R0나 불명 결과의 credential로 돌아가지 않는다. 새 응답의 access도 저장 대기 후 유효하지 않으면 새로 확정된 credential을 보존하며 다시 pause로 끝낸다. 연속 사용자 재시도는 가능하지만 자동 호출·rotation 반복·TTL 연장은 없다.
 5. HTTP·저장 결과와 필요한 정리가 확정되면 해당 복원 작업이 소유한 writer·verification 대기를 끝내고 `restoring`에 남지 않는다. `retryAuth`는 처리가 끝난 현재 snapshot을 담은 기존 `AuthCommandResult`로 resolve하며, pause로 끝나면 다음 사용자 재시도를 받을 수 있어야 한다. 중복 호출은 현재 phase·writer 검사로 거절하고 새 작업을 queue하지 않는다. 이 종료 계약은 [동기 OS prompt](desktop-auth-platform.md#os-저장-선택)를 timer로 취소하거나 응답 시간을 보장한다는 뜻이 아니다.
