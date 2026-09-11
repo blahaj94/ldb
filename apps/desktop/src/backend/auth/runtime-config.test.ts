@@ -1,6 +1,6 @@
 import * as fs from 'node:fs'
 import { dirname, join, posix, sep, win32 } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import {
   applyAuthRuntimeProfile,
@@ -29,7 +29,9 @@ const validEnvironment = {
 }
 
 function createRuntimeProfileRoot(): string {
-  return fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-')))
+  const root = fs.realpathSync(fs.mkdtempSync(join(homedir(), '.ldb-runtime-profile-')))
+  fs.chmodSync(root, 0o700)
+  return root
 }
 
 describe('desktop auth runtime config', () => {
