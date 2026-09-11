@@ -2,29 +2,29 @@
 type: reference
 status: active
 scope: desktop OCR character search implementation and isolated verification
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-12
 ---
 
 # Desktop 캐릭터 검색
 
-기존 OCR 안정화 결과를 현재 capture의 네 슬롯 검색으로 연결한다. 정책은 [Desktop 검색 계약](../rules/desktop-auth.md#ocr-검색-연결-제안)과 [인증 준비 미완료 보완](../rules/desktop-auth.md#인증-준비-미완료-검색-종료-제안)을 따른다. 기본 제품 main은 여전히 인증 미구성이며 native media를 거절한다. 검색 module 구현과 production 인증·media 활성화는 별개다.
+기존 OCR 안정화 결과를 현재 capture의 네 슬롯 검색으로 연결한다. 정책은 [Desktop 검색 계약](../rules/desktop-auth.md#ocr-검색-연결-제안)과 [인증 준비 미완료 보완](../rules/desktop-auth.md#인증-준비-미완료-검색-종료-제안)을 따른다. 제품 main은 완전한 trusted runtime 설정에서 인증·검색 runtime을 조건부 구성하고 설정 누락·오류에서는 비활성화하며, native media는 계속 거절한다. 검색 module 구현과 실제 product 인증·media 성공 검증은 별개다.
 
 ## 구현 위치
 
-| 위치 | 책임 |
-| --- | --- |
-| `apps/desktop/src/backend/capture/ipc-handler.ts` | 현재 auth/source/document와 capture를 결합하고 검색 IPC·media를 같은 수명에서 검사한다. Navigation, destruction, renderer process 종료, source·auth 변경 때 요청을 무효화한다. |
-| `apps/desktop/src/backend/search/capture-lifetime.ts` | 네 슬롯의 최신 관측·requestId·상태, clear/retry와 429 버튼 대기를 소유한다. |
-| `apps/desktop/src/backend/search/request.ts` | 입력 접수부터 authorization·body 검증·401 회복까지 하나의 검색 예산과 취소 판정을 수행한다. |
-| `apps/desktop/src/backend/search/http.ts` | 고정 `GET /characters`, 선택 query 생략, HTTP/UTF-8/JSON/전체 후보 검증과 다섯 field projection을 수행한다. |
-| `apps/desktop/src/backend/search/retry-after.ts` | 헤더 수신 시각부터 남은 시간을 검사하고 긴 timer를 지원 범위 안에서 나눠 예약한다. |
-| `apps/desktop/src/preload/common/types/search.ts`, `common/search/snapshot.ts` | Shared DTO·오류 문구·feature API와 exact own shape·상태 조합 검증을 정의한다. |
-| `apps/desktop/src/preload/api/search.ts`, `search-command.ts`, `capture.ts` | `window.search`의 제어/구독과 기존 `window.api`의 확장된 OCR 통지를 연결한다. Electron event와 부적합 DTO는 전달하지 않는다. |
-| `apps/desktop/src/frontend/src/search/connection.ts` | 구독 후 read, run/revision 순서, 유실된 명령의 조회만 재시도하는 연결 수명을 소유한다. |
-| `apps/desktop/src/frontend/src/search/capture-search.ts`, `useCharacterSearch.ts` | Start별 수명, 로컬 관측 revision, 즉시 표시 제거와 슬롯별 retry 진행 상태를 연결한다. |
-| `apps/desktop/src/frontend/src/auth/capture-context.ts`, `AuthBridge.tsx`, `useAuthBridge.ts` | Main에서 받은 현재 auth snapshot과 읽기 재동기화를 capture에 전달한다. 별도 인증 상태 머신이나 token 전달은 없다. |
-| `apps/desktop/src/frontend/src/capture/usePartyCaptureSession.ts`, `usePartyRecognition.ts` | begin 완료 뒤 media/OCR 시작, 늦은 begin의 자기 ID 정리와 stable/null 전이 통지를 연결한다. 기존 OCR 안정화·기본 3초 간격은 유지한다. |
-| `apps/desktop/src/frontend/src/search/SearchResults.tsx` | 네 슬롯의 상태·후보·고정 오류·수동 retry를 text로 표시한다. |
+| 위치                                                                                          | 책임                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/desktop/src/backend/capture/ipc-handler.ts`                                             | 현재 auth/source/document와 capture를 결합하고 검색 IPC·media를 같은 수명에서 검사한다. Navigation, destruction, renderer process 종료, source·auth 변경 때 요청을 무효화한다. |
+| `apps/desktop/src/backend/search/capture-lifetime.ts`                                         | 네 슬롯의 최신 관측·requestId·상태, clear/retry와 429 버튼 대기를 소유한다.                                                                                                    |
+| `apps/desktop/src/backend/search/request.ts`                                                  | 입력 접수부터 authorization·body 검증·401 회복까지 하나의 검색 예산과 취소 판정을 수행한다.                                                                                    |
+| `apps/desktop/src/backend/search/http.ts`                                                     | 고정 `GET /characters`, 선택 query 생략, HTTP/UTF-8/JSON/전체 후보 검증과 다섯 field projection을 수행한다.                                                                    |
+| `apps/desktop/src/backend/search/retry-after.ts`                                              | 헤더 수신 시각부터 남은 시간을 검사하고 긴 timer를 지원 범위 안에서 나눠 예약한다.                                                                                             |
+| `apps/desktop/src/preload/common/types/search.ts`, `common/search/snapshot.ts`                | Shared DTO·오류 문구·feature API와 exact own shape·상태 조합 검증을 정의한다.                                                                                                  |
+| `apps/desktop/src/preload/api/search.ts`, `search-command.ts`, `capture.ts`                   | `window.search`의 제어/구독과 기존 `window.api`의 확장된 OCR 통지를 연결한다. Electron event와 부적합 DTO는 전달하지 않는다.                                                   |
+| `apps/desktop/src/frontend/src/search/connection.ts`                                          | 구독 후 read, run/revision 순서, 유실된 명령의 조회만 재시도하는 연결 수명을 소유한다.                                                                                         |
+| `apps/desktop/src/frontend/src/search/capture-search.ts`, `useCharacterSearch.ts`             | Start별 수명, 로컬 관측 revision, 즉시 표시 제거와 슬롯별 retry 진행 상태를 연결한다.                                                                                          |
+| `apps/desktop/src/frontend/src/auth/capture-context.ts`, `AuthBridge.tsx`, `useAuthBridge.ts` | Main에서 받은 현재 auth snapshot과 읽기 재동기화를 capture에 전달한다. 별도 인증 상태 머신이나 token 전달은 없다.                                                              |
+| `apps/desktop/src/frontend/src/capture/usePartyCaptureSession.ts`, `usePartyRecognition.ts`   | begin 완료 뒤 media/OCR 시작, 늦은 begin의 자기 ID 정리와 stable/null 전이 통지를 연결한다. 기존 OCR 안정화·기본 3초 간격은 유지한다.                                          |
+| `apps/desktop/src/frontend/src/search/SearchResults.tsx`                                      | 네 슬롯의 상태·후보·고정 오류·수동 retry를 text로 표시한다.                                                                                                                    |
 
 Begin의 직접 성공 응답만 해당 Start가 소유한 ID로 사용한다. 응답이 유실되면 read로 상태를 확인하지만 그 결과의 ID를 늦은 Start의 소유로 추정해 end하지 않는다. 해당 시작은 창을 다시 선택하도록 안내하며 같은 begin을 자동 재전송하지 않는다. 새 source 선택은 기존 main 선택/capture 무효화 경로를 사용한다.
 
@@ -42,13 +42,13 @@ Keyboard·focus·좁은 화면·theme·reduced-motion의 실제 Electron 관측�
 
 앱 메뉴에서 아래 응답을 선택한 뒤 **Stop → Start**로 새 OCR 관측을 만들거나 현재 실패의 **다시 시도**를 누른다. 메뉴 선택 자체는 검색을 보내거나 진행 중 응답을 바꾸지 않는다. 로그인과 source 선택은 기존 fixture 절차를 따른다.
 
-| 메뉴 | 다음 검색의 관측 |
-| --- | --- |
-| 검색 응답: 성공 | 합성 후보 한 건과 다섯 field 표시 |
-| 검색 응답: 0건 | 후보 없이 “검색 결과가 없습니다.” 표시 |
-| 검색 응답: 서버 오류 | 고정 오류와 활성화된 수동 retry |
-| 검색 응답: 5초 제한 | 429 안내와 비활성 retry, main 대기 만료 뒤 같은 실패의 버튼만 활성화 |
-| 검색 응답: 시간 초과 대기 | pending 표시 후 제품의 전체 검색 예산 만료, 종료·Stop 시 abort |
+| 메뉴                      | 다음 검색의 관측                                                     |
+| ------------------------- | -------------------------------------------------------------------- |
+| 검색 응답: 성공           | 합성 후보 한 건과 다섯 field 표시                                    |
+| 검색 응답: 0건            | 후보 없이 “검색 결과가 없습니다.” 표시                               |
+| 검색 응답: 서버 오류      | 고정 오류와 활성화된 수동 retry                                      |
+| 검색 응답: 5초 제한       | 429 안내와 비활성 retry, main 대기 만료 뒤 같은 실패의 버튼만 활성화 |
+| 검색 응답: 시간 초과 대기 | pending 표시 후 제품의 전체 검색 예산 만료, 종료·Stop 시 abort       |
 
 Main 접수 계측은 결과의 `ok:true`와 capture/slot/nickname/observationRevision의 정확한 일치를 확인한다. 더 높은 snapshot 관측 revision은 오래된 입력의 접수 증거가 아니다. 원문 payload를 저장하지 않고 counter·합성 일치 mask만 기록한다.
 

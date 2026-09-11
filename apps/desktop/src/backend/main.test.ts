@@ -484,9 +484,8 @@ it('일반 second-instance의 window 활성화 실패를 Electron event 경계 �
 
 it('actual ingress와 일반 second-instance가 함께 받아도 callback은 한 번 시작하고 window 예외를 회수한다', async () => {
   stubTrustedRuntimeEnvironment()
-  const actualProtocol = await vi.importActual<typeof import('./auth/protocol-ingress')>(
-    './auth/protocol-ingress'
-  )
+  const actualProtocol =
+    await vi.importActual<typeof import('./auth/protocol-ingress')>('./auth/protocol-ingress')
   mocks.createIngress.mockImplementationOnce(actualProtocol.createProtocolIngress)
   mocks.attachAfterStart.mockImplementationOnce(actualProtocol.attachProtocolIngressAfterStart)
 
