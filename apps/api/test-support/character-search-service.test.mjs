@@ -139,6 +139,27 @@ async function service(f) {
   return createAuthenticatedSearchService(f.deps)
 }
 
+test('search rejects a non-string API key without reading its length after query validation', async () => {
+  const f = fixture()
+  let lengthReads = 0
+  f.deps.apiKey = Object.defineProperty({}, 'length', {
+    get() {
+      lengthReads += 1
+      throw new Error('API key length should not be read')
+    }
+  })
+  const search = await service(f)
+  try {
+    await assert.rejects(search.search(headers, originalUrl), { status: 500 })
+    await assert.rejects(search.search(headers, '/characters?characterName='), { status: 400 })
+    assert.equal(lengthReads, 0)
+    assert.equal(f.state.connections, 0)
+    assert.equal(f.state.calls, 0)
+  } finally {
+    await search.onModuleDestroy()
+  }
+})
+
 test('search service locks only session, reads fresh time, commits before starting upstream', async () => {
   const f = fixture()
   const search = await service(f)
@@ -197,6 +218,8 @@ test('search missing or revoked session allows residual request with activity ze
       await assert.rejects(search.search(headers, originalUrl), { status: 429 })
       assert.equal(f.state.writes, 0)
       assert.equal(f.state.calls, 10)
+      assert.equal(f.state.commits, 10)
+      assert.equal(f.state.releases, 10)
     } finally {
       await search.onModuleDestroy()
     }
