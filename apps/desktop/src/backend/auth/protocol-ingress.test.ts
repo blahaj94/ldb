@@ -395,7 +395,10 @@ describe('Desktop auth protocol ingress', () => {
   it.each([
     '--return-url=mailto:user@example.test',
     '--return-url= \tmailto:user@example.test',
-    '/return-url:https://example.test/auth/return'
+    '/return-url:https://example.test/auth/return',
+    '--return_url=mailto:user@example.test',
+    '--return.url=https://example.test/auth/return',
+    '/other_path:C:/auth/return'
   ])('option payload의 URL-like 입력 %s도 일반 실행으로 활성화하지 않는다', (value) => {
     const app = createApp()
     const dispatch = vi.fn()
@@ -427,6 +430,22 @@ describe('Desktop auth protocol ingress', () => {
 
   it.each(['--return-url=c:/auth/return', '--other-path=c:/auth/return'])(
     'Windows drive 예외는 known path option에만 한정해 %s을 활성화하지 않는다',
+    (value) => {
+      const app = createApp()
+      const dispatch = vi.fn()
+      const activate = vi.fn()
+      const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+      ingress.attach(dispatch, activate)
+
+      emitSecondInstance(app, [value])
+
+      expect(dispatch).not.toHaveBeenCalled()
+      expect(activate).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['--user-data-dir=C:\t/profile', '--user-data-dir=C:/profile\n'])(
+    'known path option도 raw-exact drive 형태가 아닌 %s은 활성화하지 않는다',
     (value) => {
       const app = createApp()
       const dispatch = vi.fn()
