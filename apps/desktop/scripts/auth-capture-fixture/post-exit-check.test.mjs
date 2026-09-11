@@ -100,6 +100,7 @@ const searchEvidence = {
 async function runSearchChild({
   evidence = searchEvidence,
   diagnostic = null,
+  layoutEvidence = null,
   completionMs = 1,
   exitCode = 0
 } = {}) {
@@ -117,6 +118,13 @@ async function runSearchChild({
         child.stderr.emit(
           'data',
           `Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}\n`
+        )
+      }
+      const hasLayoutEvidence = layoutEvidence != null
+      if (hasLayoutEvidence) {
+        child.stderr.emit(
+          'data',
+          `Capture fixture layout evidence: ${JSON.stringify(layoutEvidence)}\n`
         )
       }
       const hasEvidence = evidence != null
@@ -237,6 +245,69 @@ it('검색 실패 child의 정제된 mixed assertion 진단을 전달한다', as
   expect(console.log).toHaveBeenCalledWith(
     `Capture fixture search diagnostic: ${JSON.stringify(diagnostic)}`
   )
+  expect(process.exitCode).toBe(1)
+})
+
+it('actual 진단이 부적합해도 expected 검사를 수행한다', async () => {
+  let hasExpectedRead = false
+  const parsedDiagnostic = {
+    stage: 'mixed',
+    check: 'capture-start',
+    kind: 'assertion',
+    actual: { started: 'invalid' },
+    expected: {},
+    generatedMessage: false
+  }
+  Object.defineProperty(parsedDiagnostic.expected, 'started', {
+    enumerable: true,
+    get() {
+      hasExpectedRead = true
+      return true
+    }
+  })
+  vi.spyOn(JSON, 'parse').mockReturnValue(parsedDiagnostic)
+
+  await runSearchChild({
+    evidence: null,
+    diagnostic: {
+      stage: 'mixed',
+      check: 'capture-start',
+      kind: 'assertion',
+      actual: { started: true },
+      expected: { started: true },
+      generatedMessage: false
+    },
+    exitCode: 1
+  })
+
+  expect(hasExpectedRead).toBe(true)
+  expect(process.exitCode).toBe(1)
+})
+
+it('검색 실패 child의 유효한 layout evidence를 정제해 전달한다', async () => {
+  const layoutEvidence = { samples: 2, overflowCount: 0, themeMismatchCount: 1 }
+
+  await runSearchChild({ evidence: null, layoutEvidence, exitCode: 1 })
+
+  expect(console.log).toHaveBeenCalledWith(
+    `Capture fixture layout evidence: ${JSON.stringify(layoutEvidence)}`
+  )
+  expect(process.exitCode).toBe(1)
+})
+
+it('검색 실패 child의 부적합한 layout evidence는 전달하지 않는다', async () => {
+  const layoutEvidence = {
+    samples: 5,
+    overflowCount: 0,
+    themeMismatchCount: 1,
+    raw: 'synthetic-private-value'
+  }
+
+  await runSearchChild({ evidence: null, layoutEvidence, exitCode: 1 })
+
+  const logged = JSON.stringify(vi.mocked(console.log).mock.calls)
+  expect(logged.includes('Capture fixture layout evidence:')).toBe(false)
+  expect(logged.includes('synthetic-private-value')).toBe(false)
   expect(process.exitCode).toBe(1)
 })
 
