@@ -38,6 +38,16 @@ describe('generated sandbox inspection source', () => {
     expect(runInNewContext(sandboxInspectionSource, { window })).toBe(true)
     expect(reads).toEqual(['electron', 'require'])
   })
+
+  it('생성 source는 require 검사를 electron guard 뒤에 독립적으로 둔다', () => {
+    expect(sandboxInspectionSource).toContain('if (!hasNoElectron)')
+    expect(sandboxInspectionSource).toContain(
+      'const hasNoRequire = typeof window.require === "undefined";'
+    )
+    expect(sandboxInspectionSource).not.toContain(
+      'const hasNoRequire = hasNoElectron && typeof window.require'
+    )
+  })
 })
 
 const clock = vi.hoisted(() => ({ now: 0 }))
