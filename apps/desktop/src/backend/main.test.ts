@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => ({
   ),
   disposeIngress: vi.fn(),
   createEffects: vi.fn(),
+  bindPowerMonitor: vi.fn(),
+  disposePowerMonitor: vi.fn(),
+  powerMonitor: { on: vi.fn(), removeListener: vi.fn() },
   bootstrapAuth: vi.fn(),
   applyProfile: vi.fn(
     (
@@ -63,6 +66,7 @@ const mocks = vi.hoisted(() => ({
     | undefined
 }))
 vi.mock('electron', () => ({
+  powerMonitor: mocks.powerMonitor,
   session: {
     defaultSession: {
       setPermissionCheckHandler: mocks.permissionCheck,
@@ -164,12 +168,43 @@ beforeEach(() => {
     searchClock: {},
     start: vi.fn(async () => undefined)
   }
-  mocks.createEffects.mockReturnValue({})
+  mocks.bindPowerMonitor.mockReturnValue(mocks.disposePowerMonitor)
+  mocks.createEffects.mockReturnValue({ bindPowerMonitor: mocks.bindPowerMonitor })
   mocks.getPath.mockImplementation(() => process.env['LDB_AUTH_USER_DATA_PATH'] ?? '')
   mocks.bootstrapAuth.mockResolvedValue(mocks.runtime)
   mocks.registerAuth.mockReturnValue(vi.fn())
 })
 afterEach(() => vi.unstubAllEnvs())
+
+it('auth clock power listeners survive canceled quit and detach at committed shutdown', async () => {
+  stubTrustedRuntimeEnvironment()
+  await import('./main')
+  await mocks.bootstrap
+
+  expect(mocks.bindPowerMonitor).toHaveBeenCalledExactlyOnceWith(mocks.powerMonitor)
+  expect(mocks.bindPowerMonitor.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.bootstrapAuth.mock.invocationCallOrder[0]
+  )
+  const beforeQuit = mocks.appOn.mock.calls.find(([event]) => event === 'before-quit')?.[1]
+  const quit = mocks.appOn.mock.calls.find(([event]) => event === 'quit')?.[1]
+  beforeQuit({ defaultPrevented: true })
+  await Promise.resolve()
+  expect(mocks.disposePowerMonitor).not.toHaveBeenCalled()
+
+  quit()
+  quit()
+  expect(mocks.disposePowerMonitor).toHaveBeenCalledOnce()
+})
+
+it('detaches clock power listeners when auth bootstrap does not create a runtime', async () => {
+  stubTrustedRuntimeEnvironment()
+  mocks.bootstrapAuth.mockResolvedValueOnce(null)
+
+  await import('./main')
+  await mocks.bootstrap
+
+  expect(mocks.disposePowerMonitor).toHaveBeenCalledOnce()
+})
 
 function stubTrustedRuntimeEnvironment(): void {
   vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
