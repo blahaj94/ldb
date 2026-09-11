@@ -21,13 +21,13 @@ async function rollbackFailure(source, scenario) {
     query: async ({ sql, parameters, query, run }) => {
       try {
         const isInsertFailure = scenario === 'insert'
-        const isRefreshTokenInsert =
-          isInsertFailure && sql.startsWith('INSERT INTO "auth_refresh_tokens"')
-        const shouldFailInsert = isInsertFailure && isRefreshTokenInsert
-        if (shouldFailInsert) {
-          // 실제 DB CHECK가 UPDATE 이후 INSERT를 거절하도록 hash parameter만 고장 주입한다.
-          assert.equal(consumed, true)
-          return await query(sql, [Buffer.alloc(31), ...parameters.slice(1)])
+        if (isInsertFailure) {
+          const isRefreshTokenInsert = sql.startsWith('INSERT INTO "auth_refresh_tokens"')
+          if (isRefreshTokenInsert) {
+            // 실제 DB CHECK가 UPDATE 이후 INSERT를 거절하도록 hash parameter만 고장 주입한다.
+            assert.equal(consumed, true)
+            return await query(sql, [Buffer.alloc(31), ...parameters.slice(1)])
+          }
         }
         const result = await run()
         const isRefreshTokenUpdate = sql.startsWith('UPDATE "auth_refresh_tokens"')
@@ -54,8 +54,7 @@ async function rollbackFailure(source, scenario) {
   }
   try {
     const isEntropyFailure = scenario === 'entropy'
-    const isHashCollision =
-      !isEntropyFailure && ['current-hash', 'old-hash', 'other-device-hash'].includes(scenario)
+    const isHashCollision = ['current-hash', 'old-hash', 'other-device-hash'].includes(scenario)
     if (isEntropyFailure) {
       await rejected(
         () =>
@@ -89,7 +88,7 @@ async function rollbackFailure(source, scenario) {
     if (isInsertFailure) {
       assert.equal(constraint, 'ck_auth_refresh_tokens_hash_length')
     }
-    const isHashScenario = !isEntropyFailure && scenario.includes('hash')
+    const isHashScenario = scenario.includes('hash')
     const shouldHaveEntropyCall = isEntropyFailure || isHashScenario
     if (shouldHaveEntropyCall) {
       assert.equal(entropyCalls, 1)

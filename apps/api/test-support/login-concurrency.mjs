@@ -63,7 +63,7 @@ async function assertCallbackClaim(source) {
   assert.equal(result.error, undefined)
   const code = new URL(result.value.returnUrl).searchParams.get('code')
   const hasCode = code != null
-  const isCodeEmpty = hasCode && code === ''
+  const isCodeEmpty = code === ''
   const hasNonEmptyCode = hasCode && !isCodeEmpty
   assert(hasNonEmptyCode)
   assert.equal((await row(source, flow.request.requestId)).status, 'exchange_ready')
@@ -90,7 +90,7 @@ async function assertSingleConsumer({ source, kind }) {
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
         const isLoginRequestQuery = /auth_login_requests/.test(sql)
-        const hasUpdateLock = isLoginRequestQuery && /FOR UPDATE/.test(sql)
+        const hasUpdateLock = /FOR UPDATE/.test(sql)
         const isLoginRequestLock = isLoginRequestQuery && hasUpdateLock
         if (isLoginRequestLock) {
           pids.push((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
@@ -155,7 +155,7 @@ async function assertFreshAfterWait({ source, table }) {
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
         const isTargetTableQuery = sql.includes(`"${table}"`)
-        const hasUpdateLock = isTargetTableQuery && sql.includes('FOR UPDATE')
+        const hasUpdateLock = sql.includes('FOR UPDATE')
         const isTargetTableLock = isTargetTableQuery && hasUpdateLock
         if (isTargetTableLock) {
           observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
@@ -296,7 +296,7 @@ async function assertCompletionLockTime(source) {
     const restore = instrument(source, {
       query: async ({ sql, query, run }) => {
         const isLoginRequestQuery = sql.includes('"auth_login_requests"')
-        const hasUpdateLock = isLoginRequestQuery && sql.includes('FOR UPDATE')
+        const hasUpdateLock = sql.includes('FOR UPDATE')
         const isLoginRequestLock = isLoginRequestQuery && hasUpdateLock
         if (isLoginRequestLock) {
           observed.resolve((await query('SELECT pg_backend_pid() AS pid'))[0].pid)
