@@ -3,7 +3,17 @@ import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { formatDate } from '../format-date.mjs'
+
 const script = fileURLToPath(new URL('../format-date.mjs', import.meta.url))
+
+test('formatDate rejects non-string timestamps with the existing UTC ISO error', () => {
+  for (const timestamp of [null, 42, Symbol('timestamp')]) {
+    assert.throws(() => formatDate(timestamp), {
+      message: 'Expected a valid UTC ISO timestamp ending in Z'
+    })
+  }
+})
 
 test('CLI displays Korean midnight across the year boundary regardless of host time zone', () => {
   for (const timeZone of ['UTC', 'America/New_York']) {
@@ -31,8 +41,8 @@ mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-08T15:35:00Z') });
   assert.equal(result.stdout, '2026년 9월 9일 00시 35분\n')
 })
 
-test('CLI rejects an invalid calendar date and a timestamp without a time zone', () => {
-  for (const timestamp of ['2026-02-30T00:00:00Z', '2026-09-08T15:35:00']) {
+test('CLI rejects invalid dates and a timestamp without a time zone', () => {
+  for (const timestamp of ['2026-01-01T99:00:00Z', '2026-02-30T00:00:00Z', '2026-09-08T15:35:00']) {
     const result = spawnSync(process.execPath, [script, timestamp], {
       encoding: 'utf8'
     })
