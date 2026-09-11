@@ -107,6 +107,39 @@ it('committed quit resolves waiters as terminal and releases auth resources once
   expect(disposeIngress).toHaveBeenCalledOnce()
 })
 
+it.each(['cancel', 'commit'] as const)(
+  'waits for the second quit outcome after the first quit is canceled (%s)',
+  async (outcome) => {
+    const { lifecycle, handlers } = createLifecycle()
+    const beforeQuit = handlers.get('before-quit')!
+    const willQuit = handlers.get('will-quit')!
+    const quit = handlers.get('quit')!
+    let actionStartedWhileQuitting = false
+    const action = vi.fn(() => {
+      actionStartedWhileQuitting = lifecycle.isQuitting()
+    })
+
+    beforeQuit({ defaultPrevented: false } as never)
+    const pendingAction = lifecycle.runAfterQuitOutcome(action)
+    willQuit({ defaultPrevented: true } as never)
+    await Promise.resolve()
+
+    beforeQuit({ defaultPrevented: false } as never)
+    queueMicrotask(() => {
+      if (outcome === 'cancel') {
+        willQuit({ defaultPrevented: true } as never)
+        return
+      }
+      quit()
+    })
+
+    await pendingAction
+
+    expect(action).toHaveBeenCalledTimes(outcome === 'cancel' ? 1 : 0)
+    expect(actionStartedWhileQuitting).toBe(false)
+  }
+)
+
 it('retries a null bootstrap only after a canceled quit was observed during bootstrap', async () => {
   const { lifecycle, handlers } = createLifecycle()
   const beforeQuit = handlers.get('before-quit')!
