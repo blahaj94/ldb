@@ -47,7 +47,18 @@ export function attachProtocolIngressAfterStart(
       if (!active || !isActive()) {
         return
       }
-      detach = ingress.attach(dispatch)
+      const attachedDetach = ingress.attach(async (rawReturnUrl) => {
+        if (!active || !isActive()) {
+          return
+        }
+        await dispatch(rawReturnUrl)
+      })
+      const shouldDetachImmediately = !active || !isActive()
+      if (shouldDetachImmediately) {
+        attachedDetach()
+        return
+      }
+      detach = attachedDetach
     },
     () => {
       ingress.dispose()
