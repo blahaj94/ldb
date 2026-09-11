@@ -65,12 +65,12 @@ for (const [name, patch, expected] of [
 test('candidate is only a hint: activity, ownership change and disappearance are reread under lock', async () => {
   const { cleanupAuthentication } = await load()
   for (const change of ['activity', 'ownership', 'removed']) {
+    const isActivity = change === 'activity'
+    const isOwnership = change === 'ownership'
     const row = session({ lastActiveAt: new Date(checkedAt.getTime() - idleMilliseconds) })
     const f = cleanupFixture({
       sessions: [row],
       beforeLock: (rows) => {
-        const isActivity = change === 'activity'
-        const isOwnership = change === 'ownership'
         if (isActivity) {
           row.lastActiveAt = checkedAt
         } else if (isOwnership) {
@@ -82,8 +82,7 @@ test('candidate is only a hint: activity, ownership change and disappearance are
     })
     assert.equal((await cleanupAuthentication(f.source)).sessionsDeleted, 0)
     assert.deepEqual(f.deleted.sessions, [])
-    const expectedEvents =
-      change === 'activity' ? ['lock', 'fresh-time', 'commit'] : ['lock', 'commit']
+    const expectedEvents = isActivity ? ['lock', 'fresh-time', 'commit'] : ['lock', 'commit']
     assert.deepEqual(f.events, expectedEvents)
   }
 })
