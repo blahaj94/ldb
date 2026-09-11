@@ -52,6 +52,9 @@ const protocolIngress =
       })
 let protocolIngressDisposed = false
 let isQuitting = false
+let activeQuitAttempt: symbol | null = null
+let shutdownCommitted = false
+let hasPendingOwnedAuthFailure = false
 let ownedAuthFailureExitRequested = false
 
 if (runtimeProfileState.status === 'application-failed') {
@@ -75,11 +78,18 @@ type WindowCloseState = {
 
 function handleDocumentLoadFailure(window: BrowserWindow, closeState: WindowCloseState): void {
   const isCurrentWindow = mainWindow === window
-  if (!isCurrentWindow || isQuitting) {
+  if (!isCurrentWindow) {
     return
   }
   if (closeState.activeAttempt != null) {
     closeState.hasPendingLoadFailure = true
+    return
+  }
+  if (shutdownCommitted) {
+    return
+  }
+  if (activeQuitAttempt != null) {
+    hasPendingOwnedAuthFailure = true
     return
   }
 
@@ -108,6 +118,7 @@ function cancelWindowCloseAttempt(
   }
 
   closeState.activeAttempt = null
+  cancelActiveQuitAttempt()
   if (!closeState.hasPendingLoadFailure) {
     return
   }
@@ -247,22 +258,87 @@ function showOrCreateMainWindow(authRuntime: AuthRuntime | null): void {
 }
 
 function disposeProtocolIngress(): void {
+  if (protocolIngressDisposed) {
+    return
+  }
+
   protocolIngressDisposed = true
   protocolIngress?.dispose()
 }
 
-function beginShutdown(): void {
+function commitShutdown(): void {
+  if (shutdownCommitted) {
+    return
+  }
+
+  shutdownCommitted = true
+  activeQuitAttempt = null
+  hasPendingOwnedAuthFailure = false
   isQuitting = true
   disposeProtocolIngress()
 }
 
+function cancelQuitAttempt(attempt: symbol): void {
+  if (shutdownCommitted || activeQuitAttempt !== attempt) {
+    return
+  }
+
+  activeQuitAttempt = null
+  isQuitting = false
+  if (!hasPendingOwnedAuthFailure) {
+    return
+  }
+
+  hasPendingOwnedAuthFailure = false
+  exitAfterOwnedAuthFailure()
+}
+
+function cancelActiveQuitAttempt(): void {
+  const attempt = activeQuitAttempt
+  if (attempt != null) {
+    cancelQuitAttempt(attempt)
+  }
+}
+
+function beginQuitAttempt(event: Readonly<{ defaultPrevented: boolean }>): void {
+  if (shutdownCommitted) {
+    return
+  }
+
+  const attempt = Symbol('app-quit-attempt')
+  activeQuitAttempt = attempt
+  isQuitting = true
+  queueMicrotask(() => {
+    if (event.defaultPrevented) {
+      cancelQuitAttempt(attempt)
+    }
+  })
+}
+
+function observeQuitAttempt(event: Readonly<{ defaultPrevented: boolean }>): void {
+  const attempt = activeQuitAttempt
+  if (attempt == null) {
+    return
+  }
+
+  queueMicrotask(() => {
+    if (event.defaultPrevented) {
+      cancelQuitAttempt(attempt)
+    }
+  })
+}
+
 function exitAfterOwnedAuthFailure(): void {
-  if (isQuitting || ownedAuthFailureExitRequested) {
+  if (shutdownCommitted || ownedAuthFailureExitRequested) {
+    return
+  }
+  if (activeQuitAttempt != null) {
+    hasPendingOwnedAuthFailure = true
     return
   }
 
   ownedAuthFailureExitRequested = true
-  beginShutdown()
+  commitShutdown()
   app.exit(1)
 }
 
@@ -289,7 +365,9 @@ app.whenReady().then(async () => {
     return
   }
 
-  app.on('before-quit', beginShutdown)
+  app.on('before-quit', beginQuitAttempt)
+  app.on('will-quit', observeQuitAttempt)
+  app.on('quit', commitShutdown)
 
   try {
     // Default open or close DevTools by F12 in development
@@ -382,13 +460,16 @@ app.whenReady().then(async () => {
       )
     }
   } catch (error) {
-    if (isQuitting) {
+    if (shutdownCommitted) {
       return
     }
 
     const ownsAuthProfile = protocolIngress?.ownsInstance === true
     if (ownsAuthProfile) {
       exitAfterOwnedAuthFailure()
+      return
+    }
+    if (isQuitting) {
       return
     }
     throw error

@@ -328,8 +328,8 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
   )
   const beforeQuit = mocks.appOn.mock.calls.find(
     ([event]) => event === 'before-quit'
-  )?.[1] as () => void
-  beforeQuit()
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  beforeQuit({ defaultPrevented: false })
   expect(bootstrapInput.isActive()).toBe(false)
 })
 
@@ -620,7 +620,109 @@ it('will-prevent-unload override가 unload를 허용하면 closed까지 load rej
   expect(mocks.exit).not.toHaveBeenCalled()
 })
 
-it('정상 quit 뒤의 늦은 document load rejection은 nonzero 종료로 바꾸지 않는다', async () => {
+it('동기 before-quit 취소 뒤에는 ingress와 window activation을 다시 사용한다', async () => {
+  stubTrustedRuntimeEnvironment()
+
+  await import('./main')
+  await mocks.bootstrap
+  const beforeQuit = mocks.appOn.mock.calls.find(
+    ([event]) => event === 'before-quit'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  const activate = mocks.attachIngress.mock.calls[0][1] as () => void
+  const window = mocks.windows[0] as {
+    show: ReturnType<typeof vi.fn>
+    focus: ReturnType<typeof vi.fn>
+  }
+  let defaultPrevented = false
+  const beforeQuitEvent = {
+    get defaultPrevented() {
+      return defaultPrevented
+    },
+    preventDefault() {
+      defaultPrevented = true
+    }
+  }
+
+  beforeQuit(beforeQuitEvent)
+  beforeQuitEvent.preventDefault()
+  await Promise.resolve()
+  activate()
+
+  expect(mocks.disposeIngress).not.toHaveBeenCalled()
+  expect(window.show).toHaveBeenCalledOnce()
+  expect(window.focus).toHaveBeenCalledOnce()
+  expect(mocks.exit).not.toHaveBeenCalled()
+})
+
+it('동기 will-quit 취소 뒤에도 ingress와 window activation을 다시 사용한다', async () => {
+  stubTrustedRuntimeEnvironment()
+
+  await import('./main')
+  await mocks.bootstrap
+  const beforeQuit = mocks.appOn.mock.calls.find(
+    ([event]) => event === 'before-quit'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  const willQuit = mocks.appOn.mock.calls.find(([event]) => event === 'will-quit')?.[1] as (event: {
+    defaultPrevented: boolean
+  }) => void
+  const activate = mocks.attachIngress.mock.calls[0][1] as () => void
+  const window = mocks.windows[0] as {
+    show: ReturnType<typeof vi.fn>
+    focus: ReturnType<typeof vi.fn>
+  }
+  let defaultPrevented = false
+  const willQuitEvent = {
+    get defaultPrevented() {
+      return defaultPrevented
+    },
+    preventDefault() {
+      defaultPrevented = true
+    }
+  }
+
+  beforeQuit({ defaultPrevented: false })
+  willQuit(willQuitEvent)
+  willQuitEvent.preventDefault()
+  await Promise.resolve()
+  activate()
+
+  expect(mocks.disposeIngress).not.toHaveBeenCalled()
+  expect(window.show).toHaveBeenCalledOnce()
+  expect(window.focus).toHaveBeenCalledOnce()
+  expect(mocks.exit).not.toHaveBeenCalled()
+})
+
+it('before-quit 취소 전에 보류한 restore rejection은 fatal로 다시 처리한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const pendingStart = deferred<void>()
+  mocks.runtime!.start = vi.fn(() => pendingStart.promise)
+
+  await import('./main')
+  await mocks.bootstrap
+  const beforeQuit = mocks.appOn.mock.calls.find(
+    ([event]) => event === 'before-quit'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  let defaultPrevented = false
+  const beforeQuitEvent = {
+    get defaultPrevented() {
+      return defaultPrevented
+    },
+    preventDefault() {
+      defaultPrevented = true
+    }
+  }
+
+  pendingStart.reject(new Error('Synthetic restore failure during canceled app quit'))
+  beforeQuit(beforeQuitEvent)
+  beforeQuitEvent.preventDefault()
+  await pendingStart.promise.catch(() => undefined)
+  await Promise.resolve()
+
+  expect(mocks.disposeIngress).toHaveBeenCalledOnce()
+  expect(mocks.exit).toHaveBeenCalledExactlyOnceWith(1)
+})
+
+it('renderer beforeunload가 app quit을 취소하면 보류한 load rejection을 fatal로 다시 처리한다', async () => {
   stubTrustedRuntimeEnvironment()
   const pendingLoad = deferred<void>()
   mocks.loadFile.mockReturnValueOnce(pendingLoad.promise)
@@ -629,9 +731,49 @@ it('정상 quit 뒤의 늦은 document load rejection은 nonzero 종료로 바�
   await mocks.bootstrap
   const beforeQuit = mocks.appOn.mock.calls.find(
     ([event]) => event === 'before-quit'
-  )?.[1] as () => void
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  const window = mocks.windows[0] as {
+    on: ReturnType<typeof vi.fn>
+    webContents: { on: ReturnType<typeof vi.fn> }
+    destroy: ReturnType<typeof vi.fn>
+  }
+  const close = window.on.mock.calls.find(([event]) => event === 'close')?.[1] as (event: {
+    defaultPrevented: boolean
+  }) => void
+  const willPreventUnload = window.webContents.on.mock.calls.find(
+    ([event]) => event === 'will-prevent-unload'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+
+  beforeQuit({ defaultPrevented: false })
+  close({ defaultPrevented: false })
+  pendingLoad.reject(new Error('Synthetic load rejection during canceled app quit'))
+  await pendingLoad.promise.catch(() => undefined)
+  await Promise.resolve()
+
+  expect(mocks.exit).not.toHaveBeenCalled()
+
+  willPreventUnload({ defaultPrevented: false })
+  await Promise.resolve()
+
+  expect(mocks.disposeIngress).toHaveBeenCalledOnce()
+  expect(mocks.exit).toHaveBeenCalledExactlyOnceWith(1)
+  expect(window.destroy).toHaveBeenCalledOnce()
+})
+
+it('확정된 정상 quit 뒤의 늦은 document load rejection은 nonzero 종료로 바꾸지 않는다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const pendingLoad = deferred<void>()
+  mocks.loadFile.mockReturnValueOnce(pendingLoad.promise)
+
+  await import('./main')
+  await mocks.bootstrap
+  const beforeQuit = mocks.appOn.mock.calls.find(
+    ([event]) => event === 'before-quit'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  const quit = mocks.appOn.mock.calls.find(([event]) => event === 'quit')?.[1] as () => void
   const window = mocks.windows[0] as { destroy: ReturnType<typeof vi.fn> }
-  beforeQuit()
+  beforeQuit({ defaultPrevented: false })
+  quit()
 
   pendingLoad.reject(new Error('Synthetic late document load failure'))
   await pendingLoad.promise.catch(() => undefined)
@@ -853,9 +995,11 @@ it('notice 대기 중 quit은 dependency, IPC, window와 restore를 뒤늦게 �
   await vi.waitFor(() => expect(mocks.bootstrapAuth).toHaveBeenCalledOnce())
   const beforeQuitRegistration = mocks.appOn.mock.calls.find(([event]) => event === 'before-quit')
   expect(beforeQuitRegistration).toBeDefined()
-  const beforeQuit = beforeQuitRegistration?.[1] as () => void
+  const beforeQuit = beforeQuitRegistration?.[1] as (event: { defaultPrevented: boolean }) => void
+  const quit = mocks.appOn.mock.calls.find(([event]) => event === 'quit')?.[1] as () => void
 
-  beforeQuit()
+  beforeQuit({ defaultPrevented: false })
+  quit()
   pendingBootstrap.resolve(mocks.runtime)
   await mocks.bootstrap
 
@@ -888,9 +1032,11 @@ it('정상 quit 뒤의 늦은 restore rejection은 nonzero 종료로 바꾸지 �
   await mocks.bootstrap
   const beforeQuitRegistration = mocks.appOn.mock.calls.find(([event]) => event === 'before-quit')
   expect(beforeQuitRegistration).toBeDefined()
-  const beforeQuit = beforeQuitRegistration?.[1] as () => void
+  const beforeQuit = beforeQuitRegistration?.[1] as (event: { defaultPrevented: boolean }) => void
+  const quit = mocks.appOn.mock.calls.find(([event]) => event === 'quit')?.[1] as () => void
 
-  beforeQuit()
+  beforeQuit({ defaultPrevented: false })
+  quit()
   pendingStart.reject(new Error('Synthetic late restore failure'))
   await pendingStart.promise.catch(() => undefined)
   await Promise.resolve()
