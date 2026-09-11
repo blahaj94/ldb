@@ -176,8 +176,9 @@ export async function runCaptureFixture(args = []) {
 
 const invokedPath = process.argv[1]
 const hasInvokedPath = invokedPath != null
-const isDirectInvocation =
-  hasInvokedPath && import.meta.url === pathToFileURL(resolve(invokedPath)).href
-if (isDirectInvocation) {
-  process.exitCode = await runCaptureFixture(process.argv.slice(2))
+if (hasInvokedPath) {
+  const isDirectInvocation = import.meta.url === pathToFileURL(resolve(invokedPath)).href
+  if (isDirectInvocation) {
+    process.exitCode = await runCaptureFixture(process.argv.slice(2))
+  }
 }
