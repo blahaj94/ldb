@@ -49,7 +49,10 @@ describe('search smoke protected evaluation', () => {
         observationRevision: { get: () => (reads.push('observationRevision'), 1) }
       }
     ) as SearchUiObservation['slots'][number]
-    const after = { requestId: null, observationRevision: 1 } as SearchUiObservation['slots'][number]
+    const after = {
+      requestId: null,
+      observationRevision: 1
+    } as SearchUiObservation['slots'][number]
 
     expect(sameRequest({ before, after })).toBe(false)
     expect(reads).toEqual(['requestId', 'observationRevision'])
