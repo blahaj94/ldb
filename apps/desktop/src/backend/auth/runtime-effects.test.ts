@@ -131,4 +131,51 @@ describe('desktop auth runtime effects', () => {
       notice: 'RESTORE_RETRY_REQUIRED'
     })
   })
+
+  it('uses the dependency creation clock reading as the restore discontinuity baseline', async () => {
+    const harness = createAuthHarness()
+    harness.store.inspection = { status: 'ready', refreshToken: 'synthetic-refresh-token' }
+    const commit =
+      deferred<Awaited<ReturnType<typeof harness.dependencies.store.commitCredential>>>()
+    harness.store.commitWaits.push(commit.promise)
+    let wallMs = Date.parse('2026-09-06T12:00:00.000Z')
+    let monotonicMs = 1_000
+    const effects = createAuthRuntimeEffects({
+      config,
+      app: { getPath: () => config.userDataPath },
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: (value) => Buffer.from(value),
+        decryptString: (value) => value.toString()
+      },
+      platform: 'darwin',
+      readWallMs: () => wallMs,
+      readMonotonicMs: () => monotonicMs,
+      createHttp: () => harness.dependencies.http,
+      createStore: () => harness.store
+    })
+    const runtime = await bootstrapAuthRuntime({
+      config,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies: effects.createDependencies
+      }
+    })
+    if (runtime == null) {
+      throw new Error('Synthetic auth runtime should be available')
+    }
+
+    const start = runtime.start()
+    await vi.waitFor(() => expect(harness.store.commitCredential).toHaveBeenCalledOnce())
+    wallMs -= 1_000
+    monotonicMs += 100
+    commit.resolve('confirmed')
+    await start
+
+    expect(runtime.coordinator.getSnapshot()).toMatchObject({
+      phase: 'restorePaused',
+      notice: 'RESTORE_RETRY_REQUIRED'
+    })
+    expect(harness.http.me).not.toHaveBeenCalled()
+  })
 })

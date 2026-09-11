@@ -1,12 +1,31 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
+import { bootstrapAuthRuntime } from './bootstrap'
 import { createAuthCoordinator } from './coordinator'
 import {
+  attachProtocolIngressAfterStart,
   createProtocolIngress,
   type ProtocolIngressApp,
   type ProtocolOpenUrlEvent
 } from './protocol-ingress'
-import { CODE, OTHER_CODE, RETURN_TARGET, createAuthHarness, settle } from './auth-test-fixtures'
+import {
+  CODE,
+  OTHER_CODE,
+  RETURN_TARGET,
+  createAuthHarness,
+  deferred,
+  settle
+} from './auth-test-fixtures'
+import type { AuthRuntimeConfig } from './runtime-config'
+
+const runtimeConfig: AuthRuntimeConfig = {
+  apiOrigin: 'https://api.example.test',
+  returnTarget: RETURN_TARGET,
+  environment: 'test',
+  providers: ['google', 'discord'],
+  appIdentity: 'com.synthetic.ldb',
+  userDataPath: '/synthetic/user-data'
+}
 
 class FakeApp extends EventEmitter {
   readonly calls: string[] = []
@@ -221,5 +240,95 @@ describe('Desktop auth protocol ingress', () => {
     expect(coordinator.getSnapshot().phase).toBe('signedOut')
     expect(coordinator.getSnapshot().notice).toBe('LOGIN_RESTART_REQUIRED')
     expect(harness.http.exchange).not.toHaveBeenCalled()
+  })
+
+  it('initial restore가 끝난 뒤 buffered cold return을 coordinator에 전달한다', async () => {
+    const harness = createAuthHarness()
+    const inspection = deferred<Awaited<ReturnType<typeof harness.dependencies.store.inspect>>>()
+    harness.store.inspect.mockImplementationOnce(async () => inspection.promise)
+    const runtime = await bootstrapAuthRuntime({
+      config: runtimeConfig,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies: () => harness.dependencies
+      }
+    })
+    if (runtime == null) {
+      throw new Error('Synthetic auth runtime should be available')
+    }
+
+    const app = createApp()
+    const raw = returnUrl()
+    const ingress = createProtocolIngress({
+      app,
+      argv: ['electron', raw],
+      returnTarget: RETURN_TARGET
+    })
+    const start = runtime.start()
+    const dispatch = vi.fn((candidate: string) => runtime.coordinator.handleReturnUrl(candidate))
+    attachProtocolIngressAfterStart(ingress, start, dispatch)
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(runtime.coordinator.getSnapshot().phase).toBe('restoring')
+
+    inspection.resolve({ status: 'empty' })
+    await start
+    await settle()
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith(raw)
+    expect(runtime.coordinator.getSnapshot().phase).toBe('signedOut')
+    expect(runtime.coordinator.getSnapshot().notice).toBe('LOGIN_RESTART_REQUIRED')
+    expect(harness.http.exchange).not.toHaveBeenCalled()
+  })
+
+  it('initial restore 실패 또는 quit 중에는 buffered cold return을 폐기한다', async () => {
+    const harness = createAuthHarness()
+    const startFailure = deferred<void>()
+    const failureApp = createApp()
+    const failureIngress = createProtocolIngress({
+      app: failureApp,
+      argv: ['electron', returnUrl()],
+      returnTarget: RETURN_TARGET
+    })
+    const failureDispatch = vi.fn()
+    attachProtocolIngressAfterStart(failureIngress, startFailure.promise, failureDispatch)
+    startFailure.reject(new Error('restore failed'))
+    await settle()
+
+    expect(failureDispatch).not.toHaveBeenCalled()
+    expect(failureApp.listenerCount('open-url')).toBe(0)
+    expect(failureApp.listenerCount('second-instance')).toBe(0)
+
+    const inspection = deferred<Awaited<ReturnType<typeof harness.dependencies.store.inspect>>>()
+    harness.store.inspect.mockImplementationOnce(async () => inspection.promise)
+    const runtime = await bootstrapAuthRuntime({
+      config: runtimeConfig,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies: () => harness.dependencies
+      }
+    })
+    if (runtime == null) {
+      throw new Error('Synthetic auth runtime should be available')
+    }
+    const quitApp = createApp()
+    const quitIngress = createProtocolIngress({
+      app: quitApp,
+      argv: ['electron', returnUrl()],
+      returnTarget: RETURN_TARGET
+    })
+    const quitDispatch = vi.fn()
+    let active = true
+    const start = runtime.start()
+    attachProtocolIngressAfterStart(quitIngress, start, quitDispatch, () => active)
+    active = false
+    quitIngress.dispose()
+
+    inspection.resolve({ status: 'empty' })
+    await start
+    await Promise.resolve()
+    expect(quitDispatch).not.toHaveBeenCalled()
+    expect(quitApp.listenerCount('open-url')).toBe(0)
+    expect(quitApp.listenerCount('second-instance')).toBe(0)
   })
 })
