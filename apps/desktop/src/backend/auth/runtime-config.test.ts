@@ -456,6 +456,86 @@ describe('desktop auth runtime config', () => {
     }
   })
 
+  it.each([
+    ['mode 0755', 0o755, 0],
+    ['foreign POSIX uid', 0o700, 1]
+  ] as const)(
+    'rejects a concurrent-created final profile with %s before setters',
+    (_condition, mode, uidOffset) => {
+      const root = createRuntimeProfileRoot()
+      const userDataPath = join(root, 'new-profile')
+      const currentUid = 1_000
+      const calls: string[] = []
+      const mkdirPaths: string[] = []
+      let finalPathReads = 0
+      const concurrentStat = {
+        isDirectory: () => true,
+        isSymbolicLink: () => false,
+        uid: currentUid + uidOffset,
+        mode
+      } as fs.Stats
+      const application = {
+        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        getPath: () => userDataPath,
+        setName: (value: string) => calls.push(`name:${value}`),
+        setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+      }
+      const filesystem: RuntimeProfileFilesystemDouble = {
+        lstatSync: ((path: fs.PathLike) => {
+          if (String(path) !== userDataPath) {
+            return fs.lstatSync(path)
+          }
+          finalPathReads += 1
+          if (finalPathReads === 1) {
+            throw Object.assign(new Error('Synthetic missing profile'), { code: 'ENOENT' })
+          }
+          return concurrentStat
+        }) as typeof fs.lstatSync,
+        statSync: fs.statSync,
+        realpathSync: fs.realpathSync.native,
+        mkdirSync: (path) => {
+          mkdirPaths.push(path)
+          throw Object.assign(new Error('Synthetic concurrent creation'), { code: 'EEXIST' })
+        },
+        openSync: () => {
+          throw new Error('Invalid concurrent profile must not be synced')
+        },
+        fsyncSync: () => undefined,
+        closeSync: () => undefined
+      }
+      const config = readAuthRuntimeConfig({
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: userDataPath
+      })
+      const originalGetUid = Object.getOwnPropertyDescriptor(process, 'getuid')
+      Object.defineProperty(process, 'getuid', { configurable: true, value: () => currentUid })
+
+      try {
+        expect(config).not.toBeNull()
+        if (config == null) {
+          throw new Error('Synthetic runtime config should be available')
+        }
+
+        const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+          application: AuthRuntimeProfileApplication,
+          config: AuthRuntimeConfig,
+          filesystem: RuntimeProfileFilesystemDouble
+        ) => void
+        expect(() => applyWithFilesystem(application, config, filesystem)).toThrow()
+        expect(finalPathReads).toBe(2)
+        expect(mkdirPaths).toEqual([userDataPath])
+        expect(calls).toEqual([])
+      } finally {
+        if (originalGetUid == null) {
+          Reflect.deleteProperty(process, 'getuid')
+        } else {
+          Object.defineProperty(process, 'getuid', originalGetUid)
+        }
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
+
   it.each(['file', 'symlink', 'permission'] as const)(
     'rejects a userData %s before changing app identity',
     (kind) => {
