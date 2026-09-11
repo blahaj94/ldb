@@ -392,6 +392,39 @@ describe('Desktop auth protocol ingress', () => {
     expect(activate).not.toHaveBeenCalled()
   })
 
+  it.each([
+    '--return-url=mailto:user@example.test',
+    '--return-url= \tmailto:user@example.test',
+    '/return-url:https://example.test/auth/return'
+  ])('option payload의 URL-like 입력 %s도 일반 실행으로 활성화하지 않는다', (value) => {
+    const app = createApp()
+    const dispatch = vi.fn()
+    const activate = vi.fn()
+    const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+    ingress.attach(dispatch, activate)
+
+    emitSecondInstance(app, [value])
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(activate).not.toHaveBeenCalled()
+  })
+
+  it.each([String.raw`--user-data-dir=C:\profile`, '--user-data-dir=C:/profile'])(
+    'Windows path option %s은 별도 exact callback 전달을 가로막지 않는다',
+    (pathOption) => {
+      const app = createApp()
+      const dispatch = vi.fn()
+      const activate = vi.fn()
+      const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+      ingress.attach(dispatch, activate)
+
+      emitSecondInstance(app, [pathOption, returnUrl()])
+
+      expect(dispatch).toHaveBeenCalledExactlyOnceWith(returnUrl())
+      expect(activate).not.toHaveBeenCalled()
+    }
+  )
+
   it('fallback 판별도 protocol 후보가 전혀 없는 second-instance만 일반 실행으로 분류한다', () => {
     const ordinary = isOrdinarySecondInstanceInvocation(['electron', '--new-window'], RETURN_TARGET)
     const validReturn = isOrdinarySecondInstanceInvocation(['electron', returnUrl()], RETURN_TARGET)
