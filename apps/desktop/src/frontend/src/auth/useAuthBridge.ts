@@ -51,20 +51,24 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
       }
       const previous = current
       const hasCurrent = previous != null
-      const hasChangedRun = hasCurrent && previous.runId !== snapshot.runId
-      if (hasChangedRun) {
-        connect()
-        return
+      if (hasCurrent) {
+        const hasChangedRun = previous.runId !== snapshot.runId
+        if (hasChangedRun) {
+          connect()
+          return
+        }
+        const isNewer = snapshot.revision > previous.revision
+        if (!isNewer) {
+          return
+        }
       }
-      const isNewer = !hasCurrent || snapshot.revision > previous.revision
-      if (!isNewer) {
-        return
+      let wasSignedIn: boolean | undefined
+      if (hasCurrent) {
+        wasSignedIn = previous.phase === 'signedIn'
       }
-      const wasSignedIn = hasCurrent && previous.phase === 'signedIn'
       const isSignedIn = snapshot.phase === 'signedIn'
-      const hasLeftSignedIn = wasSignedIn && !isSignedIn
       // React가 여러 auth event를 한 render로 합쳐도 이전 home을 재사용하지 않는다.
-      if (hasLeftSignedIn) {
+      if (wasSignedIn === true && !isSignedIn) {
         presentationEpochRef.current += 1
       }
       current = snapshot
@@ -140,8 +144,16 @@ export function useAuthBridge(api: AuthApi): AuthBridge {
           }
           const buffered = queued
           const hasQueued = buffered != null
-          const hasSameRun = hasQueued && buffered.runId === snapshot.runId
-          const isOlder = hasSameRun && snapshot.revision <= buffered.revision
+          if (!hasQueued) {
+            queued = snapshot
+            return
+          }
+          const hasSameRun = buffered.runId === snapshot.runId
+          if (!hasSameRun) {
+            queued = snapshot
+            return
+          }
+          const isOlder = snapshot.revision <= buffered.revision
           if (!isOlder) {
             queued = snapshot
           }
