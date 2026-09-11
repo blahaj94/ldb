@@ -108,26 +108,20 @@ function isDiagnosticValue(value, type) {
   }
   if (type === 'mask') {
     const isNonnegative = value >= 0
-    if (!isNonnegative) {
-      return false
-    }
-    return value <= 15
+    const hasMaximum = value <= 15
+    return isNonnegative && hasMaximum
   }
   if (type === 'slot-count') {
     const isNonnegative = value >= 0
-    if (!isNonnegative) {
-      return false
-    }
-    return value <= 4
+    const hasMaximum = value <= 4
+    return isNonnegative && hasMaximum
   }
   if (type !== 'request-delta') {
     return false
   }
   const hasMinimum = value >= -20
-  if (!hasMinimum) {
-    return false
-  }
-  return value <= 20
+  const hasMaximum = value <= 20
+  return hasMinimum && hasMaximum
 }
 
 /** @returns {Record<string, unknown> | null} */
@@ -147,8 +141,8 @@ function readSearchDiagnostic(output) {
     }
     const keys = ['stage', 'check', 'kind', 'actual', 'expected', 'generatedMessage']
     const hasExactKeys = Object.keys(value).length === keys.length
-    const hasKnownStage = hasExactKeys ? value.stage === 'mixed' : false
-    const definition = hasKnownStage ? searchDiagnosticDefinitions[value.check] : null
+    const hasKnownStage = value.stage === 'mixed'
+    const definition = searchDiagnosticDefinitions[value.check]
     const hasDefinition = definition != null
     const hasKnownKind = value.kind === 'assertion' || value.kind === 'deadline'
     const hasAllowedKind = hasDefinition ? definition.kinds.includes(value.kind) : false
@@ -164,7 +158,7 @@ function readSearchDiagnostic(output) {
     const hasExactActualKeys = actualIsObject
       ? Object.keys(value.actual).length === actualKeys.length
       : false
-    const hasValidActual = hasExactActualKeys
+    const hasValidActual = actualIsObject
       ? actualKeys.every((key) => isDiagnosticValue(value.actual[key], definition.actual[key]))
       : false
     const expectedKeys = Object.keys(definition.expected)
@@ -173,10 +167,21 @@ function readSearchDiagnostic(output) {
     const hasExactExpectedKeys = expectedIsObject
       ? Object.keys(value.expected).length === expectedKeys.length
       : false
-    const hasExpectedValues = hasExactExpectedKeys
+    const hasExpectedValues = expectedIsObject
       ? expectedKeys.every((key) => value.expected[key] === definition.expected[key])
       : false
-    if (!hasValidActual || !hasExpectedValues) {
+    const hasValidDiagnostic =
+      hasExactKeys &&
+      hasKnownStage &&
+      hasDefinition &&
+      hasKnownKind &&
+      hasAllowedKind &&
+      hasGeneratedMessage &&
+      hasExactActualKeys &&
+      hasValidActual &&
+      hasExactExpectedKeys &&
+      hasExpectedValues
+    if (!hasValidDiagnostic) {
       return null
     }
     const actual = Object.fromEntries(actualKeys.map((key) => [key, value.actual[key]]))
@@ -211,10 +216,9 @@ function readSearchEvidence(output) {
     }
     const keys = Object.keys(expectedSearchEvidence)
     const hasExactCount = Object.keys(value).length === keys.length
-    const hasRequiredValues = hasExactCount
-      ? keys.every((key) => value[key] === expectedSearchEvidence[key])
-      : false
-    if (!hasRequiredValues) {
+    const hasRequiredValues = keys.every((key) => value[key] === expectedSearchEvidence[key])
+    const hasValidEvidence = hasExactCount && hasRequiredValues
+    if (!hasValidEvidence) {
       return null
     }
     return Object.fromEntries(keys.map((key) => [key, value[key]]))
@@ -255,21 +259,14 @@ function reportSearchStages(output, { reportDiagnostic }) {
         continue
       }
       const hasExactKeys = Object.keys(value).length === keys.length
-      const hasCounts = hasExactKeys
-        ? keys.every((key) => {
-            const isSafeInteger = Number.isSafeInteger(value[key])
-            if (!isSafeInteger) {
-              return false
-            }
-            const isNonnegative = value[key] >= 0
-            if (!isNonnegative) {
-              return false
-            }
-            const isWithinSampleLimit = value[key] <= 4
-            return isWithinSampleLimit
-          })
-        : false
-      if (hasCounts) {
+      const hasCounts = keys.every((key) => {
+        const isSafeInteger = Number.isSafeInteger(value[key])
+        const isNonnegative = value[key] >= 0
+        const hasMaximum = value[key] <= 4
+        return isSafeInteger && isNonnegative && hasMaximum
+      })
+      const hasValidLayoutEvidence = hasExactKeys && hasCounts
+      if (hasValidLayoutEvidence) {
         const counts = Object.fromEntries(keys.map((key) => [key, value[key]]))
         console.log(`Capture fixture layout evidence: ${JSON.stringify(counts)}`)
       }
