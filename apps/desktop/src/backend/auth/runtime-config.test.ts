@@ -372,6 +372,43 @@ describe('desktop auth runtime config', () => {
     }
   })
 
+  it.skipIf(process.platform !== 'darwin')(
+    'rejects a differently cased profile alias on a case-insensitive Darwin filesystem',
+    () => {
+      const root = createRuntimeProfileRoot()
+      const canonicalUserDataPath = join(root, 'Profiles', 'Dev')
+      const userDataPath = join(root, 'profiles', 'dev')
+      fs.mkdirSync(canonicalUserDataPath, { recursive: true, mode: 0o700 })
+      const calls: string[] = []
+      const application = {
+        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        setName: (value: string) => calls.push(`name:${value}`),
+        setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+      }
+      const config = readAuthRuntimeConfig({
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: userDataPath
+      })
+
+      try {
+        const supportsCaseAliases = fs.existsSync(userDataPath)
+        if (!supportsCaseAliases) {
+          return
+        }
+        expect(fs.realpathSync.native(userDataPath)).toBe(canonicalUserDataPath)
+        expect(config).not.toBeNull()
+        if (config == null) {
+          throw new Error('Synthetic runtime config should be available')
+        }
+
+        expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
+        expect(calls).toEqual([])
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
+
   it.each(['trailing-separator', 'dot-alias'] as const)(
     'rejects a symlink profile with a %s leaf alias',
     (kind) => {
