@@ -49,8 +49,12 @@ function isTrustedFrame(window: BrowserWindow | null, frame: WebFrameMain | null
   }
 
   const isWindowAlive = !window.isDestroyed()
-  const isWindowContentsAlive = isWindowAlive && !window.webContents.isDestroyed()
-  if (!isWindowContentsAlive) {
+  if (!isWindowAlive) {
+    return false
+  }
+
+  const isContentsAlive = !window.webContents.isDestroyed()
+  if (!isContentsAlive) {
     return false
   }
 
@@ -60,8 +64,16 @@ function isTrustedFrame(window: BrowserWindow | null, frame: WebFrameMain | null
   }
 
   const isMainFrame = frame === window.webContents.mainFrame
-  const isFrameAlive = isMainFrame && !frame.isDestroyed()
-  const hasExactDocument = isFrameAlive && frame.url === documentUrl
+  if (!isMainFrame) {
+    return false
+  }
+
+  const isFrameAlive = !frame.isDestroyed()
+  if (!isFrameAlive) {
+    return false
+  }
+
+  const hasExactDocument = frame.url === documentUrl
 
   return hasExactDocument
 }
@@ -108,8 +120,12 @@ function currentMainFrame(): WebFrameMain | null {
   }
 
   const isWindowAlive = !window.isDestroyed()
-  const isWindowContentsAlive = isWindowAlive && !window.webContents.isDestroyed()
-  if (!isWindowContentsAlive) {
+  if (!isWindowAlive) {
+    return null
+  }
+
+  const isContentsAlive = !window.webContents.isDestroyed()
+  if (!isContentsAlive) {
     return null
   }
 
@@ -359,7 +375,6 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
     const selectionGeneration = sourceSelectionGeneration
     const sourceId = selectedSourceId
     const binding = search?.current
-    const hasCapture = binding != null
     const hasPermission = generation != null
     const hasSource = sourceId != null
     const isTrusted = isTrustedFrame(window, request.frame)
@@ -370,12 +385,12 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
       audioRequested: request.audioRequested,
       userGesture: request.userGesture
     })
-    const hasSameAuth = hasCapture && binding.authGeneration === generation
-    const hasSameWindow = hasCapture && binding.windowGeneration === startedWindowGeneration
-    const hasSameSource = hasCapture && binding.sourceGeneration === selectionGeneration
-    const hasCurrentCapture = hasCapture && hasSameAuth && hasSameWindow && hasSameSource
+    const hasSameAuth = binding?.authGeneration === generation
+    const hasSameWindow = binding?.windowGeneration === startedWindowGeneration
+    const hasSameSource = binding?.sourceGeneration === selectionGeneration
+    const hasCurrentCapture = hasSameAuth && hasSameWindow && hasSameSource
     const isAllowed = hasPermission && hasSource && isRequestAllowed && hasCurrentCapture
-    if (!isAllowed) {
+    if (!isAllowed || binding == null) {
       deliverMediaResult(callback, null)
       return
     }
