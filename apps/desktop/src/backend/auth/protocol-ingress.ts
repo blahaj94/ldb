@@ -167,6 +167,7 @@ export function selectProtocolIngressArguments(
 type ProjectedUrlInput = Readonly<{
   value: string
   hasInternalControl: boolean
+  matchesRaw: boolean
 }>
 
 function projectUrlDetectionInput(value: string): ProjectedUrlInput {
@@ -199,7 +200,7 @@ function projectUrlDetectionInput(value: string): ProjectedUrlInput {
     }
   }
 
-  return { value: projected, hasInternalControl }
+  return { value: projected, hasInternalControl, matchesRaw: projected === value }
 }
 
 type StructuredOptionPayload = Readonly<{
@@ -208,12 +209,28 @@ type StructuredOptionPayload = Readonly<{
 }>
 
 function readStructuredOptionPayload(value: string): StructuredOptionPayload | undefined {
-  const option = /^(?:--|\/)([A-Za-z0-9][A-Za-z0-9-]*)(?:=|:)([\s\S]*)$/.exec(value)
-  if (option == null) {
+  const prefixLength = value.startsWith('--') ? 2 : value.startsWith('/') ? 1 : 0
+  if (prefixLength === 0) {
     return undefined
   }
 
-  return { name: option[1]!.toLowerCase(), value: option[2]! }
+  const option = value.slice(prefixLength)
+  const separatorIndexes = [option.indexOf('='), option.indexOf(':')].filter((index) => index >= 0)
+  const separatorIndex = Math.min(...separatorIndexes)
+  if (!Number.isFinite(separatorIndex) || separatorIndex < 0) {
+    return undefined
+  }
+
+  const name = option.slice(0, separatorIndex)
+  const isSlashOptionWithPathName = prefixLength === 1 && /[\\/]/.test(name)
+  if (isSlashOptionWithPathName) {
+    return undefined
+  }
+
+  return {
+    name: name.toLowerCase(),
+    value: option.slice(separatorIndex + 1)
+  }
 }
 
 function looksLikeUrlInput(value: string): boolean {
@@ -225,7 +242,10 @@ function looksLikeUrlInput(value: string): boolean {
   const hasInternalControl =
     projectedArgument.hasInternalControl || projectedPayload.hasInternalControl
   const isKnownAbsoluteWindowsPathOption =
-    structuredOption?.name === 'user-data-dir' && /^[A-Za-z]:[\\/](?![\\/])/.test(projected)
+    structuredOption?.name === 'user-data-dir' &&
+    projectedArgument.matchesRaw &&
+    projectedPayload.matchesRaw &&
+    /^[A-Za-z]:[\\/](?![\\/])/.test(projected)
 
   if (isKnownAbsoluteWindowsPathOption) {
     return hasInternalControl && projected.includes(':')

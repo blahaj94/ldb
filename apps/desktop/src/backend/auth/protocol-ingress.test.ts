@@ -398,7 +398,9 @@ describe('Desktop auth protocol ingress', () => {
     '/return-url:https://example.test/auth/return',
     '--return_url=mailto:user@example.test',
     '--return.url=https://example.test/auth/return',
-    '/other_path:C:/auth/return'
+    '/other_path:C:/auth/return',
+    '--=mailto:user@example.test',
+    '/=mailto:user@example.test'
   ])('option payload의 URL-like 입력 %s도 일반 실행으로 활성화하지 않는다', (value) => {
     const app = createApp()
     const dispatch = vi.fn()
