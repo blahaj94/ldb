@@ -18,7 +18,7 @@ const appBuilderConfigModulePath = join(
 const desktopProjectDir = fileURLToPath(new URL('..', import.meta.url))
 const debugLogger = {
   isEnabled: false,
-  add() {}
+  add: () => undefined
 }
 
 describe('desktop package fuse configuration', () => {
