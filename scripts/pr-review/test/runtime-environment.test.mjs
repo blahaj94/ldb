@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import {
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile
-} from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -72,11 +67,7 @@ test('does not append a summary when the summary path is missing or empty', asyn
   const directory = await mkdtemp(join(tmpdir(), 'ldb-pr-review-runtime-'))
   try {
     const eventPath = join(directory, 'event.json')
-    await writeFile(
-      eventPath,
-      JSON.stringify({ workflow_run: { conclusion: 'failure' } }),
-      'utf8'
-    )
+    await writeFile(eventPath, JSON.stringify({ workflow_run: { conclusion: 'failure' } }), 'utf8')
 
     for (const summaryPath of [undefined, '']) {
       const environment = baseEnvironment({ GITHUB_EVENT_PATH: eventPath })
@@ -100,11 +91,7 @@ test('appends the policy skip message to a configured summary path', async () =>
   try {
     const eventPath = join(directory, 'event.json')
     const summaryPath = join(directory, 'summary.md')
-    await writeFile(
-      eventPath,
-      JSON.stringify({ workflow_run: { conclusion: 'failure' } }),
-      'utf8'
-    )
+    await writeFile(eventPath, JSON.stringify({ workflow_run: { conclusion: 'failure' } }), 'utf8')
 
     const result = await execute(
       runScript,
