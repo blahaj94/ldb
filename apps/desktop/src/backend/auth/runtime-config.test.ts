@@ -8,7 +8,7 @@ import type { AuthRuntimeConfig, AuthRuntimeProfileApplication } from './runtime
 type RuntimeProfileFilesystemDouble = {
   lstatSync: typeof fs.lstatSync
   statSync: typeof fs.statSync
-  mkdirSync: typeof fs.mkdirSync
+  mkdirSync(path: string, options: { mode: number }): void
   openSync(path: string, flags: number): number
   fsyncSync(fd: number): void
   closeSync(fd: number): void
@@ -112,6 +112,53 @@ describe('desktop auth runtime config', () => {
       expect(fs.lstatSync(userDataPath).isDirectory()).toBe(true)
       expect(fs.lstatSync(userDataPath).mode & 0o7777).toBe(0o700)
       expect(calls[0]).toBe(`path:userData:${userDataPath}`)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('revalidates a userData directory created by a concurrent first launch', () => {
+    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const userDataPath = join(root, 'new-profile')
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: fs.lstatSync,
+      statSync: fs.statSync,
+      mkdirSync: (path, options) => {
+        fs.mkdirSync(path, options)
+        throw Object.assign(new Error('Synthetic concurrent creation'), { code: 'EEXIST' })
+      },
+      openSync: fs.openSync,
+      fsyncSync: fs.fsyncSync,
+      closeSync: fs.closeSync
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble
+      ) => void
+      expect(() => applyWithFilesystem(application, config, filesystem)).not.toThrow()
+      expect(calls).toEqual([
+        `path:userData:${userDataPath}`,
+        'name:com.synthetic.ldb',
+        'identity:com.synthetic.ldb'
+      ])
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
