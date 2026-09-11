@@ -385,12 +385,18 @@ function registerDisplayMediaHandler(window: BrowserWindow): void {
       audioRequested: request.audioRequested,
       userGesture: request.userGesture
     })
-    const hasSameAuth = binding?.authGeneration === generation
-    const hasSameWindow = binding?.windowGeneration === startedWindowGeneration
-    const hasSameSource = binding?.sourceGeneration === selectionGeneration
+    const hasCapture = binding != null
+    if (!hasCapture) {
+      deliverMediaResult(callback, null)
+      return
+    }
+
+    const hasSameAuth = binding.authGeneration === generation
+    const hasSameWindow = binding.windowGeneration === startedWindowGeneration
+    const hasSameSource = binding.sourceGeneration === selectionGeneration
     const hasCurrentCapture = hasSameAuth && hasSameWindow && hasSameSource
     const isAllowed = hasPermission && hasSource && isRequestAllowed && hasCurrentCapture
-    if (!isAllowed || binding == null) {
+    if (!isAllowed) {
       deliverMediaResult(callback, null)
       return
     }
