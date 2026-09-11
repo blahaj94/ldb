@@ -33,8 +33,8 @@ export type AuthRuntimeEffects = Readonly<{
 }>
 
 function createClock(readWallMs: () => number, readMonotonicMs: () => number): AuthClock {
-  let previousWallMs: number | undefined
-  let previousMonotonicMs: number | undefined
+  let previousWallMs = readWallMs()
+  let previousMonotonicMs = readMonotonicMs()
 
   return {
     read: () => {

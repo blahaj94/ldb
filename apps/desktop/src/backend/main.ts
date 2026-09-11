@@ -7,7 +7,7 @@ import { validateDevRendererUrl } from './renderer-document'
 import { registerCaptureIpc, registerCaptureWindow } from './capture/ipc-handler'
 import { registerCapturePermissions } from './capture/permission-policy'
 import { registerAuthIpc } from './auth/ipc-handler'
-import { createProtocolIngress } from './auth/protocol-ingress'
+import { attachProtocolIngressAfterStart, createProtocolIngress } from './auth/protocol-ingress'
 import { bootstrapAuthRuntime, type AuthRuntime } from './auth/bootstrap'
 import { createAuthRuntimeEffects } from './auth/runtime-effects'
 import { applyAuthRuntimeProfile, readAuthRuntimeConfig } from './auth/runtime-config'
@@ -30,6 +30,7 @@ const protocolIngress =
   runtimeConfig == null
     ? null
     : createProtocolIngress({ app, argv: process.argv, returnTarget: runtimeConfig.returnTarget })
+let protocolIngressDisposed = false
 
 function createWindow(authRuntime: AuthRuntime | null): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
@@ -92,6 +93,7 @@ function createWindow(authRuntime: AuthRuntime | null): void {
 }
 
 function disposeProtocolIngress(): void {
+  protocolIngressDisposed = true
   protocolIngress?.dispose()
 }
 
@@ -152,17 +154,22 @@ app.whenReady().then(async () => {
 
   const startAuthRuntime = authRuntime?.start()
   void startAuthRuntime?.catch(() => undefined)
-  if (authRuntime != null && protocolIngress != null) {
-    protocolIngress.attach(async (rawReturnUrl) => {
-      const window = mainWindow
-      const hasWindow = window != null && !window.isDestroyed()
-      if (!hasWindow) {
-        createWindow(authRuntime)
-      } else {
-        window.show()
-        window.focus()
-      }
-      await authRuntime.coordinator.handleReturnUrl(rawReturnUrl)
-    })
+  if (authRuntime != null && protocolIngress != null && startAuthRuntime != null) {
+    attachProtocolIngressAfterStart(
+      protocolIngress,
+      startAuthRuntime,
+      async (rawReturnUrl) => {
+        const window = mainWindow
+        const hasWindow = window != null && !window.isDestroyed()
+        if (!hasWindow) {
+          createWindow(authRuntime)
+        } else {
+          window.show()
+          window.focus()
+        }
+        await authRuntime.coordinator.handleReturnUrl(rawReturnUrl)
+      },
+      () => !protocolIngressDisposed
+    )
   }
 })

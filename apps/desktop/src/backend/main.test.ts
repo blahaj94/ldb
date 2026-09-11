@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   bootstrap: undefined as Promise<void> | undefined,
   createIngress: vi.fn(),
   attachIngress: vi.fn(),
+  attachAfterStart: vi.fn(),
   disposeIngress: vi.fn(),
   createEffects: vi.fn(),
   bootstrapAuth: vi.fn(),
@@ -81,7 +82,8 @@ vi.mock('./capture/ipc-handler', () => ({
   registerCaptureWindow: mocks.registerWindow
 }))
 vi.mock('./auth/protocol-ingress', () => ({
-  createProtocolIngress: mocks.createIngress
+  createProtocolIngress: mocks.createIngress,
+  attachProtocolIngressAfterStart: mocks.attachAfterStart
 }))
 vi.mock('./auth/runtime-effects', () => ({
   createAuthRuntimeEffects: mocks.createEffects
@@ -101,6 +103,10 @@ beforeEach(() => {
     ownsInstance: true,
     attach: mocks.attachIngress,
     dispose: mocks.disposeIngress
+  })
+  mocks.attachAfterStart.mockImplementation((_ingress, _start, dispatch) => {
+    mocks.attachIngress(dispatch)
+    return vi.fn()
   })
   mocks.runtime = {
     coordinator: mocks.coordinator,

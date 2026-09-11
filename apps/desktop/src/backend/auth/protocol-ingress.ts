@@ -34,6 +34,34 @@ export type ProtocolIngress = Readonly<{
   dispose(): void
 }>
 
+export function attachProtocolIngressAfterStart(
+  ingress: ProtocolIngress,
+  start: Promise<unknown>,
+  dispatch: ProtocolIngressDispatch,
+  isActive: () => boolean = () => true
+): () => void {
+  let attached = true
+  const startResult = start.then(
+    () => true,
+    () => {
+      ingress.dispose()
+      return false
+    }
+  )
+  const detach = ingress.attach(async (rawReturnUrl) => {
+    const didStart = await startResult
+    if (!didStart || !attached || !isActive()) {
+      return
+    }
+    await dispatch(rawReturnUrl)
+  })
+
+  return () => {
+    attached = false
+    detach()
+  }
+}
+
 function findReturnCandidate(
   values: readonly unknown[],
   returnProtocol: string,
