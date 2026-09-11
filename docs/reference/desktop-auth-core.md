@@ -7,7 +7,7 @@ last-reviewed: 2026-09-11
 
 # Desktop Auth Core
 
-Desktop main 인증 core는 `apps/desktop/src/backend/auth`에 있고, 제품 composition은 `apps/desktop/src/backend/main.ts`와 `auth/runtime-config.ts`, `auth/runtime-effects.ts`, `auth/bootstrap.ts`가 담당한다. 완전한 trusted runtime 설정이 없거나 유효하지 않으면 auth effects, protocol ingress, store, network를 만들지 않고 현재 renderer의 연결 실패 안내를 사용한다. 설정이 유효하면 main은 lock 전에 app identity와 userData profile을 적용하고, ready 뒤 안내 완료→dependency 생성으로 coordinator를 만든다. Runtime clock은 dependency 생성 시 실제 wall/monotonic 값을 기준점으로 잡아 coordinator의 첫 restore access 검사부터 관측된 시간 역행을 감지한다. 큰 순방향 불연속이나 suspend를 별도로 판정하는 정책은 정의하지 않았고, 실제 환경의 clock/native 검증도 후속 범위다. 이후 window·auth/capture IPC·activate lifecycle을 먼저 연결한 뒤 `start()`로 restore를 시작하고, protocol return은 start 성공 뒤에만 전달해 restoring 중 cold callback이 유실되지 않게 한다. 실제 API/provider, OS protocol registry, safeStorage·file durability와 packaged native 성공은 여전히 별도 검증 범위다.
+Desktop main 인증 core는 `apps/desktop/src/backend/auth`에 있고, 제품 composition은 `apps/desktop/src/backend/main.ts`와 `auth/runtime-config.ts`, `auth/runtime-effects.ts`, `auth/bootstrap.ts`가 담당한다. 완전한 trusted runtime 설정이 없거나 유효하지 않으면 auth effects, protocol ingress, store, network를 만들지 않고 현재 renderer의 연결 실패 안내를 사용한다. 설정이 유효하면 main은 lock 전에 app identity와 userData profile directory를 준비하고 profile을 적용하며, ready 뒤 안내 완료→dependency 생성으로 coordinator를 만든다. Runtime clock은 dependency 생성 시 실제 wall/monotonic 값을 기준점으로 잡아 coordinator의 첫 restore access 검사부터 관측된 시간 역행을 감지한다. 큰 순방향 불연속이나 suspend를 별도로 판정하는 정책은 정의하지 않았고, 실제 환경의 clock/native 검증도 후속 범위다. 이후 window·auth/capture IPC·activate lifecycle을 먼저 연결한 뒤 `start()`로 restore를 시작하고, protocol return은 start 성공 뒤에만 전달해 restoring 중 cold callback이 유실되지 않게 한다. 실제 API/provider, OS protocol registry, safeStorage·file durability와 packaged native 성공은 여전히 별도 검증 범위다.
 
 ## Module 경계
 
@@ -34,7 +34,7 @@ Coordinator 생성 시 enabled provider, API origin, 등록 return target과 Bro
 
 현재 process 설정 key는 `LDB_AUTH_API_ORIGIN`, `LDB_AUTH_RETURN_TARGET`, `LDB_AUTH_ENVIRONMENT`, `LDB_AUTH_PROVIDERS`, `LDB_AUTH_APP_IDENTITY`, `LDB_AUTH_USER_DATA_PATH`다. 여섯 값이 모두 exact contract를 통과해야 하며, 제품 provider는 Google만 허용한다. 누락·빈 값·잘못된 provider/URL·identity/profile에는 기본값을 적용하지 않는다. Discord는 공통 synthetic core type에 남아 있지만 미해소 gate가 있어 제품 runtime config에서 거절한다.
 
-`LDB_AUTH_USER_DATA_PATH`는 lock 이전에 Electron `userData` path로 적용되고 app identity는 name과 platform app-user-model identity에 함께 적용된다. 이 tuple이 완전하지 않거나 profile 적용이 실패하면 protocol lock·store·network를 활성화하지 않는다. 실제 배포 identity와 profile 값은 아직 결정하지 않는다.
+`LDB_AUTH_USER_DATA_PATH`는 설정 검증 뒤 lock 이전에 lstat한다. 없는 trusted directory만 0700으로 만들고, 기존 POSIX directory는 현재 user 소유·0700인지 확인하며 권한을 임의로 변경하지 않는다. 비디렉터리·symlink·권한/파일시스템 오류는 fail closed한 뒤 `app.setPath('userData', ...)`를 호출하고, 그 다음 app identity를 적용한다. 이 tuple이 완전하지 않거나 profile 준비·적용이 실패하면 protocol lock·store·network를 활성화하지 않는다. 실제 배포 identity와 profile 값은 아직 결정하지 않는다.
 
 등록 return target은 coordinator 생성 시 검사하며 원문에 `?` 또는 `#`가 있으면 내용이 비어 있어도 거절한다. 설정을 보정하지 않으며, percent-encoded path와 정상 target 뒤의 code-only callback query는 기존 exact 검사로 허용한다.
 
