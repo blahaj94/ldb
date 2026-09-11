@@ -42,9 +42,11 @@ export const installObservation = `(() => {
     }
     postMessage(...args) {
       const hasMessage = args[0] != null;
-      const isRecognition = hasMessage && args[0].action === 'recognize';
-      if (isRecognition) {
-        counts.recognitionRequests += 1;
+      if (hasMessage) {
+        const isRecognitionAction = args[0].action === 'recognize';
+        if (isRecognitionAction) {
+          counts.recognitionRequests += 1;
+        }
       }
       return super.postMessage(...args);
     }
