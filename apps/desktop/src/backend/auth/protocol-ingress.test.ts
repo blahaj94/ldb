@@ -312,10 +312,9 @@ describe('Desktop auth protocol ingress', () => {
       returnTarget: RETURN_TARGET
     })
     const dispatch = vi.fn()
-    let stop: (() => void) | undefined
-    stop = attachProtocolIngressAfterStart(ingress, start.promise, (rawReturnUrl) => {
+    const stop = attachProtocolIngressAfterStart(ingress, start.promise, (rawReturnUrl) => {
       dispatch(rawReturnUrl)
-      stop?.()
+      stop()
     })
 
     start.resolve()
