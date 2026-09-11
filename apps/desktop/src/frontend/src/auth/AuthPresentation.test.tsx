@@ -162,6 +162,16 @@ it('restorePaused exposes only safe retry and device logout', async () => {
   expect(onIntent.mock.calls).toEqual([[{ type: 'retryAuth' }], [{ type: 'logout' }]])
 })
 
+it('restorePaused presents the time-check notice with the same safe actions', async () => {
+  await render({ input: snapshot('restorePaused', { notice: 'RESTORE_RETRY_REQUIRED' }) })
+
+  expect(labels()).toEqual(['다시 시도', '이 기기 로그아웃'])
+  expect(container.textContent).toContain('로그인 상태 확인을 마치지 못했습니다')
+  await click('다시 시도')
+  await click('이 기기 로그아웃')
+  expect(onIntent.mock.calls).toEqual([[{ type: 'retryAuth' }], [{ type: 'logout' }]])
+})
+
 it.each(['SECURE_STORAGE_UNAVAILABLE', 'TOKEN_SAVE_FAILED', 'LOCAL_CLEAR_UNCONFIRMED'] as const)(
   'storageBlocked/%s permits retry only and hides injected protected data',
   async (notice) => {

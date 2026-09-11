@@ -2,7 +2,7 @@
 type: reference
 status: current
 scope: desktop renderer auth presentation and isolated fixture
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-11
 ---
 
 # Desktop Auth UI
@@ -61,7 +61,7 @@ Code result `bd5d5e1`에서 aggregate exit 0, 10 files/53 tests, lint, Desktop b
 | Light, 초기 wide(1100×768 content), signedOut→waitingBrowser | provider 표시, Tab/Shift+Tab focus, Enter intent, 대기 중 disabled, 다음 snapshot의 현재 attempt 취소 focus. |
 | Dark, 360×740, startingLogin·exchanging·restoring·signingOut | 안내와 loading/disabled 표현, 보호 content 부재, exchange 취소 focus, restoring/signingOut의 activation 차단. |
 | Dark, 360×740, invalidReturn | 새 로그인 Enter→취소 대기 중 두 action disabled→signedOut 안내. 대기 중 provider가 나타나지 않는다. |
-| Dark, 360×740, restorePaused·storageBlocked | retry/logout 순서와 focus, logout 후 signingOut, storageBlocked의 retry만 노출 및 local/server 불명 안내. |
+| Dark, 360×740, restorePaused·storageBlocked | retry/logout 순서와 focus, logout 후 signingOut, storageBlocked의 retry만 노출 및 local/server 불명 안내. `RESTORE_RETRY_REQUIRED`도 같은 안전한 retry/logout action과 고정 시간 확인 안내를 사용한다. |
 | Light/Dark, 360×740, 최대 nickname welcome→home | `W` 20 grapheme가 영역 안에 표시된다. 시작하기 Enter 후 home 계정·캡처 안내·logout 표시와 focus를 확인했다. |
 | Dark, reduced-motion run | CLI flag만 사용한 실행에서 실제 DevTools `matchMedia('(prefers-reduced-motion: reduce)').matches === true`, dark true, `window.api` undefined 확인. Wide 화면에서 Tab→provider·Enter→busy→waiting→취소 focus·Enter→busy→signedOut·Tab→provider focus를 확인했다. DevTools는 read-only query에 사용했고 media emulation을 설정하지 않았다. |
 

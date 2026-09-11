@@ -79,6 +79,7 @@ export class CredentialWriter {
 export class CredentialSession {
   private accessGeneration = 0
   private credential: SessionCredential | null = null
+  private untrustedAccessGeneration: number | null = null
   private knownRefreshToken: string | null = null
   private disposalFlight: Readonly<{ refreshToken: string; promise: Promise<boolean> }> | null =
     null
@@ -216,6 +217,7 @@ export class CredentialSession {
 
   acceptCommitted(tokens: AuthTokens): void {
     this.accessGeneration += 1
+    this.untrustedAccessGeneration = null
     this.credential = {
       ...tokens,
       accessTokenExpiresAtMs: Date.parse(tokens.accessTokenExpiresAt),
@@ -233,8 +235,21 @@ export class CredentialSession {
     this.credential = null
   }
 
+  isAccessTrusted(credential: SessionCredential): boolean {
+    const isUntrusted = this.untrustedAccessGeneration === credential.accessGeneration
+    return !isUntrusted
+  }
+
+  markAccessUntrusted(credential: SessionCredential): void {
+    const isCurrentCredential = this.credential === credential
+    if (isCurrentCredential) {
+      this.untrustedAccessGeneration = credential.accessGeneration
+    }
+  }
+
   discard(): void {
     this.credential = null
+    this.untrustedAccessGeneration = null
     this.knownRefreshToken = null
     this.disposalFlight = null
   }

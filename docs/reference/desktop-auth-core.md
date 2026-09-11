@@ -2,7 +2,7 @@
 type: reference
 status: active
 scope: apps/desktop main authentication core
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-11
 ---
 
 # Desktop Auth Core
@@ -93,6 +93,8 @@ Constructor는 attempt 상태를 구성한다. Coordinator가 current reference�
 Clock 검사는 wall/monotonic 각각을 마지막으로 수용한 관측과 비교한다. 어느 쪽이든 역행하면 `LOGIN_EXPIRED`이며 동일하거나 정상 증가한 관측만 다음 비교 기준으로 저장한다. Request 수신과 timer 재예약에서도 이 history를 유지한다. Monotonic 600초 상한은 최초 `startedAt`에 고정하고 서버 `expiresAt` wall-clock 조건과 불연속 검사도 별도로 유지한다.
 
 ## Lifecycle entry
+
+- Restore는 commit/finalize 뒤와 `/me` 전송·응답 처리 뒤 access 만료·clock 신뢰를 다시 확인한다. 시간 문제가 확인되면 확정 credential을 보존한 `restorePaused/RESTORE_RETRY_REQUIRED`로 끝내고, 해당 access의 신뢰 상실은 다음 credential commit까지 유지한다. 시간 문제가 없는 `RESTORE_RETRY_REQUIRED` retry는 `/me`만 재개하며, 신뢰 상실·만료 retry는 현재 확정 refresh로 한 번 rotation한 뒤 검사를 이어간다.
 
 - `start()`는 store를 한 번 복원한다. Ready refresh를 transition 뒤 한 번 rotate하고 새 credential을 commit한 다음 `GET /me`로 user를 확인해야 `signedIn/home`이 된다.
 - `beginLogin(provider)`는 `signedOut`이고 이전 writer가 끝난 때만 local attempt와 독립 PKCE를 만든다. 시작 및 login request 응답 뒤 expiry 재설정에서 무효화된 attempt는 `startingLogin`이나 `waitingBrowser`로 다시 공개하지 않는다. 검증한 login request 응답도 현재 pending이 유지된 경우에만 외부 Browser에 한 번 전달한다.
