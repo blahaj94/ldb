@@ -96,12 +96,24 @@ export function command(program, args, options = {}) {
   })
 }
 
+export function shouldThrowDockerFailure({ allowFailure, result }) {
+  const shouldRejectFailure = !allowFailure
+  if (!shouldRejectFailure) {
+    return false
+  }
+
+  const hasFailedExit = result.code !== 0
+  if (hasFailedExit) {
+    return true
+  }
+
+  const hasExitSignal = result.signal !== null
+  return hasExitSignal
+}
+
 export async function docker(args, options = {}) {
   const result = await command('docker', args, { timeoutMs: options.timeoutMs })
-  const shouldRejectFailure = !options.allowFailure
-  const hasFailedExit = shouldRejectFailure && result.code !== 0
-  const hasExitSignal = shouldRejectFailure && !hasFailedExit && result.signal !== null
-  const shouldThrow = shouldRejectFailure && (hasFailedExit || hasExitSignal)
+  const shouldThrow = shouldThrowDockerFailure({ allowFailure: options.allowFailure, result })
   if (shouldThrow) {
     throw new Error(`Docker command failed: ${args[0] ?? 'unknown'}`)
   }
@@ -124,6 +136,35 @@ function normalizeNativePlatform({ os, architecture }) {
   throw new Error('Unsupported Docker architecture')
 }
 
+export function assertApprovedChildDigest(expectedChildDigest) {
+  const hasExpectedChildDigest = expectedChildDigest != null
+  assert(hasExpectedChildDigest, 'native platform is not approved')
+
+  const hasNonEmptyChildDigest = expectedChildDigest !== ''
+  assert(hasNonEmptyChildDigest, 'native platform is not approved')
+}
+
+export function matchesImagePlatform(entry, platform) {
+  const [expectedOs, expectedArchitecture] = platform.split('/')
+  const hasMatchingOs = entry.platform?.os === expectedOs
+  if (!hasMatchingOs) {
+    return false
+  }
+
+  const hasMatchingArchitecture = entry.platform?.architecture === expectedArchitecture
+  if (!hasMatchingArchitecture) {
+    return false
+  }
+
+  const requiresArm64Variant = platform === 'linux/arm64/v8'
+  if (!requiresArm64Variant) {
+    return true
+  }
+
+  const hasArm64Variant = entry.platform?.variant === 'v8'
+  return hasArm64Variant
+}
+
 export async function verifyApprovedImage() {
   const info = await docker([
     'info',
@@ -137,8 +178,7 @@ export async function verifyApprovedImage() {
   }
   const platform = normalizeNativePlatform({ os: match[1], architecture: match[2] })
   const expectedChildDigest = POSTGRES_CHILD_DIGESTS[platform]
-  const hasApprovedChildDigest = expectedChildDigest != null && expectedChildDigest !== ''
-  assert(hasApprovedChildDigest, 'native platform is not approved')
+  assertApprovedChildDigest(expectedChildDigest)
 
   const manifestResult = await docker(
     ['buildx', 'imagetools', 'inspect', POSTGRES_IMAGE, '--format', '{{json .Manifest}}'],
@@ -147,16 +187,7 @@ export async function verifyApprovedImage() {
   const manifest = JSON.parse(manifestResult.stdout)
   assert.equal(manifest.mediaType, 'application/vnd.oci.image.index.v1+json')
   assert.equal(manifest.digest, POSTGRES_INDEX_DIGEST)
-  const child = manifest.manifests.find((entry) => {
-    const hasMatchingOs = entry.platform?.os === platform.split('/')[0]
-    const hasMatchingArchitecture =
-      hasMatchingOs && entry.platform?.architecture === platform.split('/')[1]
-    const requiresArm64Variant = hasMatchingArchitecture && platform === 'linux/arm64/v8'
-    const hasArm64Variant = requiresArm64Variant && entry.platform?.variant === 'v8'
-    const hasMatchingVariant = !requiresArm64Variant || hasArm64Variant
-    const isMatchingPlatform = hasMatchingOs && hasMatchingArchitecture && hasMatchingVariant
-    return isMatchingPlatform
-  })
+  const child = manifest.manifests.find((entry) => matchesImagePlatform(entry, platform))
   assert.equal(child?.digest, expectedChildDigest)
 
   const childManifestResult = await docker(
@@ -375,14 +406,7 @@ export async function createPostgres(runId, verifiedImage, hooks = {}) {
     assertContainerImageId(JSON.parse(metadataMatch[1]), verifiedImage)
     assert.equal(JSON.parse(metadataMatch[2]), 'linux')
     const mounts = JSON.parse(metadataMatch[3])
-    const hasOwnedDataVolume = mounts.some((mount) => {
-      const isVolumeMount = mount.Type === 'volume'
-      const hasMatchingName = isVolumeMount && mount.Name === volumeName
-      const hasMatchingDestination =
-        hasMatchingName && mount.Destination === POSTGRES_DATA.volumeTarget
-      const isOwnedDataVolume = isVolumeMount && hasMatchingName && hasMatchingDestination
-      return isOwnedDataVolume
-    })
+    const hasOwnedDataVolume = hasOwnedDataVolumeMount(mounts, volumeName)
     assert.equal(hasOwnedDataVolume, true)
     const architecture = await docker(['exec', containerName, 'uname', '-m'])
     const containerArchitecture = architecture.stdout.trim()
@@ -410,6 +434,23 @@ export async function createPostgres(runId, verifiedImage, hooks = {}) {
     await teardownPostgres({ runId, containerName, volumeName })
     throw error
   }
+}
+
+export function hasOwnedDataVolumeMount(mounts, volumeName) {
+  return mounts.some((mount) => {
+    const isVolumeMount = mount.Type === 'volume'
+    if (!isVolumeMount) {
+      return false
+    }
+
+    const hasMatchingName = mount.Name === volumeName
+    if (!hasMatchingName) {
+      return false
+    }
+
+    const hasMatchingDestination = mount.Destination === POSTGRES_DATA.volumeTarget
+    return hasMatchingDestination
+  })
 }
 
 async function inspectOwnership({ kind, name }) {
