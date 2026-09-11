@@ -636,7 +636,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return Promise.resolve(state.success(cancelled))
   }
 
-  function handleReturnUrl(raw: unknown): Promise<void> {
+  function handleReturnUrl(raw: unknown, onClaimed?: () => Promise<void> | void): Promise<void> {
     let parsed: Readonly<{ code: string }>
     try {
       parsed = parseReturnUrl(raw, dependencies.returnTarget)
@@ -676,7 +676,14 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     const writer = session.reserveWriter()
     value.trackExchange(writer.completion)
-    return writer.execute(() => exchangeLogin(value, claim, writer))
+    const exchange = writer.execute(() => exchangeLogin(value, claim, writer))
+    try {
+      const activation = onClaimed?.()
+      void Promise.resolve(activation).catch(() => undefined)
+    } catch {
+      // Window activation is best-effort and must not interrupt the claimed exchange.
+    }
+    return exchange
   }
 
   async function rotateCredential(
@@ -943,7 +950,12 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         checkedAt,
         refreshedCredential.accessTokenExpiresAtMs
       )
-      const canUseAccess = step === 'verify-user'
+      const hasUsableAccessTime = step === 'verify-user'
+      if (!hasUsableAccessTime) {
+        session.markAccessUntrusted(refreshedCredential)
+      }
+      const isAccessTrusted = session.isAccessTrusted(refreshedCredential)
+      const canUseAccess = hasUsableAccessTime && isAccessTrusted
       if (!canUseAccess) {
         return { status: 'unavailable' }
       }
@@ -967,7 +979,12 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const checkedAt = dependencies.clock.read()
     const isClockUsable = !checkedAt.discontinuous
     const isAccessCurrent = checkedAt.wallMs < currentCredential.accessTokenExpiresAtMs
-    const canUseAccess = isClockUsable && isAccessCurrent
+    const hasUsableAccessTime = isClockUsable && isAccessCurrent
+    if (!hasUsableAccessTime) {
+      session.markAccessUntrusted(currentCredential)
+    }
+    const isAccessTrusted = session.isAccessTrusted(currentCredential)
+    const canUseAccess = hasUsableAccessTime && isAccessTrusted
     if (canUseAccess) {
       return {
         status: 'available',

@@ -85,6 +85,31 @@ function validArguments(channel: Mutation, args: unknown[]): boolean {
 
 export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options): () => void {
   let disposed = false
+  const registeredChannels: Array<keyof AsyncIPCFunctions> = []
+
+  function register<ChannelName extends keyof AsyncIPCFunctions>(
+    channel: ChannelName,
+    handler: (
+      event: IpcMainInvokeEvent,
+      ...args: Parameters<AsyncIPCFunctions[ChannelName]>
+    ) =>
+      | ReturnType<AsyncIPCFunctions[ChannelName]>
+      | Awaited<ReturnType<AsyncIPCFunctions[ChannelName]>>
+  ): void {
+    addHandler(channel, handler)
+    registeredChannels.push(channel)
+  }
+
+  function removeRegisteredChannels(): void {
+    for (const channel of registeredChannels) {
+      try {
+        ipcMain.removeHandler(channel)
+      } catch {
+        // Continue removing the remaining partially registered handlers.
+      }
+    }
+    registeredChannels.length = 0
+  }
 
   function allowedWindow(window: BrowserWindow | null): window is BrowserWindow {
     const hasWindow = window != null
@@ -105,6 +130,10 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
     const frame = contents.mainFrame
     const hasFrame = frame != null
     if (!hasFrame) {
+      return false
+    }
+    const isFrameDestroyed = frame.isDestroyed()
+    if (isFrameDestroyed) {
       return false
     }
     const isFrameAttached = !frame.detached
@@ -144,7 +173,6 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
     }
     return publicSnapshot(coordinator.getSnapshot())
   }
-  addHandler('getAuthState', getAuthState)
 
   async function mutate(
     channel: Mutation,
@@ -191,24 +219,42 @@ export function registerAuthIpc({ coordinator, getWindow, documentUrl }: Options
     }
     return { ok: false, error: { code: result.error.code }, snapshot }
   }
-  addHandler('beginLogin', (event, ...args) => mutate('beginLogin', event, args))
-  addHandler('cancelLogin', (event, ...args) => mutate('cancelLogin', event, args))
-  addHandler('retryAuth', (event, ...args) => mutate('retryAuth', event, args))
-  addHandler('logout', (event, ...args) => mutate('logout', event, args))
+  let unsubscribe: (() => void) | undefined
+  try {
+    register('getAuthState', getAuthState)
+    register('beginLogin', (event, ...args) => mutate('beginLogin', event, args))
+    register('cancelLogin', (event, ...args) => mutate('cancelLogin', event, args))
+    register('retryAuth', (event, ...args) => mutate('retryAuth', event, args))
+    register('logout', (event, ...args) => mutate('logout', event, args))
 
-  const unsubscribe = coordinator.subscribe((snapshot) => {
-    const window = getWindow()
-    const isAllowed = allowedWindow(window)
-    if (!isAllowed) {
+    unsubscribe = coordinator.subscribe((snapshot) => {
+      const window = getWindow()
+      const isAllowed = allowedWindow(window)
+      if (!isAllowed) {
+        return
+      }
+      window.webContents.send('authStateChanged', publicSnapshot(snapshot))
+    })
+  } catch (error) {
+    disposed = true
+    try {
+      unsubscribe?.()
+    } catch {
+      // Continue rolling back the registered handlers.
+    }
+    removeRegisteredChannels()
+    throw error
+  }
+
+  return () => {
+    if (disposed) {
       return
     }
-    window.webContents.send('authStateChanged', publicSnapshot(snapshot))
-  })
-  return () => {
     disposed = true
-    unsubscribe()
-    for (const channel of ['getAuthState', 'beginLogin', 'cancelLogin', 'retryAuth', 'logout']) {
-      ipcMain.removeHandler(channel)
+    try {
+      unsubscribe?.()
+    } finally {
+      removeRegisteredChannels()
     }
   }
 }

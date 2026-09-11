@@ -1295,6 +1295,105 @@ describe('Desktop AuthCoordinator login', () => {
     expect(harness.http.exchange).toHaveBeenCalledTimes(1)
   })
 
+  it('callback claim hook은 새 valid pending claim에서 exchange 작업을 시작한 뒤 한 번만 실행한다', async () => {
+    const harness = createAuthHarness()
+    const exchange = deferred<Awaited<ReturnType<typeof harness.http.value.exchange>>>()
+    harness.http.exchange.mockImplementationOnce(() => exchange.promise)
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    const pendinglessHook = vi.fn()
+    const invalidHook = vi.fn()
+    const claimedHook = vi.fn(() => {
+      expect(harness.store.establishTransition).toHaveBeenCalledTimes(1)
+      expect(coordinator.getSnapshot()).toMatchObject({ phase: 'exchanging' })
+    })
+    const joinedHook = vi.fn()
+    const ignoredHook = vi.fn()
+    await coordinator.start()
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, pendinglessHook)
+    expect(pendinglessHook).not.toHaveBeenCalled()
+    await beginWaitingLogin(coordinator)
+    await coordinator.handleReturnUrl(`ldb-test://auth/wrong?code=${CODE}`, invalidHook)
+    expect(invalidHook).not.toHaveBeenCalled()
+
+    const first = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, claimedHook)
+    const duplicate = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, joinedHook)
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${OTHER_CODE}`, ignoredHook)
+
+    expect(duplicate).toBe(first)
+    expect(claimedHook).toHaveBeenCalledTimes(1)
+    expect(joinedHook).not.toHaveBeenCalled()
+    expect(ignoredHook).not.toHaveBeenCalled()
+    exchange.resolve({
+      ...tokenResponse(),
+      user: { id: USER_ID, nickname: '모험가0000001' },
+      isNewUser: false
+    })
+    await first
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+  })
+
+  it('expired callback은 claim hook을 실행하지 않는다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    const onClaimed = vi.fn()
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+
+    harness.clock.discontinuous = true
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, onClaimed)
+
+    expect(onClaimed).not.toHaveBeenCalled()
+    expect(harness.http.exchange).not.toHaveBeenCalled()
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      notice: 'LOGIN_EXPIRED'
+    })
+  })
+
+  it('callback claim hook 예외를 외부로 전파하지 않고 exchange를 계속한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    const onClaimed = vi.fn(() => {
+      throw new Error('window activation failed')
+    })
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+
+    let returning: Promise<void> | undefined
+    expect(() => {
+      returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, onClaimed)
+    }).not.toThrow()
+    await expect(returning).resolves.toBeUndefined()
+
+    expect(onClaimed).toHaveBeenCalledTimes(1)
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn' })
+  })
+
+  it('callback claim hook의 비동기 결과도 관찰하고 exchange와 분리한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    let calls = 0
+    const activation = Promise.reject(new Error('window activation failed asynchronously'))
+    const guardedActivation = activation.catch(() => undefined)
+    const activationCatch = vi.spyOn(activation, 'catch')
+    const onClaimed = (): Promise<never> => {
+      calls += 1
+      return activation
+    }
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, onClaimed)
+    await guardedActivation
+
+    expect(calls).toBe(1)
+    expect(activationCatch).toHaveBeenCalledTimes(1)
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn' })
+  })
+
   it.each(['success', 'cancel-recover'] as const)(
     '거절 clear 완료의 동기 listener에서 다른 callback으로 writer를 인계한다: %s',
     async (outcome) => {
@@ -2187,6 +2286,38 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     }
   )
 
+  it('authorization의 clock 신뢰 상실은 전송 전 refresh 중단 뒤에도 현재 access를 다시 사용하지 않는다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await restoreSignedIn(coordinator, harness)
+    harness.http.refresh.mockClear()
+    harness.http.me.mockClear()
+    harness.clock.discontinuous = true
+    harness.http.refresh.mockRejectedValueOnce(new AuthHttpFailure('network', 'not-sent'))
+
+    await expect(coordinator.authorization()).resolves.toEqual({ status: 'unavailable' })
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'restorePaused',
+      notice: 'NETWORK_UNAVAILABLE'
+    })
+    expect(harness.http.refresh).toHaveBeenCalledTimes(1)
+    expect(harness.http.refresh).toHaveBeenLastCalledWith(REFRESH_1, expect.any(AbortSignal))
+    expect(harness.http.me).not.toHaveBeenCalled()
+
+    harness.clock.discontinuous = false
+    harness.http.refresh.mockResolvedValueOnce(
+      tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 })
+    )
+    await coordinator.retryAuth()
+
+    expect(harness.http.refresh).toHaveBeenCalledTimes(2)
+    expect(harness.http.refresh).toHaveBeenLastCalledWith(REFRESH_1, expect.any(AbortSignal))
+    expect(harness.http.me).toHaveBeenCalledTimes(1)
+    expect(harness.http.me).toHaveBeenCalledWith(ACCESS_2, expect.any(AbortSignal))
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
+  })
+
   it('만료 access의 동시 caller가 refresh HTTP와 동일 authorization 결과를 공유한다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
@@ -2273,8 +2404,8 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
           accessTokenExpiresAt: nextExpiry
         })
       )
-      const nextAuthorization = coordinator.authorization()
       harness.clock.discontinuous = false
+      const nextAuthorization = coordinator.authorization()
       const nextResult = await nextAuthorization
 
       expect(nextResult).toMatchObject({ status: 'available', accessToken: ACCESS_1 })

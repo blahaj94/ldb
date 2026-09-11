@@ -3,14 +3,14 @@ type: reference
 status: active
 enforcement: autonomous
 scope: desktop macOS credential adapter and isolated validation
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-12
 ---
 
 # Desktop credential store
 
-`apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`의 `createMacOsCredentialStore`는 기존 `CredentialStore`를 구현한다. Production bootstrap에는 연결하지 않았다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
+`apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`의 `createMacOsCredentialStore`는 기존 `CredentialStore`를 구현한다. 제품 main은 완전하고 유효한 trusted runtime 설정이 있을 때 이 adapter를 auth HTTP, coordinator와 같은 tuple로 구성한다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
 
-Main이 `userDataPath`, trusted `context`와 Electron `safeStorage`를 주입한다. Context는 `environment`, exact HTTPS `apiOrigin`, `clientId:"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. 실제 환경값은 build 설정이 고정하며 renderer에서 받지 않는다. 기본 host가 macOS가 아니면 암호화·파일 작업 전에 거절한다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
+Main은 Electron에 적용·read-back 확인한 trusted config 하나를 bootstrap에 전달한다. Runtime effects의 `createDependencies(config)`가 그 config의 `userDataPath`, `environment`, exact HTTPS `apiOrigin`으로 store context를 만들고 기본 Electron `safeStorage`와 함께 adapter에 전달한다. Context의 `clientId`는 `"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. Runtime 값은 renderer가 아니라 process 설정에서만 읽지만, 실제 dev/test/prod 값과 package 주입은 현재 `electron-builder.yml`에 고정되어 있지 않다. 현재 builder identity도 배포용 trusted tuple로 확정한 값이 아니다. 제품 composition entry는 OS allowlist 없이 실행되지만 현재 credential 구현은 macOS 전용이다. 기본 host가 macOS가 아니면 암호화·파일 작업 전에 `unavailable`을 반환하고 coordinator가 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`로 끝낸다. 이를 Windows/Linux 지원 성공으로 해석하지 않는다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
 
 ## 파일과 결과
 
@@ -19,14 +19,14 @@ Main이 `userDataPath`, trusted `context`와 Electron `safeStorage`를 주입한
 - `transition.v1`에는 version·임의 local operation ID·종류만 둔다. Exclusive temp 생성→file sync→동일 directory rename→directory sync를 확인한 marker만 이 instance의 mutation 자격으로 사용한다. 재확립은 새 marker를 먼저 flush한 뒤 이전 marker temp를 제거하고 삭제 sync까지 확인한다.
 - Credential 교체도 exclusive temp→file sync→rename→directory sync이며 이전 사본을 만들지 않는다. Local clear는 확립된 clear marker 아래 credential와 소유 temp를 지우고 sync한다. 이후 marker 삭제·directory sync는 별도 port 호출이다.
 
-| 관측 | Port 결과와 호출자의 후속 처리 |
-| --- | --- |
-| Marker/소유 temp 없음, 보호 backend의 시험 암복호화 성공, credential 없음 | `empty` |
-| Marker/소유 temp 없음, 정상 record 복호화·payload 검증 성공 | `ready`와 refresh 하나 |
-| Marker 또는 소유 temp 존재, record/payload 손상 | `recovery-required`; marker가 있으면 backend 조회·복호화하지 않는다. Coordinator가 clear와 최종 상태를 결정한다. |
-| 권한/type/owner/symlink 문제, backend 거절·복호화 예외 | `unavailable`; 정상 ciphertext를 임의로 삭제하거나 평문 fallback을 사용하지 않는다. |
-| 교체 호출 전 실패 | `failed`; 성공으로 publish하지 않는다. |
-| Rename 호출 이후 실패 또는 marker 삭제 결과/flush 불명 | `unknown`; 기존 credential operations가 marker 재확립을 시도한다. 재확립 실패는 local clear 미확인이며 다음 실행의 복원 차단을 보장하지 않는다. |
+| 관측                                                                      | Port 결과와 호출자의 후속 처리                                                                                                                  |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Marker/소유 temp 없음, 보호 backend의 시험 암복호화 성공, credential 없음 | `empty`                                                                                                                                         |
+| Marker/소유 temp 없음, 정상 record 복호화·payload 검증 성공               | `ready`와 refresh 하나                                                                                                                          |
+| Marker 또는 소유 temp 존재, record/payload 손상                           | `recovery-required`; marker가 있으면 backend 조회·복호화하지 않는다. Coordinator가 clear와 최종 상태를 결정한다.                                |
+| 권한/type/owner/symlink 문제, backend 거절·복호화 예외                    | `unavailable`; 정상 ciphertext를 임의로 삭제하거나 평문 fallback을 사용하지 않는다.                                                             |
+| 교체 호출 전 실패                                                         | `failed`; 성공으로 publish하지 않는다.                                                                                                          |
+| Rename 호출 이후 실패 또는 marker 삭제 결과/flush 불명                    | `unknown`; 기존 credential operations가 marker 재확립을 시도한다. 재확립 실패는 local clear 미확인이며 다음 실행의 복원 차단을 보장하지 않는다. |
 
 ## 검증 명령과 범위
 
@@ -51,7 +51,7 @@ Native runner의 `--prepare-only`는 bundle 생성·정리만 하며 Electron/Ke
 
 ## Bootstrap 연결 조건과 남은 gate
 
-단일 main ownership·writer가 확립되고 `app.ready` 이후 접근 안내를 표시한 뒤 실제 safeStorage를 주입해야 한다. 고정된 dev/test/prod profile·API origin·배포 identity와 private root 권한을 확인한다. OS prompt는 동기 safeStorage 호출을 막을 수 있으며 JavaScript timer로 취소된다고 가정하지 않는다. 실제 OAuth와 production 저장 활성화는 별도 통합 범위다.
+제품 main은 single-instance lock 전에 app identity와 private userData profile을 적용하고, `app.ready` 이후 접근 안내를 표시한 뒤 runtime effects가 기본 Electron safeStorage를 사용하는 dependency를 생성하게 한다. 설정이 없거나 잘못되면 adapter, auth HTTP와 coordinator를 생성하지 않는다. 고정된 dev/test/prod profile·API origin·배포 identity와 private root 권한의 실제 값은 아직 확인하지 않았다. OS prompt는 동기 safeStorage 호출을 막을 수 있으며 JavaScript timer로 취소된다고 가정하지 않는다. 실제 OAuth, packaged app과 production 저장 검증은 별도 통합 범위다.
 
 확인한 고정 조합은 Electron **39.8.10**, Node **22.22.1**, libuv **1.51.0**이다. [Electron DEPS](https://raw.githubusercontent.com/electron/electron/v39.8.10/DEPS)와 설치 runtime을 대조했다. [Node의 libuv Apple 구현](https://raw.githubusercontent.com/nodejs/node/v22.22.1/deps/uv/src/unix/fs.c)은 `FileHandle.sync()` 경로에서 `F_FULLFSYNC`, 실패 시 `F_BARRIERFSYNC`, 다시 실패 시 `fsync`를 사용한다. JavaScript 성공은 선택된 fallback을 알려 주지 않으므로 실제 filesystem의 directory durability·전원 손실 보장을 증명하지 않는다.
 

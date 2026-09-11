@@ -2,25 +2,26 @@
 type: reference
 status: active
 scope: desktop authentication capture integration and isolated media fixture
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-12
 ---
 
 # Desktop Auth Capture
 
-[승인된 Desktop auth 경계](../rules/desktop-auth.md)에 따라 기존 capture 화면을 signedIn home에 연결하고 인증 이탈 시 main source와 renderer resource를 정리한다. 제품 entry에는 실제 auth effects가 아직 구성되지 않았으므로 기본 실행은 고정된 인증 연결 실패 안내를 표시하며 capture를 mount하지 않는다. 실제 로그인·native credential 저장·OS protocol 등록·API/provider 연결 완료를 뜻하지 않는다.
+[승인된 Desktop auth 경계](../rules/desktop-auth.md)에 따라 기존 capture 화면을 signedIn home에 연결하고 인증 이탈 시 main source와 renderer resource를 정리한다. 제품 entry는 trusted auth 설정이 없을 때 고정된 인증 연결 실패 안내를 표시하며 capture를 mount하지 않는다. 설정이 유효할 때만 main auth generation과 검색 HTTP를 capture IPC에 연결한다. 실제 로그인·native credential 저장·OS protocol registry·API/provider 연결 완료를 뜻하지 않는다.
 
 ## 구현 위치
 
-| File | 현재 책임 |
-| --- | --- |
-| `apps/desktop/src/backend/auth/coordinator.ts`, `types.ts` | `captureGeneration(): number \| null`로 현재 signedIn의 내부 auth generation만 반환한다. HTTP용 `authorization()`을 호출하거나 access expiry 때문에 refresh하지 않는다. |
-| `apps/desktop/src/backend/capture/ipc-handler.ts` | 실제 coordinator를 등록하고 source 열거·선택·media 완료의 auth/window/document 수명을 확인한다. 선택 무효화, trusted 빈 선택 cleanup, 안정화 통지의 현재 main 권한과 raw log 제거를 담당한다. |
-| `apps/desktop/src/backend/renderer-document.ts` | 개발 URL은 HTTP(S)의 exact `localhost`, `127.0.0.1`, `[::1]`과 canonical 입력만 허용한다. Credential·공백·control·backslash·host alias를 거절하고 Electron Vite가 제공하는 slash 없는 bare origin만 정규화한다. |
-| `apps/desktop/src/backend/main.ts` | 검증한 renderer URL, sandbox·contextIsolation 활성화, nodeIntegration 비활성화와 navigation/popup 차단을 구성한다. 실제 auth owner를 만들지 않으며 permission check/request도 명시적으로 거절해 legacy media 경로를 차단한다. |
-| `apps/desktop/src/preload/index.ts`, `index.d.ts` | auth/capture와 검색 feature API만 노출한다. 범용 `window.electron`과 isolation-off fallback은 없다. |
-| `apps/desktop/src/frontend/src/App.tsx`, `auth/AuthBridge.tsx`, `auth/AuthPresentation.tsx` | 실제 제품 App이 AuthBridge의 home content로 기존 PartyCapture를 전달한다. Welcome·인증 처리·연결 실패 화면에서는 capture를 mount하지 않는다. |
-| `apps/desktop/src/frontend/src/capture/PartyCapture.tsx` | 기존 source/interval·Start/Stop·인식값 UI와 네 슬롯 검색 결과를 표시한다. 공용 UI 외형을 변경하지 않는다. |
-| `apps/desktop/src/frontend/src/capture/usePartyCaptureSession.ts`, `usePartyRecognition.ts`, `useCaptureSourceSelection.ts` | 현재 capture의 AbortSignal을 OCR에 전달하고 종료 뒤 결과·통지를 버린다. Unmount에서 stream·video·worker·loop와 main 선택을 정리한다. |
+| File                                                                                                                        | 현재 책임                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/desktop/src/backend/auth/coordinator.ts`, `types.ts`                                                                  | `captureGeneration(): number \| null`로 현재 signedIn의 내부 auth generation만 반환한다. HTTP용 `authorization()`을 호출하거나 access expiry 때문에 refresh하지 않는다.                                         |
+| `apps/desktop/src/backend/capture/ipc-handler.ts`                                                                           | 실제 coordinator를 등록하고 source 열거·선택·media 완료의 auth/window/document 수명을 확인한다. 선택 무효화, trusted 빈 선택 cleanup, 안정화 통지의 현재 main 권한과 raw log 제거를 담당한다.                   |
+| `apps/desktop/src/backend/renderer-document.ts`                                                                             | 개발 URL은 HTTP(S)의 exact `localhost`, `127.0.0.1`, `[::1]`과 canonical 입력만 허용한다. Credential·공백·control·backslash·host alias를 거절하고 Electron Vite가 제공하는 slash 없는 bare origin만 정규화한다. |
+| `apps/desktop/src/backend/main.ts`                                                                                          | 검증한 renderer URL, sandbox·contextIsolation 활성화, nodeIntegration 비활성화와 navigation/popup 차단을 구성한다. 모든 window에 exact document/capture 경계를 연결하고 capture IPC를 등록하되, trusted auth runtime이 있을 때만 auth IPC와 coordinator/search authority를 추가한다. |
+| `apps/desktop/src/backend/capture/permission-policy.ts`                                                                     | 제품 default session의 media permission check와 request를 모두 명시적으로 거절한다. Fixture 전용 빈 `mediaTypes` 예외는 이 module로 이전하지 않는다.                  |
+| `apps/desktop/src/preload/index.ts`, `index.d.ts`                                                                           | auth/capture와 검색 feature API만 노출한다. 범용 `window.electron`과 isolation-off fallback은 없다.                                                                                                             |
+| `apps/desktop/src/frontend/src/App.tsx`, `auth/AuthBridge.tsx`, `auth/AuthPresentation.tsx`                                 | 실제 제품 App이 AuthBridge의 home content로 기존 PartyCapture를 전달한다. Welcome·인증 처리·연결 실패 화면에서는 capture를 mount하지 않는다.                                                                    |
+| `apps/desktop/src/frontend/src/capture/PartyCapture.tsx`                                                                    | 기존 source/interval·Start/Stop·인식값 UI와 네 슬롯 검색 결과를 표시한다. 공용 UI 외형을 변경하지 않는다.                                                                                                       |
+| `apps/desktop/src/frontend/src/capture/usePartyCaptureSession.ts`, `usePartyRecognition.ts`, `useCaptureSourceSelection.ts` | 현재 capture의 AbortSignal을 OCR에 전달하고 종료 뒤 결과·통지를 버린다. Unmount에서 stream·video·worker·loop와 main 선택을 정리한다.                                                                            |
 
 Capture generation은 main 내부 값이며 snapshot/IPC payload로 추가하지 않는다. Renderer의 revision이나 snapshot은 권한 근거가 아니다. 기존 [auth bridge](desktop-auth-bridge.md)의 구독 순서·snapshot allowlist·credential 비노출을 유지한다. Auth API 오류는 기존 고정 UI로 처리하며 명령을 자동 재전송하지 않는다.
 
@@ -32,7 +33,7 @@ Renderer는 accepted signedIn 이탈을 별도 presentation epoch로 기록하�
 
 Main은 auth 이탈 알림에서 선택을 직접 지우며 trusted renderer의 빈 source 선택은 인증 phase와 무관하게 허용한다. 다른 window/frame/document의 cleanup 요청은 거절한다. 재로그인은 source와 Start를 다시 요구한다. Capture의 이전 AbortSignal이 취소되면 늦은 OCR은 새 instance의 상태를 변경하거나 안정화 통지를 보내지 않는다. IPC 발송 뒤 main 권한이 이탈해 생긴 통지 거절도 raw error log 없이 회수한다.
 
-`notifyStableNicknameDetected`는 captureId·slot·observationRevision·nickname을 받아 현재 수명의 검색으로 연결한다. Main의 HTTP/전체 응답 검증과 renderer의 네 슬롯 후보·retry 구현은 [캐릭터 검색](desktop-character-search.md)을 참고한다. Raw OCR nickname은 log에 남기지 않는다. Profile과 [남은 restore/native 정책](desktop-auth-core.md)은 별도 작업이다.
+`notifyStableNicknameDetected`는 captureId·slot·observationRevision·nickname을 받아 현재 수명의 검색으로 연결한다. Main의 HTTP/전체 응답 검증과 renderer의 네 슬롯 후보·retry 구현은 [캐릭터 검색](desktop-character-search.md)을 참고한다. Raw OCR nickname은 log에 남기지 않는다. 제품 main은 trusted profile·auth restore·capture/search composition을 연결하며, 실제 API/provider와 profile ACL·durability를 포함한 남은 native gate는 [Desktop auth core](desktop-auth-core.md)를 따른다.
 
 ## 격리 Electron fixture
 
@@ -62,11 +63,11 @@ Fixture constructor는 `sandbox:true`, `contextIsolation:true`, `nodeIntegration
 
 ## Native media와 독립 OCR의 관측 구분
 
-Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercontent.com/electron/electron/v39.8.10/shell/browser/web_contents_permission_helper.cc)는 `getDisplayMedia`와 legacy desktop `getUserMedia`를 모두 `media` permission 및 빈 `mediaTypes`로 전달한다. 이 빈 배열만 허용하면 legacy 경로가 display handler의 source·gesture 검사를 우회할 수 있다. [승인된 media 검증 예외](../rules/desktop-capture-media-fixture-proposal.md)는 통제된 fixture만 신뢰한다. `permissions.ts`는 살아 있는 등록 창의 정확한 main frame·현재/요청 document와 main signedIn을 확인한 뒤 `media`의 존재하는 빈 `mediaTypes` 배열만 허용한다. Fixture permission check와 제품 기본 entry의 permission check/request는 모두 거절한다. `capture:fixture:deny`는 fixture request도 전면 거절하는 회귀 검증 모드다. Renderer API monkey patch를 legacy 경로 차단 보장으로 해석하거나 CSP/webSecurity를 완화하지 않는다.
+Pinned Electron 39.8.10의 [permission 처리 source](https://raw.githubusercontent.com/electron/electron/v39.8.10/shell/browser/web_contents_permission_helper.cc)는 `getDisplayMedia`와 legacy desktop `getUserMedia`를 모두 `media` permission 및 빈 `mediaTypes`로 전달한다. 이 빈 배열만 허용하면 legacy 경로가 display handler의 source·gesture 검사를 우회할 수 있다. [승인된 media 검증 예외](../rules/desktop-capture-media-fixture-proposal.md)는 통제된 fixture만 신뢰한다. 제품 `capture/permission-policy.ts`는 permission check와 request를 모두 명시적으로 거절하며, fixture 전용 `permissions.ts`만 등록 window·main frame·exact document·signedIn과 존재하는 빈 `mediaTypes`를 확인하는 예외를 별도로 구현한다. `capture:fixture:deny`는 fixture request도 전면 거절하는 회귀 검증 모드다. Renderer API monkey patch를 legacy 경로 차단 보장으로 해석하거나 CSP/webSecurity를 완화하지 않는다.
 
 첫 native 관측에서 auth·sandbox·synthetic source 열거/선택은 진행됐고 host screen permission은 `granted`였다. Native media 요청은 `NotAllowedError`, 실제 stream 0·worker 0으로 종료됐다. 당시 child의 cleanup PASS 이후 초기 실패 실행의 profile 두 개가 남은 것을 확인했으므로 이전 cleanup 성공 판정은 철회했다. OS 권한이 있다는 사실을 앱의 capture 경계 검증 완료로 해석하지 않는다. 이 기록은 승인 전 실패이며 아래 승인 후 관측과 구분한다.
 
-승인 후 입력 `cdfabca05111724d7c408abfd5d9c55139af0a40`에서 macOS 26.6.2 arm64·Electron 39.8.10으로 `capture:fixture:smoke`를 실행해 exit 0을 관측했다. 실제 제품 display handler 요청 1·허용 1, 실제 stream 1·worker 1, native track와 실제 video frame 모두 1920×1080·네 slot의 mana/crop 존재, Slot 1의 실제 OCR 기대값 표시와 main 안정화 통지 1회 이상을 확인했다. 당시 자동 검증은 Slot 2–4의 표시나 slot별 통지 기대값을 검사하지 않았으므로 네 slot OCR/IPC 완료 evidence로 해석하지 않는다. Logout 뒤 track 종료·worker terminate·video 해제는 각각 1이며 인식값과 capture UI가 사라졌다. 이어진 3.2초 동안 OCR 요청과 main 안정화 IPC가 증가하지 않았다. 재로그인 뒤 source는 비어 있고 Start는 비활성이며 자동 stream/worker 생성은 0이었다. Source를 다시 고르지 않은 실제 media 요청은 main display handler까지 도달해 거절돼 누적 요청 2·허용 1이었다. 새 source 선택 후 두 번째 capture 성공은 이 실행에서 관측하지 않았다. 강제로 지연시킨 이전 OCR 완료 경합은 별도 unit/hook evidence다.
+승인 후 입력 `cdfabca05111724d7c408abfd5d9c55139af0a40`에서 macOS 26.6.2 arm64·Electron 39.8.10으로 `capture:fixture:smoke`를 실행해 exit 0을 관측했다. Fixture 전용 permission adapter가 기존 display handler에 전달한 요청 1·허용 1, 실제 stream 1·worker 1, native track와 실제 video frame 모두 1920×1080·네 slot의 mana/crop 존재, Slot 1의 실제 OCR 기대값 표시와 main 안정화 통지 1회 이상을 확인했다. 이는 제품 default session의 media permission 허용 evidence가 아니다. 당시 자동 검증은 Slot 2–4의 표시나 slot별 통지 기대값을 검사하지 않았으므로 네 slot OCR/IPC 완료 evidence로 해석하지 않는다. Logout 뒤 track 종료·worker terminate·video 해제는 각각 1이며 인식값과 capture UI가 사라졌다. 이어진 3.2초 동안 OCR 요청과 main 안정화 IPC가 증가하지 않았다. 재로그인 뒤 source는 비어 있고 Start는 비활성이며 자동 stream/worker 생성은 0이었다. Source를 다시 고르지 않은 실제 media 요청은 fixture display handler까지 도달해 거절돼 누적 요청 2·허용 1이었다. 새 source 선택 후 두 번째 capture 성공은 이 실행에서 관측하지 않았다. 강제로 지연시킨 이전 OCR 완료 경합은 별도 unit/hook evidence다.
 
 이 실행에서 무선택 요청 거절 callback은 Electron의 `Video was requested, but no video stream was provided` unhandled rejection warning을 남겼으나 renderer의 media promise는 거절됐다. 마지막 logout과 진행 중 source 열거가 경합해 main의 `Capture source access denied`도 출력됐다. 이 출력은 숨기지 않으며 경고 없는 실행이라고 주장하지 않는다. Launcher의 cleanup PASS와 exit 0은 확인했지만 별도 종료 후 검증의 결과는 해당 exact head와 함께 따로 기록한다.
 

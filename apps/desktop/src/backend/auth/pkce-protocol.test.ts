@@ -185,4 +185,12 @@ describe('Desktop auth PKCE와 URL 경계', () => {
       expect(() => parseReturnUrl(`${target}?code=${CODE}`, target)).toThrow()
     }
   )
+
+  it.each(['x://auth/return', 'x:/auth/return', 'x:opaque-return'])(
+    'one-letter private scheme %s도 기존 exact parser 계약대로 허용한다',
+    (target) => {
+      expect(validateReturnTarget(target)).toBe(target)
+      expect(parseReturnUrl(`${target}?code=${CODE}`, target)).toEqual({ code: CODE })
+    }
+  )
 })
