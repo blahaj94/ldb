@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   createEffects: vi.fn(),
   bootstrapAuth: vi.fn(),
   registerAuth: vi.fn(),
+  setPath: vi.fn(),
+  setName: vi.fn(),
+  setAppUserModelId: vi.fn(),
   windows: [] as unknown[],
   coordinator: {
     captureGeneration: vi.fn(() => 1),
@@ -24,6 +27,7 @@ const mocks = vi.hoisted(() => ({
         coordinator: typeof mocks.coordinator
         apiOrigin: string
         clock: object
+        start: ReturnType<typeof vi.fn>
       }
     | undefined
 }))
@@ -43,6 +47,9 @@ vi.mock('electron', () => ({
     }),
     on: vi.fn(),
     requestSingleInstanceLock: vi.fn(() => true),
+    setPath: mocks.setPath,
+    setName: mocks.setName,
+    setAppUserModelId: mocks.setAppUserModelId,
     quit: vi.fn()
   },
   BrowserWindow: class {
@@ -98,7 +105,8 @@ beforeEach(() => {
   mocks.runtime = {
     coordinator: mocks.coordinator,
     apiOrigin: 'https://api.synthetic.test',
-    clock: {}
+    clock: {},
+    start: vi.fn(async () => undefined)
   }
   mocks.createEffects.mockReturnValue({})
   mocks.bootstrapAuth.mockResolvedValue(mocks.runtime)
@@ -155,6 +163,8 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
   vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
   vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
   vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', '/synthetic/ldb-test-profile')
   vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
   await import('./main')
@@ -167,6 +177,9 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
   })
   expect(mocks.createEffects).toHaveBeenCalledOnce()
   expect(mocks.bootstrapAuth).toHaveBeenCalledOnce()
+  expect(mocks.setPath).toHaveBeenCalledExactlyOnceWith('userData', '/synthetic/ldb-test-profile')
+  expect(mocks.setName).toHaveBeenCalledExactlyOnceWith('com.synthetic.ldb')
+  expect(mocks.setAppUserModelId).toHaveBeenCalledExactlyOnceWith('com.synthetic.ldb')
   expect(mocks.registerAuth).toHaveBeenCalledExactlyOnceWith({
     coordinator: mocks.coordinator,
     getWindow: expect.any(Function),
@@ -177,6 +190,28 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
     'http://localhost:5173/'
   )
   expect(mocks.attachIngress).toHaveBeenCalledExactlyOnceWith(expect.any(Function))
+  expect(mocks.runtime?.start).toHaveBeenCalledOnce()
+  expect(mocks.runtime?.start.mock.invocationCallOrder[0]).toBeGreaterThan(
+    mocks.registerAuth.mock.invocationCallOrder[0]
+  )
+})
+
+it('does not activate product auth for the unresolved Discord provider gate', async () => {
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'discord')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', '/synthetic/ldb-test-profile')
+
+  await import('./main')
+  await mocks.bootstrap
+
+  expect(mocks.createIngress).not.toHaveBeenCalled()
+  expect(mocks.createEffects).not.toHaveBeenCalled()
+  expect(mocks.bootstrapAuth).not.toHaveBeenCalled()
+  expect(mocks.registerAuth).not.toHaveBeenCalled()
+  expect(mocks.setPath).not.toHaveBeenCalled()
 })
 
 it('single-instance loser는 auth/store/window 초기화 없이 종료한다', async () => {
@@ -184,6 +219,8 @@ it('single-instance loser는 auth/store/window 초기화 없이 종료한다', a
   vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
   vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
   vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', '/synthetic/ldb-test-profile')
   mocks.createIngress.mockReturnValue({
     ownsInstance: false,
     attach: mocks.attachIngress,
@@ -205,6 +242,8 @@ it('warm return은 현재 창을 focus하고, 창이 없으면 같은 auth runti
   vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
   vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
   vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', '/synthetic/ldb-test-profile')
   vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
   await import('./main')

@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { BrowserWindow } from 'electron'
 import { registerCapturePermissions } from './permission-policy'
 
 const documentUrl = 'file:///fixture/index.html'
@@ -36,7 +35,7 @@ function createFixture(): PermissionFixture {
     setPermissionRequestHandler: request
   }
   const auth = { captureGeneration: vi.fn<() => number | null>(() => 1) }
-  registerCapturePermissions(session, window as unknown as BrowserWindow, documentUrl, auth)
+  registerCapturePermissions(session)
   return { check, request, frame, webContents, window, auth }
 }
 
@@ -56,10 +55,10 @@ function ask(
 }
 
 describe('capture permission policy', () => {
-  it('allows only the signed-in exact document media request shape', () => {
+  it('keeps product media request and check explicitly denied', () => {
     const fixture = createFixture()
 
-    expect(ask(fixture)).toHaveBeenCalledExactlyOnceWith(true)
+    expect(ask(fixture)).toHaveBeenCalledExactlyOnceWith(false)
     expect(fixture.check.mock.calls[0][0]()).toBe(false)
   })
 

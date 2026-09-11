@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { bootstrapAuthRuntime } from './bootstrap'
-import { createAuthHarness, CODE, REFRESH_0, settle } from './auth-test-fixtures'
+import { createAuthHarness, CODE, deferred, REFRESH_0, settle } from './auth-test-fixtures'
 import { AuthHttpFailure } from './http'
 import type { AuthRuntimeConfig } from './runtime-config'
 
@@ -8,7 +8,9 @@ const config: AuthRuntimeConfig = {
   apiOrigin: 'https://api.example.test',
   returnTarget: 'ldb-test://auth/return',
   environment: 'test',
-  providers: ['google', 'discord']
+  providers: ['google', 'discord'],
+  appIdentity: 'com.synthetic.ldb',
+  userDataPath: '/synthetic/user-data'
 }
 
 describe('desktop auth bootstrap', () => {
@@ -27,10 +29,13 @@ describe('desktop auth bootstrap', () => {
       effects: { announceCredentialAccess, createDependencies }
     })
 
-    expect(runtime?.coordinator.getSnapshot().phase).toBe('signedOut')
-    expect(operations).toEqual(['notice:complete', 'dependencies:create', 'store:inspect'])
+    expect(runtime?.coordinator.getSnapshot().phase).toBe('restoring')
+    expect(operations).toEqual(['notice:complete', 'dependencies:create'])
     expect(announceCredentialAccess).toHaveBeenCalledOnce()
     expect(createDependencies).toHaveBeenCalledOnce()
+
+    await runtime?.start()
+    expect(operations).toEqual(['notice:complete', 'dependencies:create', 'store:inspect'])
   })
 
   it('does not create auth effects when trusted configuration is absent', async () => {
@@ -77,6 +82,7 @@ describe('desktop auth bootstrap', () => {
       throw new Error('Synthetic auth runtime should be available')
     }
 
+    await runtime.start()
     const started = await runtime.coordinator.beginLogin('google')
     await settle()
     expect(started).toMatchObject({ ok: true, snapshot: { phase: 'startingLogin' } })
@@ -104,6 +110,7 @@ describe('desktop auth bootstrap', () => {
     if (failedLogin == null) {
       throw new Error('Synthetic auth runtime should be available')
     }
+    await failedLogin.start()
     await failedLogin.coordinator.beginLogin('google')
     await settle()
     await failedLogin.coordinator.handleReturnUrl(`${config.returnTarget}?code=${CODE}`)
@@ -125,6 +132,8 @@ describe('desktop auth bootstrap', () => {
     if (restored == null) {
       throw new Error('Synthetic auth runtime should be available')
     }
+    const start = restored.start()
+    await start
     expect(restored.coordinator.getSnapshot()).toMatchObject({
       phase: 'restorePaused',
       notice: 'NETWORK_UNAVAILABLE'
@@ -135,6 +144,37 @@ describe('desktop auth bootstrap', () => {
     })
     const retry = await restored.coordinator.retryAuth()
     await settle()
+    await start
     expect(retry).toMatchObject({ ok: true, snapshot: { phase: 'signedIn' } })
+  })
+
+  it('exposes restoring coordinator state before start so logout can be wired immediately', async () => {
+    const harness = createAuthHarness()
+    harness.store.inspection = { status: 'ready', refreshToken: REFRESH_0 }
+    const pendingMe = deferred<Awaited<ReturnType<typeof harness.dependencies.http.me>>>()
+    harness.http.me.mockImplementation(async () => pendingMe.promise)
+    const runtime = await bootstrapAuthRuntime({
+      config,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies: () => harness.dependencies
+      }
+    })
+    if (runtime == null) {
+      throw new Error('Synthetic auth runtime should be available')
+    }
+
+    expect(runtime.coordinator.getSnapshot().phase).toBe('restoring')
+    const start = runtime.start()
+    await vi.waitFor(() => expect(harness.http.me).toHaveBeenCalledOnce())
+    const logout = runtime.coordinator.logout()
+
+    expect(runtime.coordinator.getSnapshot().phase).toBe('signingOut')
+    pendingMe.resolve({
+      user: { id: '20000000-0000-4000-8000-000000000001', nickname: '모험가000001' }
+    })
+    expect(await logout).toMatchObject({ ok: true, snapshot: { phase: 'signedOut' } })
+    expect(runtime.coordinator.getSnapshot()).toMatchObject({ phase: 'signedOut' })
+    await start
   })
 })
