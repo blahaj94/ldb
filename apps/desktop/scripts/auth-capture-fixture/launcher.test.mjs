@@ -123,7 +123,10 @@ function captureSignals() {
   vi.spyOn(process, 'removeListener').mockImplementation((event, listener) => {
     const registration = handlers.get(event)
     const hasRegistration = registration != null
-    const isRegistered = hasRegistration && registration.listener === listener
+    let isRegistered
+    if (hasRegistration) {
+      isRegistered = registration.listener === listener
+    }
     if (isRegistered) {
       handlers.delete(event)
     } else {

@@ -13,11 +13,15 @@ import { createFixtureSearch, searchScenarios, type SearchScenario } from './sea
 const profile = process.env.LDB_AUTH_CAPTURE_PROFILE
 const launcherPid = process.env.LDB_AUTH_CAPTURE_LAUNCHER_PID
 const hasProfile = profile != null
-const hasExpectedDirectory = hasProfile && dirname(profile) === tmpdir()
-const hasOwnedName =
-  hasProfile && /^ldb-auth-capture-fixture-[A-Za-z0-9]{6}$/.test(basename(profile))
+let hasExpectedDirectory: boolean | undefined
+let hasOwnedName: boolean | undefined
+if (hasProfile) {
+  hasExpectedDirectory = dirname(profile) === tmpdir()
+  hasOwnedName = /^ldb-auth-capture-fixture-[A-Za-z0-9]{6}$/.test(basename(profile))
+}
 const isLauncherChild = launcherPid === String(process.ppid)
-const canStart = hasExpectedDirectory && hasOwnedName && isLauncherChild
+const canStart =
+  hasProfile && hasExpectedDirectory === true && hasOwnedName === true && isLauncherChild
 const isAuto = process.argv.includes('--smoke')
 const isSearchSmoke = process.argv.includes('--search-smoke')
 const isOcr = process.argv.includes('--ocr')
