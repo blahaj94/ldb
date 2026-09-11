@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react'
+import { createRoot } from 'react-dom/client'
 import { expect, it } from 'vitest'
 import {
   SEARCH_ERRORS,
@@ -15,6 +16,7 @@ import {
   withSearchSlot
 } from '../../../preload/api/search-test-fixture'
 import { authSnapshot, createRendererFixture, media } from './search-renderer-test-fixture'
+import { SearchResults } from './SearchResults'
 
 type Fixture = ReturnType<typeof createRendererFixture>
 async function recognized(): Promise<Fixture> {
@@ -135,6 +137,50 @@ it('429 유효 대기 동안 retry를 막고 같은 failure의 0초 event에서�
     slot: 0,
     requestId: REQUEST_ID
   })
+})
+
+it('failure 조건은 오류와 retry 대기 getter를 기존 순서로 평가한다', async () => {
+  const reads: string[] = []
+  const error = new Proxy(
+    { code: 'SEARCH_RATE_LIMITED' as const, retryAfterSeconds: 2 },
+    {
+      get(target, property, receiver) {
+        if (property === 'code' || property === 'retryAfterSeconds') {
+          reads.push(property)
+        }
+        return Reflect.get(target, property, receiver)
+      }
+    }
+  ) as SearchSlot['error']
+  const container = document.createElement('div')
+  const root = createRoot(container)
+  document.body.append(container)
+
+  await act(async () => {
+    root.render(
+      <SearchResults
+        view={{
+          ready: true,
+          slots: [searchSlot({ state: 'failure', error })],
+          retryPending: [false],
+          connectionFailed: false
+        }}
+        retry={() => undefined}
+      />
+    )
+  })
+
+  expect(reads).toEqual([
+    'code',
+    'code',
+    'retryAfterSeconds',
+    'retryAfterSeconds',
+    'code',
+    'retryAfterSeconds'
+  ])
+
+  await act(async () => root.unmount())
+  container.remove()
 })
 
 it('retry 응답을 기다리는 동안 버튼을 비활성화하고 같은 요청을 중복 전송하지 않는다', async () => {

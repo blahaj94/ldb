@@ -18,11 +18,27 @@ function SlotResult({
   const isFailure = slot.state === 'failure'
   const hasError = error != null
   const shouldShowError = isFailure && hasError
-  const canRetry = shouldShowError && SEARCH_ERRORS[error.code].retryable
-  const isRateLimited = shouldShowError && error.code === 'SEARCH_RATE_LIMITED'
-  const hasRetryAfter = isRateLimited && error.retryAfterSeconds != null
-  const hasPositiveRetryAfter = hasRetryAfter && error.retryAfterSeconds > 0
-  const isWaiting = isRateLimited && hasRetryAfter && hasPositiveRetryAfter
+  let canRetry: boolean | undefined
+  let isRateLimited: boolean | undefined
+  let hasRetryAfter: boolean | undefined
+  let hasPositiveRetryAfter: boolean | undefined
+
+  if (shouldShowError) {
+    canRetry = SEARCH_ERRORS[error.code].retryable
+    isRateLimited = error.code === 'SEARCH_RATE_LIMITED'
+    if (isRateLimited) {
+      const retryAfterSeconds = error.retryAfterSeconds
+      const hasRetryAfterValue = retryAfterSeconds != null
+      hasRetryAfter = hasRetryAfterValue
+      if (hasRetryAfterValue) {
+        const positiveRetryAfterSeconds = error.retryAfterSeconds
+        const hasPositiveRetryAfterValue = positiveRetryAfterSeconds != null
+        hasPositiveRetryAfter = hasPositiveRetryAfterValue && positiveRetryAfterSeconds > 0
+      }
+    }
+  }
+
+  const isWaiting = shouldShowError && isRateLimited && hasRetryAfter && hasPositiveRetryAfter
   const isBusy = isPending || retryPending
   const isRetryDisabled = isWaiting || retryPending
   const hasNickname = slot.nickname != null
