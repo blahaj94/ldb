@@ -202,7 +202,7 @@ async function boundary({ source, phase, boundaryKind, method }) {
       }
       clocks++
       const atAdmission = phase === 'admission'
-      const isFunctionClock = !atAdmission && clocks === 2
+      const isFunctionClock = clocks === 2
       const isTarget = atAdmission || isFunctionClock
       const time = isTarget ? checkedAt : f.now
       return [{ now: time }]
@@ -457,8 +457,8 @@ async function databaseFailure({ source, phase, applied, method }) {
       const isInitialReadPhase = phase === 'read'
       const isInitialReadFailure = isInitialReadPhase && isUserRead
       const isFunctionReadPhase = phase === 'function-read'
-      const hasCommittedAdmission = isFunctionReadPhase && commits === 1
-      const isFunctionReadFailure = hasCommittedAdmission && isUserRead
+      const hasCommittedAdmission = commits === 1
+      const isFunctionReadFailure = isFunctionReadPhase && hasCommittedAdmission && isUserRead
       const failRead = isInitialReadFailure || isFunctionReadFailure
       const shouldFailQuery = failWrite || failRead
       if (shouldFailQuery) {
@@ -515,7 +515,7 @@ async function databaseFailure({ source, phase, applied, method }) {
   }
   const after = await snapshot(source, f)
   const isInitialReadFailure = phase === 'read'
-  const isAdmissionFailure = !isInitialReadFailure && phase === 'admission'
+  const isAdmissionFailure = phase === 'admission'
   const hasUncommittedAdmission = isAdmissionFailure && !applied
   const noActivity = isInitialReadFailure || hasUncommittedAdmission
   if (noActivity) {
