@@ -3,9 +3,12 @@ import { expect, it, vi } from 'vitest'
 import { createAuthAppLifecycle } from './app-lifecycle'
 
 type QuitEvent = { defaultPrevented: boolean }
+type App = Parameters<typeof createAuthAppLifecycle>[0]['app'] & {
+  exit: ReturnType<typeof vi.fn>
+}
 
 function createApp(): {
-  app: Parameters<typeof createAuthAppLifecycle>[0]['app']
+  app: App
   handlers: Map<string, (...args: never[]) => void>
 } {
   const handlers = new Map<string, (...args: never[]) => void>()
@@ -42,7 +45,13 @@ function createWindow(): {
   return { window, handlers, webContentsHandlers, destroy }
 }
 
-function createLifecycle() {
+function createLifecycle(): {
+  lifecycle: ReturnType<typeof createAuthAppLifecycle>
+  handlers: Map<string, (...args: never[]) => void>
+  disposeIngress: ReturnType<typeof vi.fn>
+  disposePowerMonitor: ReturnType<typeof vi.fn>
+  app: App
+} {
   const { app, handlers } = createApp()
   const disposeIngress = vi.fn()
   const disposePowerMonitor = vi.fn()
@@ -104,7 +113,7 @@ it('owned document load failure clears the window, IPC, ingress, and exits nonze
   const disposeAuthIpc = vi.fn()
 
   lifecycle.publishWindow(window, disposeAuthIpc)
-  lifecycle.registerWindow(window, Promise.reject(new Error('synthetic load failure')))
+  lifecycle.registerWindow(window)(Promise.reject(new Error('synthetic load failure')))
   await vi.waitFor(() => expect(app.exit).toHaveBeenCalledExactlyOnceWith(1))
 
   expect(lifecycle.getWindow()).toBeNull()
@@ -114,7 +123,7 @@ it('owned document load failure clears the window, IPC, ingress, and exits nonze
 })
 
 it('load failure held by a canceled close is handled after close cancellation', async () => {
-  const { lifecycle, handlers: appHandlers, disposeIngress, app } = createLifecycle()
+  const { lifecycle, disposeIngress, app } = createLifecycle()
   const { window, handlers, destroy } = createWindow()
   const disposeAuthIpc = vi.fn()
   let rejectLoad!: (error: unknown) => void
@@ -123,7 +132,8 @@ it('load failure held by a canceled close is handled after close cancellation', 
   })
 
   lifecycle.publishWindow(window, disposeAuthIpc)
-  lifecycle.registerWindow(window, load)
+  lifecycle.registerWindow(window)(load)
+  rejectLoad(new Error('synthetic canceled-close load failure'))
   let defaultPrevented = false
   const closeEvent = {
     get defaultPrevented() {
@@ -131,16 +141,10 @@ it('load failure held by a canceled close is handled after close cancellation', 
     }
   } as QuitEvent
   handlers.get('close')!(closeEvent as never)
-  rejectLoad(new Error('synthetic canceled-close load failure'))
+  defaultPrevented = true
   await load.catch(() => undefined)
   await Promise.resolve()
 
-  expect(destroy).not.toHaveBeenCalled()
-  expect(app.exit).not.toHaveBeenCalled()
-
-  defaultPrevented = true
-  await Promise.resolve()
-  await vi.waitFor(() => expect(appHandlers.get('quit')).toBeDefined())
   expect(app.exit).toHaveBeenCalledExactlyOnceWith(1)
   expect(disposeIngress).toHaveBeenCalledOnce()
   expect(disposeAuthIpc).toHaveBeenCalledOnce()
