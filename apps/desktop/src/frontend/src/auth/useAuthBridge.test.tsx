@@ -119,6 +119,65 @@ it('subscribe 이후 조회하고 먼저 도착한 높은 event revision을 늦�
   expect(current.snapshot).toEqual(snapshot(4))
 })
 
+it('최초 snapshot에서도 phase를 평가하고 presentation epoch를 바꾸지 않는다', async () => {
+  let phaseReads = 0
+  const initial = {
+    ...snapshot(1),
+    get phase(): AuthSnapshot['phase'] {
+      phaseReads += 1
+      return 'signedOut'
+    }
+  }
+  fixture.api.getAuthState.mockResolvedValue(initial)
+
+  await mount()
+
+  expect(phaseReads).toBe(1)
+  expect(current.snapshot).toBe(initial)
+  expect(current.presentationEpoch).toBe(0)
+})
+
+it('stale revision에서는 phase를 평가하지 않고 signedIn 이탈에서만 presentation epoch를 증가시킨다', async () => {
+  fixture.api.getAuthState.mockResolvedValue({
+    ...snapshot(1),
+    phase: 'signedIn',
+    user: { nickname: '중립모험가' },
+    entry: 'home'
+  })
+  await mount()
+
+  let phaseReads = 0
+  const stale = {
+    ...snapshot(0),
+    get phase(): AuthSnapshot['phase'] {
+      phaseReads += 1
+      return 'signedOut'
+    }
+  }
+  await act(async () => fixture.emit(stale))
+  expect(phaseReads).toBe(0)
+  expect(current.presentationEpoch).toBe(0)
+
+  await act(async () => fixture.emit(snapshot(2)))
+  expect(current.presentationEpoch).toBe(1)
+})
+
+it('baseline 전 queued event는 같은 run의 오래된 revision을 버리고 run 변경 snapshot으로 덮어쓴다', async () => {
+  const query = deferred<AuthSnapshot>()
+  fixture.api.getAuthState.mockImplementation(() => {
+    fixture.order.push('query')
+    return query.promise
+  })
+  await mount()
+
+  await act(async () => fixture.emit(snapshot(4)))
+  await act(async () => fixture.emit(snapshot(3)))
+  await act(async () => fixture.emit(snapshot(2, 'run-two')))
+  await act(async () => query.resolve(snapshot(1, 'run-two')))
+
+  expect(current.snapshot).toEqual(snapshot(2, 'run-two'))
+})
+
 it('commandPending과 exact intent를 전달하고 늦은 command snapshot도 역행하지 않는다', async () => {
   await mount()
   const command = deferred<AuthCommandResult>()
