@@ -82,13 +82,13 @@ describe('desktop auth runtime effects', () => {
 
     expect(clock.read()).toEqual({ wallMs: 1_000, monotonicMs: 50, discontinuous: false })
     wallMs = 900
-    monotonicMs = 40
+    monotonicMs = 60
 
-    expect(clock.read()).toEqual({ wallMs: 900, monotonicMs: 40, discontinuous: true })
+    expect(clock.read()).toEqual({ wallMs: 900, monotonicMs: 60, discontinuous: true })
     wallMs = 910
-    monotonicMs = 50
+    monotonicMs = 70
 
-    expect(clock.read()).toEqual({ wallMs: 910, monotonicMs: 50, discontinuous: true })
+    expect(clock.read()).toEqual({ wallMs: 910, monotonicMs: 70, discontinuous: true })
   })
 
   it('passes a wall-clock reversal during restore to the coordinator pause guard', async () => {
