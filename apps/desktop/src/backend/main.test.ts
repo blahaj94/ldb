@@ -7,7 +7,25 @@ const mocks = vi.hoisted(() => ({
   registerWindow: vi.fn(),
   permissionCheck: vi.fn(),
   permissionRequest: vi.fn(),
-  bootstrap: undefined as Promise<void> | undefined
+  bootstrap: undefined as Promise<void> | undefined,
+  createIngress: vi.fn(),
+  attachIngress: vi.fn(),
+  disposeIngress: vi.fn(),
+  createEffects: vi.fn(),
+  bootstrapAuth: vi.fn(),
+  registerAuth: vi.fn(),
+  windows: [] as unknown[],
+  coordinator: {
+    captureGeneration: vi.fn(() => 1),
+    handleReturnUrl: vi.fn()
+  },
+  runtime: undefined as
+    | {
+        coordinator: typeof mocks.coordinator
+        apiOrigin: string
+        clock: object
+      }
+    | undefined
 }))
 vi.mock('electron', () => ({
   session: {
@@ -18,21 +36,32 @@ vi.mock('electron', () => ({
   },
   app: {
     whenReady: () => ({
-      then: (callback: () => void): Promise<void> => {
+      then: (callback: () => void | Promise<void>): Promise<void> => {
         mocks.bootstrap = Promise.resolve().then(callback)
         return mocks.bootstrap.catch(() => undefined)
       }
     }),
-    on: vi.fn()
+    on: vi.fn(),
+    requestSingleInstanceLock: vi.fn(() => true),
+    quit: vi.fn()
   },
   BrowserWindow: class {
     constructor() {
       mocks.constructWindow()
+      mocks.windows.push(this)
     }
+    isDestroyed = vi.fn(() => false)
     on = vi.fn()
-    webContents = { setWindowOpenHandler: vi.fn(), on: vi.fn() }
+    webContents = {
+      mainFrame: { url: '', detached: false, isDestroyed: vi.fn(() => false) },
+      isDestroyed: vi.fn(() => false),
+      setWindowOpenHandler: vi.fn(),
+      on: vi.fn()
+    }
     loadURL = mocks.loadURL
     loadFile = mocks.loadFile
+    show = vi.fn()
+    focus = vi.fn()
   }
 }))
 vi.mock('@electron-toolkit/utils', () => ({
@@ -44,10 +73,36 @@ vi.mock('./capture/ipc-handler', () => ({
   registerCaptureIpc: vi.fn(),
   registerCaptureWindow: mocks.registerWindow
 }))
+vi.mock('./auth/protocol-ingress', () => ({
+  createProtocolIngress: mocks.createIngress
+}))
+vi.mock('./auth/runtime-effects', () => ({
+  createAuthRuntimeEffects: mocks.createEffects
+}))
+vi.mock('./auth/bootstrap', () => ({
+  bootstrapAuthRuntime: mocks.bootstrapAuth
+}))
+vi.mock('./auth/ipc-handler', () => ({
+  registerAuthIpc: mocks.registerAuth
+}))
 
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
+  mocks.windows = []
+  mocks.createIngress.mockReturnValue({
+    ownsInstance: true,
+    attach: mocks.attachIngress,
+    dispose: mocks.disposeIngress
+  })
+  mocks.runtime = {
+    coordinator: mocks.coordinator,
+    apiOrigin: 'https://api.synthetic.test',
+    clock: {}
+  }
+  mocks.createEffects.mockReturnValue({})
+  mocks.bootstrapAuth.mockResolvedValue(mocks.runtime)
+  mocks.registerAuth.mockReturnValue(vi.fn())
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -93,4 +148,87 @@ it('인증 미구성 기본 entry는 legacy를 포함한 media permission을 명
   const callback = vi.fn()
   request({}, 'media', callback, { mediaTypes: [], isMainFrame: true })
   expect(callback).toHaveBeenCalledExactlyOnceWith(false)
+})
+
+it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제품에 연결한다', async () => {
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
+
+  await import('./main')
+  await mocks.bootstrap
+
+  expect(mocks.createIngress).toHaveBeenCalledExactlyOnceWith({
+    app: expect.anything(),
+    argv: process.argv,
+    returnTarget: 'ldb-synthetic://auth/return'
+  })
+  expect(mocks.createEffects).toHaveBeenCalledOnce()
+  expect(mocks.bootstrapAuth).toHaveBeenCalledOnce()
+  expect(mocks.registerAuth).toHaveBeenCalledExactlyOnceWith({
+    coordinator: mocks.coordinator,
+    getWindow: expect.any(Function),
+    documentUrl: 'http://localhost:5173/'
+  })
+  expect(mocks.registerWindow).toHaveBeenCalledExactlyOnceWith(
+    expect.anything(),
+    'http://localhost:5173/'
+  )
+  expect(mocks.attachIngress).toHaveBeenCalledExactlyOnceWith(expect.any(Function))
+})
+
+it('single-instance loser는 auth/store/window 초기화 없이 종료한다', async () => {
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  mocks.createIngress.mockReturnValue({
+    ownsInstance: false,
+    attach: mocks.attachIngress,
+    dispose: mocks.disposeIngress
+  })
+
+  await import('./main')
+  await mocks.bootstrap
+
+  expect(mocks.createEffects).not.toHaveBeenCalled()
+  expect(mocks.bootstrapAuth).not.toHaveBeenCalled()
+  expect(mocks.registerAuth).not.toHaveBeenCalled()
+  expect(mocks.registerWindow).not.toHaveBeenCalled()
+  expect(mocks.constructWindow).not.toHaveBeenCalled()
+})
+
+it('warm return은 현재 창을 focus하고, 창이 없으면 같은 auth runtime으로 재생성한다', async () => {
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
+
+  await import('./main')
+  await mocks.bootstrap
+  const dispatch = mocks.attachIngress.mock.calls[0][0] as (raw: string) => Promise<void>
+  const firstWindow = mocks.windows[0] as {
+    show: ReturnType<typeof vi.fn>
+    focus: ReturnType<typeof vi.fn>
+    isDestroyed: ReturnType<typeof vi.fn>
+  }
+
+  await dispatch('ldb-synthetic://auth/return?code=synthetic')
+  expect(firstWindow.show).toHaveBeenCalledOnce()
+  expect(firstWindow.focus).toHaveBeenCalledOnce()
+  expect(mocks.coordinator.handleReturnUrl).toHaveBeenCalledWith(
+    'ldb-synthetic://auth/return?code=synthetic'
+  )
+
+  firstWindow.isDestroyed = vi.fn(() => true)
+  await dispatch('ldb-synthetic://auth/return?code=synthetic-2')
+  expect(mocks.constructWindow).toHaveBeenCalledTimes(2)
+  expect(mocks.registerAuth).toHaveBeenCalledTimes(2)
+  expect(mocks.registerWindow).toHaveBeenCalledTimes(2)
+  expect(mocks.coordinator.handleReturnUrl).toHaveBeenLastCalledWith(
+    'ldb-synthetic://auth/return?code=synthetic-2'
+  )
 })

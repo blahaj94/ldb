@@ -1,14 +1,26 @@
 import { app, BrowserWindow, session } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { validateDevRendererUrl } from './renderer-document'
 import { registerCaptureIpc, registerCaptureWindow } from './capture/ipc-handler'
+import { registerCapturePermissions } from './capture/permission-policy'
+import { registerAuthIpc } from './auth/ipc-handler'
+import { createProtocolIngress } from './auth/protocol-ingress'
+import { bootstrapAuthRuntime, type AuthRuntime } from './auth/bootstrap'
+import { createAuthRuntimeEffects } from './auth/runtime-effects'
+import { readAuthRuntimeConfig } from './auth/runtime-config'
 
 let mainWindow: BrowserWindow | null = null
+let disposeAuthIpc: (() => void) | undefined
+const runtimeConfig = readAuthRuntimeConfig()
+const protocolIngress =
+  runtimeConfig == null
+    ? null
+    : createProtocolIngress({ app, argv: process.argv, returnTarget: runtimeConfig.returnTarget })
 
-function createWindow(): void {
+function createWindow(authRuntime: AuthRuntime | null): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   const isDevelopment = is.dev
   const hasDevUrl = devUrl != null
@@ -34,11 +46,27 @@ function createWindow(): void {
   })
 
   mainWindow = window
+  registerCapturePermissions(
+    session.defaultSession,
+    window,
+    rendererDocumentUrl,
+    authRuntime?.coordinator
+  )
   registerCaptureWindow(window, rendererDocumentUrl)
+  if (authRuntime != null) {
+    disposeAuthIpc?.()
+    disposeAuthIpc = registerAuthIpc({
+      coordinator: authRuntime.coordinator,
+      getWindow: () => mainWindow,
+      documentUrl: rendererDocumentUrl
+    })
+  }
 
   window.on('closed', () => {
     const isCurrentWindow = mainWindow === window
     if (isCurrentWindow) {
+      disposeAuthIpc?.()
+      disposeAuthIpc = undefined
       mainWindow = null
     }
   })
@@ -57,12 +85,18 @@ function createWindow(): void {
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+function disposeProtocolIngress(): void {
+  protocolIngress?.dispose()
+}
+
+// This method will be called when Electron has finished initialization and is ready to create windows.
+app.whenReady().then(async () => {
+  const hasOwnedInstance = protocolIngress == null || protocolIngress.ownsInstance
+  if (!hasOwnedInstance) {
+    return
+  }
+
+  app.on('before-quit', disposeProtocolIngress)
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -71,33 +105,55 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  session.defaultSession.setPermissionCheckHandler(() => false)
-  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
-    callback(false)
-  )
-  registerCaptureIpc()
+  let authRuntime: AuthRuntime | null = null
+  if (runtimeConfig != null) {
+    try {
+      const effects = createAuthRuntimeEffects({ config: runtimeConfig })
+      authRuntime = await bootstrapAuthRuntime({ config: runtimeConfig, effects })
+    } catch {
+      authRuntime = null
+    }
+  }
+  const hasAuthRuntime = authRuntime != null
+  if (!hasAuthRuntime) {
+    disposeProtocolIngress()
+  }
+  const searchConfiguration =
+    authRuntime == null
+      ? undefined
+      : {
+          apiOrigin: authRuntime.apiOrigin,
+          clock: authRuntime.clock
+        }
+  registerCaptureIpc(authRuntime?.coordinator, searchConfiguration)
 
-  createWindow()
+  createWindow(authRuntime)
+  if (authRuntime != null && protocolIngress != null) {
+    protocolIngress.attach(async (rawReturnUrl) => {
+      const window = mainWindow
+      const hasWindow = window != null && !window.isDestroyed()
+      if (!hasWindow) {
+        createWindow(authRuntime)
+      } else {
+        window.show()
+        window.focus()
+      }
+      await authRuntime.coordinator.handleReturnUrl(rawReturnUrl)
+    })
+  }
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     const hasNoOpenWindows = BrowserWindow.getAllWindows().length === 0
     if (hasNoOpenWindows) {
-      createWindow()
+      createWindow(authRuntime)
+    }
+  })
+  app.on('window-all-closed', () => {
+    const shouldQuit = process.platform !== 'darwin'
+    if (shouldQuit) {
+      app.quit()
     }
   })
 })
-
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  const shouldQuit = process.platform !== 'darwin'
-  if (shouldQuit) {
-    app.quit()
-  }
-})
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
