@@ -1,10 +1,21 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { AuthSnapshot } from '../../../preload/common/types/auth'
-import type { SearchCommandResult, SearchSnapshot } from '../../../preload/common/types/search'
-import { SEARCH_RUN, searchSnapshot } from '../../../preload/api/search-test-fixture'
+import type {
+  SearchCommandResult,
+  SearchSlot,
+  SearchSnapshot
+} from '../../../preload/common/types/search'
+import {
+  CAPTURE_ID,
+  REQUEST_ID,
+  SEARCH_RUN,
+  searchSlot,
+  searchSnapshot
+} from '../../../preload/api/search-test-fixture'
 
 const connectionState = vi.hoisted(() => ({
-  responses: [] as Array<SearchCommandResult | null | Promise<SearchCommandResult | null>>
+  responses: [] as Array<SearchCommandResult | null | Promise<SearchCommandResult | null>>,
+  onCommand: () => {}
 }))
 
 vi.mock('./connection', () => ({
@@ -16,6 +27,7 @@ vi.mock('./connection', () => ({
     }
 
     command(): Promise<SearchCommandResult | null> {
+      connectionState.onCommand()
       const response = connectionState.responses.shift()
       return Promise.resolve(response ?? null)
     }
@@ -87,6 +99,7 @@ function createSearch(): InstanceType<typeof CaptureSearch> {
 
 beforeEach(() => {
   connectionState.responses = []
+  connectionState.onCommand = () => {}
 })
 
 it('begin은 양쪽 snapshot 비교 뒤 signal을 정확히 한 번 읽는다', async () => {
@@ -194,4 +207,75 @@ it('늦은 begin은 stale ticket의 active getter를 읽지 않는다', async ()
   await begin
 
   expect(events).toEqual(['completed.captureId'])
+})
+
+it('observe는 captureId, ticket active, publish와 명령의 순서를 유지한다', () => {
+  const events: string[] = []
+  const search = createSearch()
+  connectionState.onCommand = () => {
+    events.push('command')
+  }
+  const ticket = {
+    active: true,
+    captureId: CAPTURE_ID,
+    revisions: [0, 0, 0, 0],
+    cleared: [true, true, true, true]
+  }
+  Object.defineProperties(ticket, {
+    captureId: {
+      get: () => {
+        events.push('ticket.captureId')
+        return CAPTURE_ID
+      }
+    },
+    active: {
+      get: () => {
+        events.push('ticket.active')
+        return true
+      }
+    }
+  })
+  ;(search as unknown as MutableCaptureSearch).capture = ticket
+
+  search.observe({ slot: 0, nickname: null })
+
+  expect(events).toEqual([
+    'ticket.captureId',
+    'ticket.active',
+    'ticket.active',
+    'ticket.captureId',
+    'command'
+  ])
+})
+
+it('retry는 rate-limit retryAfter getter를 양수 대기 검사에서 두 번 읽는다', async () => {
+  const events: string[] = []
+  const search = createSearch()
+  const error: NonNullable<SearchSlot['error']> = {
+    code: 'SEARCH_RATE_LIMITED',
+    get retryAfterSeconds() {
+      events.push('error.retryAfterSeconds')
+      return 2
+    }
+  }
+  ;(search as unknown as MutableCaptureSearch).capture = {
+    active: true,
+    captureId: CAPTURE_ID,
+    revisions: [1, 0, 0, 0],
+    cleared: [false, true, true, true]
+  }
+  ;(search as unknown as MutableCaptureSearch).snapshot = searchSnapshot({
+    slots: [
+      searchSlot({
+        state: 'failure',
+        requestId: REQUEST_ID,
+        error
+      }),
+      ...searchSnapshot().slots.slice(1)
+    ]
+  })
+
+  await search.retry(0)
+
+  expect(events).toEqual(['error.retryAfterSeconds', 'error.retryAfterSeconds'])
 })
