@@ -20,7 +20,11 @@ async function deleteEndedSession(source: DataSource, hint: SessionHint): Promis
       lock: { mode: 'pessimistic_write' }
     })
     const hasSession = session != null
-    const hasSameOwner = hasSession && session.userId === hint.userId
+    if (!hasSession) {
+      return 0
+    }
+
+    const hasSameOwner = session.userId === hint.userId
     if (!hasSameOwner) {
       return 0
     }
