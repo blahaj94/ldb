@@ -82,6 +82,9 @@ test('candidate is only a hint: activity, ownership change and disappearance are
     })
     assert.equal((await cleanupAuthentication(f.source)).sessionsDeleted, 0)
     assert.deepEqual(f.deleted.sessions, [])
+    const expectedEvents =
+      change === 'activity' ? ['lock', 'fresh-time', 'commit'] : ['lock', 'commit']
+    assert.deepEqual(f.events, expectedEvents)
   }
 })
 
