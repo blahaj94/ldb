@@ -1,5 +1,5 @@
 import * as fs from 'node:fs'
-import { isAbsolute, parse } from 'node:path'
+import { dirname, isAbsolute, join, parse } from 'node:path'
 import type { Stats } from 'node:fs'
 import { validateApiOrigin, validateReturnTarget } from './protocol'
 import type { AuthProvider } from './types'
@@ -20,6 +20,9 @@ export type AuthRuntimeProfileApplication = Readonly<{
 }>
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
+type RuntimeProfileFilesystem = Readonly<
+  Pick<typeof fs, 'lstatSync' | 'statSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'>
+>
 
 function isAuthProvider(value: string): value is AuthProvider {
   const isSupported = value === 'google'
@@ -76,19 +79,77 @@ function assertPrivateUserDataDirectory(stat: Stats): void {
   }
 }
 
-function prepareUserDataDirectory(path: string): void {
-  let stat: Stats
-  try {
-    stat = fs.lstatSync(path)
-  } catch (error) {
-    const isMissingPath = isMissing(error)
-    if (!isMissingPath) {
-      throw error
-    }
-    fs.mkdirSync(path, { recursive: true, mode: 0o700 })
-    stat = fs.lstatSync(path)
+function assertDirectory(stat: Stats): void {
+  const isDirectory = stat.isDirectory()
+  if (!isDirectory) {
+    throw new Error('Trusted userData directory is unavailable.')
   }
-  assertPrivateUserDataDirectory(stat)
+}
+
+function hasLeafAlias(path: string): boolean {
+  const segments = path.split(/[\\/]/)
+  const leaf = segments[segments.length - 1]
+  return leaf == null || leaf.length === 0 || leaf === '.' || leaf === '..'
+}
+
+function directoryChain(path: string): string[] {
+  const root = parse(path).root
+  const segments = path.slice(root.length).split(/[\\/]/).filter(Boolean)
+  let current = root
+  return segments.map((segment) => {
+    current = join(current, segment)
+    return current
+  })
+}
+
+function syncDirectory(path: string, filesystem: RuntimeProfileFilesystem): void {
+  if (process.platform === 'win32') {
+    return
+  }
+
+  const flags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW
+  const handle = filesystem.openSync(path, flags)
+  try {
+    filesystem.fsyncSync(handle)
+  } finally {
+    filesystem.closeSync(handle)
+  }
+}
+
+function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesystem): void {
+  if (hasLeafAlias(path)) {
+    throw new Error('Trusted userData path must not use a leaf alias.')
+  }
+
+  const paths = directoryChain(path)
+  const finalPath = paths[paths.length - 1]
+  for (const currentPath of paths) {
+    let stat: Stats
+    let created = false
+    try {
+      const isFinalPath = currentPath === finalPath
+      stat = isFinalPath ? filesystem.lstatSync(currentPath) : filesystem.statSync(currentPath)
+    } catch (error) {
+      const isMissingPath = isMissing(error)
+      if (!isMissingPath) {
+        throw error
+      }
+      filesystem.mkdirSync(currentPath, { mode: 0o700 })
+      stat = filesystem.lstatSync(currentPath)
+      created = true
+    }
+
+    const isFinalPath = currentPath === finalPath
+    if (isFinalPath) {
+      assertPrivateUserDataDirectory(stat)
+    } else {
+      assertDirectory(stat)
+    }
+    if (created) {
+      syncDirectory(currentPath, filesystem)
+      syncDirectory(dirname(currentPath), filesystem)
+    }
+  }
 }
 
 export function readAuthRuntimeConfig(
@@ -120,8 +181,10 @@ export function readAuthRuntimeConfig(
     const code = character.charCodeAt(0)
     return code > 0x1f && code !== 0x7f
   })
+  const hasNoLeafAlias = !hasLeafAlias(userDataPath)
   const isUserDataRoot = parse(userDataPath).root === userDataPath
-  const hasValidUserDataPath = isAbsolute(userDataPath) && !isUserDataRoot && hasNoControlPath
+  const hasValidUserDataPath =
+    isAbsolute(userDataPath) && !isUserDataRoot && hasNoControlPath && hasNoLeafAlias
   if (!hasValidAppIdentity || !hasValidUserDataPath) {
     return null
   }
@@ -138,9 +201,10 @@ export function readAuthRuntimeConfig(
 
 export function applyAuthRuntimeProfile(
   application: AuthRuntimeProfileApplication,
-  config: AuthRuntimeConfig
+  config: AuthRuntimeConfig,
+  filesystem: RuntimeProfileFilesystem = fs
 ): void {
-  prepareUserDataDirectory(config.userDataPath)
+  prepareUserDataDirectory(config.userDataPath, filesystem)
   application.setPath('userData', config.userDataPath)
   application.setName(config.appIdentity)
   application.setAppUserModelId(config.appIdentity)

@@ -3,6 +3,16 @@ import { join, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { applyAuthRuntimeProfile, readAuthRuntimeConfig } from './runtime-config'
+import type { AuthRuntimeConfig, AuthRuntimeProfileApplication } from './runtime-config'
+
+type RuntimeProfileFilesystemDouble = {
+  lstatSync: typeof fs.lstatSync
+  statSync: typeof fs.statSync
+  mkdirSync: typeof fs.mkdirSync
+  openSync(path: string, flags: number): number
+  fsyncSync(fd: number): void
+  closeSync(fd: number): void
+}
 
 const validEnvironment = {
   LDB_AUTH_API_ORIGIN: 'https://api.synthetic.test',
@@ -189,8 +199,9 @@ describe('desktop auth runtime config', () => {
     const openedPaths: string[] = []
     const syncedFds: number[] = []
     const closedFds: number[] = []
-    const filesystem = {
+    const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
+      statSync: fs.statSync,
       mkdirSync: fs.mkdirSync,
       openSync: (path: string, flags: number) => {
         openedPaths.push(path)
@@ -225,9 +236,9 @@ describe('desktop auth runtime config', () => {
       }
 
       const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
-        application: typeof application,
-        config: typeof config,
-        filesystem: typeof filesystem
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble
       ) => void
       applyWithFilesystem(application, config, filesystem)
 
