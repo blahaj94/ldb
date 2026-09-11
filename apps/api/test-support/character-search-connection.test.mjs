@@ -49,7 +49,7 @@ test('search abort closes a PostgreSQL connection still waiting for authenticati
     await bounded(connection)
     controller.abort()
     const connectionResult = await bounded(connecting)
-    const hasConnectionError = Boolean(connectionResult.error)
+    const hasConnectionError = connectionResult.error != null
     assert(hasConnectionError)
     emitLateError()
     lateCallback()

@@ -472,7 +472,7 @@ test('deadline aborts the request, wins over a late known code, and performs no 
 
   const pending = search(input)
   await Promise.resolve()
-  const hasDeadlineCallback = Boolean(callback)
+  const hasDeadlineCallback = callback != null
   assert(hasDeadlineCallback)
   callback!()
 
