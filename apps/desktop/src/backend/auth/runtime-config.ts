@@ -1,5 +1,5 @@
 import * as fs from 'node:fs'
-import { dirname, isAbsolute, join, parse } from 'node:path'
+import { dirname, isAbsolute, join, parse, sep } from 'node:path'
 import type { Stats } from 'node:fs'
 import { validateApiOrigin, validateReturnTarget } from './protocol'
 import type { AuthProvider } from './types'
@@ -86,15 +86,21 @@ function assertDirectory(stat: Stats): void {
   }
 }
 
-function hasLeafAlias(path: string): boolean {
-  const segments = path.split(/[\\/]/)
+function splitNativePath(path: string): string[] {
+  const separator = sep === '\\' ? /[\\/]/ : /\//
+  return path.split(separator)
+}
+
+function hasPathAlias(path: string): boolean {
+  const segments = splitNativePath(path)
   const leaf = segments[segments.length - 1]
-  return leaf == null || leaf.length === 0 || leaf === '.' || leaf === '..'
+  const hasDotSegment = segments.some((segment) => segment === '.' || segment === '..')
+  return hasDotSegment || leaf == null || leaf.length === 0
 }
 
 function directoryChain(path: string): string[] {
   const root = parse(path).root
-  const segments = path.slice(root.length).split(/[\\/]/).filter(Boolean)
+  const segments = splitNativePath(path.slice(root.length)).filter(Boolean)
   let current = root
   return segments.map((segment) => {
     current = join(current, segment)
@@ -117,8 +123,8 @@ function syncDirectory(path: string, filesystem: RuntimeProfileFilesystem): void
 }
 
 function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesystem): void {
-  if (hasLeafAlias(path)) {
-    throw new Error('Trusted userData path must not use a leaf alias.')
+  if (hasPathAlias(path)) {
+    throw new Error('Trusted userData path must not use path aliases.')
   }
 
   const paths = directoryChain(path)
@@ -181,10 +187,10 @@ export function readAuthRuntimeConfig(
     const code = character.charCodeAt(0)
     return code > 0x1f && code !== 0x7f
   })
-  const hasNoLeafAlias = !hasLeafAlias(userDataPath)
+  const hasNoPathAlias = !hasPathAlias(userDataPath)
   const isUserDataRoot = parse(userDataPath).root === userDataPath
   const hasValidUserDataPath =
-    isAbsolute(userDataPath) && !isUserDataRoot && hasNoControlPath && hasNoLeafAlias
+    isAbsolute(userDataPath) && !isUserDataRoot && hasNoControlPath && hasNoPathAlias
   if (!hasValidAppIdentity || !hasValidUserDataPath) {
     return null
   }
