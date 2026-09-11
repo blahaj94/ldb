@@ -1,9 +1,44 @@
 // @vitest-environment jsdom
+import { runInNewContext } from 'node:vm'
 import type { BrowserWindow } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuthCoordinator } from '../../src/backend/auth/types'
 import { installObservation } from './observe'
-import { smoke } from './smoke'
+import { sandboxInspectionSource, smoke } from './smoke'
+
+describe('generated sandbox inspection source', () => {
+  it('Electron 노출 시 require getter를 읽지 않는다', () => {
+    const reads: string[] = []
+    const window = Object.defineProperties(
+      {},
+      {
+        electron: { get: () => (reads.push('electron'), {}) },
+        require: {
+          get: () => {
+            throw new Error('require getter must stay skipped')
+          }
+        }
+      }
+    )
+
+    expect(runInNewContext(sandboxInspectionSource, { window })).toBe(false)
+    expect(reads).toEqual(['electron'])
+  })
+
+  it('Electron이 없으면 require를 한 번 읽어 sandbox 부재를 확인한다', () => {
+    const reads: string[] = []
+    const window = Object.defineProperties(
+      {},
+      {
+        electron: { get: () => (reads.push('electron'), undefined) },
+        require: { get: () => (reads.push('require'), undefined) }
+      }
+    )
+
+    expect(runInNewContext(sandboxInspectionSource, { window })).toBe(true)
+    expect(reads).toEqual(['electron', 'require'])
+  })
+})
 
 const clock = vi.hoisted(() => ({ now: 0 }))
 vi.mock('node:timers/promises', () => {
