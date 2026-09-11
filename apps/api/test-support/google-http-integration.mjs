@@ -223,11 +223,13 @@ export async function assertGoogleHttpIntegration(source, mark) {
   const capture = (chunk, encoding, callback) => {
     captured.push(String(chunk))
     const isEncodingCallback = typeof encoding === 'function'
-    const hasWriteCallback = !isEncodingCallback && typeof callback === 'function'
     if (isEncodingCallback) {
       encoding()
-    } else if (hasWriteCallback) {
-      callback()
+    } else {
+      const hasWriteCallback = typeof callback === 'function'
+      if (hasWriteCallback) {
+        callback()
+      }
     }
     return true
   }
