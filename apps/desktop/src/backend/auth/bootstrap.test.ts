@@ -63,6 +63,25 @@ describe('desktop auth bootstrap', () => {
     expect(createSearchClock).not.toHaveBeenCalled()
   })
 
+  it('does not announce or create auth effects when the runtime is already inactive', async () => {
+    const announceCredentialAccess = vi.fn(async () => undefined)
+    const createDependencies = vi.fn(() => createAuthHarness().dependencies)
+    const createSearchClock = vi.fn(() => createAuthHarness().clock)
+    const isActive = vi.fn(() => false)
+
+    const runtime = await bootstrapAuthRuntime({
+      config,
+      effects: { announceCredentialAccess, createDependencies, createSearchClock },
+      isActive
+    })
+
+    expect(runtime).toBeNull()
+    expect(isActive).toHaveBeenCalledOnce()
+    expect(announceCredentialAccess).not.toHaveBeenCalled()
+    expect(createDependencies).not.toHaveBeenCalled()
+    expect(createSearchClock).not.toHaveBeenCalled()
+  })
+
   it('does not inspect the store when the access notice cannot complete', async () => {
     const harness = createAuthHarness()
     const announceCredentialAccess = vi.fn(async () => {
@@ -80,6 +99,90 @@ describe('desktop auth bootstrap', () => {
     expect(createDependencies).not.toHaveBeenCalled()
     expect(createSearchClock).not.toHaveBeenCalled()
     expect(harness.store.inspect).not.toHaveBeenCalled()
+  })
+
+  it('does not create auth effects when the runtime becomes inactive during the access notice', async () => {
+    const harness = createAuthHarness()
+    const pendingNotice = deferred<void>()
+    let active = true
+    const announceCredentialAccess = vi.fn(async () => pendingNotice.promise)
+    const createDependencies = vi.fn(() => harness.dependencies)
+    const createSearchClock = vi.fn(() => harness.clock)
+    const isActive = vi.fn(() => active)
+
+    const bootstrap = bootstrapAuthRuntime({
+      config,
+      effects: { announceCredentialAccess, createDependencies, createSearchClock },
+      isActive
+    })
+    await vi.waitFor(() => expect(announceCredentialAccess).toHaveBeenCalledOnce())
+
+    active = false
+    pendingNotice.resolve()
+
+    await expect(bootstrap).resolves.toBeNull()
+    expect(isActive).toHaveBeenCalledTimes(2)
+    expect(createDependencies).not.toHaveBeenCalled()
+    expect(createSearchClock).not.toHaveBeenCalled()
+    expect(harness.store.inspect).not.toHaveBeenCalled()
+  })
+
+  it('propagates unexpected dependency construction failures', async () => {
+    const dependencyFailure = new Error('synthetic dependency construction failure')
+    const createDependencies = vi.fn(() => {
+      throw dependencyFailure
+    })
+    const createSearchClock = vi.fn(() => createAuthHarness().clock)
+
+    const bootstrap = bootstrapAuthRuntime({
+      config,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies,
+        createSearchClock
+      }
+    })
+
+    await expect(bootstrap).rejects.toBe(dependencyFailure)
+    expect(createDependencies).toHaveBeenCalledOnce()
+    expect(createSearchClock).not.toHaveBeenCalled()
+  })
+
+  it('propagates unexpected search clock construction failures', async () => {
+    const harness = createAuthHarness()
+    const searchClockFailure = new Error('synthetic search clock construction failure')
+    const createSearchClock = vi.fn(() => {
+      throw searchClockFailure
+    })
+
+    const bootstrap = bootstrapAuthRuntime({
+      config,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies: vi.fn(() => harness.dependencies),
+        createSearchClock
+      }
+    })
+
+    await expect(bootstrap).rejects.toBe(searchClockFailure)
+    expect(createSearchClock).toHaveBeenCalledOnce()
+    expect(harness.entropy.uuid).not.toHaveBeenCalled()
+  })
+
+  it('propagates unexpected coordinator construction failures', async () => {
+    const harness = createAuthHarness()
+    const invalidDependencies = { ...harness.dependencies, apiOrigin: 'http://api.example.test' }
+
+    const bootstrap = bootstrapAuthRuntime({
+      config,
+      effects: {
+        announceCredentialAccess: vi.fn(async () => undefined),
+        createDependencies: vi.fn(() => invalidDependencies),
+        createSearchClock: vi.fn(() => harness.clock)
+      }
+    })
+
+    await expect(bootstrap).rejects.toThrow('Authentication URL is invalid.')
   })
 
   it('connects a synthetic successful login without using production environment values', async () => {

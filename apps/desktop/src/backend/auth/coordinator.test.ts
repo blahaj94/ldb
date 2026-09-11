@@ -1295,6 +1295,82 @@ describe('Desktop AuthCoordinator login', () => {
     expect(harness.http.exchange).toHaveBeenCalledTimes(1)
   })
 
+  it('callback claim hook은 새 valid pending claim에서 exchange 작업을 시작한 뒤 한 번만 실행한다', async () => {
+    const harness = createAuthHarness()
+    const exchange = deferred<Awaited<ReturnType<typeof harness.http.value.exchange>>>()
+    harness.http.exchange.mockImplementationOnce(() => exchange.promise)
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    const pendinglessHook = vi.fn()
+    const invalidHook = vi.fn()
+    const claimedHook = vi.fn(() => {
+      expect(harness.store.establishTransition).toHaveBeenCalledTimes(1)
+      expect(coordinator.getSnapshot()).toMatchObject({ phase: 'exchanging' })
+    })
+    const joinedHook = vi.fn()
+    const ignoredHook = vi.fn()
+    await coordinator.start()
+
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, pendinglessHook)
+    expect(pendinglessHook).not.toHaveBeenCalled()
+    await beginWaitingLogin(coordinator)
+    await coordinator.handleReturnUrl(`ldb-test://auth/wrong?code=${CODE}`, invalidHook)
+    expect(invalidHook).not.toHaveBeenCalled()
+
+    const first = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, claimedHook)
+    const duplicate = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, joinedHook)
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${OTHER_CODE}`, ignoredHook)
+
+    expect(duplicate).toBe(first)
+    expect(claimedHook).toHaveBeenCalledTimes(1)
+    expect(joinedHook).not.toHaveBeenCalled()
+    expect(ignoredHook).not.toHaveBeenCalled()
+    exchange.resolve({
+      ...tokenResponse(),
+      user: { id: USER_ID, nickname: '모험가0000001' },
+      isNewUser: false
+    })
+    await first
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+  })
+
+  it('expired callback은 claim hook을 실행하지 않는다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    const onClaimed = vi.fn()
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+
+    harness.clock.discontinuous = true
+    await coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, onClaimed)
+
+    expect(onClaimed).not.toHaveBeenCalled()
+    expect(harness.http.exchange).not.toHaveBeenCalled()
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      notice: 'LOGIN_EXPIRED'
+    })
+  })
+
+  it('callback claim hook 예외를 외부로 전파하지 않고 exchange를 계속한다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    const onClaimed = vi.fn(() => {
+      throw new Error('window activation failed')
+    })
+    await coordinator.start()
+    await beginWaitingLogin(coordinator)
+
+    let returning: Promise<void> | undefined
+    expect(() => {
+      returning = coordinator.handleReturnUrl(`${RETURN_TARGET}?code=${CODE}`, onClaimed)
+    }).not.toThrow()
+    await expect(returning).resolves.toBeUndefined()
+
+    expect(onClaimed).toHaveBeenCalledTimes(1)
+    expect(harness.http.exchange).toHaveBeenCalledTimes(1)
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn' })
+  })
+
   it.each(['success', 'cancel-recover'] as const)(
     '거절 clear 완료의 동기 listener에서 다른 callback으로 writer를 인계한다: %s',
     async (outcome) => {

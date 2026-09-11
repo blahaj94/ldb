@@ -5,6 +5,7 @@ import { createAuthCoordinator } from './coordinator'
 import {
   attachProtocolIngressAfterStart,
   createProtocolIngress,
+  isOrdinarySecondInstanceInvocation,
   type ProtocolIngressApp,
   type ProtocolOpenUrlEvent
 } from './protocol-ingress'
@@ -124,24 +125,125 @@ describe('Desktop auth protocol ingress', () => {
     expect(dispatch).not.toHaveBeenCalled()
   })
 
+  it('second-instance 일반 실행은 start 뒤 창을 활성화하고 start 전 반복 요청은 하나로 제한한다', async () => {
+    const start = deferred<void>()
+    const app = createApp()
+    const dispatch = vi.fn()
+    const activate = vi.fn()
+    const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+
+    attachProtocolIngressAfterStart(ingress, start.promise, dispatch, () => true, activate)
+    app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp')
+    app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp')
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(activate).not.toHaveBeenCalled()
+
+    start.resolve()
+    await settle()
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(activate).toHaveBeenCalledTimes(1)
+
+    app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp')
+    await settle()
+
+    expect(activate).toHaveBeenCalledTimes(2)
+  })
+
+  it('second-instance exact 복귀는 auth에만 전달하고 일반 활성화를 실행하지 않는다', () => {
+    const app = createApp()
+    const dispatch = vi.fn()
+    const activate = vi.fn()
+    const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+    ingress.attach(dispatch, activate)
+
+    app.emit('second-instance', {}, ['electron', returnUrl()], '/tmp')
+
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith(returnUrl())
+    expect(activate).not.toHaveBeenCalled()
+  })
+
+  it('second-instance malformed 또는 복수 복귀 후보는 auth와 일반 활성화를 모두 거절한다', () => {
+    const app = createApp()
+    const dispatch = vi.fn()
+    const activate = vi.fn()
+    const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+    ingress.attach(dispatch, activate)
+
+    app.emit('second-instance', {}, ['electron', `${RETURN_TARGET}?code=short`], '/tmp')
+    app.emit('second-instance', {}, ['electron', returnUrl(), returnUrl(OTHER_CODE)], '/tmp')
+
+    expect(dispatch).not.toHaveBeenCalled()
+    expect(activate).not.toHaveBeenCalled()
+  })
+
+  it('fallback 판별도 protocol 후보가 전혀 없는 second-instance만 일반 실행으로 분류한다', () => {
+    const ordinary = isOrdinarySecondInstanceInvocation(['electron', '--new-window'], RETURN_TARGET)
+    const validReturn = isOrdinarySecondInstanceInvocation(['electron', returnUrl()], RETURN_TARGET)
+    const malformedReturn = isOrdinarySecondInstanceInvocation(
+      ['electron', `${RETURN_TARGET}?code=short`],
+      RETURN_TARGET
+    )
+    const multipleReturns = isOrdinarySecondInstanceInvocation(
+      ['electron', returnUrl(), returnUrl(OTHER_CODE)],
+      RETURN_TARGET
+    )
+
+    expect(ordinary).toBe(true)
+    expect(validReturn).toBe(false)
+    expect(malformedReturn).toBe(false)
+    expect(multipleReturns).toBe(false)
+  })
+
+  it('일반 활성화 예외를 EventEmitter 밖으로 전파하지 않고 detach 뒤 요청도 하나만 보존한다', () => {
+    const app = createApp()
+    const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+    const firstActivate = vi.fn()
+    const detach = ingress.attach(vi.fn(), firstActivate)
+    detach()
+
+    app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp')
+    app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp')
+
+    const secondActivate = vi.fn(() => {
+      throw new Error('activation failed')
+    })
+    expect(() => ingress.attach(vi.fn(), secondActivate)).not.toThrow()
+    expect(secondActivate).toHaveBeenCalledTimes(1)
+
+    expect(() => {
+      app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp')
+    }).not.toThrow()
+    expect(secondActivate).toHaveBeenCalledTimes(2)
+    expect(firstActivate).not.toHaveBeenCalled()
+
+    ingress.dispose()
+    app.emit('second-instance', {}, ['electron', '--new-window'], '/tmp')
+    expect(secondActivate).toHaveBeenCalledTimes(2)
+  })
+
   it('scheme 대소문자 변형도 복귀 후보로 세되 exact parser가 alias를 허용하지 않는다', () => {
     const app = createApp()
     const dispatch = vi.fn()
+    const activate = vi.fn()
     const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
     const uppercaseScheme = returnUrl().replace('ldb-test:', 'LDB-TEST:')
-    ingress.attach(dispatch)
+    ingress.attach(dispatch, activate)
 
     app.emit('second-instance', {}, ['electron', returnUrl(), uppercaseScheme], '/tmp')
     app.emit('second-instance', {}, ['electron', uppercaseScheme], '/tmp')
 
     expect(dispatch).not.toHaveBeenCalled()
+    expect(activate).not.toHaveBeenCalled()
   })
 
-  it('일반 argv와 잘못된 복귀 입력은 외부 side effect 없이 무시한다', () => {
+  it('일반 argv는 창 활성화에만 전달하고 잘못된 복귀 입력은 모두 무시한다', () => {
     const app = createApp()
     const dispatch = vi.fn()
+    const activate = vi.fn()
     const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
-    ingress.attach(dispatch)
+    ingress.attach(dispatch, activate)
 
     app.emit(
       'second-instance',
@@ -158,6 +260,7 @@ describe('Desktop auth protocol ingress', () => {
     )
 
     expect(dispatch).not.toHaveBeenCalled()
+    expect(activate).toHaveBeenCalledTimes(1)
   })
 
   it('attach 해제 중에는 첫 후보 하나만 보관하고 dispose 뒤 listener와 후보를 정리한다', () => {
