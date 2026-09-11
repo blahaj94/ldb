@@ -1,5 +1,5 @@
 import * as fs from 'node:fs'
-import { join, sep } from 'node:path'
+import { join, sep, win32 } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import {
@@ -59,6 +59,62 @@ describe('desktop auth runtime config', () => {
     { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: '/' }
   ])('rejects incomplete or invalid values without a production fallback: %j', (environment) => {
     expect(readAuthRuntimeConfig(environment)).toBeNull()
+  })
+
+  it('rejects non-native separators under Windows path semantics', () => {
+    const readWithPathSemantics = readAuthRuntimeConfig as unknown as (
+      environment: Record<string, string | undefined>,
+      pathSemantics: typeof win32
+    ) => AuthRuntimeConfig | null
+    const nativePath = String.raw`C:\Users\Alice\LdbProfile`
+    const separatorAlias = 'C:/Users/Alice/LdbProfile'
+
+    expect(
+      readWithPathSemantics({ ...validEnvironment, LDB_AUTH_USER_DATA_PATH: nativePath }, win32)
+    ).toMatchObject({ userDataPath: nativePath })
+    expect(
+      readWithPathSemantics({ ...validEnvironment, LDB_AUTH_USER_DATA_PATH: separatorAlias }, win32)
+    ).toBeNull()
+  })
+
+  it('rejects a Windows separator alias before touching the profile filesystem', () => {
+    const touchedPaths: string[] = []
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: ((path: fs.PathLike) => {
+        touchedPaths.push(String(path))
+        throw new Error('Synthetic filesystem access')
+      }) as typeof fs.lstatSync,
+      statSync: fs.statSync,
+      realpathSync: fs.realpathSync.native,
+      mkdirSync: fs.mkdirSync,
+      openSync: fs.openSync,
+      fsyncSync: fs.fsyncSync,
+      closeSync: fs.closeSync
+    }
+    const config: AuthRuntimeConfig = {
+      apiOrigin: validEnvironment.LDB_AUTH_API_ORIGIN,
+      returnTarget: validEnvironment.LDB_AUTH_RETURN_TARGET,
+      environment: validEnvironment.LDB_AUTH_ENVIRONMENT,
+      providers: ['google'],
+      appIdentity: validEnvironment.LDB_AUTH_APP_IDENTITY,
+      userDataPath: 'C:/Users/Alice/LdbProfile'
+    }
+
+    const applyWithPathSemantics = applyAuthRuntimeProfile as unknown as (
+      application: AuthRuntimeProfileApplication,
+      config: AuthRuntimeConfig,
+      filesystem: RuntimeProfileFilesystemDouble,
+      pathSemantics: typeof win32
+    ) => void
+    expect(() => applyWithPathSemantics(application, config, filesystem, win32)).toThrow()
+    expect(touchedPaths).toEqual([])
+    expect(calls).toEqual([])
   })
 
   it('applies the trusted app identity and userData profile before the instance lock', () => {
