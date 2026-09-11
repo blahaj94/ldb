@@ -2286,6 +2286,38 @@ describe('Desktop AuthCoordinator restore, refresh와 logout', () => {
     }
   )
 
+  it('authorization의 clock 신뢰 상실은 전송 전 refresh 중단 뒤에도 현재 access를 다시 사용하지 않는다', async () => {
+    const harness = createAuthHarness()
+    const coordinator = createAuthCoordinator(harness.dependencies)
+    await restoreSignedIn(coordinator, harness)
+    harness.http.refresh.mockClear()
+    harness.http.me.mockClear()
+    harness.clock.discontinuous = true
+    harness.http.refresh.mockRejectedValueOnce(new AuthHttpFailure('network', 'not-sent'))
+
+    await expect(coordinator.authorization()).resolves.toEqual({ status: 'unavailable' })
+
+    expect(coordinator.getSnapshot()).toMatchObject({
+      phase: 'restorePaused',
+      notice: 'NETWORK_UNAVAILABLE'
+    })
+    expect(harness.http.refresh).toHaveBeenCalledTimes(1)
+    expect(harness.http.refresh).toHaveBeenLastCalledWith(REFRESH_1, expect.any(AbortSignal))
+    expect(harness.http.me).not.toHaveBeenCalled()
+
+    harness.clock.discontinuous = false
+    harness.http.refresh.mockResolvedValueOnce(
+      tokenResponse({ refreshToken: REFRESH_2, accessToken: ACCESS_2 })
+    )
+    await coordinator.retryAuth()
+
+    expect(harness.http.refresh).toHaveBeenCalledTimes(2)
+    expect(harness.http.refresh).toHaveBeenLastCalledWith(REFRESH_1, expect.any(AbortSignal))
+    expect(harness.http.me).toHaveBeenCalledTimes(1)
+    expect(harness.http.me).toHaveBeenCalledWith(ACCESS_2, expect.any(AbortSignal))
+    expect(coordinator.getSnapshot()).toMatchObject({ phase: 'signedIn', entry: 'home' })
+  })
+
   it('만료 access의 동시 caller가 refresh HTTP와 동일 authorization 결과를 공유한다', async () => {
     const harness = createAuthHarness()
     const coordinator = createAuthCoordinator(harness.dependencies)
