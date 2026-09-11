@@ -20,19 +20,25 @@ function hasRetryWait(slot: Slot): slot is Slot & { retryAfterSeconds: number } 
   return hasWait
 }
 
-function sameRequest({ before, after }: { before: Slot; after: Slot }): boolean {
+export function sameRequest({ before, after }: { before: Slot; after: Slot }): boolean {
   const hasRequestId = before.requestId != null
-  const hasSameId = hasRequestId && before.requestId === after.requestId
+  let hasSameId: boolean | undefined
+  if (hasRequestId) {
+    hasSameId = before.requestId === after.requestId
+  }
   const hasSameObservation = before.observationRevision === after.observationRevision
-  const isSameRequest = hasSameId && hasSameObservation
+  const isSameRequest = hasRequestId && hasSameId === true && hasSameObservation
   return isSameRequest
 }
 function hasState(view: SearchUiObservation, state: string): boolean {
   const hasRegions = view.regionMask === 15
   const hasMatchingSlots = view.slots.every((slot) => {
     const isState = slot.state === state
-    const hasMatchingState = isState && slot.statusMatched
-    return hasMatchingState
+    if (!isState) {
+      return false
+    }
+    const hasMatchingStatus = slot.statusMatched
+    return hasMatchingStatus
   })
   const hasMatchingView = hasRegions && hasMatchingSlots
   return hasMatchingView
@@ -133,7 +139,15 @@ function createRetryScript({
       });
       const hasButton = button != null;
       const allowsDisabledClick = ${allowDisabled};
-      const canClick = hasButton && (allowsDisabledClick || !button.disabled);
+      let canClick = false;
+      if (hasButton) {
+        if (allowsDisabledClick) {
+          canClick = true;
+        } else {
+          const isButtonEnabled = !button.disabled;
+          canClick = isButtonEnabled;
+        }
+      }
       if (!canClick) {
         return false;
       }
@@ -180,10 +194,16 @@ export async function smokeCharacterSearch(
     await until(() => hasText('Capture ready at 1920×1080.'), 30_000)
     const view = await waitFor((current) => {
       const hasCaptureId = current.captureId != null
-      const hasNewCapture = hasCaptureId && current.captureId !== previousCapture
+      let hasNewCapture: boolean | undefined
+      if (hasCaptureId) {
+        hasNewCapture = current.captureId !== previousCapture
+      }
       const hasAllOcrSlots = current.ocrMask === 15
-      const hasOcr = hasAllOcrSlots && main.nicknameMatchedSlots === 15
-      const hasReadyCapture = hasNewCapture && hasOcr
+      let hasOcr: boolean | undefined
+      if (hasAllOcrSlots) {
+        hasOcr = main.nicknameMatchedSlots === 15
+      }
+      const hasReadyCapture = hasNewCapture === true && hasOcr === true
       return hasReadyCapture
     }, 30_000)
     const active = await observe()
@@ -202,15 +222,28 @@ export async function smokeCharacterSearch(
     await click('Stop')
     await waitFor((view) => {
       const hasNoCapture = view.captureId === null
-      const hasEnded = hasNoCapture && view.ocrMask === 0
-      const hasIdleView = hasEnded && hasState(view, 'idle')
-      return hasIdleView
+      let hasEnded: boolean | undefined
+      if (hasNoCapture) {
+        hasEnded = view.ocrMask === 0
+      }
+      let hasIdleView: boolean | undefined
+      if (hasEnded === true) {
+        hasIdleView = hasState(view, 'idle')
+      }
+      return hasIdleView === true
     })
     await until(async () => {
       const state = await observe()
-      const hasTerminatedWorkers = state.ended && state.terminated === state.workers
-      const hasClearedVideos = hasTerminatedWorkers && state.clearedVideos === state.streams
-      return hasClearedVideos
+      const isEnded = state.ended
+      let hasTerminatedWorkers: boolean | undefined
+      if (isEnded) {
+        hasTerminatedWorkers = state.terminated === state.workers
+      }
+      let hasClearedVideos: boolean | undefined
+      if (hasTerminatedWorkers === true) {
+        hasClearedVideos = state.clearedVideos === state.streams
+      }
+      return hasClearedVideos === true
     })
   }
   async function retry({
@@ -246,8 +279,11 @@ export async function smokeCharacterSearch(
     const empty = await waitFor((view) => hasState(view, 'empty'))
     const emptyMask = empty.slots.reduce((mask, slot, index) => {
       const hasEmptyState = slot.state === 'empty'
-      const isEmpty = hasEmptyState && slot.statusMatched
-      return isEmpty ? mask | (1 << index) : mask
+      if (!hasEmptyState) {
+        return mask
+      }
+      const hasMatchingStatus = slot.statusMatched
+      return hasMatchingStatus ? mask | (1 << index) : mask
     }, 0)
     assert.equal(emptyMask, 15)
 
@@ -298,23 +334,25 @@ export async function smokeCharacterSearch(
     const limitedSlot = mixed.slots.findIndex((slot) => slot.code === 'SEARCH_RATE_LIMITED')
     const limitedBefore = mixed.slots[limitedSlot]
     const hasInitialRetryWait = hasRetryWait(limitedBefore)
-    const hasPositiveWait = hasInitialRetryWait && limitedBefore.retryAfterSeconds > 0
-    let isRetryDisabledWhileWaiting = false
-    if (hasPositiveWait) {
-      const retryDisabled = limitedBefore.retryDisabled === true
-      isRetryDisabledWhileWaiting = retryDisabled
+    let hasPositiveWait: boolean | undefined
+    if (hasInitialRetryWait) {
+      hasPositiveWait = limitedBefore.retryAfterSeconds > 0
+    }
+    let isRetryDisabledWhileWaiting: boolean | undefined
+    if (hasPositiveWait === true) {
+      isRetryDisabledWhileWaiting = limitedBefore.retryDisabled === true
     }
     diagnostic = {
       stage: 'mixed',
       check: 'initial-rate-wait',
       actual: {
         hasRetryWait: hasInitialRetryWait,
-        hasPositiveWait,
-        retryDisabled: isRetryDisabledWhileWaiting
+        hasPositiveWait: hasPositiveWait === true,
+        retryDisabled: isRetryDisabledWhileWaiting === true
       },
       expected: { hasRetryWait: true, hasPositiveWait: true, retryDisabled: true }
     }
-    assert.equal(isRetryDisabledWhileWaiting, true)
+    assert.equal(isRetryDisabledWhileWaiting === true, true)
     const mixedRequests = search.counts.requests
     search.selectScenario('success')
     const currentRequests = search.counts.requests
@@ -328,17 +366,20 @@ export async function smokeCharacterSearch(
     await retry({ slot: failures[0], diagnosticCheck: 'first-retry-click' })
     const firstRetry = await waitFor((view) => {
       const hasSucceeded = view.slots[failures[0]].state === 'success'
-      const hasMatchingStatus = hasSucceeded && view.slots[failures[0]].statusMatched
+      let hasMatchingStatus: boolean | undefined
+      if (hasSucceeded) {
+        hasMatchingStatus = view.slots[failures[0]].statusMatched
+      }
       diagnostic = {
         stage: 'mixed',
         check: 'first-retry-ready',
         actual: {
           succeeded: hasSucceeded,
-          statusMatched: hasMatchingStatus
+          statusMatched: hasMatchingStatus === true
         },
         expected: { succeeded: true, statusMatched: true }
       }
-      return hasMatchingStatus
+      return hasMatchingStatus === true
     })
     const hasIndependentSlots = mixed.slots.every((before, index) => {
       const isRetried = index === failures[0]
@@ -348,7 +389,10 @@ export async function smokeCharacterSearch(
         return hasNewRequest
       }
       const hasSameRequest = sameRequest({ before, after })
-      const hasUnchangedState = hasSameRequest && before.state === after.state
+      if (!hasSameRequest) {
+        return false
+      }
+      const hasUnchangedState = before.state === after.state
       return hasUnchangedState
     })
     const independentRetry = hasIndependentSlots && search.counts.requests === mixedRequests + 1
@@ -359,8 +403,11 @@ export async function smokeCharacterSearch(
     const beforeBlockedUi = await read()
     const blockedSlot = beforeBlockedUi.slots[limitedSlot]
     const hasBlockedWait = hasRetryWait(blockedSlot)
-    const hasPositiveBlockedWait = hasBlockedWait && blockedSlot.retryAfterSeconds > 0
-    assert.equal(hasPositiveBlockedWait, true)
+    let hasPositiveBlockedWait: boolean | undefined
+    if (hasBlockedWait) {
+      hasPositiveBlockedWait = blockedSlot.retryAfterSeconds > 0
+    }
+    assert.equal(hasPositiveBlockedWait === true, true)
     const isStillWaiting = blockedSlot.retryDisabled === true
     assert.equal(isStillWaiting, true)
     const beforeBlocked = search.counts.requests
@@ -372,20 +419,23 @@ export async function smokeCharacterSearch(
       const isRetryEnabled = hasExpiredWait && view.slots[limitedSlot].retryDisabled === false
       return isRetryEnabled
     })
-    const hasObservedWait = hasPositiveWait && isStillWaiting
-    let rateWait = false
+    const hasObservedWait = hasPositiveWait === true && isStillWaiting
+    let hasSameLimitedRequest: boolean | undefined
     if (hasObservedWait) {
-      const hasSameLimitedRequest = sameRequest({
+      hasSameLimitedRequest = sameRequest({
         before: limitedBefore,
         after: expired.slots[limitedSlot]
       })
-      if (hasSameLimitedRequest) {
-        const hasRetainedRateLimit = expired.slots[limitedSlot].code === 'SEARCH_RATE_LIMITED'
-        if (hasRetainedRateLimit) {
-          rateWait = expired.slots[limitedSlot].statusMatched
-        }
-      }
     }
+    let hasRetainedRateLimit: boolean | undefined
+    if (hasSameLimitedRequest === true) {
+      hasRetainedRateLimit = expired.slots[limitedSlot].code === 'SEARCH_RATE_LIMITED'
+    }
+    let hasRateWait: boolean | undefined
+    if (hasRetainedRateLimit === true) {
+      hasRateWait = expired.slots[limitedSlot].statusMatched
+    }
+    const rateWait = hasRateWait === true
     const rateNoAutoGet = search.counts.requests === beforeBlocked
     const hasWaitedWithoutAutoGet = rateWait && rateNoAutoGet
     assert.equal(hasWaitedWithoutAutoGet, true)
@@ -394,20 +444,30 @@ export async function smokeCharacterSearch(
     enterStage('timeout')
     const timedOut = await waitFor((view) => {
       const hasTimedOut = view.slots[pendingSlot].code === 'SEARCH_TIMEOUT'
-      const hasMatchingTimeout = hasTimedOut && view.slots[pendingSlot].statusMatched
-      return hasMatchingTimeout
+      let hasMatchingTimeout: boolean | undefined
+      if (hasTimedOut) {
+        hasMatchingTimeout = view.slots[pendingSlot].statusMatched
+      }
+      return hasMatchingTimeout === true
     }, 20_000)
     const hasSameTimedOutRequest = sameRequest({
       before: mixed.slots[pendingSlot],
       after: timedOut.slots[pendingSlot]
     })
-    const timeout = hasSameTimedOutRequest && timedOut.slots[pendingSlot].retryDisabled === false
+    let isRetryEnabled: boolean | undefined
+    if (hasSameTimedOutRequest) {
+      isRetryEnabled = timedOut.slots[pendingSlot].retryDisabled === false
+    }
+    const timeout = hasSameTimedOutRequest && isRetryEnabled === true
     assert.equal(timeout, true)
     await retry({ slot: pendingSlot })
     await waitFor((view) => {
       const hasAllCandidates = view.candidateMask === 15
-      const hasSuccessfulView = hasAllCandidates && hasState(view, 'success')
-      return hasSuccessfulView
+      let hasSuccessfulView: boolean | undefined
+      if (hasAllCandidates) {
+        hasSuccessfulView = hasState(view, 'success')
+      }
+      return hasSuccessfulView === true
     })
 
     await stop()
@@ -420,16 +480,26 @@ export async function smokeCharacterSearch(
     await until(() => hasText('Google로 계속하기'))
     await until(async () => {
       const state = await observe()
-      const hasTerminatedWorkers = state.ended && state.terminated === state.workers
-      const hasAbortedPendingRequests =
-        hasTerminatedWorkers && search.counts.pendingAborts === abortsBeforeLogout + 4
-      return hasAbortedPendingRequests
+      const isEnded = state.ended
+      let hasTerminatedWorkers: boolean | undefined
+      if (isEnded) {
+        hasTerminatedWorkers = state.terminated === state.workers
+      }
+      let hasAbortedPendingRequests: boolean | undefined
+      if (hasTerminatedWorkers === true) {
+        hasAbortedPendingRequests = search.counts.pendingAborts === abortsBeforeLogout + 4
+      }
+      return hasAbortedPendingRequests === true
     })
     const stopped = await observe()
     const stoppedUi = await read()
-    const hasStoppedStreams = stopped.ended && stopped.stops === stopped.streams
+    const isStopped = stopped.ended
+    let hasStoppedStreams: boolean | undefined
+    if (isStopped) {
+      hasStoppedStreams = stopped.stops === stopped.streams
+    }
     let pendingCleanup = false
-    if (hasStoppedStreams) {
+    if (hasStoppedStreams === true) {
       const hasClearedVideos = stopped.clearedVideos === stopped.streams
       if (hasClearedVideos) {
         const hasRemovedCapture = stoppedUi.captureId === null
@@ -465,13 +535,19 @@ export async function smokeCharacterSearch(
     await selectSyntheticSource()
     const restarted = await start()
     const hasRestartedCapture = restarted.captureId != null
-    const newCapture = hasRestartedCapture && restarted.captureId !== beforeLogout.captureId
+    let newCapture: boolean | undefined
+    if (hasRestartedCapture) {
+      newCapture = restarted.captureId !== beforeLogout.captureId
+    }
     const complete = await waitFor((view) => {
       const hasAllCandidates = view.candidateMask === 15
-      const hasSuccessfulView = hasAllCandidates && hasState(view, 'success')
-      return hasSuccessfulView
+      let hasSuccessfulView: boolean | undefined
+      if (hasAllCandidates) {
+        hasSuccessfulView = hasState(view, 'success')
+      }
+      return hasSuccessfulView === true
     })
-    assert.equal(newCapture, true)
+    assert.equal(newCapture === true, true)
     enterStage('layout')
     await inspectLayouts(window, read)
     enterStage('final-cleanup')
@@ -479,13 +555,17 @@ export async function smokeCharacterSearch(
     await click('이 기기 로그아웃')
     await until(() => hasText('Google로 계속하기'))
     const final = await observe()
-    const hasTerminatedWorkers = final.ended && final.terminated === final.workers
-    let hasStoppedAllStreams = false
-    if (hasTerminatedWorkers) {
+    const isFinalEnded = final.ended
+    let hasTerminatedWorkers: boolean | undefined
+    if (isFinalEnded) {
+      hasTerminatedWorkers = final.terminated === final.workers
+    }
+    let hasStoppedAllStreams: boolean | undefined
+    if (hasTerminatedWorkers === true) {
       const hasStoppedStreams = final.stops === final.streams
       hasStoppedAllStreams = hasStoppedStreams
     }
-    assert.equal(hasStoppedAllStreams, true)
+    assert.equal(hasStoppedAllStreams === true, true)
     assert.equal(main.displayRequests, 4)
     assert.equal(main.displayAllowed, 4)
     assert.equal(search.counts.requests, 20)
@@ -499,7 +579,7 @@ export async function smokeCharacterSearch(
       rateNoAutoGet,
       pendingCleanup,
       relogin,
-      newCapture,
+      newCapture: newCapture === true,
       displayRequests: main.displayRequests,
       displayAllowed: main.displayAllowed,
       searchRequests: search.counts.requests,

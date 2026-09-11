@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SearchUiObservation } from './search-observation'
-import { inspectMixedReadiness, inspectSandboxBoundary, isReloginReady } from './search-smoke'
+import {
+  inspectMixedReadiness,
+  inspectSandboxBoundary,
+  isReloginReady,
+  sameRequest
+} from './search-smoke'
 
 describe('search smoke protected evaluation', () => {
   it('Electron 노출 시 require getter를 읽지 않는다', () => {
@@ -33,6 +38,24 @@ describe('search smoke protected evaluation', () => {
 
     expect(inspectSandboxBoundary(window)).toBe(true)
     expect(reads).toEqual(['electron', 'require'])
+  })
+
+  it('sameRequest는 requestId 부재 뒤 observationRevision 비교를 유지한다', () => {
+    const reads: string[] = []
+    const before = Object.defineProperties(
+      {},
+      {
+        requestId: { get: () => (reads.push('requestId'), null) },
+        observationRevision: { get: () => (reads.push('observationRevision'), 1) }
+      }
+    ) as SearchUiObservation['slots'][number]
+    const after = {
+      requestId: null,
+      observationRevision: 1
+    } as SearchUiObservation['slots'][number]
+
+    expect(sameRequest({ before, after })).toBe(false)
+    expect(reads).toEqual(['requestId', 'observationRevision'])
   })
 
   it('region이 불완전해도 count를 먼저 읽고 every는 건너뛴다', () => {

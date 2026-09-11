@@ -108,8 +108,11 @@ export function registerObservedCapture(
         counts.displayRequests += 1
         handler(request, (streams) => {
           const hasStreams = streams != null
-          const isAllowed = hasStreams && streams.video != null
-          if (isAllowed) {
+          let hasVideo: boolean | undefined
+          if (hasStreams) {
+            hasVideo = streams.video != null
+          }
+          if (hasVideo === true) {
             counts.displayAllowed += 1
           }
           callback(streams)

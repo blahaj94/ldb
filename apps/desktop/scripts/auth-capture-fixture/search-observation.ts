@@ -60,7 +60,8 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
       '명성: 12345'
     ].every((field) => rowFields.includes(field))
     const isSuccess = slot.state === 'success'
-    const hasCandidate = isSuccess && hasOneCandidate && hasExpectedFields
+    const hasCandidateFields = hasOneCandidate && hasExpectedFields
+    const hasCandidate = isSuccess && hasCandidateFields
     if (hasCandidate) {
       candidateMask |= 1 << slot.slot
     }
@@ -78,8 +79,17 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
     const expectedStatus = hasCode ? messages[code] : stateLabels[slot.state]
     const statusText = region?.querySelector('[role="status"]')?.textContent?.trim()
     const hasStatusLabel = expectedStatus != null
-    const hasExpectedStatus = hasStatusLabel && statusText === expectedStatus
-    const statusMatched = hasRegion && (isSuccess ? hasCandidate : hasExpectedStatus)
+    let hasExpectedStatus: boolean | undefined
+    if (hasStatusLabel) {
+      hasExpectedStatus = statusText === expectedStatus
+    }
+    let hasStatusMatch: boolean | undefined
+    if (isSuccess) {
+      hasStatusMatch = hasCandidate
+    } else if (hasExpectedStatus != null) {
+      hasStatusMatch = hasExpectedStatus
+    }
+    const statusMatched = hasRegion && hasStatusMatch === true
     return {
       state: slot.state,
       requestId: slot.requestId,
@@ -102,7 +112,10 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
   }
   const source = document.querySelector('select')
   const hasSource = source != null
-  const sourceSelected = hasSource && source.value.length > 0
+  let hasSelectedSource: boolean | undefined
+  if (hasSource) {
+    hasSelectedSource = source.value.length > 0
+  }
   const start = Array.from(document.querySelectorAll('button')).find((button) => {
     const isStart = button.textContent?.trim() === 'Start'
     return isStart
@@ -116,7 +129,7 @@ async function readSearchUi(messages: Record<string, string>): Promise<SearchUiO
     candidateMask,
     ocrMask,
     regionMask,
-    sourceSelected,
+    sourceSelected: hasSelectedSource === true,
     startDisabled: start?.disabled ?? null,
     horizontalOverflow,
     dark: window.matchMedia('(prefers-color-scheme: dark)').matches
