@@ -33,18 +33,20 @@ export function formatDate(timestamp) {
 
 const entryPath = process.argv[1]
 const hasEntryPath = entryPath != null
-const isDirectRun = hasEntryPath && import.meta.url === pathToFileURL(entryPath).href
-if (isDirectRun) {
-  try {
-    const hasExtraArguments = process.argv.length > 3
-    if (hasExtraArguments) {
-      throw new Error('Expected at most one UTC ISO timestamp')
-    }
+if (hasEntryPath) {
+  const isDirectRun = import.meta.url === pathToFileURL(entryPath).href
+  if (isDirectRun) {
+    try {
+      const hasExtraArguments = process.argv.length > 3
+      if (hasExtraArguments) {
+        throw new Error('Expected at most one UTC ISO timestamp')
+      }
 
-    const timestamp = process.argv[2] ?? new Date().toISOString()
-    console.log(formatDate(timestamp))
-  } catch (error) {
-    console.error(error.message)
-    process.exitCode = 1
+      const timestamp = process.argv[2] ?? new Date().toISOString()
+      console.log(formatDate(timestamp))
+    } catch (error) {
+      console.error(error.message)
+      process.exitCode = 1
+    }
   }
 }
