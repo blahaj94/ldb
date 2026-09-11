@@ -26,12 +26,22 @@ import {
 
 const isInvalidToken = (error: unknown) => {
   const isAccessJwtError = error instanceof AccessJwtError
-  const hasInvalidTokenCode = isAccessJwtError && error.code === 'INVALID_ACCESS_JWT'
-  const hasInvalidTokenMessage = hasInvalidTokenCode && error.message === 'Invalid access JWT'
-  const hasNoCause = hasInvalidTokenMessage && !Object.hasOwn(error, 'cause')
-  const isExpectedInvalidToken =
-    isAccessJwtError && hasInvalidTokenCode && hasInvalidTokenMessage && hasNoCause
-  return isExpectedInvalidToken
+  if (!isAccessJwtError) {
+    return false
+  }
+
+  const hasInvalidTokenCode = error.code === 'INVALID_ACCESS_JWT'
+  if (!hasInvalidTokenCode) {
+    return false
+  }
+
+  const hasInvalidTokenMessage = error.message === 'Invalid access JWT'
+  if (!hasInvalidTokenMessage) {
+    return false
+  }
+
+  const hasNoCause = !Object.hasOwn(error, 'cause')
+  return hasNoCause
 }
 
 test('발급 token은 승인된 최소 claims만 담고 jose와 독립 verifier로 검증된다', async () => {
@@ -113,9 +123,12 @@ test('발급 입력은 UUID와 UTC 정수 초를 요구하고 만료된 session�
   for (const value of cases) {
     await assert.rejects(issue({ ...input(), ...value }), (error: unknown) => {
       const isAccessJwtError = error instanceof AccessJwtError
-      const hasInvalidInputCode = isAccessJwtError && error.code === 'INVALID_ACCESS_JWT_INPUT'
-      const isInvalidInputFailure = isAccessJwtError && hasInvalidInputCode
-      return isInvalidInputFailure
+      if (!isAccessJwtError) {
+        return false
+      }
+
+      const hasInvalidInputCode = error.code === 'INVALID_ACCESS_JWT_INPUT'
+      return hasInvalidInputCode
     })
   }
 })
