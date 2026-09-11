@@ -71,13 +71,18 @@ export function startTask(args, run = execFileSync) {
 }
 
 const entryPath = process.argv[1]
-const hasEntryPath = entryPath != null && entryPath !== ''
-const isDirectRun = hasEntryPath && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-if (isDirectRun) {
-  try {
-    console.log(startTask(process.argv.slice(2)))
-  } catch (error) {
-    console.error(error.message)
-    process.exitCode = 1
+const hasEntryPath = entryPath != null
+if (hasEntryPath) {
+  const hasNonEmptyEntryPath = entryPath !== ''
+  if (hasNonEmptyEntryPath) {
+    const isDirectRun = import.meta.url === pathToFileURL(resolve(entryPath)).href
+    if (isDirectRun) {
+      try {
+        console.log(startTask(process.argv.slice(2)))
+      } catch (error) {
+        console.error(error.message)
+        process.exitCode = 1
+      }
+    }
   }
 }
