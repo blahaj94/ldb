@@ -6,8 +6,12 @@ const TEST_COMMIT = /^test(?:\([^)]*\))?!?:/i
 
 function isLogicFile(filename) {
   const hasLogicExtension = LOGIC_EXTENSION.test(filename)
-  const isNonLogicPath = hasLogicExtension && NON_LOGIC_PATH.test(filename)
-  const isLogicPath = hasLogicExtension && !isNonLogicPath
+  if (!hasLogicExtension) {
+    return false
+  }
+
+  const isNonLogicPath = NON_LOGIC_PATH.test(filename)
+  const isLogicPath = !isNonLogicPath
   return isLogicPath
 }
 
@@ -72,8 +76,17 @@ function logicLines(files) {
 function logicBudgetCheck(files, commitFiles) {
   const commitFileCount = commitFiles?.length
   const hasCommitFileCount = commitFileCount != null
-  const hasCommitFileGroups = hasCommitFileCount && Boolean(commitFileCount)
-  const changes = hasCommitFileGroups ? commitFiles : [{ sha: 'whole PR fallback', files }]
+  let changes
+  if (hasCommitFileCount) {
+    const hasCommitFileGroups = Boolean(commitFileCount)
+    if (hasCommitFileGroups) {
+      changes = commitFiles
+    } else {
+      changes = [{ sha: 'whole PR fallback', files }]
+    }
+  } else {
+    changes = [{ sha: 'whole PR fallback', files }]
+  }
   const largest = changes
     .map(({ sha, files: changedFiles }) => ({ sha, lines: logicLines(changedFiles) }))
     .sort((left, right) => right.lines - left.lines)[0]
