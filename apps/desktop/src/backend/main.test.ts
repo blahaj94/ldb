@@ -371,6 +371,49 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
   expect(bootstrapInput.isActive()).toBe(false)
 })
 
+it.each(['cancel', 'commit'] as const)(
+  'bootstrap 직후 시작된 quit의 %s outcome 전에는 후속 composition을 시작하지 않는다',
+  async (outcome) => {
+    stubTrustedRuntimeEnvironment()
+    let compositionBeforeOutcome: number | null = null
+    mocks.bootstrapAuth.mockImplementationOnce(async () => {
+      const beforeQuit = mocks.appOn.mock.calls.find(
+        ([event]) => event === 'before-quit'
+      )?.[1] as (event: { defaultPrevented: boolean }) => void
+      const willQuit = mocks.appOn.mock.calls.find(([event]) => event === 'will-quit')?.[1] as (
+        event: { defaultPrevented: boolean }
+      ) => void
+      const quit = mocks.appOn.mock.calls.find(([event]) => event === 'quit')?.[1] as () => void
+
+      queueMicrotask(() => {
+        queueMicrotask(() => {
+          beforeQuit({ defaultPrevented: false })
+          if (outcome === 'cancel') {
+            queueMicrotask(() => {
+              willQuit({ defaultPrevented: true })
+              compositionBeforeOutcome = mocks.constructWindow.mock.calls.length
+            })
+            return
+          }
+
+          queueMicrotask(() => {
+            quit()
+            compositionBeforeOutcome = mocks.constructWindow.mock.calls.length
+          })
+        })
+      })
+      return mocks.runtime
+    })
+
+    await import('./main')
+    await mocks.bootstrap
+    await vi.waitFor(() => expect(compositionBeforeOutcome).not.toBeNull())
+
+    expect(compositionBeforeOutcome).toBe(0)
+    expect(mocks.constructWindow).toHaveBeenCalledOnce()
+  }
+)
+
 it('Electron defaultApp은 executable과 app path를 제외한 user argv만 lock handoff에 넘긴다', async () => {
   stubTrustedRuntimeEnvironment()
   const originalArgv = process.argv
