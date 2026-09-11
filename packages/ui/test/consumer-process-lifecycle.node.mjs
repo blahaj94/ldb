@@ -164,6 +164,63 @@ for (const { name, mode, status } of unitCases) {
   })
 }
 
+const invalidPidCases = [
+  {
+    name: 'non-integer PID stops before the owned group check',
+    pid: 1.5,
+    expectedPidReads: 1
+  },
+  {
+    name: 'PID 1 stops after the integer check without cleanup work',
+    pid: 1,
+    expectedPidReads: 2
+  }
+]
+
+for (const { name, pid, expectedPidReads } of invalidPidCases) {
+  test(name, async () => {
+    const group = createControlledGroup('absent')
+    let pidReads = 0
+    let nowCalls = 0
+    let killCalls = 0
+    let sleepCalls = 0
+    Object.defineProperty(group.child, 'pid', {
+      configurable: true,
+      get: () => {
+        pidReads += 1
+        return pid
+      }
+    })
+    const operation = stopOwnedProcessGroup({
+      ...group,
+      now: () => {
+        nowCalls += 1
+        return group.now()
+      },
+      kill: (...args) => {
+        killCalls += 1
+        return group.kill(...args)
+      },
+      sleep: async (milliseconds) => {
+        sleepCalls += 1
+        return group.sleep(milliseconds)
+      }
+    })
+    try {
+      const outcome = await settleWithin({ operation, deadlineMs: 250 })
+      assert.equal(outcome.status, 'rejected')
+      assert.equal(outcome.error.message, 'Cannot identify the owned detached process group')
+      assert.equal(pidReads, expectedPidReads)
+      assert.equal(killCalls, 0)
+      assert.equal(nowCalls, 0)
+      assert.equal(sleepCalls, 0)
+    } finally {
+      group.release()
+      await operation.catch(() => {})
+    }
+  })
+}
+
 function createChildSource(ignoresTerm) {
   const termHandler = ignoresTerm ? "process.on('SIGTERM', () => {})" : ''
   // 소유 detached group의 독립 안전장치: test runner가 강제 종료돼도 12초 내 정리된다.
