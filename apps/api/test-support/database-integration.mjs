@@ -346,14 +346,47 @@ async function runSignalScenario({ signal, stage, image }) {
     assert.equal(stderr, '')
   } finally {
     const hasNoExitCode = child.exitCode === null
-    const hasNoSignalCode = hasNoExitCode && child.signalCode === null
-    const isChildRunning = hasNoExitCode && hasNoSignalCode
-    if (isChildRunning) {
-      child.kill('SIGKILL')
+    if (hasNoExitCode) {
+      const hasNoSignalCode = child.signalCode === null
+      if (hasNoSignalCode) {
+        child.kill('SIGKILL')
+      }
     }
     await exited.catch(() => undefined)
   }
   await assertResourcesAbsent(runId)
+}
+
+function assertInvalidScenarioConfiguration() {
+  const hasScenarioConfiguration = false
+  assert(hasScenarioConfiguration)
+}
+
+export function assertChildScenarioConfiguration({ runId, platform, imageId }) {
+  const hasRunId = runId != null && runId !== ''
+  if (!hasRunId) {
+    assertInvalidScenarioConfiguration()
+  }
+
+  const hasPlatform = platform != null && platform !== ''
+  if (!hasPlatform) {
+    assertInvalidScenarioConfiguration()
+  }
+
+  const hasImageId = imageId != null && imageId !== ''
+  if (!hasImageId) {
+    assertInvalidScenarioConfiguration()
+  }
+}
+
+export function shouldWaitForSignalAtStage({ scenario, signalStage, expectedStage }) {
+  const isSignalScenario = scenario === 'signal'
+  if (!isSignalScenario) {
+    return false
+  }
+
+  const isExpectedStage = signalStage === expectedStage
+  return isExpectedStage
 }
 
 async function assertOwnershipProtection() {
@@ -396,11 +429,7 @@ async function childScenario() {
   const platform = process.env.LDB_DB_PLATFORM
   const signalStage = process.env.LDB_DB_SIGNAL_STAGE
   const imageId = process.env.LDB_DB_IMAGE_ID
-  const hasRunId = runId != null && runId !== ''
-  const hasPlatform = hasRunId && platform != null && platform !== ''
-  const hasImageId = hasPlatform && imageId != null && imageId !== ''
-  const hasScenarioConfiguration = hasRunId && hasPlatform && hasImageId
-  assert(hasScenarioConfiguration)
+  assertChildScenarioConfiguration({ runId, platform, imageId })
   announceRecovery({ runId })
   let receivedSignal
   let resolveSignal
@@ -432,9 +461,11 @@ async function childScenario() {
       { platform, imageId },
       {
         afterVolumeCreated: async () => {
-          const isSignalScenario = scenario === 'signal'
-          const isVolumeSignalStage = isSignalScenario && signalStage === 'volume'
-          const shouldWaitForSignal = isSignalScenario && isVolumeSignalStage
+          const shouldWaitForSignal = shouldWaitForSignalAtStage({
+            scenario,
+            signalStage,
+            expectedStage: 'volume'
+          })
           if (shouldWaitForSignal) {
             process.stdout.write('CHILD_RESOURCE_READY\n')
             await waitForSignal()
@@ -442,9 +473,11 @@ async function childScenario() {
           }
         },
         afterContainerCreated: async () => {
-          const isSignalScenario = scenario === 'signal'
-          const isContainerSignalStage = isSignalScenario && signalStage === 'container'
-          const shouldWaitForSignal = isSignalScenario && isContainerSignalStage
+          const shouldWaitForSignal = shouldWaitForSignalAtStage({
+            scenario,
+            signalStage,
+            expectedStage: 'container'
+          })
           if (shouldWaitForSignal) {
             process.stdout.write('CHILD_RESOURCE_READY\n')
             await waitForSignal()
@@ -873,18 +906,19 @@ async function primaryScenario() {
 }
 
 const hasScriptArgument = Boolean(process.argv[1])
-const isDirectExecution =
-  hasScriptArgument && pathToFileURL(process.argv[1]).href === import.meta.url
-if (isDirectExecution) {
-  try {
-    const hasChildScenario = Boolean(process.env.LDB_DB_SCENARIO)
-    if (hasChildScenario) {
-      await childScenario()
-    } else {
-      await primaryScenario()
+if (hasScriptArgument) {
+  const isDirectExecution = pathToFileURL(process.argv[1]).href === import.meta.url
+  if (isDirectExecution) {
+    try {
+      const hasChildScenario = Boolean(process.env.LDB_DB_SCENARIO)
+      if (hasChildScenario) {
+        await childScenario()
+      } else {
+        await primaryScenario()
+      }
+    } catch {
+      process.stderr.write(`Database integration failed at ${currentStage}\n`)
+      process.exitCode = 1
     }
-  } catch {
-    process.stderr.write(`Database integration failed at ${currentStage}\n`)
-    process.exitCode = 1
   }
 }
