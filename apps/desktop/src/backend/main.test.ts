@@ -1010,6 +1010,95 @@ it('notice 대기 중 quit은 dependency, IPC, window와 restore를 뒤늦게 �
   expect(mocks.runtime?.start).not.toHaveBeenCalled()
 })
 
+it('notice 대기 중 quit이 취소되면 bootstrap 이후 composition을 다시 진행한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const pendingBootstrap = deferred<typeof mocks.runtime>()
+  mocks.bootstrapAuth.mockReturnValueOnce(pendingBootstrap.promise)
+
+  await import('./main')
+  await vi.waitFor(() => expect(mocks.bootstrapAuth).toHaveBeenCalledOnce())
+  const beforeQuit = mocks.appOn.mock.calls.find(
+    ([event]) => event === 'before-quit'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  const willQuit = mocks.appOn.mock.calls.find(([event]) => event === 'will-quit')?.[1] as (event: {
+    defaultPrevented: boolean
+  }) => void
+
+  beforeQuit({ defaultPrevented: false })
+  pendingBootstrap.resolve(mocks.runtime)
+  await Promise.resolve()
+  await Promise.resolve()
+
+  expect(mocks.constructWindow).not.toHaveBeenCalled()
+
+  let defaultPrevented = false
+  const willQuitEvent = {
+    get defaultPrevented() {
+      return defaultPrevented
+    },
+    preventDefault() {
+      defaultPrevented = true
+    }
+  }
+  willQuit(willQuitEvent)
+  willQuitEvent.preventDefault()
+  await mocks.bootstrap
+
+  expect(mocks.registerCapture).toHaveBeenCalledOnce()
+  expect(mocks.registerAuth).toHaveBeenCalledOnce()
+  expect(mocks.constructWindow).toHaveBeenCalledOnce()
+  expect(mocks.runtime?.start).toHaveBeenCalledOnce()
+})
+
+it('start 성공과 protocol callback이 quit 시도 중 겹쳐도 취소 뒤 한 번 전달한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const pendingStart = deferred<void>()
+  mocks.runtime!.start = vi.fn(() => pendingStart.promise)
+  const actualIngress =
+    await vi.importActual<typeof import('./auth/protocol-ingress')>('./auth/protocol-ingress')
+  mocks.attachAfterStart.mockImplementationOnce(actualIngress.attachProtocolIngressAfterStart)
+
+  await import('./main')
+  await mocks.bootstrap
+  const beforeQuit = mocks.appOn.mock.calls.find(
+    ([event]) => event === 'before-quit'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+  const window = mocks.windows[0] as {
+    on: ReturnType<typeof vi.fn>
+    webContents: { on: ReturnType<typeof vi.fn> }
+    show: ReturnType<typeof vi.fn>
+  }
+  const close = window.on.mock.calls.find(([event]) => event === 'close')?.[1] as (event: {
+    defaultPrevented: boolean
+  }) => void
+  const willPreventUnload = window.webContents.on.mock.calls.find(
+    ([event]) => event === 'will-prevent-unload'
+  )?.[1] as (event: { defaultPrevented: boolean }) => void
+
+  beforeQuit({ defaultPrevented: false })
+  close({ defaultPrevented: false })
+  pendingStart.resolve()
+  await pendingStart.promise
+  await Promise.resolve()
+
+  expect(mocks.attachIngress).toHaveBeenCalledOnce()
+  const dispatch = mocks.attachIngress.mock.calls[0][0] as (raw: string) => Promise<void>
+  const dispatchResult = dispatch('ldb-synthetic://auth/return?code=synthetic')
+  await Promise.resolve()
+
+  expect(mocks.coordinator.handleReturnUrl).not.toHaveBeenCalled()
+  expect(window.show).not.toHaveBeenCalled()
+
+  willPreventUnload({ defaultPrevented: false })
+  await dispatchResult
+
+  expect(mocks.coordinator.handleReturnUrl).toHaveBeenCalledExactlyOnceWith(
+    'ldb-synthetic://auth/return?code=synthetic',
+    expect.any(Function)
+  )
+  expect(window.show).toHaveBeenCalledOnce()
+})
+
 it('profile owner의 예상 밖 restore rejection은 ingress를 닫고 nonzero로 종료한다', async () => {
   stubTrustedRuntimeEnvironment()
   mocks.runtime!.start = vi.fn(async () => {

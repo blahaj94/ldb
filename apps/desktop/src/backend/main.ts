@@ -55,6 +55,8 @@ let isQuitting = false
 let activeQuitAttempt: symbol | null = null
 let shutdownCommitted = false
 let hasPendingOwnedAuthFailure = false
+let quitOutcomeWaiters: Array<(canResume: boolean) => void> = []
+let quitCancellationActions: Array<() => void> = []
 let ownedAuthFailureExitRequested = false
 
 if (runtimeProfileState.status === 'application-failed') {
@@ -89,7 +91,7 @@ function handleDocumentLoadFailure(window: BrowserWindow, closeState: WindowClos
     return
   }
   if (activeQuitAttempt != null) {
-    hasPendingOwnedAuthFailure = true
+    quitCancellationActions.push(() => handleDocumentLoadFailure(window, closeState))
     return
   }
 
@@ -274,7 +276,13 @@ function commitShutdown(): void {
   shutdownCommitted = true
   activeQuitAttempt = null
   hasPendingOwnedAuthFailure = false
+  quitCancellationActions = []
   isQuitting = true
+  const waiters = quitOutcomeWaiters
+  quitOutcomeWaiters = []
+  for (const resolve of waiters) {
+    resolve(false)
+  }
   disposeProtocolIngress()
 }
 
@@ -285,12 +293,25 @@ function cancelQuitAttempt(attempt: symbol): void {
 
   activeQuitAttempt = null
   isQuitting = false
-  if (!hasPendingOwnedAuthFailure) {
+  const cancellationActions = quitCancellationActions
+  quitCancellationActions = []
+  for (const action of cancellationActions) {
+    action()
+  }
+
+  if (hasPendingOwnedAuthFailure && !shutdownCommitted) {
+    hasPendingOwnedAuthFailure = false
+    exitAfterOwnedAuthFailure()
+  }
+  if (shutdownCommitted) {
     return
   }
 
-  hasPendingOwnedAuthFailure = false
-  exitAfterOwnedAuthFailure()
+  const waiters = quitOutcomeWaiters
+  quitOutcomeWaiters = []
+  for (const resolve of waiters) {
+    resolve(true)
+  }
 }
 
 function cancelActiveQuitAttempt(): void {
@@ -305,8 +326,8 @@ function beginQuitAttempt(event: Readonly<{ defaultPrevented: boolean }>): void 
     return
   }
 
-  const attempt = Symbol('app-quit-attempt')
-  activeQuitAttempt = attempt
+  const attempt = activeQuitAttempt ?? Symbol('app-quit-attempt')
+  activeQuitAttempt ??= attempt
   isQuitting = true
   queueMicrotask(() => {
     if (event.defaultPrevented) {
@@ -325,6 +346,35 @@ function observeQuitAttempt(event: Readonly<{ defaultPrevented: boolean }>): voi
     if (event.defaultPrevented) {
       cancelQuitAttempt(attempt)
     }
+  })
+}
+
+function waitForQuitOutcome(): Promise<boolean> {
+  if (shutdownCommitted) {
+    return Promise.resolve(false)
+  }
+  if (activeQuitAttempt == null) {
+    return Promise.resolve(true)
+  }
+
+  return new Promise((resolve) => {
+    quitOutcomeWaiters.push(resolve)
+  })
+}
+
+function runAfterQuitOutcome(action: () => Promise<void> | void): Promise<void> | void {
+  if (shutdownCommitted) {
+    return
+  }
+  if (activeQuitAttempt == null) {
+    return action()
+  }
+
+  return waitForQuitOutcome().then(async (canResume) => {
+    if (!canResume || shutdownCommitted) {
+      return
+    }
+    await action()
   })
 }
 
@@ -380,14 +430,29 @@ app.whenReady().then(async () => {
     let authRuntime: AuthRuntime | null = null
     if (runtimeConfig != null) {
       const effects = createAuthRuntimeEffects()
-      authRuntime = await bootstrapAuthRuntime({
-        config: runtimeConfig,
-        effects,
-        isActive: () => !isQuitting
-      })
-    }
-    if (isQuitting) {
-      return
+      while (authRuntime == null) {
+        let bootstrapObservedQuitAttempt = false
+        authRuntime = await bootstrapAuthRuntime({
+          config: runtimeConfig,
+          effects,
+          isActive: () => {
+            bootstrapObservedQuitAttempt ||= isQuitting && !shutdownCommitted
+            return !isQuitting
+          }
+        })
+        if (shutdownCommitted) {
+          return
+        }
+        if (isQuitting) {
+          const canResume = await waitForQuitOutcome()
+          if (!canResume) {
+            return
+          }
+        }
+        if (!bootstrapObservedQuitAttempt || authRuntime != null) {
+          break
+        }
+      }
     }
 
     const hasAuthRuntime = authRuntime != null
@@ -450,13 +515,13 @@ app.whenReady().then(async () => {
         protocolIngress,
         startAuthRuntime,
         (rawReturnUrl) =>
-          authRuntime.coordinator.handleReturnUrl(rawReturnUrl, () => {
-            activateWindowSafely(authRuntime)
-          }),
-        () => !isQuitting && !protocolIngressDisposed,
-        () => {
-          activateWindowSafely(authRuntime)
-        }
+          runAfterQuitOutcome(() =>
+            authRuntime.coordinator.handleReturnUrl(rawReturnUrl, () => {
+              activateWindowSafely(authRuntime)
+            })
+          ),
+        () => !shutdownCommitted && !protocolIngressDisposed,
+        () => runAfterQuitOutcome(() => activateWindowSafely(authRuntime))
       )
     }
   } catch (error) {
