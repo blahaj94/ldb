@@ -1,3 +1,6 @@
+import * as fs from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { applyAuthRuntimeProfile, readAuthRuntimeConfig } from './runtime-config'
 
@@ -40,24 +43,106 @@ describe('desktop auth runtime config', () => {
   })
 
   it('applies the trusted app identity and userData profile before the instance lock', () => {
+    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const userDataPath = join(root, 'profile')
+    fs.mkdirSync(userDataPath, { mode: 0o700 })
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
-    const config = readAuthRuntimeConfig(validEnvironment)
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
 
-    expect(config).not.toBeNull()
-    if (config == null) {
-      throw new Error('Synthetic runtime config should be available')
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      expect(() => applyAuthRuntimeProfile(application, config)).not.toThrow()
+      expect(calls).toEqual([
+        `path:userData:${userDataPath}`,
+        'name:com.synthetic.ldb',
+        'identity:com.synthetic.ldb'
+      ])
+      expect(fs.lstatSync(userDataPath).mode & 0o7777).toBe(0o700)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
     }
-
-    expect(() => applyAuthRuntimeProfile(application, config)).not.toThrow()
-    expect(calls).toEqual([
-      'path:userData:/synthetic/ldb-test-profile',
-      'name:com.synthetic.ldb',
-      'identity:com.synthetic.ldb'
-    ])
   })
+
+  it('creates a missing trusted userData directory before setPath', () => {
+    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const userDataPath = join(root, 'new-profile')
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => {
+        fs.lstatSync(value)
+        calls.push(`path:${name}:${value}`)
+      },
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      expect(() => applyAuthRuntimeProfile(application, config)).not.toThrow()
+      expect(fs.lstatSync(userDataPath).isDirectory()).toBe(true)
+      expect(fs.lstatSync(userDataPath).mode & 0o7777).toBe(0o700)
+      expect(calls[0]).toBe(`path:userData:${userDataPath}`)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each(['file', 'symlink', 'permission'] as const)(
+    'rejects a userData %s before changing app identity',
+    (kind) => {
+      const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+      const userDataPath = join(root, 'profile')
+      if (kind === 'file') {
+        fs.writeFileSync(userDataPath, 'synthetic')
+      } else if (kind === 'symlink') {
+        const target = join(root, 'target')
+        fs.mkdirSync(target, { mode: 0o700 })
+        fs.symlinkSync(target, userDataPath)
+      } else {
+        fs.mkdirSync(userDataPath, { mode: 0o755 })
+      }
+      const calls: string[] = []
+      const application = {
+        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        setName: (value: string) => calls.push(`name:${value}`),
+        setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+      }
+      const config = readAuthRuntimeConfig({
+        ...validEnvironment,
+        LDB_AUTH_USER_DATA_PATH: userDataPath
+      })
+
+      try {
+        expect(config).not.toBeNull()
+        if (config == null) {
+          throw new Error('Synthetic runtime config should be available')
+        }
+
+        expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
+        expect(calls).toEqual([])
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true })
+      }
+    }
+  )
 })
