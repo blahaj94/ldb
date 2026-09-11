@@ -239,9 +239,13 @@ describe('desktop auth runtime config', () => {
     }
   )
 
-  it.each(['.', '..'] as const)(
+  it.each([
+    ['current-directory', '.'],
+    ['parent-directory', '..'],
+    ['empty', '']
+  ] as const)(
     'rejects a %s segment before touching the profile filesystem',
-    (segment) => {
+    (_kind, segment) => {
       const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
       const child = join(root, 'child')
       fs.mkdirSync(child, { mode: 0o700 })

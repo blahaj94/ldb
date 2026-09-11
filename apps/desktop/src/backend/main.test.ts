@@ -1,3 +1,6 @@
+import * as fs from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -32,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   setPath: vi.fn(),
   setName: vi.fn(),
   setAppUserModelId: vi.fn(),
+  exit: vi.fn(),
   windows: [] as unknown[],
   coordinator: {
     captureGeneration: vi.fn(() => 1),
@@ -65,6 +69,7 @@ vi.mock('electron', () => ({
     setPath: mocks.setPath,
     setName: mocks.setName,
     setAppUserModelId: mocks.setAppUserModelId,
+    exit: mocks.exit,
     quit: vi.fn()
   },
   BrowserWindow: class {
@@ -237,6 +242,38 @@ it('does not activate product auth for the unresolved Discord provider gate', as
   expect(mocks.bootstrapAuth).not.toHaveBeenCalled()
   expect(mocks.registerAuth).not.toHaveBeenCalled()
   expect(mocks.setPath).not.toHaveBeenCalled()
+})
+
+it('profile 적용이 시작된 뒤 실패하면 부분 적용된 userData로 시작하지 않는다', async () => {
+  const root = fs.mkdtempSync(join(tmpdir(), 'ldb-main-profile-'))
+  const userDataPath = join(root, 'profile')
+  fs.mkdirSync(userDataPath, { mode: 0o700 })
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', userDataPath)
+  const actual = await vi.importActual<typeof import('./auth/runtime-config')>(
+    './auth/runtime-config'
+  )
+  mocks.applyProfile.mockImplementationOnce(actual.applyAuthRuntimeProfile)
+  mocks.setName.mockImplementationOnce(() => {
+    throw new Error('Synthetic app identity failure')
+  })
+
+  try {
+    await import('./main')
+    await mocks.bootstrap
+
+    expect(mocks.setPath).toHaveBeenCalledExactlyOnceWith('userData', userDataPath)
+    expect(mocks.exit).toHaveBeenCalledExactlyOnceWith(1)
+    expect(mocks.createIngress).not.toHaveBeenCalled()
+    expect(mocks.bootstrapAuth).not.toHaveBeenCalled()
+    expect(mocks.constructWindow).not.toHaveBeenCalled()
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
 })
 
 it('single-instance loser는 auth/store/window 초기화 없이 종료한다', async () => {
