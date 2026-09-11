@@ -694,6 +694,7 @@ it('actual ingress는 malformed, 복수, pending 없는 callback에 window side 
   secondInstance({}, ['electron', '1bad://auth/return'], '/tmp')
   secondInstance({}, ['electron', 'x://auth/return'], '/tmp')
   secondInstance({}, ['electron', '\u0001mailto:user@example.test'], '/tmp')
+  secondInstance({}, ['electron', 'ma\tilto:user@example.test'], '/tmp')
   await Promise.resolve()
 
   expect(mocks.coordinator.handleReturnUrl).not.toHaveBeenCalled()
