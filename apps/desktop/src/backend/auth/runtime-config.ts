@@ -198,6 +198,11 @@ function prepareUserDataDirectory(
     throw new Error('Trusted userData path must not use path aliases.')
   }
 
+  const rootPath = pathSemantics.parse(path).root
+  const rootStat = filesystem.lstatSync(rootPath)
+  assertTrustedAncestorDirectory(rootStat)
+  assertCanonicalPath(rootPath, filesystem)
+
   const paths = directoryChain(path, pathSemantics)
   const finalPath = paths[paths.length - 1]
   for (const currentPath of paths) {
