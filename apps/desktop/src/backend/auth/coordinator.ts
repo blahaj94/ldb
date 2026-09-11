@@ -210,7 +210,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     tokens: AuthTokens,
     kind: CredentialTransitionKind,
     operationGeneration: number,
-    isOperationFresh: () => boolean = () => generation === operationGeneration
+    isOperationFresh: () => boolean = () => generation === operationGeneration,
+    shouldTrackAccessTrust = false
   ): Promise<boolean> {
     let credentialCommit: Awaited<ReturnType<typeof session.writeCredential>>
     try {
@@ -238,6 +239,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       storageBlocked('TOKEN_SAVE_FAILED', 'clear-store')
       return false
     }
+
+    const accessTokenExpiresAtMs = Date.parse(tokens.accessTokenExpiresAt)
+    const hasUnusableAccessTime = shouldTrackAccessTrust && !isAccessTimeUsable(accessTokenExpiresAtMs)
 
     let finalized: Awaited<ReturnType<typeof session.finalize>>
     try {
@@ -276,6 +280,11 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const isCommitted = finalized === 'committed'
     if (isCommitted) {
       session.acceptCommitted(tokens)
+      const committedCredential = session.current
+      const hasCommittedCredential = committedCredential != null
+      if (hasUnusableAccessTime && hasCommittedCredential) {
+        session.markAccessUntrusted(committedCredential)
+      }
       return true
     }
 
@@ -292,6 +301,15 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return false
   }
 
+  function isAccessTimeUsable(accessTokenExpiresAtMs: number): boolean {
+    const checkedAt = dependencies.clock.read()
+    const isClockTrusted = !checkedAt.discontinuous
+    const isAccessCurrent = checkedAt.wallMs < accessTokenExpiresAtMs
+    const canUseAccessTime = isClockTrusted && isAccessCurrent
+
+    return canUseAccessTime
+  }
+
   function ensureRestoreAccessUsable(
     credential: SessionCredential,
     operationGeneration: number
@@ -303,11 +321,9 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       return false
     }
 
-    const checkedAt = dependencies.clock.read()
-    const isClockTrusted = !checkedAt.discontinuous
-    const isAccessCurrent = checkedAt.wallMs < credential.accessTokenExpiresAtMs
+    const canUseAccessTime = isAccessTimeUsable(credential.accessTokenExpiresAtMs)
     const isAccessTrusted = session.isAccessTrusted(credential)
-    const canUseAccess = isClockTrusted && isAccessCurrent && isAccessTrusted
+    const canUseAccess = canUseAccessTime && isAccessTrusted
     if (!canUseAccess) {
       session.markAccessUntrusted(credential)
       state.restorePaused('RESTORE_RETRY_REQUIRED')
@@ -665,7 +681,8 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   async function rotateCredential(
     refreshToken: string,
     operationGeneration: number,
-    writer: CredentialWriter
+    writer: CredentialWriter,
+    shouldTrackAccessTrust = false
   ): Promise<SessionCredential | null> {
     const prepared = await prepareTransition('refresh', operationGeneration)
     if (!prepared) {
@@ -724,7 +741,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!isCurrent) {
       return null
     }
-    const committed = await commitTokens(tokens, 'refresh', operationGeneration)
+    const committed = await commitTokens(
+      tokens,
+      'refresh',
+      operationGeneration,
+      undefined,
+      shouldTrackAccessTrust
+    )
     const credential = committed ? session.current : null
 
     return credential
@@ -804,7 +827,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     session.retainForRestore(refreshToken)
     await session.runWriter(async (writer) => {
-      await rotateCredential(refreshToken, operationGeneration, writer)
+      await rotateCredential(refreshToken, operationGeneration, writer, true)
     })
     const isCurrentAfterRotation = generation === operationGeneration
     if (!isCurrentAfterRotation) {
@@ -1048,17 +1071,33 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
       }
       const checkedAt = dependencies.clock.read()
       const step = selectCredentialRecoveryStep(checkedAt, currentCredential.accessTokenExpiresAtMs)
+      const isClockTrusted = !checkedAt.discontinuous
+      const isAccessCurrent = checkedAt.wallMs < currentCredential.accessTokenExpiresAtMs
+      const hasUsableAccessTime = isClockTrusted && isAccessCurrent
+      if (!hasUsableAccessTime) {
+        session.markAccessUntrusted(currentCredential)
+      }
       const isAccessTrusted = session.isAccessTrusted(currentCredential)
       const requiresRefreshForTime = step === 'refresh-credential'
       const requiresRefreshForTrust = !isAccessTrusted
       const requiresRefresh = requiresRefreshForTime || requiresRefreshForTrust
+      let refreshedCredential: SessionCredential | null = null
       if (requiresRefresh) {
         await session.runWriter(async (writer) => {
-          await rotateCredential(currentCredential.refreshToken, operationGeneration, writer)
+          refreshedCredential = await rotateCredential(
+            currentCredential.refreshToken,
+            operationGeneration,
+            writer,
+            true
+          )
         })
       }
       const isCurrentAfterRecovery = generation === operationGeneration
       if (!isCurrentAfterRecovery) {
+        return state.success()
+      }
+      const hasRefreshResult = !requiresRefresh || refreshedCredential != null
+      if (!hasRefreshResult) {
         return state.success()
       }
       const hasCurrentCredentialAfterRecovery = session.current != null
