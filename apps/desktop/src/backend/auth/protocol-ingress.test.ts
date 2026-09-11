@@ -205,6 +205,10 @@ describe('Desktop auth protocol ingress', () => {
       ['electron', '1bad://auth/return'],
       RETURN_TARGET
     )
+    const singleLetterScheme = isOrdinarySecondInstanceInvocation(
+      ['electron', 'x://auth/return'],
+      RETURN_TARGET
+    )
     const windowsExecutable = isOrdinarySecondInstanceInvocation(
       ['C:\\Program Files\\LDB\\ldb.exe', '--new-window'],
       RETURN_TARGET
@@ -222,6 +226,7 @@ describe('Desktop auth protocol ingress', () => {
     expect(webUrl).toBe(false)
     expect(paddedWrongScheme).toBe(false)
     expect(malformedScheme).toBe(false)
+    expect(singleLetterScheme).toBe(false)
     expect(windowsExecutable).toBe(true)
     expect(windowsDriveRelativePath).toBe(true)
   })
