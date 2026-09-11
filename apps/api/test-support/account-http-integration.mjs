@@ -456,8 +456,9 @@ async function databaseFailure({ source, phase, applied, method }) {
       const isUserRead = sql.includes('FROM "users"')
       const isInitialReadPhase = phase === 'read'
       const isInitialReadFailure = isInitialReadPhase && isUserRead
+      const isFunctionReadPhase = phase === 'function-read'
       const hasCommittedAdmission = commits === 1
-      const isFunctionReadFailure = hasCommittedAdmission && isUserRead
+      const isFunctionReadFailure = isFunctionReadPhase && hasCommittedAdmission && isUserRead
       const failRead = isInitialReadFailure || isFunctionReadFailure
       const shouldFailQuery = failWrite || failRead
       if (shouldFailQuery) {
