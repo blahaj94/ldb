@@ -34,7 +34,7 @@ last-reviewed: 2026-09-11
 
 ## Composition 인계 예시
 
-실제 `main.ts` 연결은 별도 integration 작업에서 수행한다. 연결 시 다음 순서를 유지한다.
+제품 `main.ts`는 다음 순서를 유지한다. Trusted return target이 있을 때만 ready 이전에 ingress를 만들고, owner 확인 뒤 저장소 접근 안내와 coordinator 시작을 수행한다.
 
 ```ts
 const ingress = createProtocolIngress({ app, argv: process.argv, returnTarget })
@@ -43,9 +43,11 @@ if (!ingress.ownsInstance) {
 }
 
 await app.whenReady()
-const coordinator = createAuthCoordinator(dependencies)
-await coordinator.start()
-const detachProtocol = ingress.attach(coordinator.handleReturnUrl)
+const runtime = await bootstrapAuthRuntime({ config, effects })
+if (runtime == null) {
+  return
+}
+const detachProtocol = ingress.attach(dispatchReturnUrlAndFocusWindow)
 
 // window·IPC composition이 끝난 뒤 종료 시 다음을 실행한다.
 detachProtocol()

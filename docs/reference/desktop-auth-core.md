@@ -7,27 +7,32 @@ last-reviewed: 2026-09-11
 
 # Desktop Auth Core
 
-Desktop main 인증의 현재 독립 core는 `apps/desktop/src/backend/auth`에 있다. 이 구현은 승인된 `docs/rules/desktop-auth.md`, `docs/rules/desktop-auth-lifecycle.md`, `docs/rules/desktop-auth-platform.md`를 소비한다. `apps/desktop/src/backend/main.ts`의 실제 auth effects, OS protocol, `safeStorage`·file adapter는 아직 구성되지 않았다. Core의 IPC/UI 연결은 [auth bridge](desktop-auth-bridge.md), 현재 capture 권한·수명 연결은 [auth capture](desktop-auth-capture.md)를 따른다.
+Desktop main 인증 core는 `apps/desktop/src/backend/auth`에 있고, 제품 composition은 `apps/desktop/src/backend/main.ts`와 `auth/runtime-config.ts`, `auth/runtime-effects.ts`, `auth/bootstrap.ts`가 담당한다. 완전한 trusted runtime 설정이 없거나 유효하지 않으면 auth effects, protocol ingress, store, network를 만들지 않고 현재 renderer의 연결 실패 안내를 사용한다. 실제 설정이 주입되면 main은 안내 완료 뒤 macOS credential store와 coordinator를 시작하고 auth/capture IPC를 같은 exact document에 연결한다. 실제 API/provider, OS protocol registry, safeStorage·file durability와 packaged native 성공은 여전히 별도 검증 범위다.
 
 ## Module 경계
 
-| Path                                                     | 현재 책임                                                                                                  |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `apps/desktop/src/backend/auth/coordinator.ts`           | command 허용, generation·pending·공개 Promise, resource 무효화와 비동기 결과 적용 |
-| `apps/desktop/src/backend/auth/auth-state.ts`            | 의미 있는 phase 전이, allowlist snapshot·revision·동기 listener와 recovery 목적 |
-| `apps/desktop/src/backend/auth/recovery-plan.ts`         | 저장 상태와 실행 시점 access 사실에서 다음 recovery 단계를 선택하는 pure 판단 |
-| `apps/desktop/src/backend/auth/user-verification.ts`     | `/me` controller 예약·abort·동일 작업 해제와 정제 실패 notice 분류 |
+| Path                                                     | 현재 책임                                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `apps/desktop/src/backend/auth/coordinator.ts`           | command 허용, generation·pending·공개 Promise, resource 무효화와 비동기 결과 적용                                        |
+| `apps/desktop/src/backend/auth/auth-state.ts`            | 의미 있는 phase 전이, allowlist snapshot·revision·동기 listener와 recovery 목적                                          |
+| `apps/desktop/src/backend/auth/recovery-plan.ts`         | 저장 상태와 실행 시점 access 사실에서 다음 recovery 단계를 선택하는 pure 판단                                            |
+| `apps/desktop/src/backend/auth/user-verification.ts`     | `/me` controller 예약·abort·동일 작업 해제와 정제 실패 notice 분류                                                       |
 | `apps/desktop/src/backend/auth/credential-session.ts`    | private credential·known refresh, writer·HTTP 진행, refresh 공유 Promise, logout reservation·disposal 결과와 저장 effect |
-| `apps/desktop/src/backend/auth/pending-login.ts`         | private attempt 상태, request TTL·timer, synchronous exchange claim·중복 판정과 폐기 |
-| `apps/desktop/src/backend/auth/cleanup-result.ts`        | local clear 결과·현재 작업 여부·logout 소유권을 받아 후속 진행 또는 storage 차단 판단 |
-| `apps/desktop/src/backend/auth/types.ts`                 | main 내부 effect와 snapshot·명령 결과 type                                                                 |
-| `apps/desktop/src/backend/auth/pkce.ts`                  | 32-byte verifier와 ASCII S256 challenge 생성, canonical base64url 검사                                     |
-| `apps/desktop/src/backend/auth/protocol.ts`              | trusted HTTPS API origin, browser launch URL, 등록 return target과 code-only 복귀 URL 검사                 |
-| `apps/desktop/src/backend/auth/http.ts`                  | Ky 기반 고정 auth endpoint request, caller abort와 15초 전체 deadline                                                   |
-| `apps/desktop/src/backend/auth/http-response.ts`         | 16,384-byte strict UTF-8 JSON stream과 Zod strict response/error schema                                |
-| `apps/desktop/src/backend/auth/credential-operations.ts` | durable transition 확립, credential commit, marker 제거·재확립, local clear 결과 합성                      |
+| `apps/desktop/src/backend/auth/pending-login.ts`         | private attempt 상태, request TTL·timer, synchronous exchange claim·중복 판정과 폐기                                     |
+| `apps/desktop/src/backend/auth/cleanup-result.ts`        | local clear 결과·현재 작업 여부·logout 소유권을 받아 후속 진행 또는 storage 차단 판단                                    |
+| `apps/desktop/src/backend/auth/types.ts`                 | main 내부 effect와 snapshot·명령 결과 type                                                                               |
+| `apps/desktop/src/backend/auth/pkce.ts`                  | 32-byte verifier와 ASCII S256 challenge 생성, canonical base64url 검사                                                   |
+| `apps/desktop/src/backend/auth/protocol.ts`              | trusted HTTPS API origin, browser launch URL, 등록 return target과 code-only 복귀 URL 검사                               |
+| `apps/desktop/src/backend/auth/http.ts`                  | Ky 기반 고정 auth endpoint request, caller abort와 15초 전체 deadline                                                    |
+| `apps/desktop/src/backend/auth/http-response.ts`         | 16,384-byte strict UTF-8 JSON stream과 Zod strict response/error schema                                                  |
+| `apps/desktop/src/backend/auth/credential-operations.ts` | durable transition 확립, credential commit, marker 제거·재확립, local clear 결과 합성                                    |
+| `apps/desktop/src/backend/auth/runtime-config.ts`        | process의 trusted 설정에서 API origin, return target, environment, enabled provider를 읽고 exact contract를 검증         |
+| `apps/desktop/src/backend/auth/runtime-effects.ts`       | 같은 설정 tuple로 auth HTTP, macOS credential store, browser, clock, entropy와 저장소 접근 전 안내를 구성                |
+| `apps/desktop/src/backend/auth/bootstrap.ts`             | 안내 완료→coordinator dependency 생성→`start()` 순서를 소유하고 실패 시 auth runtime을 비활성화                          |
 
-Coordinator 생성 시 enabled provider, API origin, 등록 return target과 Browser·HTTP·clock·entropy·credential store effect를 주입한다. Runtime dependency는 `ky@2.1.0`, `zod@4.5.4`로 고정했다. Source에는 운영 origin, owned scheme, app identity가 없다. Composition은 같은 trusted runtime config로 고정 HTTP client와 coordinator를 만들고 실제 platform adapter를 연결해야 한다.
+Coordinator 생성 시 enabled provider, API origin, 등록 return target과 Browser·HTTP·clock·entropy·credential store effect를 주입한다. Runtime dependency는 `ky@2.1.0`, `zod@4.5.4`로 고정했다. Source와 build에는 운영 origin, owned scheme, app identity의 fixture 기본값이 없다. Composition은 process에 주입된 동일한 trusted runtime config로 고정 HTTP client, coordinator와 `environment/apiOrigin/clientId:"desktop"` store context를 만든다.
+
+현재 process 설정 key는 `LDB_AUTH_API_ORIGIN`, `LDB_AUTH_RETURN_TARGET`, `LDB_AUTH_ENVIRONMENT`, `LDB_AUTH_PROVIDERS`다. 네 값이 모두 exact contract를 통과해야 하며, 누락·빈 값·잘못된 provider/URL에는 기본값을 적용하지 않는다.
 
 등록 return target은 coordinator 생성 시 검사하며 원문에 `?` 또는 `#`가 있으면 내용이 비어 있어도 거절한다. 설정을 보정하지 않으며, percent-encoded path와 정상 target 뒤의 code-only callback query는 기존 exact 검사로 허용한다.
 
@@ -117,4 +122,4 @@ Clock 검사는 wall/monotonic 각각을 마지막으로 수용한 관측과 비
 
 Zod `strictObject`가 success와 nested user/error의 exact field·type을 검사하며 `safeParse` 실패의 issue·message·불신 key는 공개하지 않는다. Coercion·unknown key 제거·문자열 보정은 하지 않는다. Access는 크기 제한을 둔 compact JWS 형태, refresh/code는 canonical 32-byte base64url, ID는 UUID, 시간은 UTC ISO, nickname은 well-formed string인지 확인한다. UUID는 기존 shape를 보존하는 `z.guid()`를 사용하고 UTC 시간의 0~3자리 소수초·date round-trip, canonical refresh decode/re-encode, nickname의 well-formed 문자열 검사를 유지한다. ASCII access의 길이와 응답 전체 byte 상한은 별도 경계이며 nickname에 client 길이 제한을 추가하지 않는다. JWT claim이나 server identity는 해석하지 않는다.
 
-Unit test는 Browser·HTTP·clock과 credential/marker 상태를 가진 store fake를 제어해 PKCE, URL, response stream, pending 취소·만료, duplicate/stale 복귀, commit 전 비공개, marker 결과와 재시작 recovery, restore와 `GET /me`, refresh single-flight, logout 경합과 snapshot 비노출을 확인한다. 실제 API `GET /me`, native credential store, OS protocol, Browser/provider, packaged app, IPC/UI/capture 연결은 후속 gate다.
+Unit test는 Browser·HTTP·clock과 credential/marker 상태를 가진 store fake를 제어해 PKCE, URL, response stream, pending 취소·만료, duplicate/stale 복귀, commit 전 비공개, marker 결과와 재시작 recovery, restore와 `GET /me`, refresh single-flight, logout 경합과 snapshot 비노출을 확인한다. 제품 composition test는 설정 누락/오류의 무활성화, owner/loser, 안내→store→start 순서, window 재생성/focus와 capture permission 경계를 합성 double로 확인한다. 실제 API `GET /me`, native credential store, OS protocol registry, Browser/provider, packaged app은 후속 gate다.

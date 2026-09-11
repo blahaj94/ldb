@@ -2,12 +2,12 @@
 type: reference
 status: active
 scope: desktop isolated authentication bridge
-last-reviewed: 2026-09-08
+last-reviewed: 2026-09-11
 ---
 
 # Desktop Auth Bridge
 
-승인된 [Desktop auth contract](../rules/desktop-auth.md)의 5 invoke와 1 event를 기존 main AuthCoordinator 및 AuthPresentation에 연결한다. 이 문서의 auth-only fixture는 media를 차단한다. 제품 preload·renderer와 capture의 후속 연결 및 실제 media 검증 범위는 [auth capture](desktop-auth-capture.md)에 별도로 기록한다. 실제 API/provider, OS protocol 등록, Keychain·credential file 접근은 이 결과에 포함하지 않는다.
+승인된 [Desktop auth contract](../rules/desktop-auth.md)의 5 invoke와 1 event를 기존 main AuthCoordinator 및 AuthPresentation에 연결한다. 제품 main은 trusted 설정이 활성화된 경우 기존 auth IPC를 local renderer window에 등록하며, 설정이 없으면 renderer의 고정 연결 실패 안내를 유지한다. 이 문서의 auth-only fixture는 media를 차단한다. 실제 API/provider, OS protocol registry, Keychain·credential file durability 접근은 이 결과에 포함하지 않는다.
 
 ## 구현 위치와 경계
 
