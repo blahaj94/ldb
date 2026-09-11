@@ -636,7 +636,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     return Promise.resolve(state.success(cancelled))
   }
 
-  function handleReturnUrl(raw: unknown): Promise<void> {
+  function handleReturnUrl(raw: unknown, onClaimed?: () => void): Promise<void> {
     let parsed: Readonly<{ code: string }>
     try {
       parsed = parseReturnUrl(raw, dependencies.returnTarget)
@@ -676,7 +676,13 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     }
     const writer = session.reserveWriter()
     value.trackExchange(writer.completion)
-    return writer.execute(() => exchangeLogin(value, claim, writer))
+    const exchange = writer.execute(() => exchangeLogin(value, claim, writer))
+    try {
+      onClaimed?.()
+    } catch {
+      // Window activation is best-effort and must not interrupt the claimed exchange.
+    }
+    return exchange
   }
 
   async function rotateCredential(

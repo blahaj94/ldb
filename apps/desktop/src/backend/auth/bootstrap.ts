@@ -6,6 +6,7 @@ import type { AuthClock, AuthCoordinator, AuthSnapshot } from './types'
 export type AuthBootstrapInput = Readonly<{
   config: AuthRuntimeConfig | null
   effects: AuthRuntimeEffects
+  isActive?(): boolean
 }>
 
 export type AuthRuntime = Readonly<{
@@ -20,24 +21,31 @@ export async function bootstrapAuthRuntime(input: AuthBootstrapInput): Promise<A
   if (config == null) {
     return null
   }
+  if (input.isActive?.() === false) {
+    return null
+  }
 
   try {
     await input.effects.announceCredentialAccess()
-    const dependencies = input.effects.createDependencies()
-    const searchClock = input.effects.createSearchClock()
-    const coordinator = createAuthCoordinator(dependencies)
-    let startPromise: Promise<AuthSnapshot> | null = null
-    const start = (): Promise<AuthSnapshot> => {
-      const existingStart = startPromise
-      if (existingStart != null) {
-        return existingStart
-      }
-      const started = coordinator.start()
-      startPromise = started
-      return started
-    }
-    return { coordinator, apiOrigin: dependencies.apiOrigin, searchClock, start }
   } catch {
     return null
   }
+  if (input.isActive?.() === false) {
+    return null
+  }
+
+  const dependencies = input.effects.createDependencies()
+  const searchClock = input.effects.createSearchClock()
+  const coordinator = createAuthCoordinator(dependencies)
+  let startPromise: Promise<AuthSnapshot> | null = null
+  const start = (): Promise<AuthSnapshot> => {
+    const existingStart = startPromise
+    if (existingStart != null) {
+      return existingStart
+    }
+    const started = coordinator.start()
+    startPromise = started
+    return started
+  }
+  return { coordinator, apiOrigin: dependencies.apiOrigin, searchClock, start }
 }

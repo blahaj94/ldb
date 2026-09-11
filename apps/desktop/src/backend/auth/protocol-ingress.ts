@@ -21,6 +21,7 @@ export interface ProtocolIngressApp {
 }
 
 export type ProtocolIngressDispatch = (rawReturnUrl: string) => Promise<void> | void
+export type ProtocolIngressActivation = () => Promise<void> | void
 
 export type ProtocolIngressInput = Readonly<{
   app: ProtocolIngressApp
@@ -30,7 +31,7 @@ export type ProtocolIngressInput = Readonly<{
 
 export type ProtocolIngress = Readonly<{
   ownsInstance: boolean
-  attach(dispatch: ProtocolIngressDispatch): () => void
+  attach(dispatch: ProtocolIngressDispatch, activate?: ProtocolIngressActivation): () => void
   dispose(): void
 }>
 
@@ -38,7 +39,8 @@ export function attachProtocolIngressAfterStart(
   ingress: ProtocolIngress,
   start: Promise<unknown>,
   dispatch: ProtocolIngressDispatch,
-  isActive: () => boolean = () => true
+  isActive: () => boolean = () => true,
+  activate?: ProtocolIngressActivation
 ): () => void {
   let active = true
   let detach: (() => void) | undefined
@@ -47,12 +49,32 @@ export function attachProtocolIngressAfterStart(
       if (!active || !isActive()) {
         return
       }
-      const attachedDetach = ingress.attach(async (rawReturnUrl) => {
+      const activation = activate
+      const hasActivation = activation != null
+      const guardedActivation = hasActivation
+        ? () => {
+            if (!active) {
+              return
+            }
+
+            const ownerIsActive = isActive()
+            if (!ownerIsActive) {
+              return
+            }
+
+            return activation()
+          }
+        : undefined
+      const guardedDispatch = async (rawReturnUrl: string): Promise<void> => {
         if (!active || !isActive()) {
           return
         }
         await dispatch(rawReturnUrl)
-      })
+      }
+      const hasGuardedActivation = guardedActivation != null
+      const attachedDetach = hasGuardedActivation
+        ? ingress.attach(guardedDispatch, guardedActivation)
+        : ingress.attach(guardedDispatch)
       const shouldDetachImmediately = !active || !isActive()
       if (shouldDetachImmediately) {
         attachedDetach()
@@ -71,12 +93,17 @@ export function attachProtocolIngressAfterStart(
   }
 }
 
-function findReturnCandidate(
+type ReturnCandidateClassification =
+  | Readonly<{ status: 'none' }>
+  | Readonly<{ status: 'invalid' }>
+  | Readonly<{ status: 'valid'; rawReturnUrl: string }>
+
+function classifyReturnCandidate(
   values: readonly unknown[],
   returnProtocol: string,
   returnTarget: string
-): string | null {
-  let candidate: string | null = null
+): ReturnCandidateClassification {
+  let candidate = ''
   let candidateCount = 0
   for (const value of values) {
     const isString = typeof value === 'string'
@@ -94,23 +121,36 @@ function findReturnCandidate(
     candidate = value
   }
 
+  const hasNoCandidate = candidateCount === 0
+  if (hasNoCandidate) {
+    return { status: 'none' }
+  }
+
   const hasSingleCandidate = candidateCount === 1
   if (!hasSingleCandidate) {
-    return null
+    return { status: 'invalid' }
   }
 
-  const hasCandidate = candidate != null
-  if (!hasCandidate) {
-    return null
-  }
-
+  const rawReturnUrl = candidate
   try {
-    parseReturnUrl(candidate, returnTarget)
+    parseReturnUrl(rawReturnUrl, returnTarget)
   } catch {
-    return null
+    return { status: 'invalid' }
   }
 
-  return candidate
+  return { status: 'valid', rawReturnUrl }
+}
+
+export function isOrdinarySecondInstanceInvocation(
+  values: readonly unknown[],
+  returnTarget: string
+): boolean {
+  const validatedReturnTarget = validateReturnTarget(returnTarget)
+  const returnProtocol = new URL(validatedReturnTarget).protocol
+  const candidate = classifyReturnCandidate(values, returnProtocol, validatedReturnTarget)
+  const hasNoReturnCandidate = candidate.status === 'none'
+
+  return hasNoReturnCandidate
 }
 
 function createInactiveIngress(): ProtocolIngress {
@@ -130,8 +170,12 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
   }
 
   const returnProtocol = new URL(returnTarget).protocol
-  let bufferedReturnUrl = findReturnCandidate(input.argv, returnProtocol, returnTarget)
+  const initialCandidate = classifyReturnCandidate(input.argv, returnProtocol, returnTarget)
+  const hasValidInitialCandidate = initialCandidate.status === 'valid'
+  let bufferedReturnUrl = hasValidInitialCandidate ? initialCandidate.rawReturnUrl : null
+  let bufferedActivation = false
   let dispatch: ProtocolIngressDispatch | null = null
+  let activate: ProtocolIngressActivation | null = null
   let disposed = false
 
   function deliver(rawReturnUrl: string): void {
@@ -152,32 +196,68 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
     }
   }
 
-  function receive(values: readonly unknown[]): void {
+  function deliverActivation(): void {
+    const currentActivation = activate
+    const hasCurrentActivation = currentActivation != null
+    if (!hasCurrentActivation) {
+      bufferedActivation = true
+      return
+    }
+
+    try {
+      void Promise.resolve(currentActivation()).catch(() => undefined)
+    } catch {
+      return
+    }
+  }
+
+  function receiveReturn(values: readonly unknown[]): void {
     if (disposed) {
       return
     }
 
-    const candidate = findReturnCandidate(values, returnProtocol, returnTarget)
-    const hasCandidate = candidate != null
-    if (!hasCandidate) {
+    const candidate = classifyReturnCandidate(values, returnProtocol, returnTarget)
+    const hasValidCandidate = candidate.status === 'valid'
+    if (!hasValidCandidate) {
       return
     }
 
-    deliver(candidate)
+    deliver(candidate.rawReturnUrl)
+  }
+
+  function receiveSecondInstance(values: readonly unknown[]): void {
+    if (disposed) {
+      return
+    }
+
+    const candidate = classifyReturnCandidate(values, returnProtocol, returnTarget)
+    const hasValidCandidate = candidate.status === 'valid'
+    if (hasValidCandidate) {
+      deliver(candidate.rawReturnUrl)
+      return
+    }
+
+    const hasNoCandidate = candidate.status === 'none'
+    if (hasNoCandidate) {
+      deliverActivation()
+    }
   }
 
   const handleOpenUrl: ProtocolOpenUrlListener = (event, url) => {
     event.preventDefault()
-    receive([url])
+    receiveReturn([url])
   }
   const handleSecondInstance: ProtocolSecondInstanceListener = (_event, commandLine) => {
-    receive(commandLine)
+    receiveSecondInstance(commandLine)
   }
 
   input.app.on('open-url', handleOpenUrl)
   input.app.on('second-instance', handleSecondInstance)
 
-  function attach(nextDispatch: ProtocolIngressDispatch): () => void {
+  function attach(
+    nextDispatch: ProtocolIngressDispatch,
+    nextActivation?: ProtocolIngressActivation
+  ): () => void {
     if (disposed) {
       return () => undefined
     }
@@ -188,9 +268,14 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
     }
 
     dispatch = nextDispatch
+    activate = nextActivation ?? null
     const pendingReturnUrl = bufferedReturnUrl
     const hasPendingReturnUrl = pendingReturnUrl != null
     bufferedReturnUrl = null
+    const hasPendingActivation = bufferedActivation && activate != null
+    if (hasPendingActivation) {
+      bufferedActivation = false
+    }
     let isAttached = true
     const detach = (): void => {
       if (!isAttached) {
@@ -201,11 +286,15 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
       const ownsDispatch = dispatch === nextDispatch
       if (ownsDispatch) {
         dispatch = null
+        activate = null
       }
     }
 
     if (hasPendingReturnUrl) {
       deliver(pendingReturnUrl)
+    }
+    if (hasPendingActivation) {
+      deliverActivation()
     }
 
     return detach
@@ -218,7 +307,9 @@ export function createProtocolIngress(input: ProtocolIngressInput): ProtocolIngr
 
     disposed = true
     dispatch = null
+    activate = null
     bufferedReturnUrl = null
+    bufferedActivation = false
     input.app.removeListener('open-url', handleOpenUrl)
     input.app.removeListener('second-instance', handleSecondInstance)
   }
