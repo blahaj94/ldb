@@ -66,7 +66,10 @@ export async function stopOwnedProcessGroup(options) {
 
   try {
     const hasIntegerPid = Number.isSafeInteger(child.pid)
-    const hasOwnedGroupId = hasIntegerPid && child.pid > 1
+    if (!hasIntegerPid) {
+      throw new Error('Cannot identify the owned detached process group')
+    }
+    const hasOwnedGroupId = child.pid > 1
     if (!hasOwnedGroupId) {
       throw new Error('Cannot identify the owned detached process group')
     }
