@@ -34,7 +34,10 @@ export function createAuthenticatedSearchService(
       }
       const input = parseCharacterSearchQuery(originalUrl)
       const isKeyString = typeof deps.apiKey === 'string'
-      const hasKey = isKeyString && deps.apiKey.length > 0
+      if (!isKeyString) {
+        throw neopleSearchFailure('internal')
+      }
+      const hasKey = deps.apiKey.length > 0
       const cannotStart = !hasKey || closed
       if (cannotStart) {
         throw neopleSearchFailure('internal')

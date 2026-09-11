@@ -40,17 +40,19 @@ export async function recordSearchActivity(
     }
 
     const hasSession = session != null
-    const isRevoked = hasSession && session.revokedAt != null
-    const canRecordActivity = hasSession && !isRevoked
-    if (canRecordActivity) {
-      const idleDeadline = session.lastActiveAt.getTime() / 1000 + LOGIN.idleSeconds
-      const isIdleExpired = checkedAtSeconds >= idleDeadline
-      if (isIdleExpired) {
-        throw neopleSearchFailure('authentication')
+    if (hasSession) {
+      const isRevoked = session.revokedAt != null
+      const canRecordActivity = !isRevoked
+      if (canRecordActivity) {
+        const idleDeadline = session.lastActiveAt.getTime() / 1000 + LOGIN.idleSeconds
+        const isIdleExpired = checkedAtSeconds >= idleDeadline
+        if (isIdleExpired) {
+          throw neopleSearchFailure('authentication')
+        }
+        const lastActiveAt = new Date(Math.max(session.lastActiveAt.getTime(), checkedAt.getTime()))
+        await repository.update({ id: session.id }, { lastActiveAt })
+        deadline.check()
       }
-      const lastActiveAt = new Date(Math.max(session.lastActiveAt.getTime(), checkedAt.getTime()))
-      await repository.update({ id: session.id }, { lastActiveAt })
-      deadline.check()
     }
     await runner.commitTransaction()
     deadline.check()
