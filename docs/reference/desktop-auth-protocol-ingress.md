@@ -18,7 +18,7 @@ last-reviewed: 2026-09-11
 3. lock owner는 즉시 `open-url`과 `second-instance` listener를 등록한다. `open-url`은 항상 `preventDefault()`를 먼저 호출한다.
 4. 초기 `argv`와 두 event의 입력은 target의 scheme으로 보이는 문자열만 후보로 세고, 후보가 정확히 하나일 때만 기존 `parseReturnUrl`을 적용한다. canonical code-only raw URL 하나만 다음 단계로 전달한다.
 
-반환 객체의 `ownsInstance`는 lock 결과를 나타내며, `attach(dispatch)`는 인증 core가 준비된 뒤 dispatch를 연결하고 disposer를 반환한다. `dispose()`는 두 Electron listener, 연결된 dispatch와 아직 전달하지 않은 초기 후보를 함께 정리한다. Adapter는 window를 만들거나 focus하지 않으므로 창이 없을 때도 동일하게 raw return을 dispatch하며, 창 복원·focus와 coordinator 상태 판정은 composition 및 coordinator의 책임이다.
+반환 객체의 `ownsInstance`는 lock 결과를 나타내며, `attach(dispatch)`는 dispatch를 연결하고 disposer를 반환한다. Main composition은 `attachProtocolIngressAfterStart(ingress, start, dispatch, isActive)`를 사용해 `start()` Promise가 성공적으로 끝난 뒤에만 buffered return을 dispatch한다. Start 실패는 ingress를 폐기하고, 그 사이 quit으로 `isActive()`가 false가 되면 callback도 폐기한다. `dispose()`는 두 Electron listener, 연결된 dispatch와 아직 전달하지 않은 초기 후보를 함께 정리한다. Adapter는 window를 만들거나 focus하지 않으므로 창이 없을 때도 동일하게 raw return을 dispatch하며, 창 복원·focus와 coordinator 상태 판정은 composition 및 coordinator의 책임이다.
 
 ## 입력과 수명
 
@@ -34,7 +34,7 @@ last-reviewed: 2026-09-11
 
 ## Composition 인계 예시
 
-제품 `main.ts`는 다음 순서를 유지한다. 완전한 trusted identity/profile tuple을 ready 이전에 적용하고 그 다음 ingress를 만든다. Owner 확인 뒤 ready에서 저장소 접근 안내와 coordinator dependency를 구성하며, window·IPC·activate를 연결한 다음 restore `start()`를 호출한다.
+제품 `main.ts`는 다음 순서를 유지한다. 완전한 trusted identity/profile tuple을 ready 이전에 적용하고 그 다음 ingress를 만든다. Owner 확인 뒤 ready에서 저장소 접근 안내와 coordinator dependency를 구성하며, window·IPC·activate를 연결한 다음 restore `start()`를 호출한다. Buffered return은 start가 성공한 뒤에만 dispatch한다.
 
 ```ts
 applyAuthRuntimeProfile(app, config)
@@ -47,18 +47,26 @@ await app.whenReady()
 const runtime = await bootstrapAuthRuntime({ config, effects })
 registerWindowAndIpc(runtime)
 registerActivateLifecycle(runtime)
-void runtime?.start()
-const detachProtocol = runtime == null ? undefined : ingress.attach(dispatchReturnUrlAndFocusWindow)
+const start = runtime?.start()
+const detachProtocol =
+  runtime == null || start == null
+    ? undefined
+    : attachProtocolIngressAfterStart(
+        ingress,
+        start,
+        dispatchReturnUrlAndFocusWindow,
+        () => !protocolIngressDisposed
+      )
 
 // window·IPC composition이 끝난 뒤 종료 시 다음을 실행한다.
 detachProtocol?.()
 ingress.dispose()
 ```
 
-실제 composition에서는 `returnTarget`, coordinator의 시작과 window 초기화 사이의 입력 보관을 유지해야 한다. lock loser 경로에서 store/network/window를 만들지 않고, cold input을 pending login의 증거로 승격하지 않으며, warm 또는 창 없는 복귀를 임의 navigation으로 바꾸지 않는다. `app.whenReady()`를 기다리기 전 listener 등록은 macOS `open-url` 유실을 줄이지만 packaged cold/warm·다중 instance·실제 OS association 성공을 증명하지 않는다.
+실제 composition에서는 `returnTarget`, coordinator의 시작과 window 초기화 사이의 입력 보관을 유지해야 한다. 초기 restore가 실패하거나 quit이 시작되면 보관된 return을 전달하지 않는다. lock loser 경로에서 store/network/window를 만들지 않고, cold input을 pending login의 증거로 승격하지 않으며, warm 또는 창 없는 복귀를 임의 navigation으로 바꾸지 않는다. `app.whenReady()`를 기다리기 전 listener 등록은 macOS `open-url` 유실을 줄이지만 packaged cold/warm·다중 instance·실제 OS association 성공을 증명하지 않는다.
 
 ## 검증 범위
 
-`apps/desktop/src/backend/auth/protocol-ingress.test.ts`는 fake app/event와 합성 target/code만 사용해 lock owner/loser, ready 전 listener, 초기 argv, `open-url`·`second-instance`, 다중 후보 거절, 2,048-byte 경계, attach/detach/dispose, 창 없는 dispatch와 pending 없는 coordinator 복귀를 확인한다. 외부 network·browser·window navigation counter는 adapter에 없으며 dispatch 경계 밖 side effect도 발생하지 않는다.
+`apps/desktop/src/backend/auth/protocol-ingress.test.ts`는 fake app/event와 합성 target/code만 사용해 lock owner/loser, ready 전 listener, 초기 argv, `open-url`·`second-instance`, 다중 후보 거절, 2,048-byte 경계, attach/detach/dispose, 창 없는 dispatch, initial restore 완료 뒤 cold 복귀, start 실패·quit 중 폐기를 확인한다. 외부 network·browser·window navigation counter는 adapter에 없으며 dispatch 경계 밖 side effect도 발생하지 않는다.
 
 실제 protocol registry, packaged cold/warm 실행, 설치 후 default handler, 서명/업데이트, OS focus, Keychain·credential store와 OAuth provider는 이 문서와 unit test의 검증 범위가 아니다. 해당 결과는 선택한 OS/package와 실제 등록 tuple이 확정된 후 별도 native validation으로 기록한다.
