@@ -10,7 +10,7 @@ last-reviewed: 2026-09-12
 
 `apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`의 `createMacOsCredentialStore`는 기존 `CredentialStore`를 구현한다. 제품 main은 완전하고 유효한 trusted runtime 설정이 있을 때 이 adapter를 auth HTTP, coordinator와 같은 tuple로 구성한다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
 
-Main이 Electron에 적용·read-back 확인한 `userDataPath`, trusted `context`와 Electron `safeStorage`를 주입한다. Context는 `environment`, exact HTTPS `apiOrigin`, `clientId:"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. 실제 환경값은 build 설정이 고정하며 renderer에서 받지 않는다. 제품 composition entry는 OS allowlist 없이 실행되지만 현재 credential 구현은 macOS 전용이다. 기본 host가 macOS가 아니면 암호화·파일 작업 전에 `unavailable`을 반환하고 coordinator가 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`로 끝낸다. 이를 Windows/Linux 지원 성공으로 해석하지 않는다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
+Main이 Electron에 적용·read-back 확인한 `userDataPath`, trusted `context`와 Electron `safeStorage`를 주입한다. Context는 `environment`, exact HTTPS `apiOrigin`, `clientId:"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. Runtime 값은 renderer가 아니라 process 설정에서만 읽지만, 실제 dev/test/prod 값과 package 주입은 현재 `electron-builder.yml`에 고정되어 있지 않다. 현재 builder identity도 배포용 trusted tuple로 확정한 값이 아니다. 제품 composition entry는 OS allowlist 없이 실행되지만 현재 credential 구현은 macOS 전용이다. 기본 host가 macOS가 아니면 암호화·파일 작업 전에 `unavailable`을 반환하고 coordinator가 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`로 끝낸다. 이를 Windows/Linux 지원 성공으로 해석하지 않는다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
 
 ## 파일과 결과
 
