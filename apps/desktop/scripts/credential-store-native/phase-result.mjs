@@ -49,7 +49,8 @@ export function validateNativeCredentialPhaseResult({ exitCode, expectedPhase, p
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- JSDoc carries the JavaScript return type.
 export function parseNativeCredentialPhaseResult({ exitCode, expectedPhase, stdout }) {
-  const line = stdout.split('\n').find((candidate) => candidate.startsWith(resultPrefix))
+  const outputLines = stdout.split('\n')
+  const line = outputLines.find((candidate) => candidate.startsWith(resultPrefix))
   const hasResult = line != null
   let parsed
   try {
