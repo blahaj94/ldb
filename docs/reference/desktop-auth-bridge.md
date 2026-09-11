@@ -2,7 +2,7 @@
 type: reference
 status: active
 scope: desktop isolated authentication bridge
-last-reviewed: 2026-09-11
+last-reviewed: 2026-09-12
 ---
 
 # Desktop Auth Bridge
@@ -63,3 +63,18 @@ git diff --check
 Unit 경계 검증, 실제 Electron smoke, 수동 UI 확인은 별도 evidence다. Build에는 기존 node/web typecheck가 포함되며 fixture의 전용 TypeScript/build는 별도로 실행한다. 실행한 exact revision·결과와 review는 Issue #116과 해당 PR에서 관리한다.
 
 Fixture는 제품 restore 종료 정책을 다시 선택하거나 새 notice를 만들지 않는다. Fake store는 빈 상태로 시작하므로 제품 main에 연결된 profile·store restore·protocol·capture composition의 native 성공을 검증하지 않는다. 실제 저장소 durability와 ACL, OS protocol registry, 서버/provider 및 다른 OS/package 검증은 후속 gate다. Sandbox fixture 성공으로 production capture/OCR 호환성이나 native 인증 완료를 주장하지 않는다.
+
+## 제품 logout·재로그인 조합 검증
+
+`apps/desktop/src/frontend/src/integration/logout-relogin.integration.test.tsx`는 Electron child를 시작하지 않는 Vitest/jsdom 제품 조합 테스트다. `bootstrapAuthRuntime`의 실제 coordinator에 실제 auth IPC handler, capture/search IPC handler, preload invoker와 `App` renderer를 연결하고, 합성 IPC transport·window source·media/OCR worker·검색 HTTP만 경계로 주입한다. 따라서 다음 연결을 한 테스트에서 확인한다.
+
+- 로그인 exchange 뒤 renderer home에서 실제 capture source 조회·선택과 search begin이 같은 auth generation을 사용한다.
+- 검색 HTTP가 pending인 동안 renderer에서 현재 기기 logout을 수행하면 auth snapshot이 `signedOut`이 되고, capture track/worker와 main source/search binding이 정리된다.
+- logout 전에 시작한 검색의 늦은 성공 응답은 현재 화면이나 다음 로그인으로 복구되지 않는다.
+- local clear가 확인된 뒤 재로그인하면 capture 화면이 다시 mount되지만 source 선택과 Start gesture가 초기화되어 자동 capture를 시작하지 않는다.
+
+이 조합 테스트는 실제 `main.ts`의 trusted runtime 설정, Electron native media/provider/API, safeStorage·credential file durability, OS protocol registry와 packaged app을 성공으로 표시하지 않는다. 서버 204와 local 삭제 결과, refresh/exchange 경합 및 notice 분류는 기존 coordinator·store 경계 테스트의 evidence로 별도 관리한다.
+
+```sh
+pnpm --filter @ldb/desktop exec vitest run src/frontend/src/integration/logout-relogin.integration.test.tsx
+```
