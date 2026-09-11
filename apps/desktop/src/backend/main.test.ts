@@ -380,9 +380,9 @@ it.each(['cancel', 'commit'] as const)(
       const beforeQuit = mocks.appOn.mock.calls.find(
         ([event]) => event === 'before-quit'
       )?.[1] as (event: { defaultPrevented: boolean }) => void
-      const willQuit = mocks.appOn.mock.calls.find(([event]) => event === 'will-quit')?.[1] as (
-        event: { defaultPrevented: boolean }
-      ) => void
+      const willQuit = mocks.appOn.mock.calls.find(
+        ([event]) => event === 'will-quit'
+      )?.[1] as (event: { defaultPrevented: boolean }) => void
       const quit = mocks.appOn.mock.calls.find(([event]) => event === 'quit')?.[1] as () => void
 
       queueMicrotask(() => {
@@ -410,7 +410,8 @@ it.each(['cancel', 'commit'] as const)(
     await vi.waitFor(() => expect(compositionBeforeOutcome).not.toBeNull())
 
     expect(compositionBeforeOutcome).toBe(0)
-    expect(mocks.constructWindow).toHaveBeenCalledOnce()
+    const expectedCompositionCount = outcome === 'cancel' ? 1 : 0
+    expect(mocks.constructWindow).toHaveBeenCalledTimes(expectedCompositionCount)
   }
 )
 

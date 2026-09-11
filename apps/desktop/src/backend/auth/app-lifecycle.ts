@@ -208,7 +208,9 @@ export function createAuthAppLifecycle(options: AuthAppLifecycleOptions): AuthAp
   }
 
   function cancelQuitAttempt(attempt: symbol): void {
-    const isStaleQuitAttempt = shutdownCommitted || activeQuitAttempt !== attempt
+    const hasCommittedShutdown = shutdownCommitted
+    const isDifferentQuitAttempt = activeQuitAttempt !== attempt
+    const isStaleQuitAttempt = hasCommittedShutdown || isDifferentQuitAttempt
     if (isStaleQuitAttempt) {
       return
     }

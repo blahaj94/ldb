@@ -171,6 +171,78 @@ app.whenReady().then(async () => {
       optimizer.watchWindowShortcuts(window)
     })
 
+    function composeAfterAuthBootstrap(authRuntime: AuthRuntime | null): void {
+      const hasAuthRuntime = authRuntime != null
+      if (!hasAuthRuntime) {
+        authAppLifecycle.disposeExternalResources()
+      }
+      const searchConfiguration =
+        authRuntime == null
+          ? undefined
+          : {
+              apiOrigin: authRuntime.apiOrigin,
+              clock: authRuntime.searchClock
+            }
+      registerCaptureIpc(authRuntime?.coordinator, searchConfiguration)
+
+      createWindow(authRuntime)
+
+      app.on('activate', function () {
+        if (authAppLifecycle.isQuitting()) {
+          return
+        }
+
+        try {
+          // On macOS it's common to re-create a window in the app when the
+          // dock icon is clicked and there are no other windows open.
+          const hasNoOpenWindows = BrowserWindow.getAllWindows().length === 0
+          if (hasNoOpenWindows) {
+            createWindow(authRuntime)
+          }
+        } catch (error) {
+          const ownsAuthProfile = protocolIngress?.ownsInstance === true
+          if (ownsAuthProfile) {
+            authAppLifecycle.exitAfterOwnedAuthFailure()
+            return
+          }
+          throw error
+        }
+      })
+      if (authRuntime == null) {
+        app.on('second-instance', (_event, _commandLine, _workingDirectory, additionalData) => {
+          const isOrdinaryInvocation =
+            runtimeConfig == null ||
+            isOrdinarySecondInstanceInvocation(additionalData, runtimeConfig.returnTarget)
+          if (isOrdinaryInvocation) {
+            activateWindowSafely(authRuntime)
+          }
+        })
+      }
+      app.on('window-all-closed', () => {
+        const shouldQuit = process.platform !== 'darwin'
+        if (shouldQuit) {
+          app.quit()
+        }
+      })
+
+      const startAuthRuntime = authRuntime?.start()
+      void startAuthRuntime?.catch(authAppLifecycle.exitAfterOwnedAuthFailure)
+      if (authRuntime != null && protocolIngress != null && startAuthRuntime != null) {
+        attachProtocolIngressAfterStart(
+          protocolIngress,
+          startAuthRuntime,
+          (rawReturnUrl) =>
+            authAppLifecycle.runAfterQuitOutcome(() =>
+              authRuntime.coordinator.handleReturnUrl(rawReturnUrl, () => {
+                activateWindowSafely(authRuntime)
+              })
+            ),
+          () => authAppLifecycle.canReceiveProtocolIngress(),
+          () => authAppLifecycle.runAfterQuitOutcome(() => activateWindowSafely(authRuntime))
+        )
+      }
+    }
+
     let authRuntime: AuthRuntime | null = null
     if (runtimeConfig != null) {
       const effects = createAuthRuntimeEffects()
@@ -182,80 +254,11 @@ app.whenReady().then(async () => {
           isActive
         })
       )
-      if (authAppLifecycle.isShutdownCommitted()) {
-        return
-      }
+      await authAppLifecycle.runAfterQuitOutcome(() => composeAfterAuthBootstrap(authRuntime))
+      return
     }
 
-    const hasAuthRuntime = authRuntime != null
-    if (!hasAuthRuntime) {
-      authAppLifecycle.disposeExternalResources()
-    }
-    const searchConfiguration =
-      authRuntime == null
-        ? undefined
-        : {
-            apiOrigin: authRuntime.apiOrigin,
-            clock: authRuntime.searchClock
-          }
-    registerCaptureIpc(authRuntime?.coordinator, searchConfiguration)
-
-    createWindow(authRuntime)
-
-    app.on('activate', function () {
-      if (authAppLifecycle.isQuitting()) {
-        return
-      }
-
-      try {
-        // On macOS it's common to re-create a window in the app when the
-        // dock icon is clicked and there are no other windows open.
-        const hasNoOpenWindows = BrowserWindow.getAllWindows().length === 0
-        if (hasNoOpenWindows) {
-          createWindow(authRuntime)
-        }
-      } catch (error) {
-        const ownsAuthProfile = protocolIngress?.ownsInstance === true
-        if (ownsAuthProfile) {
-          authAppLifecycle.exitAfterOwnedAuthFailure()
-          return
-        }
-        throw error
-      }
-    })
-    if (authRuntime == null) {
-      app.on('second-instance', (_event, _commandLine, _workingDirectory, additionalData) => {
-        const isOrdinaryInvocation =
-          runtimeConfig == null ||
-          isOrdinarySecondInstanceInvocation(additionalData, runtimeConfig.returnTarget)
-        if (isOrdinaryInvocation) {
-          activateWindowSafely(authRuntime)
-        }
-      })
-    }
-    app.on('window-all-closed', () => {
-      const shouldQuit = process.platform !== 'darwin'
-      if (shouldQuit) {
-        app.quit()
-      }
-    })
-
-    const startAuthRuntime = authRuntime?.start()
-    void startAuthRuntime?.catch(authAppLifecycle.exitAfterOwnedAuthFailure)
-    if (authRuntime != null && protocolIngress != null && startAuthRuntime != null) {
-      attachProtocolIngressAfterStart(
-        protocolIngress,
-        startAuthRuntime,
-        (rawReturnUrl) =>
-          authAppLifecycle.runAfterQuitOutcome(() =>
-            authRuntime.coordinator.handleReturnUrl(rawReturnUrl, () => {
-              activateWindowSafely(authRuntime)
-            })
-          ),
-        () => authAppLifecycle.canReceiveProtocolIngress(),
-        () => authAppLifecycle.runAfterQuitOutcome(() => activateWindowSafely(authRuntime))
-      )
-    }
+    composeAfterAuthBootstrap(authRuntime)
   } catch (error) {
     if (authAppLifecycle.isShutdownCommitted()) {
       return
