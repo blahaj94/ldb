@@ -207,6 +207,57 @@ describe('desktop auth runtime config', () => {
     }
   })
 
+  it('rejects a canonical alias created by a concurrent first launch before syncing', () => {
+    const root = createRuntimeProfileRoot()
+    const userDataPath = join(root, 'new-profile')
+    const canonicalUserDataPath = join(root, 'New-Profile')
+    const calls: string[] = []
+    const openedPaths: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: fs.lstatSync,
+      statSync: fs.statSync,
+      realpathSync: (path) =>
+        path === userDataPath ? canonicalUserDataPath : fs.realpathSync.native(path),
+      mkdirSync: (path, options) => {
+        fs.mkdirSync(path, options)
+        throw Object.assign(new Error('Synthetic concurrent creation'), { code: 'EEXIST' })
+      },
+      openSync: (path, flags) => {
+        openedPaths.push(path)
+        return fs.openSync(path, flags)
+      },
+      fsyncSync: fs.fsyncSync,
+      closeSync: fs.closeSync
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble
+      ) => void
+      expect(() => applyWithFilesystem(application, config, filesystem)).toThrow()
+      expect(openedPaths).toEqual([])
+      expect(calls).toEqual([])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it.each(['file', 'symlink', 'permission'] as const)(
     'rejects a userData %s before changing app identity',
     (kind) => {
