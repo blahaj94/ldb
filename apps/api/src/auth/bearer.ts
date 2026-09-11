@@ -2,8 +2,16 @@
 export function readBearerToken(rawHeaders: readonly string[]): string | undefined {
   const authorizations = rawHeaders.flatMap((value, index) => {
     const isName = index % 2 === 0
-    const isAuthorization = isName && value.toLowerCase() === 'authorization'
-    return isAuthorization ? [rawHeaders[index + 1]] : []
+    if (!isName) {
+      return []
+    }
+
+    const isAuthorization = value.toLowerCase() === 'authorization'
+    if (!isAuthorization) {
+      return []
+    }
+
+    return [rawHeaders[index + 1]]
   })
   const hasOneAuthorization = authorizations.length === 1
   if (!hasOneAuthorization) {

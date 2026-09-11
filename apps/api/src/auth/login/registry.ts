@@ -71,16 +71,20 @@ function validateRegistration(snapshot: ProviderRegistration, apiOrigin: string)
   if (!hasExactCallback) {
     throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
   }
-  const shouldCheckGoogleAudience = snapshot.provider === 'google'
-  const isGoogleAudienceInvalid =
-    shouldCheckGoogleAudience && snapshot.expectedAudience !== snapshot.providerClientId
-  if (isGoogleAudienceInvalid) {
-    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+  const isGoogleProviderForAudience = snapshot.provider === 'google'
+  if (isGoogleProviderForAudience) {
+    const hasMatchingGoogleAudience = snapshot.expectedAudience === snapshot.providerClientId
+    if (!hasMatchingGoogleAudience) {
+      throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+    }
   }
-  const shouldCheckDiscordAudience = snapshot.provider === 'discord'
-  const isDiscordAudienceInvalid = shouldCheckDiscordAudience && snapshot.expectedAudience !== null
-  if (isDiscordAudienceInvalid) {
-    throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+
+  const isDiscordProviderForAudience = snapshot.provider === 'discord'
+  if (isDiscordProviderForAudience) {
+    const hasNoDiscordAudience = snapshot.expectedAudience === null
+    if (!hasNoDiscordAudience) {
+      throw new LoginFailure(LOGIN_ERRORS.INTERNAL)
+    }
   }
 
   // 3. 앱 복귀 URL은 host/path가 있는 등록 protocol이어야 한다.
