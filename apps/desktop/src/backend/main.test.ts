@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   setName: vi.fn(),
   setAppUserModelId: vi.fn(),
   exit: vi.fn(),
+  appOn: vi.fn(),
   windows: [] as unknown[],
   coordinator: {
     captureGeneration: vi.fn(() => 1),
@@ -64,7 +65,7 @@ vi.mock('electron', () => ({
         return mocks.bootstrap.catch(() => undefined)
       }
     }),
-    on: vi.fn(),
+    on: mocks.appOn,
     requestSingleInstanceLock: vi.fn(() => true),
     setPath: mocks.setPath,
     setName: mocks.setName,
@@ -299,6 +300,34 @@ it('single-instance loser는 auth/store/window 초기화 없이 종료한다', a
   expect(mocks.constructWindow).not.toHaveBeenCalled()
 })
 
+it('URL 없는 second-instance는 기존 창을 표시하고 focus한다', async () => {
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', '/synthetic/ldb-test-profile')
+
+  await import('./main')
+  await mocks.bootstrap
+  const registration = mocks.appOn.mock.calls.find(([event]) => event === 'second-instance')
+  expect(registration).toBeDefined()
+  const listener = registration?.[1] as (
+    event: unknown,
+    commandLine: readonly string[],
+    workingDirectory: string
+  ) => void
+  const window = mocks.windows[0] as {
+    show: ReturnType<typeof vi.fn>
+    focus: ReturnType<typeof vi.fn>
+  }
+
+  listener({}, ['electron'], '/tmp')
+
+  expect(window.show).toHaveBeenCalledOnce()
+  expect(window.focus).toHaveBeenCalledOnce()
+})
+
 it('warm return은 현재 창을 focus하고, 창이 없으면 같은 auth runtime으로 재생성한다', async () => {
   vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
   vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
@@ -332,4 +361,26 @@ it('warm return은 현재 창을 focus하고, 창이 없으면 같은 auth runti
   expect(mocks.coordinator.handleReturnUrl).toHaveBeenLastCalledWith(
     'ldb-synthetic://auth/return?code=synthetic-2'
   )
+})
+
+it('warm return은 창 활성화가 실패해도 auth callback을 먼저 처리한다', async () => {
+  vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
+  vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
+  vi.stubEnv('LDB_AUTH_ENVIRONMENT', 'test')
+  vi.stubEnv('LDB_AUTH_PROVIDERS', 'google')
+  vi.stubEnv('LDB_AUTH_APP_IDENTITY', 'com.synthetic.ldb')
+  vi.stubEnv('LDB_AUTH_USER_DATA_PATH', '/synthetic/ldb-test-profile')
+
+  await import('./main')
+  await mocks.bootstrap
+  const dispatch = mocks.attachIngress.mock.calls[0][0] as (raw: string) => Promise<void>
+  const window = mocks.windows[0] as { show: ReturnType<typeof vi.fn> }
+  window.show.mockImplementationOnce(() => {
+    throw new Error('Synthetic window activation failure')
+  })
+  const rawReturnUrl = 'ldb-synthetic://auth/return?code=synthetic'
+
+  await expect(dispatch(rawReturnUrl)).rejects.toThrow('Synthetic window activation failure')
+
+  expect(mocks.coordinator.handleReturnUrl).toHaveBeenCalledExactlyOnceWith(rawReturnUrl)
 })

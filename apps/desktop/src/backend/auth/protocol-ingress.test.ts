@@ -250,7 +250,8 @@ describe('Desktop auth protocol ingress', () => {
       config: runtimeConfig,
       effects: {
         announceCredentialAccess: vi.fn(async () => undefined),
-        createDependencies: () => harness.dependencies
+        createDependencies: () => harness.dependencies,
+        createSearchClock: () => harness.clock
       }
     })
     if (runtime == null) {
@@ -349,7 +350,8 @@ describe('Desktop auth protocol ingress', () => {
       config: runtimeConfig,
       effects: {
         announceCredentialAccess: vi.fn(async () => undefined),
-        createDependencies: () => harness.dependencies
+        createDependencies: () => harness.dependencies,
+        createSearchClock: () => harness.clock
       }
     })
     if (runtime == null) {

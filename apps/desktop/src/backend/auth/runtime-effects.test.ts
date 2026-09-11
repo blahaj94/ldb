@@ -60,7 +60,7 @@ describe('desktop auth runtime effects', () => {
     expect(openExternal).toHaveBeenCalledOnce()
   })
 
-  it('reports a runtime wall-clock reversal as discontinuous', () => {
+  it('keeps auth rollback detection isolated from search clock reads', () => {
     let wallMs = 1_000
     let monotonicMs = 50
     const harness = createAuthHarness()
@@ -78,17 +78,16 @@ describe('desktop auth runtime effects', () => {
       createHttp: () => harness.dependencies.http,
       createStore: () => harness.store
     })
-    const clock = effects.createDependencies().clock
+    const authClock = effects.createDependencies().clock
+    const searchClock = effects.createSearchClock()
 
-    expect(clock.read()).toEqual({ wallMs: 1_000, monotonicMs: 50, discontinuous: false })
+    expect(authClock.read()).toEqual({ wallMs: 1_000, monotonicMs: 50, discontinuous: false })
+    expect(searchClock.read()).toEqual({ wallMs: 1_000, monotonicMs: 50, discontinuous: false })
     wallMs = 900
     monotonicMs = 60
 
-    expect(clock.read()).toEqual({ wallMs: 900, monotonicMs: 60, discontinuous: true })
-    wallMs = 910
-    monotonicMs = 70
-
-    expect(clock.read()).toEqual({ wallMs: 910, monotonicMs: 70, discontinuous: true })
+    expect(searchClock.read()).toEqual({ wallMs: 900, monotonicMs: 60, discontinuous: true })
+    expect(authClock.read()).toEqual({ wallMs: 900, monotonicMs: 60, discontinuous: true })
   })
 
   it('passes a wall-clock reversal during restore to the coordinator pause guard', async () => {
@@ -116,7 +115,8 @@ describe('desktop auth runtime effects', () => {
       config,
       effects: {
         announceCredentialAccess: vi.fn(async () => undefined),
-        createDependencies: effects.createDependencies
+        createDependencies: effects.createDependencies,
+        createSearchClock: effects.createSearchClock
       }
     })
     if (runtime == null) {
@@ -162,7 +162,8 @@ describe('desktop auth runtime effects', () => {
       config,
       effects: {
         announceCredentialAccess: vi.fn(async () => undefined),
-        createDependencies: effects.createDependencies
+        createDependencies: effects.createDependencies,
+        createSearchClock: effects.createSearchClock
       }
     })
     if (runtime == null) {
