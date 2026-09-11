@@ -425,6 +425,22 @@ describe('Desktop auth protocol ingress', () => {
     }
   )
 
+  it.each(['--return-url=c:/auth/return', '--other-path=c:/auth/return'])(
+    'Windows drive 예외는 known path option에만 한정해 %s을 활성화하지 않는다',
+    (value) => {
+      const app = createApp()
+      const dispatch = vi.fn()
+      const activate = vi.fn()
+      const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
+      ingress.attach(dispatch, activate)
+
+      emitSecondInstance(app, [value])
+
+      expect(dispatch).not.toHaveBeenCalled()
+      expect(activate).not.toHaveBeenCalled()
+    }
+  )
+
   it('fallback 판별도 protocol 후보가 전혀 없는 second-instance만 일반 실행으로 분류한다', () => {
     const ordinary = isOrdinarySecondInstanceInvocation(['electron', '--new-window'], RETURN_TARGET)
     const validReturn = isOrdinarySecondInstanceInvocation(['electron', returnUrl()], RETURN_TARGET)

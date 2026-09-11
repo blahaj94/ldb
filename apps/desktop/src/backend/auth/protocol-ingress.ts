@@ -164,7 +164,12 @@ export function selectProtocolIngressArguments(
   return argv.slice(bootstrapArgumentCount)
 }
 
-function looksLikeUrlInput(value: string): boolean {
+type ProjectedUrlInput = Readonly<{
+  value: string
+  hasInternalControl: boolean
+}>
+
+function projectUrlDetectionInput(value: string): ProjectedUrlInput {
   const characters = Array.from(value)
   let first = 0
   let last = characters.length
@@ -192,6 +197,41 @@ function looksLikeUrlInput(value: string): boolean {
     if (!isParserIgnoredInternal) {
       projected += character
     }
+  }
+
+  return { value: projected, hasInternalControl }
+}
+
+type StructuredOptionPayload = Readonly<{
+  name: string
+  value: string
+}>
+
+function readStructuredOptionPayload(value: string): StructuredOptionPayload | undefined {
+  const option = /^(?:--|\/)([A-Za-z0-9][A-Za-z0-9-]*)(?:=|:)([\s\S]*)$/.exec(value)
+  if (option == null) {
+    return undefined
+  }
+
+  return { name: option[1]!.toLowerCase(), value: option[2]! }
+}
+
+function looksLikeUrlInput(value: string): boolean {
+  const projectedArgument = projectUrlDetectionInput(value)
+  const structuredOption = readStructuredOptionPayload(projectedArgument.value)
+  const projectedPayload =
+    structuredOption == null
+      ? projectedArgument
+      : projectUrlDetectionInput(structuredOption.value)
+  const projected = projectedPayload.value
+  const hasInternalControl =
+    projectedArgument.hasInternalControl || projectedPayload.hasInternalControl
+  const isKnownAbsoluteWindowsPathOption =
+    structuredOption?.name === 'user-data-dir' &&
+    /^[A-Za-z]:[\\/](?![\\/])/.test(projected)
+
+  if (isKnownAbsoluteWindowsPathOption) {
+    return hasInternalControl && projected.includes(':')
   }
 
   const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(projected)
