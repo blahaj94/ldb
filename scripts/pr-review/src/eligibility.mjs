@@ -7,10 +7,11 @@ export function evaluateReviewRequest(event, { label = '@ldb-review' } = {}) {
   }
 
   const isLabeledEvent = event.action === 'labeled'
-  const isEventLabelMatch = isLabeledEvent && event.label?.name === label
-  const isLabeledEventWithWrongLabel = isLabeledEvent && !isEventLabelMatch
-  if (isLabeledEventWithWrongLabel) {
-    return { eligible: false, reason: 'label_event_mismatch' }
+  if (isLabeledEvent) {
+    const isEventLabelMatch = event.label?.name === label
+    if (!isEventLabelMatch) {
+      return { eligible: false, reason: 'label_event_mismatch' }
+    }
   }
 
   const pullRequest = event.pull_request
