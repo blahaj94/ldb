@@ -28,7 +28,7 @@ export class AuthRuntimeProfileApplicationFailure extends Error {
 
 type RuntimeEnvironment = Readonly<Record<string, string | undefined>>
 type RuntimeProfileFilesystem = Readonly<
-  Pick<typeof fs, 'lstatSync' | 'statSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'>
+  Pick<typeof fs, 'lstatSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'>
 >
 
 function isAuthProvider(value: string): value is AuthProvider {
@@ -150,8 +150,7 @@ function prepareUserDataDirectory(path: string, filesystem: RuntimeProfileFilesy
     let stat: Stats
     let created = false
     try {
-      const isFinalPath = currentPath === finalPath
-      stat = isFinalPath ? filesystem.lstatSync(currentPath) : filesystem.statSync(currentPath)
+      stat = filesystem.lstatSync(currentPath)
     } catch (error) {
       const isMissingPath = isMissing(error)
       if (!isMissingPath) {
