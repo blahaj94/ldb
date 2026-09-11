@@ -22,18 +22,22 @@ const mocks = vi.hoisted(() => ({
     (
       application: {
         setPath(name: 'userData', path: string): void
+        getPath(name: 'userData'): string
         setName(name: string): void
         setAppUserModelId(id: string): void
       },
       config: { userDataPath: string; appIdentity: string }
     ) => {
       application.setPath('userData', config.userDataPath)
+      application.getPath('userData')
       application.setName(config.appIdentity)
       application.setAppUserModelId(config.appIdentity)
+      return config
     }
   ),
   registerAuth: vi.fn(),
   setPath: vi.fn(),
+  getPath: vi.fn(),
   setName: vi.fn(),
   setAppUserModelId: vi.fn(),
   exit: vi.fn(),
@@ -69,6 +73,7 @@ vi.mock('electron', () => ({
     on: mocks.appOn,
     requestSingleInstanceLock: vi.fn(() => true),
     setPath: mocks.setPath,
+    getPath: mocks.getPath,
     setName: mocks.setName,
     setAppUserModelId: mocks.setAppUserModelId,
     exit: mocks.exit,
@@ -143,6 +148,7 @@ beforeEach(() => {
     start: vi.fn(async () => undefined)
   }
   mocks.createEffects.mockReturnValue({})
+  mocks.getPath.mockImplementation(() => process.env['LDB_AUTH_USER_DATA_PATH'] ?? '')
   mocks.bootstrapAuth.mockResolvedValue(mocks.runtime)
   mocks.registerAuth.mockReturnValue(vi.fn())
 })
@@ -322,7 +328,7 @@ it('single-instance loser는 auth/store/window 초기화 없이 종료한다', a
   expect(mocks.constructWindow).not.toHaveBeenCalled()
 })
 
-it('profile owner의 runtime 구성 실패는 unauthenticated window로 계속하지 않고 종료한다', async () => {
+it('profile owner의 notice 실패는 ingress를 닫고 같은 owner의 비인증 window로 전환한다', async () => {
   stubTrustedRuntimeEnvironment()
   mocks.bootstrapAuth.mockResolvedValueOnce(null)
 
@@ -330,9 +336,9 @@ it('profile owner의 runtime 구성 실패는 unauthenticated window로 계속�
   await mocks.bootstrap
 
   expect(mocks.disposeIngress).toHaveBeenCalledOnce()
-  expect(mocks.exit).toHaveBeenCalledExactlyOnceWith(1)
+  expect(mocks.exit).not.toHaveBeenCalled()
   expect(mocks.registerAuth).not.toHaveBeenCalled()
-  expect(mocks.constructWindow).not.toHaveBeenCalled()
+  expect(mocks.constructWindow).toHaveBeenCalledOnce()
 })
 
 it('profile owner의 예상 밖 restore rejection은 ingress를 닫고 nonzero로 종료한다', async () => {

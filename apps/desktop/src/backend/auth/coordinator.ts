@@ -943,7 +943,12 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
         checkedAt,
         refreshedCredential.accessTokenExpiresAtMs
       )
-      const canUseAccess = step === 'verify-user'
+      const hasUsableAccessTime = step === 'verify-user'
+      if (!hasUsableAccessTime) {
+        session.markAccessUntrusted(refreshedCredential)
+      }
+      const isAccessTrusted = session.isAccessTrusted(refreshedCredential)
+      const canUseAccess = hasUsableAccessTime && isAccessTrusted
       if (!canUseAccess) {
         return { status: 'unavailable' }
       }
@@ -967,7 +972,12 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     const checkedAt = dependencies.clock.read()
     const isClockUsable = !checkedAt.discontinuous
     const isAccessCurrent = checkedAt.wallMs < currentCredential.accessTokenExpiresAtMs
-    const canUseAccess = isClockUsable && isAccessCurrent
+    const hasUsableAccessTime = isClockUsable && isAccessCurrent
+    if (!hasUsableAccessTime) {
+      session.markAccessUntrusted(currentCredential)
+    }
+    const isAccessTrusted = session.isAccessTrusted(currentCredential)
+    const canUseAccess = hasUsableAccessTime && isAccessTrusted
     if (canUseAccess) {
       return {
         status: 'available',

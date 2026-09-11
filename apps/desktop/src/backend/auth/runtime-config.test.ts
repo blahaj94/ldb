@@ -117,6 +117,7 @@ describe('desktop auth runtime config', () => {
       }
       const application = {
         setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        getPath: () => path,
         setName: (value: string) => calls.push(`name:${value}`),
         setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
       }
@@ -175,6 +176,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -208,6 +210,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => {
         calls.push(`name:${value}`)
         throw new Error('Synthetic identity failure')
@@ -278,6 +281,7 @@ describe('desktop auth runtime config', () => {
         fs.lstatSync(value)
         calls.push(`path:${name}:${value}`)
       },
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -307,6 +311,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -357,6 +362,7 @@ describe('desktop auth runtime config', () => {
     const openedPaths: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -417,6 +423,7 @@ describe('desktop auth runtime config', () => {
       const calls: string[] = []
       const application = {
         setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        getPath: () => userDataPath,
         setName: (value: string) => calls.push(`name:${value}`),
         setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
       }
@@ -453,6 +460,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -484,6 +492,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -529,6 +538,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -575,6 +585,7 @@ describe('desktop auth runtime config', () => {
       const calls: string[] = []
       const application = {
         setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        getPath: () => userDataPath,
         setName: (value: string) => calls.push(`name:${value}`),
         setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
       }
@@ -615,6 +626,7 @@ describe('desktop auth runtime config', () => {
       const calls: string[] = []
       const application = {
         setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+        getPath: () => aliasedPath,
         setName: (value: string) => calls.push(`name:${value}`),
         setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
       }
@@ -650,6 +662,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => aliasedPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -692,6 +705,7 @@ describe('desktop auth runtime config', () => {
         fs.lstatSync(value)
         calls.push(`path:${name}:${value}`)
       },
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }
@@ -744,6 +758,7 @@ describe('desktop auth runtime config', () => {
       setPath: () => {
         syncCountAtSetPath = syncedFds.length
       },
+      getPath: () => userDataPath,
       setName: () => undefined,
       setAppUserModelId: () => undefined
     }
@@ -806,6 +821,7 @@ describe('desktop auth runtime config', () => {
       setPath: () => {
         syncCountAtSetPath = syncedFds.length
       },
+      getPath: () => userDataPath,
       setName: () => undefined,
       setAppUserModelId: () => undefined
     }
@@ -845,6 +861,7 @@ describe('desktop auth runtime config', () => {
     const calls: string[] = []
     const application = {
       setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => userDataPath,
       setName: (value: string) => calls.push(`name:${value}`),
       setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
     }

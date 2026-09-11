@@ -1,13 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
-import {
-  app as electronApp,
-  dialog,
-  safeStorage as electronSafeStorage,
-  shell,
-  type App,
-  type SafeStorage
-} from 'electron'
+import { dialog, safeStorage as electronSafeStorage, shell, type SafeStorage } from 'electron'
 import { createAuthHttpClient } from './http'
 import { createMacOsCredentialStore } from './credential-store/macos-credential-store'
 import type { AuthClock, AuthCoordinatorDependencies } from './types'
@@ -15,7 +8,6 @@ import type { AuthRuntimeConfig } from './runtime-config'
 
 type RuntimeEffectsOptions = Readonly<{
   config: AuthRuntimeConfig
-  app?: Pick<App, 'getPath'>
   safeStorage?: Pick<SafeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'>
   platform?: NodeJS.Platform
   fetch?: typeof globalThis.fetch
@@ -60,7 +52,6 @@ function createClock(readWallMs: () => number, readMonotonicMs: () => number): A
 }
 
 export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRuntimeEffects {
-  const application = options.app ?? electronApp
   const safeStorage = options.safeStorage ?? electronSafeStorage
   const platform = options.platform ?? process.platform
   const createStore = options.createStore ?? createMacOsCredentialStore
@@ -92,7 +83,7 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRu
       const apiOrigin = options.config.apiOrigin
       const http = createHttp({ apiOrigin, fetch: options.fetch })
       const store = createStore({
-        userDataPath: application.getPath('userData'),
+        userDataPath: options.config.userDataPath,
         context: {
           environment: options.config.environment,
           apiOrigin,

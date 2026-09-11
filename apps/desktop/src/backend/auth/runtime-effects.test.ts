@@ -23,7 +23,6 @@ describe('desktop auth runtime effects', () => {
     const store = vi.fn(() => harness.store)
     const effects = createAuthRuntimeEffects({
       config,
-      app: { getPath: () => '/synthetic/later-electron-profile' },
       safeStorage: {
         isEncryptionAvailable: () => true,
         encryptString: (value) => Buffer.from(value),
@@ -66,7 +65,6 @@ describe('desktop auth runtime effects', () => {
     const harness = createAuthHarness()
     const effects = createAuthRuntimeEffects({
       config,
-      app: { getPath: () => config.userDataPath },
       safeStorage: {
         isEncryptionAvailable: () => true,
         encryptString: (value) => Buffer.from(value),
@@ -99,7 +97,6 @@ describe('desktop auth runtime effects', () => {
     let monotonicMs = 1_000
     const effects = createAuthRuntimeEffects({
       config,
-      app: { getPath: () => config.userDataPath },
       safeStorage: {
         isEncryptionAvailable: () => true,
         encryptString: (value) => Buffer.from(value),
@@ -146,7 +143,6 @@ describe('desktop auth runtime effects', () => {
     let monotonicMs = 1_000
     const effects = createAuthRuntimeEffects({
       config,
-      app: { getPath: () => config.userDataPath },
       safeStorage: {
         isEncryptionAvailable: () => true,
         encryptString: (value) => Buffer.from(value),

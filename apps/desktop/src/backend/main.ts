@@ -18,28 +18,32 @@ import {
 
 let mainWindow: BrowserWindow | null = null
 let disposeAuthIpc: (() => void) | undefined
-let runtimeProfileApplicationFailed = false
 const parsedRuntimeConfig = readAuthRuntimeConfig()
-const runtimeConfig = (() => {
+type RuntimeProfileState =
+  | Readonly<{ status: 'inactive-config' }>
+  | Readonly<{ status: 'preparation-failed' }>
+  | Readonly<{ status: 'application-failed' }>
+  | Readonly<{ status: 'applied'; config: NonNullable<typeof parsedRuntimeConfig> }>
+const runtimeProfileState: RuntimeProfileState = (() => {
   if (parsedRuntimeConfig == null) {
-    return null
+    return { status: 'inactive-config' }
   }
   try {
-    applyAuthRuntimeProfile(app, parsedRuntimeConfig)
-    return parsedRuntimeConfig
+    const appliedConfig = applyAuthRuntimeProfile(app, parsedRuntimeConfig)
+    return { status: 'applied', config: appliedConfig }
   } catch (error) {
     const isApplicationFailure = error instanceof AuthRuntimeProfileApplicationFailure
-    runtimeProfileApplicationFailed = isApplicationFailure
-    return null
+    return { status: isApplicationFailure ? 'application-failed' : 'preparation-failed' }
   }
 })()
+const runtimeConfig = runtimeProfileState.status === 'applied' ? runtimeProfileState.config : null
 const protocolIngress =
   runtimeConfig == null
     ? null
     : createProtocolIngress({ app, argv: process.argv, returnTarget: runtimeConfig.returnTarget })
 let protocolIngressDisposed = false
 
-if (runtimeProfileApplicationFailed) {
+if (runtimeProfileState.status === 'application-failed') {
   app.exit(1)
 }
 
@@ -111,6 +115,9 @@ function showOrCreateMainWindow(authRuntime: AuthRuntime | null): void {
     return
   }
 
+  if (window.isMinimized()) {
+    window.restore()
+  }
   window.show()
   window.focus()
 }
@@ -120,9 +127,14 @@ function disposeProtocolIngress(): void {
   protocolIngress?.dispose()
 }
 
+function exitAfterOwnedAuthFailure(): void {
+  disposeProtocolIngress()
+  app.exit(1)
+}
+
 // This method will be called when Electron has finished initialization and is ready to create windows.
 app.whenReady().then(async () => {
-  if (runtimeProfileApplicationFailed) {
+  if (runtimeProfileState.status === 'application-failed') {
     return
   }
 
@@ -173,7 +185,11 @@ app.whenReady().then(async () => {
     }
   })
   app.on('second-instance', () => {
-    showOrCreateMainWindow(authRuntime)
+    try {
+      showOrCreateMainWindow(authRuntime)
+    } catch {
+      return
+    }
   })
   app.on('window-all-closed', () => {
     const shouldQuit = process.platform !== 'darwin'
@@ -183,7 +199,7 @@ app.whenReady().then(async () => {
   })
 
   const startAuthRuntime = authRuntime?.start()
-  void startAuthRuntime?.catch(() => undefined)
+  void startAuthRuntime?.catch(exitAfterOwnedAuthFailure)
   if (authRuntime != null && protocolIngress != null && startAuthRuntime != null) {
     attachProtocolIngressAfterStart(
       protocolIngress,

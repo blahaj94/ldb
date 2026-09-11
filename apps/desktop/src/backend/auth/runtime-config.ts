@@ -15,6 +15,7 @@ export type AuthRuntimeConfig = Readonly<{
 
 export type AuthRuntimeProfileApplication = Readonly<{
   setPath(name: 'userData', path: string): void
+  getPath(name: 'userData'): string
   setName(name: string): void
   setAppUserModelId(id: string): void
 }>
@@ -291,12 +292,17 @@ export function applyAuthRuntimeProfile(
   config: AuthRuntimeConfig,
   filesystem: RuntimeProfileFilesystem = nativeRuntimeProfileFilesystem,
   pathSemantics: RuntimePathSemantics = nativeRuntimePathSemantics
-): void {
+): AuthRuntimeConfig {
   prepareUserDataDirectory(config.userDataPath, filesystem, pathSemantics)
   try {
     application.setPath('userData', config.userDataPath)
+    const appliedUserDataPath = application.getPath('userData')
+    if (appliedUserDataPath !== config.userDataPath) {
+      throw new Error('Electron applied a different userData path.')
+    }
     application.setName(config.appIdentity)
     application.setAppUserModelId(config.appIdentity)
+    return { ...config, userDataPath: appliedUserDataPath }
   } catch {
     throw new AuthRuntimeProfileApplicationFailure()
   }
