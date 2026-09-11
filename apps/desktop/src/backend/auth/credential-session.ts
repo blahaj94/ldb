@@ -123,9 +123,11 @@ export class CredentialSession {
   ): Promise<AuthAuthorization> {
     const existing = this.refreshFlight
     const hasExisting = existing != null
-    const hasSameGeneration = hasExisting && existing.generation === generation
-    if (hasSameGeneration) {
-      return existing.promise
+    if (hasExisting) {
+      const hasSameGeneration = existing.generation === generation
+      if (hasSameGeneration) {
+        return existing.promise
+      }
     }
     let resolve!: (result: AuthAuthorization) => void
     let reject!: (reason: unknown) => void
@@ -152,7 +154,11 @@ export class CredentialSession {
   currentRefresh(generation: number): Promise<AuthAuthorization> | null {
     const flight = this.refreshFlight
     const hasFlight = flight != null
-    const hasSameGeneration = hasFlight && flight.generation === generation
+    if (!hasFlight) {
+      return null
+    }
+
+    const hasSameGeneration = flight.generation === generation
     return hasSameGeneration ? flight.promise : null
   }
 
@@ -240,9 +246,11 @@ export class CredentialSession {
   dispose(refreshToken: string): Promise<boolean> {
     const existing = this.disposalFlight
     const hasExisting = existing != null
-    const hasSameRefreshToken = hasExisting && existing.refreshToken === refreshToken
-    if (hasSameRefreshToken) {
-      return existing.promise
+    if (hasExisting) {
+      const hasSameRefreshToken = existing.refreshToken === refreshToken
+      if (hasSameRefreshToken) {
+        return existing.promise
+      }
     }
 
     const promise = (async () => {
