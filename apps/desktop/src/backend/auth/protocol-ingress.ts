@@ -115,9 +115,11 @@ function classifyReturnCandidate(
     const protocolPrefix = value.slice(0, returnProtocol.length).toLowerCase()
     const hasReturnProtocol = protocolPrefix === returnProtocol
     if (!hasReturnProtocol) {
-      const hasUriScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
-      const isWindowsDrivePath = /^[A-Za-z]:[\\/]/.test(value)
-      if (hasUriScheme && !isWindowsDrivePath) {
+      const classificationValue = value.trimStart()
+      const hasUriScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(classificationValue)
+      const hasUrlDelimiter = classificationValue.includes('://')
+      const isWindowsDrivePath = /^[A-Za-z]:/.test(classificationValue)
+      if ((hasUriScheme || hasUrlDelimiter) && !isWindowsDrivePath) {
         hasUnexpectedUrl = true
       }
       continue
