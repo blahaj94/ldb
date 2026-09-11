@@ -20,8 +20,10 @@ async function startLoopback(
     server.listen(0, '127.0.0.1', resolve)
   })
   const address = server.address()
-  const hasAddress = Boolean(address)
-  assert(hasAddress)
+  const isAddressMissing = address == null
+  assert(!isAddressMissing)
+  const isAddressEmpty = address === ''
+  assert(!isAddressEmpty)
   const isAddressObject = typeof address !== 'string'
   assert(isAddressObject)
   return { origin: `http://127.0.0.1:${(address as { port: number }).port}`, server }
