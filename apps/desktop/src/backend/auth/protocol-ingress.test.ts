@@ -60,7 +60,11 @@ describe('Desktop auth protocol ingress', () => {
   it('lock owner는 ready 전 listener를 등록하고 단일 초기 argv를 attach 시 전달한다', () => {
     const app = createApp()
     const raw = returnUrl()
-    const ingress = createProtocolIngress({ app, argv: ['electron', '--', raw], returnTarget: RETURN_TARGET })
+    const ingress = createProtocolIngress({
+      app,
+      argv: ['electron', '--', raw],
+      returnTarget: RETURN_TARGET
+    })
     const dispatch = vi.fn()
 
     expect(app.calls).toEqual(['requestSingleInstanceLock'])
@@ -107,9 +111,19 @@ describe('Desktop auth protocol ingress', () => {
     const ingress = createProtocolIngress({ app, argv: [], returnTarget: RETURN_TARGET })
     ingress.attach(dispatch)
 
-    app.emit('second-instance', {}, ['electron', '--', '/Applications/ldb.app', 'https://example.test'], '/tmp')
+    app.emit(
+      'second-instance',
+      {},
+      ['electron', '--', '/Applications/ldb.app', 'https://example.test'],
+      '/tmp'
+    )
     app.emit('second-instance', {}, ['electron', `${RETURN_TARGET}?code=short`], '/tmp')
-    app.emit('second-instance', {}, ['electron', `${RETURN_TARGET}?code=${CODE}&state=extra`], '/tmp')
+    app.emit(
+      'second-instance',
+      {},
+      ['electron', `${RETURN_TARGET}?code=${CODE}&state=extra`],
+      '/tmp'
+    )
 
     expect(dispatch).not.toHaveBeenCalled()
   })
@@ -166,7 +180,11 @@ describe('Desktop auth protocol ingress', () => {
     const coordinator = createAuthCoordinator(harness.dependencies)
     await coordinator.start()
     const app = createApp()
-    const ingress = createProtocolIngress({ app, argv: ['electron', returnUrl()], returnTarget: RETURN_TARGET })
+    const ingress = createProtocolIngress({
+      app,
+      argv: ['electron', returnUrl()],
+      returnTarget: RETURN_TARGET
+    })
     const dispatch = vi.fn(coordinator.handleReturnUrl)
 
     ingress.attach(dispatch)
