@@ -27,6 +27,10 @@ const validEnvironment = {
   LDB_AUTH_USER_DATA_PATH: '/synthetic/ldb-test-profile'
 }
 
+function createRuntimeProfileRoot(): string {
+  return fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-')))
+}
+
 describe('desktop auth runtime config', () => {
   it('validates a complete trusted tuple without supplying defaults', () => {
     expect(readAuthRuntimeConfig(validEnvironment)).toEqual({
@@ -57,7 +61,7 @@ describe('desktop auth runtime config', () => {
   })
 
   it('applies the trusted app identity and userData profile before the instance lock', () => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'profile')
     fs.mkdirSync(userDataPath, { mode: 0o700 })
     const calls: string[] = []
@@ -90,7 +94,7 @@ describe('desktop auth runtime config', () => {
   })
 
   it('classifies an identity failure after setPath as a fatal partial application', () => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'profile')
     fs.mkdirSync(userDataPath, { mode: 0o700 })
     const calls: string[] = []
@@ -123,7 +127,7 @@ describe('desktop auth runtime config', () => {
   })
 
   it('creates a missing trusted userData directory before setPath', () => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'new-profile')
     const calls: string[] = []
     const application = {
@@ -155,7 +159,7 @@ describe('desktop auth runtime config', () => {
   })
 
   it('revalidates a userData directory created by a concurrent first launch', () => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'new-profile')
     const calls: string[] = []
     const application = {
@@ -204,7 +208,7 @@ describe('desktop auth runtime config', () => {
   it.each(['file', 'symlink', 'permission'] as const)(
     'rejects a userData %s before changing app identity',
     (kind) => {
-      const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+      const root = createRuntimeProfileRoot()
       const userDataPath = join(root, 'profile')
       if (kind === 'file') {
         fs.writeFileSync(userDataPath, 'synthetic')
@@ -240,10 +244,45 @@ describe('desktop auth runtime config', () => {
     }
   )
 
+  it('rejects a symlink above the direct profile parent', () => {
+    const root = createRuntimeProfileRoot()
+    const target = join(root, 'target')
+    const nested = join(target, 'nested')
+    const profile = join(nested, 'profile')
+    const alias = join(root, 'profile-alias')
+    const userDataPath = join(alias, 'nested', 'profile')
+    fs.mkdirSync(target, { mode: 0o700 })
+    fs.mkdirSync(nested, { mode: 0o700 })
+    fs.mkdirSync(profile, { mode: 0o700 })
+    fs.symlinkSync(target, alias)
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
+      expect(calls).toEqual([])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it.each(['trailing-separator', 'dot-alias'] as const)(
     'rejects a symlink profile with a %s leaf alias',
     (kind) => {
-      const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+      const root = createRuntimeProfileRoot()
       const userDataPath = join(root, 'profile')
       const target = join(root, 'target')
       fs.mkdirSync(target, { mode: 0o700 })
@@ -281,7 +320,7 @@ describe('desktop auth runtime config', () => {
     ['parent-directory', '..'],
     ['empty', '']
   ] as const)('rejects a %s segment before touching the profile filesystem', (_kind, segment) => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const child = join(root, 'child')
     fs.mkdirSync(child, { mode: 0o700 })
     const aliasedPath = `${child}${sep}${segment}${sep}profile`
@@ -322,7 +361,7 @@ describe('desktop auth runtime config', () => {
       return
     }
 
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'profile\\name')
     const calls: string[] = []
     const application = {
@@ -353,7 +392,7 @@ describe('desktop auth runtime config', () => {
   })
 
   it('syncs each newly created profile directory and its parent entry before setPath', () => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const parent = join(root, 'nested')
     const userDataPath = join(parent, 'profile')
     const openedPaths: string[] = []
@@ -418,7 +457,7 @@ describe('desktop auth runtime config', () => {
   })
 
   it('syncs an existing profile directory and its parent before setPath', () => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const userDataPath = join(root, 'profile')
     fs.mkdirSync(userDataPath, { mode: 0o700 })
     const openedPaths: string[] = []
@@ -472,7 +511,7 @@ describe('desktop auth runtime config', () => {
   })
 
   it('rejects a direct symlink parent before creating the profile directory', () => {
-    const root = fs.mkdtempSync(join(tmpdir(), 'ldb-runtime-profile-'))
+    const root = createRuntimeProfileRoot()
     const target = join(root, 'target')
     const parent = join(root, 'parent')
     const userDataPath = join(parent, 'profile')
