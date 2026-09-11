@@ -229,15 +229,11 @@ function prepareUserDataDirectory(
     assertCanonicalPath(currentPath, filesystem)
     if (created) {
       const parentPath = pathSemantics.dirname(currentPath)
-      if (isFinalPath) {
-        syncDirectory(parentPath, filesystem)
-        const grandparentPath = pathSemantics.dirname(parentPath)
-        if (grandparentPath !== parentPath) {
-          syncDirectory(grandparentPath, filesystem)
-        }
-      } else {
-        syncDirectory(currentPath, filesystem)
-        syncDirectory(parentPath, filesystem)
+      syncDirectory(currentPath, filesystem)
+      syncDirectory(parentPath, filesystem)
+      const grandparentPath = pathSemantics.dirname(parentPath)
+      if (grandparentPath !== parentPath) {
+        syncDirectory(grandparentPath, filesystem)
       }
     }
   }
