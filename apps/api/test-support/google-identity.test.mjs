@@ -55,7 +55,8 @@ test('Google RS256 returns only case-sensitive provider/subject and discards pro
     const hasOriginalTokenSignal = tokenRequest.options.signal === f.input.signal
     const jwksSignal = transport.requests[1].options.signal
     const hasJwksSignal = jwksSignal != null
-    const isJwksSignalUnaborted = hasJwksSignal && !jwksSignal.aborted
+    assert(hasJwksSignal)
+    const isJwksSignalUnaborted = !jwksSignal.aborted
     const rejectsAllRedirects = transport.requests.every(({ options }) => {
       const rejectsRedirect = options.redirect === 'error'
       return rejectsRedirect

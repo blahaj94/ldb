@@ -255,9 +255,11 @@ test('cold and expired JWKS each refresh once to verify a newly propagated RS256
       const hasExpectedSignals = signals.every(({ url, signal }) => {
         const isTokenRequest = url === tokenEndpoint
         const hasOriginalSignal = signal === f.input.signal
-        const isUnabortedKeySignal = !isTokenRequest && !signal.aborted
-        const isExpectedSignal = isTokenRequest ? hasOriginalSignal : isUnabortedKeySignal
-        return isExpectedSignal
+        if (isTokenRequest) {
+          return hasOriginalSignal
+        }
+        const isUnabortedKeySignal = !signal.aborted
+        return isUnabortedKeySignal
       })
       assert(hasExpectedSignals)
     })
