@@ -21,6 +21,8 @@ type RuntimeEffectsOptions = Readonly<{
   fetch?: typeof globalThis.fetch
   showMessageBox?: () => Promise<unknown>
   openExternal?: (url: string) => Promise<void>
+  readWallMs?: () => number
+  readMonotonicMs?: () => number
   createStore?: typeof createMacOsCredentialStore
   createHttp?: typeof createAuthHttpClient
 }>
@@ -30,13 +32,25 @@ export type AuthRuntimeEffects = Readonly<{
   createDependencies(): AuthCoordinatorDependencies
 }>
 
-function createClock(): AuthClock {
+function createClock(readWallMs: () => number, readMonotonicMs: () => number): AuthClock {
+  let previousWallMs: number | undefined
+  let previousMonotonicMs: number | undefined
+
   return {
-    read: () => ({
-      wallMs: Date.now(),
-      monotonicMs: performance.now(),
-      discontinuous: false
-    }),
+    read: () => {
+      const wallMs = readWallMs()
+      const monotonicMs = readMonotonicMs()
+      const movedWallBack = previousWallMs != null && wallMs < previousWallMs
+      const movedMonotonicBack = previousMonotonicMs != null && monotonicMs < previousMonotonicMs
+      previousWallMs = wallMs
+      previousMonotonicMs = monotonicMs
+
+      return {
+        wallMs,
+        monotonicMs,
+        discontinuous: movedWallBack || movedMonotonicBack
+      }
+    },
     schedule: (delayMs, callback) => {
       const timeout = setTimeout(callback, delayMs)
       return () => clearTimeout(timeout)
@@ -50,7 +64,14 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRu
   const platform = options.platform ?? process.platform
   const createStore = options.createStore ?? createMacOsCredentialStore
   const createHttp = options.createHttp ?? createAuthHttpClient
-  const openExternal = options.openExternal ?? shell.openExternal
+  const openExternal =
+    options.openExternal ??
+    shell?.openExternal ??
+    (async () => {
+      throw new Error('External browser is unavailable.')
+    })
+  const readWallMs = options.readWallMs ?? Date.now
+  const readMonotonicMs = options.readMonotonicMs ?? (() => performance.now())
   const showMessageBox =
     options.showMessageBox ??
     (() =>
@@ -79,7 +100,7 @@ export function createAuthRuntimeEffects(options: RuntimeEffectsOptions): AuthRu
         safeStorage,
         platform
       })
-      const clock = createClock()
+      const clock = createClock(readWallMs, readMonotonicMs)
 
       return {
         providers: options.config.providers,

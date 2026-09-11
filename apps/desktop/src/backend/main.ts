@@ -10,11 +10,22 @@ import { registerAuthIpc } from './auth/ipc-handler'
 import { createProtocolIngress } from './auth/protocol-ingress'
 import { bootstrapAuthRuntime, type AuthRuntime } from './auth/bootstrap'
 import { createAuthRuntimeEffects } from './auth/runtime-effects'
-import { readAuthRuntimeConfig } from './auth/runtime-config'
+import { applyAuthRuntimeProfile, readAuthRuntimeConfig } from './auth/runtime-config'
 
 let mainWindow: BrowserWindow | null = null
 let disposeAuthIpc: (() => void) | undefined
-const runtimeConfig = readAuthRuntimeConfig()
+const parsedRuntimeConfig = readAuthRuntimeConfig()
+const runtimeConfig = (() => {
+  if (parsedRuntimeConfig == null) {
+    return null
+  }
+  try {
+    applyAuthRuntimeProfile(app, parsedRuntimeConfig)
+    return parsedRuntimeConfig
+  } catch {
+    return null
+  }
+})()
 const protocolIngress =
   runtimeConfig == null
     ? null
@@ -46,12 +57,7 @@ function createWindow(authRuntime: AuthRuntime | null): void {
   })
 
   mainWindow = window
-  registerCapturePermissions(
-    session.defaultSession,
-    window,
-    rendererDocumentUrl,
-    authRuntime?.coordinator
-  )
+  registerCapturePermissions(session.defaultSession)
   registerCaptureWindow(window, rendererDocumentUrl)
   if (authRuntime != null) {
     disposeAuthIpc?.()
@@ -128,19 +134,6 @@ app.whenReady().then(async () => {
   registerCaptureIpc(authRuntime?.coordinator, searchConfiguration)
 
   createWindow(authRuntime)
-  if (authRuntime != null && protocolIngress != null) {
-    protocolIngress.attach(async (rawReturnUrl) => {
-      const window = mainWindow
-      const hasWindow = window != null && !window.isDestroyed()
-      if (!hasWindow) {
-        createWindow(authRuntime)
-      } else {
-        window.show()
-        window.focus()
-      }
-      await authRuntime.coordinator.handleReturnUrl(rawReturnUrl)
-    })
-  }
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
@@ -156,4 +149,20 @@ app.whenReady().then(async () => {
       app.quit()
     }
   })
+
+  const startAuthRuntime = authRuntime?.start()
+  void startAuthRuntime?.catch(() => undefined)
+  if (authRuntime != null && protocolIngress != null) {
+    protocolIngress.attach(async (rawReturnUrl) => {
+      const window = mainWindow
+      const hasWindow = window != null && !window.isDestroyed()
+      if (!hasWindow) {
+        createWindow(authRuntime)
+      } else {
+        window.show()
+        window.focus()
+      }
+      await authRuntime.coordinator.handleReturnUrl(rawReturnUrl)
+    })
+  }
 })
