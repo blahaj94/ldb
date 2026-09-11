@@ -44,7 +44,10 @@ function parseCommand<T extends object>({
   const hasExactKeyCount = keys.length === Object.keys(parsed.data).length
   const hasOnlyExpectedKeys = keys.every((key) => {
     const isStringKey = typeof key === 'string'
-    const isExpectedKey = isStringKey && Object.hasOwn(parsed.data, key)
+    if (!isStringKey) {
+      return false
+    }
+    const isExpectedKey = Object.hasOwn(parsed.data, key)
     return isExpectedKey
   })
   const hasExactKeys = hasExactKeyCount && hasOnlyExpectedKeys
