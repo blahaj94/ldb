@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +43,7 @@ const mocks = vi.hoisted(() => ({
   setAppUserModelId: vi.fn(),
   exit: vi.fn(),
   appOn: vi.fn(),
+  appRemoveListener: vi.fn(),
   windows: [] as unknown[],
   coordinator: {
     captureGeneration: vi.fn(() => 1),
@@ -71,6 +73,7 @@ vi.mock('electron', () => ({
       }
     }),
     on: mocks.appOn,
+    removeListener: mocks.appRemoveListener,
     requestSingleInstanceLock: vi.fn(() => true),
     setPath: mocks.setPath,
     getPath: mocks.getPath,
@@ -80,6 +83,8 @@ vi.mock('electron', () => ({
     quit: vi.fn()
   },
   BrowserWindow: class {
+    static getAllWindows = vi.fn(() => mocks.windows)
+
     constructor() {
       mocks.constructWindow()
       mocks.windows.push(this)
@@ -249,6 +254,35 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
   )
 })
 
+it('packaged document의 closed 정리 뒤 activate에서 같은 runtime과 IPC를 다시 연결한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const expectedDocumentUrl = pathToFileURL(join(__dirname, '../frontend/index.html')).href
+
+  await import('./main')
+  await mocks.bootstrap
+  const firstWindow = mocks.windows[0] as { on: ReturnType<typeof vi.fn> }
+  const closedRegistration = firstWindow.on.mock.calls.find(([event]) => event === 'closed')
+  expect(closedRegistration).toBeDefined()
+  const closeWindow = closedRegistration?.[1] as () => void
+  const firstAuthDisposer = mocks.registerAuth.mock.results[0]?.value as ReturnType<typeof vi.fn>
+
+  closeWindow()
+  mocks.windows = []
+  const activateRegistration = mocks.appOn.mock.calls.find(([event]) => event === 'activate')
+  expect(activateRegistration).toBeDefined()
+  const activate = activateRegistration?.[1] as () => void
+  activate()
+
+  expect(firstAuthDisposer).toHaveBeenCalledOnce()
+  expect(mocks.constructWindow).toHaveBeenCalledTimes(2)
+  expect(mocks.registerAuth).toHaveBeenCalledTimes(2)
+  expect(mocks.registerWindow).toHaveBeenNthCalledWith(1, expect.anything(), expectedDocumentUrl)
+  expect(mocks.registerWindow).toHaveBeenNthCalledWith(2, expect.anything(), expectedDocumentUrl)
+  expect(mocks.loadFile).toHaveBeenCalledTimes(2)
+  expect(mocks.loadFile).toHaveBeenNthCalledWith(1, join(__dirname, '../frontend/index.html'))
+  expect(mocks.loadFile).toHaveBeenNthCalledWith(2, join(__dirname, '../frontend/index.html'))
+})
+
 it('does not activate product auth for the unresolved Discord provider gate', async () => {
   vi.stubEnv('LDB_AUTH_API_ORIGIN', 'https://api.synthetic.test')
   vi.stubEnv('LDB_AUTH_RETURN_TARGET', 'ldb-synthetic://auth/return')
@@ -303,6 +337,22 @@ it('profile 적용이 시작된 뒤 실패하면 부분 적용된 userData로 �
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
+})
+
+it('profile 준비 실패는 Electron 전역값과 lock을 건드리지 않고 비인증 window로 전환한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  mocks.applyProfile.mockImplementationOnce(() => {
+    throw new Error('Synthetic profile preparation failure')
+  })
+
+  await import('./main')
+  await mocks.bootstrap
+
+  expect(mocks.setPath).not.toHaveBeenCalled()
+  expect(mocks.createIngress).not.toHaveBeenCalled()
+  expect(mocks.bootstrapAuth).not.toHaveBeenCalled()
+  expect(mocks.exit).not.toHaveBeenCalled()
+  expect(mocks.constructWindow).toHaveBeenCalledOnce()
 })
 
 it('single-instance loser는 auth/store/window 초기화 없이 종료한다', async () => {
@@ -430,6 +480,37 @@ it('일반 second-instance의 window 활성화 실패를 Electron event 경계 �
   })
 
   expect(() => listener({}, ['electron'], '/tmp')).not.toThrow()
+})
+
+it('actual ingress와 일반 second-instance가 함께 받아도 callback은 한 번 시작하고 window 예외를 회수한다', async () => {
+  stubTrustedRuntimeEnvironment()
+  const actualProtocol = await vi.importActual<typeof import('./auth/protocol-ingress')>(
+    './auth/protocol-ingress'
+  )
+  mocks.createIngress.mockImplementationOnce(actualProtocol.createProtocolIngress)
+  mocks.attachAfterStart.mockImplementationOnce(actualProtocol.attachProtocolIngressAfterStart)
+
+  await import('./main')
+  await mocks.bootstrap
+  const secondInstanceListeners = mocks.appOn.mock.calls
+    .filter(([event]) => event === 'second-instance')
+    .map(([, listener]) => listener as (event: unknown, commandLine: string[], cwd: string) => void)
+  expect(secondInstanceListeners).toHaveLength(2)
+  const window = mocks.windows[0] as { show: ReturnType<typeof vi.fn> }
+  window.show.mockImplementation(() => {
+    throw new Error('Synthetic persistent window activation failure')
+  })
+  const code = Buffer.alloc(32, 7).toString('base64url')
+  const commandLine = ['electron', `ldb-synthetic://auth/return?code=${code}`]
+
+  expect(() => {
+    for (const listener of secondInstanceListeners) {
+      listener({}, commandLine, '/tmp')
+    }
+  }).not.toThrow()
+  await vi.waitFor(() =>
+    expect(mocks.coordinator.handleReturnUrl).toHaveBeenCalledExactlyOnceWith(commandLine[1])
+  )
 })
 
 it('warm return은 현재 창을 focus하고, 창이 없으면 같은 auth runtime으로 재생성한다', async () => {
