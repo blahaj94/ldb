@@ -208,11 +208,6 @@ function prepareUserDataDirectory(
       const parentPath = pathSemantics.dirname(currentPath)
       assertDirectory(filesystem.lstatSync(parentPath))
       assertCanonicalPath(parentPath, filesystem)
-      syncDirectory(parentPath, filesystem)
-      const grandparentPath = pathSemantics.dirname(parentPath)
-      if (grandparentPath !== parentPath) {
-        syncDirectory(grandparentPath, filesystem)
-      }
       try {
         filesystem.mkdirSync(currentPath, { mode: 0o700 })
       } catch (mkdirError) {
@@ -232,9 +227,18 @@ function prepareUserDataDirectory(
       assertDirectory(stat)
     }
     assertCanonicalPath(currentPath, filesystem)
-    if (created && !isFinalPath) {
-      syncDirectory(currentPath, filesystem)
-      syncDirectory(pathSemantics.dirname(currentPath), filesystem)
+    if (created) {
+      const parentPath = pathSemantics.dirname(currentPath)
+      if (isFinalPath) {
+        syncDirectory(parentPath, filesystem)
+        const grandparentPath = pathSemantics.dirname(parentPath)
+        if (grandparentPath !== parentPath) {
+          syncDirectory(grandparentPath, filesystem)
+        }
+      } else {
+        syncDirectory(currentPath, filesystem)
+        syncDirectory(parentPath, filesystem)
+      }
     }
   }
 

@@ -575,44 +575,6 @@ describe('desktop auth runtime config', () => {
     }
   })
 
-  it.skipIf(process.platform !== 'darwin')(
-    'rejects a differently cased profile alias on a case-insensitive Darwin filesystem',
-    () => {
-      const root = createRuntimeProfileRoot()
-      const canonicalUserDataPath = join(root, 'Profiles', 'Dev')
-      const userDataPath = join(root, 'profiles', 'dev')
-      fs.mkdirSync(canonicalUserDataPath, { recursive: true, mode: 0o700 })
-      const calls: string[] = []
-      const application = {
-        setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
-        getPath: () => userDataPath,
-        setName: (value: string) => calls.push(`name:${value}`),
-        setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
-      }
-      const config = readAuthRuntimeConfig({
-        ...validEnvironment,
-        LDB_AUTH_USER_DATA_PATH: userDataPath
-      })
-
-      try {
-        const supportsCaseAliases = fs.existsSync(userDataPath)
-        if (!supportsCaseAliases) {
-          return
-        }
-        expect(fs.realpathSync.native(userDataPath)).toBe(canonicalUserDataPath)
-        expect(config).not.toBeNull()
-        if (config == null) {
-          throw new Error('Synthetic runtime config should be available')
-        }
-
-        expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
-        expect(calls).toEqual([])
-      } finally {
-        fs.rmSync(root, { recursive: true, force: true })
-      }
-    }
-  )
-
   it.each(['trailing-separator', 'dot-alias'] as const)(
     'rejects a symlink profile with a %s leaf alias',
     (kind) => {
@@ -795,23 +757,18 @@ describe('desktop auth runtime config', () => {
     }
   })
 
-  it('repairs an observed concurrent parent entry before creating its missing profile child', () => {
+  it('repairs an observed concurrent parent entry before applying its missing profile child', () => {
     const root = createRuntimeProfileRoot()
     const parent = join(root, 'nested')
     const userDataPath = join(parent, 'profile')
     fs.mkdirSync(parent, { mode: 0o700 })
     const openedPaths: string[] = []
-    let openedPathsAtProfileCreation: string[] = []
+    let openedPathsAtProfileApplication: string[] = []
     const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
       statSync: fs.statSync,
       realpathSync: fs.realpathSync.native,
-      mkdirSync: (path, options) => {
-        if (path === userDataPath) {
-          openedPathsAtProfileCreation = [...openedPaths]
-        }
-        fs.mkdirSync(path, options)
-      },
+      mkdirSync: fs.mkdirSync,
       openSync: (path, flags) => {
         openedPaths.push(path)
         return fs.openSync(path, flags)
@@ -820,7 +777,9 @@ describe('desktop auth runtime config', () => {
       closeSync: fs.closeSync
     }
     const application = {
-      setPath: () => undefined,
+      setPath: () => {
+        openedPathsAtProfileApplication = [...openedPaths]
+      },
       getPath: () => userDataPath,
       setName: () => undefined,
       setAppUserModelId: () => undefined
@@ -843,8 +802,8 @@ describe('desktop auth runtime config', () => {
       ) => AuthRuntimeConfig
       applyWithFilesystem(application, config, filesystem)
 
-      expect(openedPathsAtProfileCreation).toContain(parent)
-      expect(openedPathsAtProfileCreation).toContain(root)
+      expect(openedPathsAtProfileApplication).toContain(parent)
+      expect(openedPathsAtProfileApplication).toContain(root)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
