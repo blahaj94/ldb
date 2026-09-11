@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session } from 'electron'
+import { app, BrowserWindow, powerMonitor, session } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { optimizer, is } from '@electron-toolkit/utils'
@@ -23,6 +23,7 @@ import {
 
 let mainWindow: BrowserWindow | null = null
 let disposeAuthIpc: (() => void) | undefined
+let disposeClockPowerMonitor: (() => void) | undefined
 const parsedRuntimeConfig = readAuthRuntimeConfig()
 type RuntimeProfileState =
   | Readonly<{ status: 'inactive-config' }>
@@ -283,6 +284,8 @@ function commitShutdown(): void {
   for (const resolve of waiters) {
     resolve(false)
   }
+  disposeClockPowerMonitor?.()
+  disposeClockPowerMonitor = undefined
   disposeProtocolIngress()
 }
 
@@ -430,6 +433,7 @@ app.whenReady().then(async () => {
     let authRuntime: AuthRuntime | null = null
     if (runtimeConfig != null) {
       const effects = createAuthRuntimeEffects()
+      disposeClockPowerMonitor = effects.bindPowerMonitor(powerMonitor)
       while (authRuntime == null) {
         let bootstrapObservedQuitAttempt = false
         authRuntime = await bootstrapAuthRuntime({
@@ -457,6 +461,8 @@ app.whenReady().then(async () => {
 
     const hasAuthRuntime = authRuntime != null
     if (!hasAuthRuntime) {
+      disposeClockPowerMonitor?.()
+      disposeClockPowerMonitor = undefined
       disposeProtocolIngress()
     }
     const searchConfiguration =

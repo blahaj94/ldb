@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { createAuthRuntimeEffects } from './runtime-effects'
 import { createAuthCoordinator } from './coordinator'
 import { AuthHttpFailure } from './http'
+import type { AuthClock } from './types'
 import {
   createAuthHarness,
+  CODE,
   deferred,
   REFRESH_0,
   REFRESH_1,
@@ -13,7 +15,14 @@ import {
   USER_ID
 } from './auth-test-fixtures'
 
-function createRuntimeHarness() {
+type RuntimeHarness = Omit<ReturnType<typeof createAuthHarness>, 'clock'> & {
+  clock: AuthClock
+  coordinator: ReturnType<typeof createAuthCoordinator>
+  time: { wallMs: number; monotonicMs: number; sampleDelayMs: number }
+  effects: ReturnType<typeof createAuthRuntimeEffects>
+}
+
+function createRuntimeHarness(): RuntimeHarness {
   const harness = createAuthHarness()
   const time = { wallMs: harness.clock.wallMs, monotonicMs: 1_000, sampleDelayMs: 0 }
   const effects = createAuthRuntimeEffects({
@@ -25,6 +34,7 @@ function createRuntimeHarness() {
     },
     readMonotonicMs: () => time.monotonicMs,
     createHttp: () => harness.dependencies.http,
+    openExternal: harness.browser.open,
     createStore: () => harness.store
   })
   const dependencies = effects.createDependencies({
@@ -120,9 +130,54 @@ describe('runtime clock trust periods', () => {
     expect(powerMonitor.listenerCount('suspend')).toBe(0)
     expect(powerMonitor.listenerCount('resume')).toBe(0)
   })
+
+  it('cannot reset trust during suspension or invalid sampling, and can establish a fresh valid period', () => {
+    const harness = createRuntimeHarness()
+    const powerMonitor = new EventEmitter()
+    const dispose = harness.effects.bindPowerMonitor(powerMonitor)
+    powerMonitor.emit('suspend')
+    harness.clock.startTrustPeriod?.()
+    expect(harness.clock.read().discontinuous).toBe(true)
+    powerMonitor.emit('resume')
+    expect(harness.clock.read().discontinuous).toBe(true)
+    const validWallMs = harness.time.wallMs
+    harness.time.wallMs = Number.NaN
+    harness.clock.startTrustPeriod?.()
+    harness.time.wallMs = validWallMs
+    expect(harness.clock.read().discontinuous).toBe(true)
+
+    harness.clock.startTrustPeriod?.()
+    expect(harness.clock.read().discontinuous).toBe(false)
+    dispose()
+  })
 })
 
 describe('runtime clock and real coordinator', () => {
+  it('expires a suspended pending login and permits a new user login after resume', async () => {
+    const harness = createRuntimeHarness()
+    const powerMonitor = new EventEmitter()
+    const dispose = harness.effects.bindPowerMonitor(powerMonitor)
+    await harness.coordinator.start()
+    await harness.coordinator.beginLogin('google')
+    await vi.waitFor(() => expect(harness.coordinator.getSnapshot().phase).toBe('waitingBrowser'))
+    powerMonitor.emit('suspend')
+    powerMonitor.emit('resume')
+    harness.clock.read()
+
+    await harness.coordinator.handleReturnUrl(`${harness.dependencies.returnTarget}?code=${CODE}`)
+
+    expect(harness.http.exchange).not.toHaveBeenCalled()
+    expect(harness.coordinator.getSnapshot()).toMatchObject({
+      phase: 'signedOut',
+      notice: 'LOGIN_EXPIRED'
+    })
+    await harness.coordinator.beginLogin('google')
+    await vi.waitFor(() => expect(harness.coordinator.getSnapshot().phase).toBe('waitingBrowser'))
+    const pending = harness.coordinator.getSnapshot().login
+    expect(pending).not.toBeNull()
+    await harness.coordinator.cancelLogin(pending?.attemptId)
+    dispose()
+  })
   it.each(['commit', 'finalize', 'me'] as const)(
     'preserves committed refresh and pauses on relative rollback during %s until one user retry',
     async (stage) => {

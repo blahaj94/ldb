@@ -127,6 +127,8 @@ export type ClockReading = Readonly<{
 
 export interface AuthClock {
   read(): ClockReading
+  // Production clocks reset only for a new login/refresh. Fakes may own trust inputs directly.
+  startTrustPeriod?(): void
   schedule(delayMs: number, callback: () => void): () => void
 }
 

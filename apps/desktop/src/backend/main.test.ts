@@ -289,7 +289,10 @@ it('완전한 trusted 설정에서 동일 document와 auth/search runtime을 제
     appIdentity: 'com.synthetic.ldb',
     userDataPath: '/synthetic/ldb-test-profile'
   })
-  const effects = Object.freeze({ source: 'synthetic trusted effects' })
+  const effects = Object.freeze({
+    source: 'synthetic trusted effects',
+    bindPowerMonitor: mocks.bindPowerMonitor
+  })
   mocks.applyProfile.mockImplementationOnce((application, config) => {
     application.setPath('userData', config.userDataPath)
     application.getPath('userData')

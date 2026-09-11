@@ -66,6 +66,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
   let pending: PendingLogin | null = null
   const session = new CredentialSession(dependencies.http, dependencies.store)
   let startPromise: Promise<AuthSnapshot> | null = null
+  let hasStartedRefresh = false
   let logoutFlight: Promise<AuthCommandResult> | null = null
   const verification = new UserVerification(dependencies.http)
 
@@ -597,6 +598,7 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     } catch {
       return Promise.resolve(state.failure('AUTH_OPERATION_FAILED'))
     }
+    dependencies.clock.startTrustPeriod?.()
     const startedAt = dependencies.clock.read()
     const value = new PendingLogin(
       { attemptId, provider, verifier: pkce.verifier, generation, startedAt },
@@ -696,6 +698,19 @@ export function createAuthCoordinator(dependencies: AuthCoordinatorDependencies)
     if (!prepared) {
       return null
     }
+
+    const previousCredential = session.current
+    const hasPreviousCredential = previousCredential != null
+    if (hasPreviousCredential) {
+      session.markAccessUntrusted(previousCredential)
+    }
+    // Initial restore keeps the dependency creation baseline. Later requests
+    // can recover trust, but may never make a previous access usable again.
+    const needsFreshPeriod = hasStartedRefresh || hasPreviousCredential
+    if (needsFreshPeriod) {
+      dependencies.clock.startTrustPeriod?.()
+    }
+    hasStartedRefresh = true
 
     let tokens: AuthTokens
     try {
