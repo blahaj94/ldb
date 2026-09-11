@@ -12,6 +12,7 @@ import type { AuthRuntimeConfig, AuthRuntimeProfileApplication } from './runtime
 type RuntimeProfileFilesystemDouble = {
   lstatSync: typeof fs.lstatSync
   statSync: typeof fs.statSync
+  realpathSync(path: string): string
   mkdirSync(path: string, options: { mode: number }): void
   openSync(path: string, flags: number): number
   fsyncSync(fd: number): void
@@ -170,6 +171,7 @@ describe('desktop auth runtime config', () => {
     const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
       statSync: fs.statSync,
+      realpathSync: fs.realpathSync,
       mkdirSync: (path, options) => {
         fs.mkdirSync(path, options)
         throw Object.assign(new Error('Synthetic concurrent creation'), { code: 'EEXIST' })
@@ -273,6 +275,97 @@ describe('desktop auth runtime config', () => {
       }
 
       expect(() => applyAuthRuntimeProfile(application, config)).toThrow()
+      expect(calls).toEqual([])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a profile path whose native canonical spelling differs', () => {
+    const root = createRuntimeProfileRoot()
+    const parent = join(root, 'profiles')
+    const userDataPath = join(parent, 'dev')
+    const canonicalUserDataPath = join(root, 'Profiles', 'Dev')
+    fs.mkdirSync(parent, { mode: 0o700 })
+    fs.mkdirSync(userDataPath, { mode: 0o700 })
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: fs.lstatSync,
+      statSync: fs.statSync,
+      realpathSync: (path) =>
+        path === userDataPath ? canonicalUserDataPath : fs.realpathSync(path),
+      mkdirSync: fs.mkdirSync,
+      openSync: fs.openSync,
+      fsyncSync: fs.fsyncSync,
+      closeSync: fs.closeSync
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble
+      ) => void
+      expect(() => applyWithFilesystem(application, config, filesystem)).toThrow()
+      expect(calls).toEqual([])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a missing profile below a parent whose canonical spelling differs', () => {
+    const root = createRuntimeProfileRoot()
+    const parent = join(root, 'profiles')
+    const userDataPath = join(parent, 'dev')
+    const canonicalParent = join(root, 'Profiles')
+    fs.mkdirSync(parent, { mode: 0o700 })
+    const calls: string[] = []
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const filesystem: RuntimeProfileFilesystemDouble = {
+      lstatSync: fs.lstatSync,
+      statSync: fs.statSync,
+      realpathSync: (path) => (path === parent ? canonicalParent : fs.realpathSync(path)),
+      mkdirSync: fs.mkdirSync,
+      openSync: fs.openSync,
+      fsyncSync: fs.fsyncSync,
+      closeSync: fs.closeSync
+    }
+    const config = readAuthRuntimeConfig({
+      ...validEnvironment,
+      LDB_AUTH_USER_DATA_PATH: userDataPath
+    })
+
+    try {
+      expect(config).not.toBeNull()
+      if (config == null) {
+        throw new Error('Synthetic runtime config should be available')
+      }
+
+      const applyWithFilesystem = applyAuthRuntimeProfile as unknown as (
+        application: AuthRuntimeProfileApplication,
+        config: AuthRuntimeConfig,
+        filesystem: RuntimeProfileFilesystemDouble
+      ) => void
+      expect(() => applyWithFilesystem(application, config, filesystem)).toThrow()
+      expect(fs.existsSync(userDataPath)).toBe(false)
       expect(calls).toEqual([])
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
@@ -401,6 +494,7 @@ describe('desktop auth runtime config', () => {
     const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
       statSync: fs.statSync,
+      realpathSync: fs.realpathSync,
       mkdirSync: fs.mkdirSync,
       openSync: (path: string, flags: number) => {
         openedPaths.push(path)
@@ -465,6 +559,7 @@ describe('desktop auth runtime config', () => {
     const filesystem: RuntimeProfileFilesystemDouble = {
       lstatSync: fs.lstatSync,
       statSync: fs.statSync,
+      realpathSync: fs.realpathSync,
       mkdirSync: fs.mkdirSync,
       openSync: (path: string, flags: number) => {
         openedPaths.push(path)
