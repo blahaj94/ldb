@@ -89,7 +89,7 @@ export async function assertLoginRequestStateMatrix(dataSource) {
     }
     for (const field of required[status]) {
       const isProviderPkceField = providerPkce.includes(field)
-      const isProcessing = isProviderPkceField && status === 'processing'
+      const isProcessing = status === 'processing'
       const shouldUsePkceConstraint = isProviderPkceField && isProcessing
       const constraint = shouldUsePkceConstraint ? 'pkce_fields' : `${status}_fields`
       await rejectConstraint(dataSource, `ck_auth_login_requests_${constraint}`, (runner) =>

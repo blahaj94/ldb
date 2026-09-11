@@ -75,8 +75,11 @@ function fixture(
       assert.deepEqual(query.lock, { mode: 'pessimistic_write' })
       events.push('user-lock')
       const isUserMissing = options.missing === true
-      const hasExistingUser = !isUserMissing && options.existing === true
-      return isUserMissing ? null : hasExistingUser ? { ...existing } : (inserted ?? null)
+      if (isUserMissing) {
+        return null
+      }
+      const hasExistingUser = options.existing === true
+      return hasExistingUser ? { ...existing } : (inserted ?? null)
     },
     update: async (_where: unknown, values: Record<string, unknown>) => {
       events.push('user-time')

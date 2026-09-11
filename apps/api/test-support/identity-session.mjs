@@ -240,7 +240,7 @@ export async function assertIdentitySessions(source, mark = () => undefined) {
   assert.equal(new Set(distinct.map((result) => result.user.id)).size, inputs.length)
   const hasOnlyExpectedNewIdentities = distinct.every((result) => {
     const isNewUser = result.isNewUser
-    const hasExpectedNickname = isNewUser && result.user.nickname === '모험가000007'
+    const hasExpectedNickname = result.user.nickname === '모험가000007'
     const isExpectedNewIdentity = isNewUser && hasExpectedNickname
     return isExpectedNewIdentity
   })

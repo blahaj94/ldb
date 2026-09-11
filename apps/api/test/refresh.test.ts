@@ -109,7 +109,8 @@ test('unknown, removed and stale ownership hints cannot select or revoke a sessi
     const f = fixture()
     f.token.consumedAt = time
     const shouldChangeSessionOwner = scenario === 'session-owner'
-    const shouldChangeTokenOwner = !shouldChangeSessionOwner && scenario === 'token-owner'
+    const isTokenOwnerScenario = scenario === 'token-owner'
+    const shouldChangeTokenOwner = !shouldChangeSessionOwner && isTokenOwnerScenario
     if (shouldChangeSessionOwner) {
       f.state.beforeLockedRead = () => {
         f.session.userId = randomUUID()
@@ -180,7 +181,8 @@ test('signing, entropy, insert and commit failures sanitize and rollback without
     const shouldFailEntropy = scenario === 'entropy'
     const operation = rotateRefreshForTest(f.deps, f.raw, shouldFailEntropy ? explode : randomBytes)
     const isEntropyFailure = scenario === 'entropy'
-    const isSigningFailure = !isEntropyFailure && scenario === 'sign'
+    const isSigningScenario = scenario === 'sign'
+    const isSigningFailure = !isEntropyFailure && isSigningScenario
     const isInternalFailure = isEntropyFailure || isSigningFailure
     await failure(operation, isInternalFailure ? 'AUTH_INTERNAL_ERROR' : 'AUTH_UNAVAILABLE')
     assert.equal(f.token.consumedAt, null)
