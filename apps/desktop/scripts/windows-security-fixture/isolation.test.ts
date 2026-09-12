@@ -1,13 +1,23 @@
-import { lstat, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import {
+  lstat,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createFixtureRoot, fixturePath, cleanupFixture, runFixtureLifecycle } from './isolation'
 
 const parents: string[] = []
 
 async function parentDirectory(): Promise<string> {
-  const parent = await mkdtemp(join(tmpdir(), 'ldb-synthetic-isolation-'))
+  const parent = await mkdtemp(join(await realpath(tmpdir()), 'ldb-synthetic-isolation-'))
   parents.push(parent)
   return parent
 }
@@ -15,7 +25,7 @@ async function parentDirectory(): Promise<string> {
 afterEach(async () => {
   for (const parent of parents.splice(0)) {
     expect(isAbsolute(parent)).toBe(true)
-    expect(dirname(parent)).toBe(resolve(tmpdir()))
+    expect(dirname(parent)).toBe(await realpath(tmpdir()))
     expect(basename(parent).startsWith('ldb-synthetic-isolation-')).toBe(true)
     const information = await lstat(parent)
     expect(information.isDirectory()).toBe(true)
