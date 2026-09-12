@@ -146,3 +146,37 @@ export async function cleanupFixture(
     return 'cleanup-incomplete'
   }
 }
+
+export async function runFixtureLifecycle({
+  create,
+  observe,
+  releaseResources
+}: {
+  create(): Promise<Fixture>
+  observe(fixture: Fixture): Promise<void>
+  releaseResources(): boolean
+}): Promise<{ failure: boolean; cleanup: 'clean' | 'cleanup-incomplete' }> {
+  let fixture: Fixture | undefined
+  let failure = false
+  let cleanup: 'clean' | 'cleanup-incomplete' = 'cleanup-incomplete'
+  try {
+    fixture = await create()
+    await observe(fixture)
+  } catch {
+    // Native/setup errors may contain private paths or descriptor inputs.
+    failure = true
+  } finally {
+    let resourcesReleased = false
+    try {
+      resourcesReleased = releaseResources()
+    } catch {
+      failure = true
+    }
+    const createdFixture = fixture
+    const hasFixture = createdFixture != null
+    if (hasFixture) {
+      cleanup = await cleanupFixture(createdFixture, { resourcesReleased })
+    }
+  }
+  return { failure, cleanup }
+}
