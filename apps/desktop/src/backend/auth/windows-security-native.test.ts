@@ -77,6 +77,7 @@ function createSecurityFixture(): SecurityFixture {
       information.FileAttributes = attributes
       return true
     },
+    getDirectoryEntries: () => false,
     getCurrentProcess: () => 104n,
     getLastError: () => ERROR_INSUFFICIENT_BUFFER,
     getLengthSid: () => currentSidData.length,
@@ -167,7 +168,14 @@ function directoryBatch(names: string[]): Buffer {
   return Buffer.concat(entries)
 }
 
-function createEnumerationFixture(batches: Buffer[], terminalError = 18) {
+type EnumerationFixture = SecurityFixture & {
+  native: ReturnType<typeof createWindowsSecurityNative>
+  query: ReturnType<typeof vi.fn<WindowsSecurityApi['getDirectoryEntries']>>
+  closeHandle: ReturnType<typeof vi.fn<WindowsSecurityApi['closeHandle']>>
+  createFile: ReturnType<typeof vi.fn<WindowsSecurityApi['createFile']>>
+}
+
+function createEnumerationFixture(batches: Buffer[], terminalError = 18): EnumerationFixture {
   const fixture = createSecurityFixture()
   let batchIndex = 0
   let lastError = ERROR_INSUFFICIENT_BUFFER
@@ -183,7 +191,7 @@ function createEnumerationFixture(batches: Buffer[], terminalError = 18) {
     batch.copy(buffer)
     return true
   })
-  const closeHandle = vi.fn((_handle: bigint) => true)
+  const closeHandle = vi.fn<WindowsSecurityApi['closeHandle']>(() => true)
   const createFile = vi.fn(fixture.api.createFile)
   const api = {
     ...fixture.api,
@@ -253,6 +261,31 @@ describe('Windows directory enumeration', () => {
     })
 
     expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it('clears the reused buffer so an incomplete batch cannot reuse stale names', () => {
+    const fixture = createEnumerationFixture([
+      directoryBatch(['credential.v1', 'transition.v1']),
+      Buffer.alloc(4)
+    ])
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).toHaveBeenCalledTimes(2)
+    expect(fixture.query.mock.calls[0][2]).toBe(fixture.query.mock.calls[1][2])
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it('rejects a next offset that leaves an incomplete header at the buffer end', () => {
+    const fixture = createEnumerationFixture([])
+    fixture.query.mockImplementation((_handle, _class, buffer) => {
+      directoryBatch(['credential.v1']).copy(buffer)
+      buffer.writeUInt32LE(buffer.byteLength - 8, 0)
+      return true
+    })
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).toHaveBeenCalledOnce()
     expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
   })
 
@@ -335,6 +368,24 @@ describe('Windows security native boundary', () => {
     expect(declaration('WriteFile')[3]).toHaveLength(5)
     expect(declaration('SetFileInformationByHandle')[3]).toHaveLength(4)
     expect(getWindowsSecurityBindingContractForTesting().getAceOutputTypeName).toMatch(/\*\*$/)
+    const directoryDeclarations = declarations.filter((entry) => {
+      const hasFunction = entry.name === 'GetFileInformationByHandleEx'
+      const hasDirectoryResult = entry.args[2] === 'int32_t'
+      return hasFunction && hasDirectoryResult
+    })
+    expect(directoryDeclarations).toHaveLength(1)
+    const directoryDeclaration = directoryDeclarations[0]
+    expect(directoryDeclaration.library).toBe('kernel32.dll')
+    expect(directoryDeclaration.args[0]).toBe('__stdcall')
+    const directoryArguments = directoryDeclaration.args[3] as Parameters<typeof koffi.proto>[3]
+    const prototype = koffi.proto('__stdcall', null, 'int32_t', directoryArguments).proto
+    expect(prototype?.result).toMatchObject({ primitive: 'Int32', size: 4 })
+    expect(prototype?.arguments).toMatchObject([
+      { direction: 'Input', type: { primitive: 'Pointer', ref: { primitive: 'Void' } } },
+      { direction: 'Input', type: { primitive: 'UInt32', size: 4 } },
+      { direction: 'Output', type: { primitive: 'Pointer', ref: { primitive: 'UInt8' } } },
+      { direction: 'Input', type: { primitive: 'UInt32', size: 4 } }
+    ])
   })
 
   it('routes adapter calls through a strict fake DLL with required NULLs and sizes', () => {
