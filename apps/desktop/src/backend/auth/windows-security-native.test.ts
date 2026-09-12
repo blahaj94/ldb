@@ -361,6 +361,9 @@ describe('Windows directory flush', () => {
 
     const desiredAccess = createFile.mock.calls[0][1]
     expect(desiredAccess & 0x40000000).toBe(0x40000000)
+    const encodedAccess = Buffer.alloc(4)
+    koffi.encode(encodedAccess, 'uint32_t', desiredAccess)
+    expect(encodedAccess.readUInt32LE()).toBe(0xc0020080)
     expect(createFile).toHaveBeenCalledExactlyOnceWith(
       'directory',
       desiredAccess,
@@ -500,6 +503,8 @@ describe('Windows security native boundary', () => {
     expect(declaration('GetAclInformation')[3]).toHaveLength(4)
     expect(declaration('ReadFile')[3]).toHaveLength(5)
     expect(declaration('WriteFile')[3]).toHaveLength(5)
+    expect(declaration('FlushFileBuffers').slice(0, 2)).toEqual(['__stdcall', 'FlushFileBuffers'])
+    expect(declaration('FlushFileBuffers')[3]).toEqual([declaration('CreateFileW')[2]])
     expect(declaration('SetFileInformationByHandle')[3]).toHaveLength(4)
     expect(getWindowsSecurityBindingContractForTesting().getAceOutputTypeName).toMatch(/\*\*$/)
     const directoryDeclarations = declarations.filter((entry) => {
