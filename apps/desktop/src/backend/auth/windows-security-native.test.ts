@@ -1,4 +1,4 @@
-import koffi from 'koffi'
+import koffi, { type TypeObject } from 'koffi'
 import { describe, expect, it } from 'vitest'
 import {
   createWindowsSecurityApiForTesting,
@@ -15,6 +15,7 @@ const ERROR_INSUFFICIENT_BUFFER = 122
 type TestWindowsLibrary = Readonly<{
   func(...args: unknown[]): (...runtimeArgs: unknown[]) => unknown
 }>
+type TestHandleMode = 'normal' | 'null' | 'invalid'
 
 function writeTokenUserBuffer(target: Buffer, sidData: Buffer): void {
   const sidOffset = process.arch === 'ia32' ? 4 : 8
@@ -193,13 +194,18 @@ describe('Windows security native boundary', () => {
     currentSidData.copy(aceData, 8)
     const acePointer = koffi.address(aceData)
     const arities = new Map<string, number[]>()
-    let returnInvalidHandle = false
+    let handleMode: TestHandleMode = 'normal'
     let returnOutOfRangeTokenSid = false
     let failLocalFree = false
     let closeCount = 0
     let createdHandleCloseCount = 0
     const equalSidCurrentArguments: unknown[] = []
     const getLengthSidArguments: unknown[] = []
+    let lastError = ERROR_INSUFFICIENT_BUFFER
+    let handleType: TypeObject | null = null
+    let normalHandle: bigint | null = null
+    let nullHandle: bigint | null = null
+    let invalidHandle: bigint | null = null
     let handleKind: 'directory' | 'file' = 'directory'
     const record = (name: string, args: unknown[]): void => {
       const values = arities.get(name) ?? []
@@ -209,6 +215,9 @@ describe('Windows security native boundary', () => {
     const loader = (library: string): TestWindowsLibrary => ({
       func: (...definition: unknown[]) => {
         const name = String(definition[1])
+        if (name === 'CreateFileW') {
+          handleType = definition[2] as TypeObject
+        }
         return (...args: unknown[]): unknown => {
           record(name, args)
           const requiredArity =
@@ -242,7 +251,13 @@ describe('Windows security native boundary', () => {
                 String(args[0]).includes('credential.v1') || String(args[0]).includes('.tmp')
                   ? 'file'
                   : 'directory'
-              return returnInvalidHandle ? 0xffffffffffffffffn : 103n
+              if (handleMode === 'null') {
+                return nullHandle
+              }
+              if (handleMode === 'invalid') {
+                return invalidHandle
+              }
+              return normalHandle
             case 'GetFileInformationByHandleEx':
               if (typeof args[3] !== 'number' || args[3] <= 0) {
                 throw new Error('GetFileInformationByHandleEx size is required')
@@ -330,7 +345,7 @@ describe('Windows security native boundary', () => {
             case 'GetCurrentProcess':
               return 108n
             case 'GetLastError':
-              return ERROR_INSUFFICIENT_BUFFER
+              return lastError
             default:
               throw new Error(`Unexpected Win32 function ${library}:${name}`)
           }
@@ -338,6 +353,24 @@ describe('Windows security native boundary', () => {
       }
     })
     const api = createWindowsSecurityApiForTesting(loader)
+    if (handleType == null) {
+      throw new Error('CreateFileW HANDLE type was not captured.')
+    }
+    const handleWidth = process.arch === 'ia32' ? 4 : 8
+    const decodeHandle = (bytes: Buffer): bigint | null =>
+      koffi.decode(bytes, handleType as TypeObject) as bigint | null
+    const normalHandleBytes = Buffer.alloc(handleWidth)
+    if (process.arch === 'ia32') {
+      normalHandleBytes.writeUInt32LE(103, 0)
+    } else {
+      normalHandleBytes.writeBigUInt64LE(103n, 0)
+    }
+    normalHandle = decodeHandle(normalHandleBytes)
+    nullHandle = decodeHandle(Buffer.alloc(handleWidth))
+    invalidHandle = decodeHandle(Buffer.alloc(handleWidth, 0xff))
+    expect(normalHandle).toBe(103n)
+    expect(nullHandle).toBeNull()
+    expect(typeof invalidHandle).toBe('bigint')
     const native = createWindowsSecurityNative({ api })
 
     expect(native.inspect(String.raw`C:\Users\Alice\LdbProfile`, 'directory')).toBe('trusted')
@@ -373,18 +406,28 @@ describe('Windows security native boundary', () => {
     expect(getLengthSidArguments.length).toBe(getLengthSidCallsBeforeOutOfRange)
     returnOutOfRangeTokenSid = false
 
+    handleMode = 'null'
+    lastError = 2
+    expect(native.inspect(String.raw`C:\Users\Alice\LdbProfile\missing`, 'directory')).toBe(
+      'missing'
+    )
+
     const fileInfoCallsBeforeInvalidHandle =
       arities.get('GetFileInformationByHandleEx')?.length ?? 0
     const securityInfoCallsBeforeInvalidHandle = arities.get('GetSecurityInfo')?.length ?? 0
     const closeCallsBeforeInvalidHandle = closeCount
-    returnInvalidHandle = true
-    expect(() => native.openRead(String.raw`C:\Users\Alice\LdbProfile\missing`)).toThrow()
+    handleMode = 'invalid'
+    lastError = 5
+    expect(native.inspect(String.raw`C:\Users\Alice\LdbProfile\denied`, 'directory')).toBe(
+      'untrusted'
+    )
     expect(arities.get('GetFileInformationByHandleEx')?.length ?? 0).toBe(
       fileInfoCallsBeforeInvalidHandle
     )
     expect(arities.get('GetSecurityInfo')?.length ?? 0).toBe(securityInfoCallsBeforeInvalidHandle)
     expect(closeCount).toBe(closeCallsBeforeInvalidHandle)
-    returnInvalidHandle = false
+    handleMode = 'normal'
+    lastError = ERROR_INSUFFICIENT_BUFFER
     const closeCallsBeforeLocalFreeFailure = closeCount
     const createdHandleCloseCallsBeforeLocalFreeFailure = createdHandleCloseCount
     failLocalFree = true
