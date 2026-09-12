@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "prepare:ocr-assets": "node scripts/prepare-ocr-assets.mjs",
     "test": "vitest run",
+    "test:windows-native": "tsc --noEmit -p scripts/windows-security-fixture/tsconfig.json && vitest run --config scripts/windows-security-fixture/vitest.config.ts",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
