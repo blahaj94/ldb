@@ -269,32 +269,37 @@ describe('Windows CredentialStore native boundary', () => {
       const rename = vi.fn<WindowsCredentialFileHandle['rename']>()
       const close = vi.fn<WindowsCredentialFileHandle['close']>()
       const error = new Error('Synthetic replacement failure.')
+      const isWriteFailure = failure === 'write'
+      const isInitialFlushFailure = failure === 'initial-flush'
+      const isPostRenameFlushFailure = failure === 'post-rename-flush'
+      const isDirectorySyncFailure = failure === 'directory-sync'
+      const isCloseFailure = failure === 'close'
       vi.mocked(fixture.native.createExclusive).mockImplementationOnce(async (path) => {
         const handle = createHandle(path, fixture.stores, fixture)
         rename.mockImplementation(handle.rename)
         close.mockImplementation(handle.close)
         const flush = vi.fn(handle.flush)
-        if (failure === 'initial-flush') {
+        if (isInitialFlushFailure) {
           flush.mockRejectedValueOnce(error)
         }
-        if (failure === 'post-rename-flush') {
+        if (isPostRenameFlushFailure) {
           flush.mockResolvedValueOnce(undefined).mockRejectedValueOnce(error)
         }
-        if (failure === 'close') {
+        if (isCloseFailure) {
           close.mockRejectedValueOnce(error)
         }
         return {
           ...handle,
-          write: failure === 'write' ? vi.fn().mockRejectedValue(error) : handle.write,
+          write: isWriteFailure ? vi.fn().mockRejectedValue(error) : handle.write,
           flush,
           rename,
           close
         }
       })
-      if (failure === 'directory-sync') {
+      if (isDirectorySyncFailure) {
         vi.mocked(fixture.native.syncDirectory).mockRejectedValueOnce(error)
       }
-      const isBeforeRename = failure === 'write' || failure === 'initial-flush'
+      const isBeforeRename = isWriteFailure || isInitialFlushFailure
 
       expect(await store.commitCredential(REFRESH_1)).toBe(isBeforeRename ? 'failed' : 'unknown')
       expect(rename).toHaveBeenCalledTimes(isBeforeRename ? 0 : 1)

@@ -374,7 +374,12 @@ describe('Windows directory flush', () => {
       null
     )
     expect(flushFileBuffers).toHaveBeenCalledExactlyOnceWith(103n)
-    expect(closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+    expect(
+      closeHandle.mock.calls.filter(([handle]) => {
+        const isDirectoryHandle = handle === 103n
+        return isDirectoryHandle
+      })
+    ).toHaveLength(1)
   })
 })
 
@@ -424,7 +429,12 @@ describe('Windows directory flush failure guards', () => {
 
     expect(() => native.syncDirectory('directory')).toThrow()
     expect(flush).not.toHaveBeenCalled()
-    expect(close.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+    expect(
+      close.mock.calls.filter(([handle]) => {
+        const isDirectoryHandle = handle === 103n
+        return isDirectoryHandle
+      })
+    ).toHaveLength(1)
   })
 
   it.each(['failure', 'exception'] as const)(
@@ -449,7 +459,12 @@ describe('Windows directory flush failure guards', () => {
 
       expect(() => native.syncDirectory('directory')).toThrow()
       expect(flush).toHaveBeenCalledExactlyOnceWith(103n)
-      expect(close.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+      expect(
+        close.mock.calls.filter(([handle]) => {
+          const isCreatedHandle = handle === 103n
+          return isCreatedHandle
+        })
+      ).toHaveLength(1)
     }
   )
 
@@ -459,7 +474,10 @@ describe('Windows directory flush failure guards', () => {
       const fixture = createSecurityFixture()
       const isDeletion = operation === 'disposition'
       fixture.set({ attributes: isDeletion ? 0 : FILE_ATTRIBUTE_DIRECTORY })
-      const close = vi.fn((handle) => handle !== 103n)
+      const close = vi.fn((handle) => {
+        const isCreatedHandle = handle === 103n
+        return !isCreatedHandle
+      })
       const flush = vi.fn(fixture.api.flushFileBuffers)
       const disposition = vi.fn(fixture.api.setFileInformationByHandle)
       const native = createWindowsSecurityNative({
@@ -479,7 +497,12 @@ describe('Windows directory flush failure guards', () => {
       } else {
         expect(flush).toHaveBeenCalledExactlyOnceWith(103n)
       }
-      expect(close.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+      expect(
+        close.mock.calls.filter(([handle]) => {
+          const isCreatedHandle = handle === 103n
+          return isCreatedHandle
+        })
+      ).toHaveLength(1)
     }
   )
 })
