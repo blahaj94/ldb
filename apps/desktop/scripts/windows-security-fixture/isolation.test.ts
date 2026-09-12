@@ -1,8 +1,8 @@
 import { lstat, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import { afterEach, expect, it } from 'vitest'
-import { createFixtureRoot, fixturePath, cleanupFixture } from './isolation'
+import { afterEach, expect, it, vi } from 'vitest'
+import { createFixtureRoot, fixturePath, cleanupFixture, runFixtureLifecycle } from './isolation'
 
 const parents: string[] = []
 
@@ -88,4 +88,50 @@ it('preserves evidence when resources have not been confirmed released', async (
   expect(await cleanupFixture(fixture, { resourcesReleased: false })).toBe('cleanup-incomplete')
   expect(await readdir(fixture.root)).toEqual([])
   expect(await readFile(fixture.manifest, 'utf8')).toContain(fixture.nonce)
+})
+
+it('releases resources and returns fixed evidence when setup inspection throws', async () => {
+  const releaseResources = vi.fn(() => true)
+  const observe = vi.fn()
+  const parent = await parentDirectory()
+
+  const result = await runFixtureLifecycle({
+    create: () =>
+      createFixtureRoot(parent, {
+        inspectReparse: () => {
+          throw new Error('synthetic private setup detail')
+        }
+      }),
+    observe,
+    releaseResources
+  })
+
+  expect(releaseResources).toHaveBeenCalledOnce()
+  expect(observe).not.toHaveBeenCalled()
+  expect(result).toEqual({ failure: true, cleanup: 'cleanup-incomplete' })
+  expect(JSON.stringify(result)).not.toContain('synthetic private setup detail')
+})
+
+it('preserves partial setup evidence while releasing resources on creation failure', async () => {
+  const parent = await parentDirectory()
+  let manifestPath = ''
+  let nonce = ''
+  const releaseResources = vi.fn(() => true)
+  const observe = vi.fn()
+
+  const result = await runFixtureLifecycle({
+    create: async () => {
+      const partial = await createFixtureRoot(parent)
+      manifestPath = partial.manifest
+      nonce = partial.nonce
+      throw new Error('synthetic partial creation failure')
+    },
+    observe,
+    releaseResources
+  })
+
+  expect(releaseResources).toHaveBeenCalledOnce()
+  expect(observe).not.toHaveBeenCalled()
+  expect(result).toEqual({ failure: true, cleanup: 'cleanup-incomplete' })
+  expect(await readFile(manifestPath, 'utf8')).toContain(nonce)
 })
