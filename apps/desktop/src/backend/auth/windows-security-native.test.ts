@@ -347,6 +347,34 @@ describe('Windows directory enumeration', () => {
   )
 })
 
+describe('Windows directory flush', () => {
+  it('opens the checked directory with GENERIC_WRITE required by FlushFileBuffers', () => {
+    const fixture = createSecurityFixture()
+    const createFile = vi.fn(fixture.api.createFile)
+    const flushFileBuffers = vi.fn(fixture.api.flushFileBuffers)
+    const closeHandle = vi.fn(fixture.api.closeHandle)
+    const native = createWindowsSecurityNative({
+      api: { ...fixture.api, createFile, flushFileBuffers, closeHandle }
+    })
+
+    native.syncDirectory('directory')
+
+    const desiredAccess = createFile.mock.calls[0][1]
+    expect(desiredAccess & 0x40000000).toBe(0x40000000)
+    expect(createFile).toHaveBeenCalledExactlyOnceWith(
+      'directory',
+      desiredAccess,
+      7,
+      null,
+      3,
+      0x2200000,
+      null
+    )
+    expect(flushFileBuffers).toHaveBeenCalledExactlyOnceWith(103n)
+    expect(closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+})
+
 describe('Windows security native boundary', () => {
   it('binds the complete Win32 call signatures required by the adapter', () => {
     const declarations: Array<{ library: string; name: string; args: unknown[] }> = []
