@@ -1,12 +1,12 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { createFixtureRoot, fixturePath, cleanupFixture } from './isolation.mjs'
+import { createFixtureRoot, fixturePath, cleanupFixture } from './isolation'
 
-const parents = []
+const parents: string[] = []
 
-async function parentDirectory() {
+async function parentDirectory(): Promise<string> {
   const parent = await mkdtemp(join(tmpdir(), 'ldb-synthetic-isolation-'))
   parents.push(parent)
   return parent
@@ -14,6 +14,13 @@ async function parentDirectory() {
 
 afterEach(async () => {
   for (const parent of parents.splice(0)) {
+    expect(isAbsolute(parent)).toBe(true)
+    expect(dirname(parent)).toBe(resolve(tmpdir()))
+    expect(basename(parent).startsWith('ldb-synthetic-isolation-')).toBe(true)
+    const information = await lstat(parent)
+    expect(information.isDirectory()).toBe(true)
+    expect(information.isSymbolicLink()).toBe(false)
+    // Node rm removes symlinks/junctions themselves, including test-created leftovers.
     await rm(parent, { recursive: true, force: true })
   }
 })
