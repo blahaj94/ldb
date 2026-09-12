@@ -14,9 +14,21 @@ Main은 Electron에 적용·read-back 확인한 trusted config 하나를 bootstr
 
 ## Windows capability와 packaging gate
 
-Windows 구현은 현재 composition에 연결되어 있지만, default native capability는 ACL/SID, selected OS/CPU ABI, packaged native module, namespace durability evidence가 없어서 `unknown`으로 닫혀 있다. Windows profile capability가 `unknown` 또는 `unavailable`이면 `setPath`, name, app identity setter 전에 main의 profile preparation이 실패하고 `preparation-failed` fallback으로 간다. Profile 적용 후 store capability가 `unavailable`일 때만 safeStorage·network mutation 전에 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`을 반환한다. Directory enumeration은 아직 구현하지 않았으므로 `list()`는 항상 unavailable을 throw하며, owned temporary 탐색·복구를 지원한다고 표시하지 않는다. Directory/삭제 namespace durability도 durable 구현이 완성되지 않았다. 현재는 directory handle 재검사·`FlushFileBuffers`, handle-bound rename/delete를 호출하는 후보 경로만 있고, 신규 directory·rename·delete의 durable 보장을 주장하려면 추가 구현과 별도 evidence가 필요하다. 이 Mac host의 테스트는 Windows API 호출이나 Windows login persistence를 증명하지 않는다. 별도 Windows OS/CPU ABI, DPAPI, packaged native module과 실제 profile/credential E2E도 아직 검증하지 않았다. Windows boundary dependency는 `koffi` **3.2.1**이다.
+Windows 구현은 현재 composition에 연결되어 있지만, default native capability는 ACL/SID, selected OS/CPU ABI, packaged native module, namespace durability evidence가 없어서 `unknown`으로 닫혀 있다. Windows profile capability가 `unknown` 또는 `unavailable`이면 `setPath`, name, app identity setter 전에 main의 profile preparation이 실패하고 `preparation-failed` fallback으로 간다. Profile 적용 후 store capability가 `unavailable`일 때만 safeStorage·network mutation 전에 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`을 반환한다. 파일 목록 조회는 구현되어 기존 소유 임시 파일 탐색과 정리 경로에 연결되지만, capability를 활성화하지 않는다. Directory/삭제 namespace durability도 durable 구현이 완성되지 않았다. 현재는 directory handle 재검사·`FlushFileBuffers`, handle-bound rename/delete를 호출하는 후보 경로만 있고, 신규 directory·rename·delete의 durable 보장을 주장하려면 추가 구현과 별도 evidence가 필요하다. 이 Mac host의 테스트는 Windows API 호출이나 Windows login persistence를 증명하지 않는다. 별도 Windows OS/CPU ABI, DPAPI, packaged native module과 실제 profile/credential E2E도 아직 검증하지 않았다. Windows boundary dependency는 `koffi` **3.2.1**이다.
 
 `pnpm-lock.yaml` entry만으로 Windows packaging 성공을 주장하지 않는다. `npmRebuild:false`를 유지한 채 선택된 target OS/CPU에서 `node_modules/@koromix/koffi-win32-*`의 정확한 variant와 packaged app의 PE architecture를 확인해야 한다. 모든 CPU variant를 임의로 설치하거나 지원 OS/CPU를 이 reference에서 확정하지 않는다. Electron-builder의 `.node` smart unpack은 바이너리 누락이나 잘못된 target variant를 해결하지 않으므로 package evidence는 별도 release gate다.
+
+## Windows 파일 목록 조회
+
+`windows-security-native.ts`는 `CreateFileW`로 연 directory HANDLE의 private owner/SID/DACL, directory type과 reparse 여부를 기존 검사로 확인한 뒤 `GetFileInformationByHandleEx`를 호출한다. 첫 호출은 `FileFullDirectoryRestartInfo`, 후속 호출은 `FileFullDirectoryInfo`이며 같은 HANDLE을 사용한다. Koffi binding은 32-bit `BOOL`, HANDLE, class, raw byte 출력 pointer와 byte 크기를 선언한다. 기존 file attribute 구조체 binding과 분리해 가변 길이 결과를 구조체 하나로 잘못 해석하지 않는다.
+
+8-byte 정렬을 확인한 64 KiB Buffer를 호출마다 비운다. API가 실제 반환 byte 수를 제공하지 않으므로 성공한 결과에서도 header, UTF-16 byte 길이, 이름 범위, 다음 entry의 정렬과 겹침, 다음 header 공간을 확인한다. 잘못된 UTF-16, NUL, 경로 구분자, colon과 Win32 경로 alias가 되는 끝의 점·공백은 거절한다. `.`과 `..`만 제외하고 이름을 보정하지 않는다. Entry의 `NextEntryOffset=0`은 해당 buffer의 끝이며 전체 조회 종료가 아니다.
+
+`ERROR_NO_MORE_FILES`를 확인하고 HANDLE 종료까지 성공한 뒤 전체 이름을 반환한다. 첫 호출과 후속 호출의 다른 오류, buffer 부족, parse 오류와 HANDLE 종료 실패는 throw하며 부분 결과나 빈 목록으로 바꾸지 않는다. Buffer를 늘려 재시도하지 않으므로 64 KiB로 처리하지 못하는 filesystem 결과도 사용 불가로 남는다. 이 구현이 filesystem snapshot이나 다른 process의 동시 변경 차단을 보장하지는 않는다.
+
+`windows-credential-native.ts`가 이 결과를 `WindowsCredentialFiles.ownedTemporaries()`에 전달한다. 기존 UUID 기반 `.credential.v1.*.tmp`와 `.transition.v1.*.tmp` 선택 규칙, marker 교체 후 marker temp 정리, clear의 credential 및 소유 temp 삭제 순서는 유지한다. 목록 조회가 끝나기 전이나 실패한 경우 삭제를 시작하지 않는다. 개별 삭제의 HANDLE 기반 보안 검사도 유지하며 unrelated 파일을 정리 대상으로 확대하지 않는다.
+
+근거는 [GetFileInformationByHandleEx](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex), [FILE_FULL_DIR_INFO의 가변 길이와 정렬](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_full_dir_info), [Microsoft WIL의 목록 종료와 오류 처리](https://github.com/microsoft/wil/blob/master/include/wil/filesystem.h)다. 고정 설치본 `koffi@3.2.1`의 `doc/output.md`, `doc/pointers.md`, `index.d.ts`와 native pointer 전달 구현을 확인했다. 동기 호출 동안 Buffer의 실제 주소를 사용하는 계약과 BigInt HANDLE decode는 테스트에서 검증한다. 이는 Windows OS 실행 evidence와 구분한다.
 
 ## 파일과 결과
 
@@ -40,7 +52,7 @@ Windows 구현은 현재 composition에 연결되어 있지만, default native c
 Repository root에서 실행한다.
 
 ```sh
-pnpm --filter @ldb/desktop exec vitest run src/backend/auth/credential-store/windows-credential-store.test.ts src/backend/auth/windows-security-native.test.ts src/backend/auth/credential-store/macos-credential-store.test.ts src/backend/auth/credential-store/macos-credential-lifecycle.test.ts
+pnpm --filter @ldb/desktop exec vitest run src/backend/auth/credential-store/windows-credential-native.test.ts src/backend/auth/credential-store/windows-credential-store.test.ts src/backend/auth/windows-security-native.test.ts src/backend/auth/credential-store/macos-credential-store.test.ts src/backend/auth/credential-store/macos-credential-lifecycle.test.ts
 pnpm --filter @ldb/desktop exec tsc --noEmit -p scripts/credential-store-native/tsconfig.json --composite false
 node apps/desktop/scripts/credential-store-native.mjs --prepare-only
 node apps/desktop/scripts/credential-store-native.mjs
