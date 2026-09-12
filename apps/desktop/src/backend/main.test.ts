@@ -149,6 +149,7 @@ vi.mock('./auth/ipc-handler', () => ({
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
+  mocks.setName.mockReset()
   mocks.windows = []
   mocks.createIngress.mockReturnValue({
     ownsInstance: true,
