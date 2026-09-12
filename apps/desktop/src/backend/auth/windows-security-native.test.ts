@@ -1,5 +1,5 @@
 import koffi, { type TypeObject } from 'koffi'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createWindowsSecurityApiForTesting,
   createWindowsSecurityNative,
@@ -153,6 +153,166 @@ function createSecurityFixture(): SecurityFixture {
   set({})
   return { api, set }
 }
+
+function directoryBatch(names: string[]): Buffer {
+  const entries = names.map((name) => {
+    const filename = Buffer.from(name, 'utf16le')
+    const entry = Buffer.alloc(Math.ceil((68 + filename.length) / 8) * 8)
+    entry.writeUInt32LE(entry.length, 0)
+    entry.writeUInt32LE(filename.length, 60)
+    filename.copy(entry, 68)
+    return entry
+  })
+  entries.at(-1)?.writeUInt32LE(0, 0)
+  return Buffer.concat(entries)
+}
+
+function createEnumerationFixture(batches: Buffer[], terminalError = 18) {
+  const fixture = createSecurityFixture()
+  let batchIndex = 0
+  let lastError = ERROR_INSUFFICIENT_BUFFER
+  const query = vi.fn((_handle: bigint, _class: number, buffer: Buffer, size: number) => {
+    expect(size).toBe(buffer.byteLength)
+    expect(koffi.address(buffer) % 8n).toBe(0n)
+    const batch = batches[batchIndex++]
+    const hasBatch = batch != null
+    if (!hasBatch) {
+      lastError = terminalError
+      return false
+    }
+    batch.copy(buffer)
+    return true
+  })
+  const closeHandle = vi.fn((_handle: bigint) => true)
+  const createFile = vi.fn(fixture.api.createFile)
+  const api = {
+    ...fixture.api,
+    createFile,
+    closeHandle,
+    getLastError: () => lastError,
+    getDirectoryEntries: query
+  }
+  return {
+    ...fixture,
+    native: createWindowsSecurityNative({ api }),
+    query,
+    closeHandle,
+    createFile
+  }
+}
+
+describe('Windows directory enumeration', () => {
+  it('reads all batches on the checked directory handle and skips only dot entries', () => {
+    const fixture = createEnumerationFixture([
+      directoryBatch(['.', '..', 'credential.v1', '한글.txt']),
+      directoryBatch(['transition.v1'])
+    ])
+
+    expect(fixture.native.list(String.raw`C:\LdbProfile\auth\test`)).toEqual([
+      'credential.v1',
+      '한글.txt',
+      'transition.v1'
+    ])
+    expect(fixture.query.mock.calls.map((call) => call[1])).toEqual([15, 14, 14])
+    expect(fixture.query.mock.calls.map((call) => call[0])).toEqual([103n, 103n, 103n])
+    expect(fixture.createFile).toHaveBeenCalledWith(
+      String.raw`C:\LdbProfile\auth\test`,
+      0x20081,
+      7,
+      null,
+      3,
+      0x2200000,
+      null
+    )
+    expect(fixture.closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+
+  it('returns an empty directory only after the explicit enumeration end', () => {
+    const fixture = createEnumerationFixture([])
+
+    expect(fixture.native.list('directory')).toEqual([])
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it.each([null, 0xffffffffffffffffn])(
+    'rejects an invalid open handle %s without using it',
+    (handle) => {
+      const fixture = createEnumerationFixture([])
+      fixture.createFile.mockReturnValue(handle)
+
+      expect(() => fixture.native.list('directory')).toThrow()
+      expect(fixture.query).not.toHaveBeenCalled()
+      expect(fixture.closeHandle).not.toHaveBeenCalled()
+    }
+  )
+
+  it('closes the directory handle if the query throws', () => {
+    const fixture = createEnumerationFixture([])
+    fixture.query.mockImplementation(() => {
+      throw new Error('Synthetic query failure.')
+    })
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it.each([2, 3, 5, 38, 87, 122, 234])('throws on error %s after a partial batch', (error) => {
+    const fixture = createEnumerationFixture([directoryBatch(['credential.v1'])], error)
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).toHaveBeenCalledTimes(2)
+    expect(fixture.closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+
+  it.each([
+    { attributes: FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT },
+    { attributes: 0 },
+    { ownerIsCurrent: false },
+    { daclPresent: 0 },
+    { aceIsCurrent: false }
+  ])('rejects an unsafe directory before querying: %j', (inspection) => {
+    const fixture = createEnumerationFixture([])
+    fixture.set(inspection)
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).not.toHaveBeenCalled()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it('does not expose a completed list when its directory handle cannot close', () => {
+    const fixture = createEnumerationFixture([directoryBatch(['credential.v1'])])
+    fixture.closeHandle.mockImplementation((handle) => handle !== 103n)
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+
+  it.each([
+    ['zero name length', (data: Buffer) => data.writeUInt32LE(0, 60)],
+    ['odd name length', (data: Buffer) => data.writeUInt32LE(3, 60)],
+    ['name past buffer', (data: Buffer) => data.writeUInt32LE(0xfffffffe, 60)],
+    ['overlapping next entry', (data: Buffer) => data.writeUInt32LE(8, 0)],
+    ['unaligned next entry', (data: Buffer) => data.writeUInt32LE(71, 0)],
+    ['next entry past buffer', (data: Buffer) => data.writeUInt32LE(0xfffffff8, 0)]
+  ])('rejects %s and releases the directory handle', (_label, corrupt) => {
+    const batch = directoryBatch(['credential.v1'])
+    corrupt(batch)
+    const fixture = createEnumerationFixture([batch])
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it.each(['a/b', 'a\\b', 'a\0b', 'a:b', '\ud800', 'credential.v1.', 'credential.v1 '])(
+    'rejects an unsafe returned filename %j',
+    (name) => {
+      const fixture = createEnumerationFixture([directoryBatch([name])])
+
+      expect(() => fixture.native.list('directory')).toThrow()
+      expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+    }
+  )
+})
 
 describe('Windows security native boundary', () => {
   it('binds the complete Win32 call signatures required by the adapter', () => {
