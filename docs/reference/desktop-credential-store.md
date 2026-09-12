@@ -26,6 +26,18 @@ Windows 파일 교체에서 write 또는 첫 file flush 실패는 rename을 시�
 
 Native 테스트는 실제 Koffi 3.2.1의 `uint32_t` encode로 JavaScript의 signed 접근 mask가 필요한 DWORD 값을 보존하는지 확인합니다. 주입 테스트는 flush 권한과 인수, 잘못된 HANDLE, 보안 검사 거절, flush 실패/예외와 close 실패를 검증합니다. Store 테스트는 위 교체 실패와 marker 재확립의 두 결과를 기존 공통 protocol을 통해 확인합니다. 실제 Win32 호출, DPAPI와 namespace 내구성 검증은 별도 gate로 남습니다.
 
+## Windows synthetic native fixture
+
+일반 권한의 Windows에서 `corepack pnpm@11.23.0 --filter @ldb/desktop test:windows-native`를 실행합니다. `scripts/windows-security-fixture/native.fixture.ts`는 기존 Koffi와 public native 경계로 synthetic byte 파일만 만들고, fixture 전용 typecheck 후 실제 Win32 관측을 JSON 한 줄로 출력합니다. 기본 Desktop test에는 격리 helper의 테스트만 포함하며, native 실행은 이 명시적인 command로 분리합니다. Electron, safeStorage, DPAPI, 실제 credential과 계정 이름 조회는 사용하지 않습니다.
+
+표준 임시 directory 아래 무작위 root와 별도 manifest를 exclusive 생성합니다. 절대경로 containment와 ancestor의 reparse 여부를 검사하며, 작업 소유 자식만 생성합니다. HANDLE과 LocalFree 대상은 finally에서 해제하고 실제 반환값을 계수합니다. Cleanup은 manifest의 nonce와 root를 재확인하고 junction 자체만 제거합니다. 모르는 reparse는 순회하지 않으며, 자원 해제나 cleanup이 불명확하면 manifest를 보존하고 실패합니다. 비정상 종료 후 manifest를 근거로 자동 재귀 삭제하는 기능은 없습니다. 같은 계정의 악의적인 동시 경로 교체나 crash 내구성을 보장하는 도구가 아닙니다.
+
+실제 HANDLE의 배타 생성, read/write, private ACL과 메모리 내 현재 process SID 비교, 추가 ACE 및 file/directory mismatch 거절, junction 거절과 대상 sentinel 보존을 확인합니다. ASCII, 한글, 비BMP를 포함한 408개 이름의 정확한 집합을 비교합니다. 헤더와 UTF-16 이름만 합쳐 122,410 byte이며, 실제 목록 호출의 성공 batch 수도 출력합니다. `WindowsCredentialFiles.ownedTemporaries()`는 unknown capability를 유지한 adapter의 관측 list를 통해 이름 선택만 검증합니다. `prepare()`나 제품 저장 gate를 통과한 것으로 해석하지 않습니다. 유효 UUID temp만 제거하고 credential, marker와 유사 이름의 보존을 확인합니다.
+
+Flush, 동일 HANDLE rename, disposition과 close의 성공 관측은 namespace 내구성 완료를 뜻하지 않습니다. Directory flush의 실제 성공/실패는 그대로 출력하고 capability는 unknown으로 유지합니다. 손상 buffer, close failure와 unknown-marker 복구는 기존 mock 테스트의 evidence이며 native 관측에 합치지 않습니다. 다른 owner, 전원 손실, OS/CPU 지원, packaged binary와 실제 인증 E2E는 미검증입니다.
+
+초기 긴 checkout 내부 경로 실행은 목록 파일 생성 중 실패했고 HANDLE 및 root cleanup은 완료됐습니다. 짧은 표준 임시 parent를 사용한 재실행은 통과했으며, 이는 장경로 지원을 검증한 결과가 아닙니다. 2026-09-12 Windows x64 관측에서 122,410 byte 목록은 3개 batch로 반환됐고 file/directory flush, rename과 disposition 호출이 성공했습니다. 최종 수치는 실행 JSON을 확인합니다. 기존 전체 Windows suite의 122개 실패와 canonical CRLF format 실패는 이 fixture 성공으로 해소되지 않습니다.
+
 ## Windows 파일 목록 조회
 
 `windows-security-native.ts`는 `CreateFileW`로 연 directory HANDLE의 private owner/SID/DACL, directory type과 reparse 여부를 기존 검사로 확인한 뒤 `GetFileInformationByHandleEx`를 호출한다. 첫 호출은 `FileFullDirectoryRestartInfo`, 후속 호출은 `FileFullDirectoryInfo`이며 같은 HANDLE을 사용한다. Koffi binding은 32-bit `BOOL`, HANDLE, class, raw byte 출력 pointer와 byte 크기를 선언한다. 기존 file attribute 구조체 binding과 분리해 가변 길이 결과를 구조체 하나로 잘못 해석하지 않는다.
