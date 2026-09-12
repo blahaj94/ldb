@@ -3,6 +3,8 @@ import { dirname, isAbsolute, join, normalize, parse, sep } from 'node:path'
 import type { Stats } from 'node:fs'
 import { validateApiOrigin, validateReturnTarget } from './protocol'
 import type { AuthProvider } from './types'
+import { createWindowsProfileSecurity } from './windows-profile-native'
+import type { WindowsProfileSecurity } from './windows-profile-native'
 
 export type AuthRuntimeConfig = Readonly<{
   apiOrigin: string
@@ -39,6 +41,7 @@ type RuntimePathSemantics = Readonly<{
 type RuntimeProfileFilesystem = Readonly<
   Pick<typeof fs, 'lstatSync' | 'mkdirSync' | 'openSync' | 'fsyncSync' | 'closeSync'> & {
     realpathSync(path: string): string
+    windows?: WindowsProfileSecurity
   }
 >
 
@@ -48,7 +51,8 @@ const nativeRuntimeProfileFilesystem: RuntimeProfileFilesystem = {
   mkdirSync: fs.mkdirSync,
   openSync: fs.openSync,
   fsyncSync: fs.fsyncSync,
-  closeSync: fs.closeSync
+  closeSync: fs.closeSync,
+  windows: createWindowsProfileSecurity()
 }
 const nativeRuntimePathSemantics: RuntimePathSemantics = {
   dirname,
@@ -192,10 +196,16 @@ function syncDirectory(path: string, filesystem: RuntimeProfileFilesystem): void
 function prepareUserDataDirectory(
   path: string,
   filesystem: RuntimeProfileFilesystem,
-  pathSemantics: RuntimePathSemantics
+  pathSemantics: RuntimePathSemantics,
+  platform: NodeJS.Platform
 ): void {
   if (hasPathAlias(path, pathSemantics)) {
     throw new Error('Trusted userData path must not use path aliases.')
+  }
+
+  if (platform === 'win32') {
+    prepareWindowsUserDataDirectory(path, filesystem.windows, pathSemantics)
+    return
   }
 
   const rootPath = pathSemantics.parse(path).root
@@ -254,6 +264,53 @@ function prepareUserDataDirectory(
   syncDirectory(finalParentPath, filesystem)
 }
 
+function assertWindowsTrustedDirectory(
+  inspection: ReturnType<WindowsProfileSecurity['inspectDirectory']>
+): void {
+  if (inspection !== 'trusted') {
+    throw new Error('Trusted userData directory is unavailable.')
+  }
+}
+
+function prepareWindowsUserDataDirectory(
+  path: string,
+  security: WindowsProfileSecurity | undefined,
+  pathSemantics: RuntimePathSemantics
+): void {
+  if (security == null) {
+    throw new Error('Windows profile security is unavailable.')
+  }
+  const hasProfileProtection = security.capabilities.profileProtection === 'confirmed'
+  const hasNamespaceMutation = security.capabilities.namespaceMutation === 'confirmed'
+  if (!hasProfileProtection || !hasNamespaceMutation) {
+    throw new Error('Windows profile security is unavailable.')
+  }
+
+  const rootPath = pathSemantics.parse(path).root
+  assertWindowsTrustedDirectory(security.inspectDirectory(rootPath, 'root'))
+  const paths = directoryChain(path, pathSemantics)
+  const finalPath = paths[paths.length - 1]
+  for (const currentPath of paths) {
+    const role = currentPath === finalPath ? 'final' : 'ancestor'
+    const inspection = security.inspectDirectory(currentPath, role)
+    if (inspection === 'missing') {
+      const parentPath = pathSemantics.dirname(currentPath)
+      assertWindowsTrustedDirectory(security.inspectDirectory(parentPath, 'ancestor'))
+      security.createDirectory(currentPath)
+      assertWindowsTrustedDirectory(security.inspectDirectory(currentPath, role))
+      security.syncDirectory(currentPath, role)
+      security.syncDirectory(parentPath, 'ancestor')
+      continue
+    }
+    assertWindowsTrustedDirectory(inspection)
+  }
+
+  const finalParentPath = pathSemantics.dirname(finalPath)
+  assertWindowsTrustedDirectory(security.inspectDirectory(finalParentPath, 'ancestor'))
+  security.syncDirectory(finalPath, 'final')
+  security.syncDirectory(finalParentPath, 'ancestor')
+}
+
 export function readAuthRuntimeConfig(
   environment: RuntimeEnvironment = process.env,
   pathSemantics: RuntimePathSemantics = nativeRuntimePathSemantics
@@ -306,9 +363,10 @@ export function applyAuthRuntimeProfile(
   application: AuthRuntimeProfileApplication,
   config: AuthRuntimeConfig,
   filesystem: RuntimeProfileFilesystem = nativeRuntimeProfileFilesystem,
-  pathSemantics: RuntimePathSemantics = nativeRuntimePathSemantics
+  pathSemantics: RuntimePathSemantics = nativeRuntimePathSemantics,
+  platform: NodeJS.Platform = process.platform
 ): AuthRuntimeConfig {
-  prepareUserDataDirectory(config.userDataPath, filesystem, pathSemantics)
+  prepareUserDataDirectory(config.userDataPath, filesystem, pathSemantics, platform)
   try {
     application.setPath('userData', config.userDataPath)
     const appliedUserDataPath = application.getPath('userData')

@@ -4,9 +4,22 @@ import type { EventEmitter } from 'node:events'
 import { dialog, safeStorage as electronSafeStorage, shell, type SafeStorage } from 'electron'
 import { createAuthHttpClient } from './http'
 import { createMacOsCredentialStore } from './credential-store/macos-credential-store'
-import type { AuthClock, AuthCoordinatorDependencies } from './types'
+import { createWindowsCredentialStore } from './credential-store/windows-credential-store'
+import type { AuthClock, AuthCoordinatorDependencies, CredentialStore } from './types'
 import type { AuthRuntimeConfig } from './runtime-config'
 import { createRuntimeClock, type ClockPowerState } from './runtime-clock'
+
+type RuntimeStoreOptions = Readonly<{
+  userDataPath: string
+  context: {
+    environment: string
+    apiOrigin: string
+    clientId: 'desktop'
+  }
+  safeStorage: Pick<SafeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'>
+  platform: NodeJS.Platform
+}>
+type RuntimeStoreFactory = (options: RuntimeStoreOptions) => CredentialStore
 
 type RuntimeEffectsOptions = Readonly<{
   safeStorage?: Pick<SafeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'>
@@ -16,7 +29,7 @@ type RuntimeEffectsOptions = Readonly<{
   openExternal?: (url: string) => Promise<void>
   readWallMs?: () => number
   readMonotonicMs?: () => number
-  createStore?: typeof createMacOsCredentialStore
+  createStore?: RuntimeStoreFactory
   createHttp?: typeof createAuthHttpClient
 }>
 
@@ -35,7 +48,9 @@ export function createAuthRuntimeEffects(
 ): AuthRuntimeEffects & RuntimePowerEffects {
   const safeStorage = options.safeStorage ?? electronSafeStorage
   const platform = options.platform ?? process.platform
-  const createStore = options.createStore ?? createMacOsCredentialStore
+  const createStore: RuntimeStoreFactory =
+    options.createStore ??
+    (platform === 'win32' ? createWindowsCredentialStore : createMacOsCredentialStore)
   const createHttp = options.createHttp ?? createAuthHttpClient
   const openExternal =
     options.openExternal ??

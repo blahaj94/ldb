@@ -102,6 +102,14 @@ App 시작 시 marker가 있으면 새/옛 credential을 **복호화해서 자�
 
 Atomic replacement·flush·directory durability는 Node 호출 하나의 반환만으로 모든 filesystem/power-loss에서 보장하지 않는다. 위 순서를 만족하는 OS별 구현과 fault injection이 release gate다. 지원 filesystem에서 durability를 확인할 수 없으면 조용히 flush를 생략하거나 이전 token fallback을 넣지 않고 해당 배포의 로그인 유지를 보류한다. Disk rollback/OS profile backup 복원·동일 OS user malware까지 이 marker가 방어하지 않는다. 서버 reuse 탐지와 OS별 한계를 함께 유지한다. 암호문은 userData에 존재하므로 “credential이 OS 저장소 밖에 없다”거나 secure physical erase를 보장하지 않는다.
 
+### Windows profile ACL과 namespace 경계
+
+Windows profile과 credential native boundary는 현재 process token에서 얻은 user SID만 신뢰한다. Path로부터 이름을 조회하거나 group membership을 user SID로 대체하지 않는다. 열린 handle에서 reparse point와 directory/file type을 확인하고, `GetSecurityInfo`의 owner를 `EqualSid`로 비교하며, null DACL·empty DACL·foreign owner·unknown/object/callback ACE·지원하지 않는 ACE flags/size는 거절한다. 최종 profile과 credential file은 현재 SID의 private DACL만 허용하고, 기존 ancestor는 다른 principal에 의한 namespace 위험 mask(`DELETE`, `FILE_DELETE_CHILD`, `WRITE_DAC`, `WRITE_OWNER` 및 generic write/all)를 허용하지 않는다.
+
+Missing directory는 current SID를 명시한 private security descriptor와 `bInheritHandle=false`인 security attributes로 생성한다. Credential temp file은 같은 directory에서 `CREATE_NEW`와 `FILE_FLAG_WRITE_THROUGH`로 만들고, `WriteFile`·`FlushFileBuffers` 후 같은 handle의 `SetFileInformationByHandle(FileRenameInfo)`로 교체한 뒤 같은 handle flush를 수행한다. 삭제도 검증한 handle에 `FileDispositionInfo`를 적용한다. `FlushFileBuffers`의 directory 호출이나 delete/namespace 성공은 일반 filesystem과 power-loss durability의 증거로 간주하지 않는다.
+
+이 계약을 구현한 Koffi/Win32 binding은 존재하지만, 현재 release capability는 Windows OS·선택 CPU에서의 ABI, ACL/reparse, packaged native module과 power-loss evidence가 없으므로 `unknown`이다. Windows profile capability가 `unknown` 또는 `unavailable`이면 `setPath`, name, app identity setter 전에 profile preparation이 실패하고 main은 `preparation-failed` fallback으로 간다. Profile 적용 후 credential store capability가 `unavailable`일 때만 `storageBlocked`로 fail closed한다. 선택한 target OS/CPU package에서 native variant·PE architecture와 실제 profile/credential E2E를 확인하기 전에는 Windows login persistence를 검증됐다고 표시하지 않는다.
+
 ## Protocol 및 browser launch 선택
 
 **권장: 서버의 HTTPS provider callback → 완료 HTML의 등록 private protocol 버튼 → main.** 이미 승인된 return target snapshot/code-only 흐름을 그대로 소비하며 새 listener 없이 앱을 활성화한다. 정확한 scheme/host/path는 owned namespace와 배포 identity를 확인한 후 server registry와 packaged 앱에 동일하게 등록한다. 현재 placeholder나 임의 `ldb://...`를 실제 등록값으로 간주하지 않는다.
