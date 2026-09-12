@@ -194,10 +194,12 @@ describe('Windows security native boundary', () => {
     const acePointer = koffi.address(aceData)
     const arities = new Map<string, number[]>()
     let returnInvalidHandle = false
+    let returnOutOfRangeTokenSid = false
     let failLocalFree = false
     let closeCount = 0
     let createdHandleCloseCount = 0
     const equalSidCurrentArguments: unknown[] = []
+    const getLengthSidArguments: unknown[] = []
     let handleKind: 'directory' | 'file' = 'directory'
     const record = (name: string, args: unknown[]): void => {
       const values = arities.get(name) ?? []
@@ -261,9 +263,19 @@ describe('Windows security native boundary', () => {
                 ;(args[4] as number[])[0] = tokenData.length
                 return false
               }
+              if (returnOutOfRangeTokenSid) {
+                const outOfRangePointer = koffi.address(currentSidData)
+                if (process.arch === 'ia32') {
+                  ;(args[2] as Buffer).writeUInt32LE(Number(outOfRangePointer), 0)
+                } else {
+                  ;(args[2] as Buffer).writeBigUInt64LE(outOfRangePointer, 0)
+                }
+                return true
+              }
               writeTokenUserBuffer(args[2] as Buffer, currentSidData)
               return true
             case 'GetLengthSid':
+              getLengthSidArguments.push(args[0])
               return currentSidData.length
             case 'IsValidSid':
               return true
@@ -350,6 +362,16 @@ describe('Windows security native boundary', () => {
     expect(
       equalSidCurrentArguments.every((value) => typeof value === 'object' && value != null)
     ).toBe(true)
+    expect(getLengthSidArguments.length).toBeGreaterThan(0)
+    expect(getLengthSidArguments.every((value) => typeof value === 'object' && value != null)).toBe(
+      true
+    )
+
+    const getLengthSidCallsBeforeOutOfRange = getLengthSidArguments.length
+    returnOutOfRangeTokenSid = true
+    expect(native.inspect(String.raw`C:\Users\Alice\LdbProfile`, 'directory')).toBe('unavailable')
+    expect(getLengthSidArguments.length).toBe(getLengthSidCallsBeforeOutOfRange)
+    returnOutOfRangeTokenSid = false
 
     const fileInfoCallsBeforeInvalidHandle =
       arities.get('GetFileInformationByHandleEx')?.length ?? 0

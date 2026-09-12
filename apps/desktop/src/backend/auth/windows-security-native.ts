@@ -410,6 +410,22 @@ function sidPointer(storage: WindowsSidStorage): ReturnType<typeof koffi.as> {
   return koffi.as(storage, SID) as ReturnType<typeof koffi.as>
 }
 
+function getTokenSidStorage(
+  tokenData: Buffer,
+  tokenSidAddress: WindowsNativeHandle
+): WindowsSidStorage | null {
+  const tokenDataStart = koffi.address(tokenData)
+  const tokenDataEnd = tokenDataStart + BigInt(tokenData.byteLength)
+  if (tokenSidAddress < tokenDataStart || tokenSidAddress >= tokenDataEnd) {
+    return null
+  }
+  const offset = tokenSidAddress - tokenDataStart
+  if (offset > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return null
+  }
+  return tokenData.subarray(Number(offset))
+}
+
 function sidString(data: Buffer): string | null {
   if (data.length < 8 || data[0] !== 1) {
     return null
@@ -452,17 +468,23 @@ function currentUserSid(api: WindowsApi): {
     if (!api.getTokenInformation(token[0], TOKEN_USER_CLASS, tokenData, tokenData.length, [0])) {
       throw nativeError(api)
     }
-    const tokenSidPointer = readPointer(tokenData)
+    const tokenSidAddress = readPointer(tokenData)
+    const tokenSidView = getTokenSidStorage(tokenData, tokenSidAddress)
+    if (tokenSidView == null) {
+      throw new Error('Current Windows token SID is outside the token buffer.')
+    }
+    const tokenSidPointer = sidPointer(tokenSidView)
     const sidLength = api.getLengthSid(tokenSidPointer)
     if (
-      tokenSidPointer === 0n ||
+      !Number.isSafeInteger(sidLength) ||
       sidLength < 8 ||
       sidLength > MAX_SID_SIZE ||
+      sidLength > tokenSidView.byteLength ||
       !api.isValidSid(tokenSidPointer)
     ) {
       throw new Error('Current Windows token SID is invalid.')
     }
-    const storage = Buffer.from(koffi.decode(tokenSidPointer, 'uint8_t', sidLength))
+    const storage = Buffer.from(tokenSidView.subarray(0, sidLength))
     const ownedSid = sidPointer(storage)
     if (!api.isValidSid(ownedSid)) {
       throw new Error('Copied Windows token SID is invalid.')
