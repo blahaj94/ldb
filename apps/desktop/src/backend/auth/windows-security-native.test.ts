@@ -426,6 +426,15 @@ describe('Windows security native boundary', () => {
     )
     expect(arities.get('GetSecurityInfo')?.length ?? 0).toBe(securityInfoCallsBeforeInvalidHandle)
     expect(closeCount).toBe(closeCallsBeforeInvalidHandle)
+    const fileInfoCallsBeforeInvalidOpen = arities.get('GetFileInformationByHandleEx')?.length ?? 0
+    const securityInfoCallsBeforeInvalidOpen = arities.get('GetSecurityInfo')?.length ?? 0
+    const closeCallsBeforeInvalidOpen = closeCount
+    expect(() => native.openRead(String.raw`C:\Users\Alice\LdbProfile\invalid`)).toThrow()
+    expect(arities.get('GetFileInformationByHandleEx')?.length ?? 0).toBe(
+      fileInfoCallsBeforeInvalidOpen
+    )
+    expect(arities.get('GetSecurityInfo')?.length ?? 0).toBe(securityInfoCallsBeforeInvalidOpen)
+    expect(closeCount).toBe(closeCallsBeforeInvalidOpen)
     handleMode = 'normal'
     lastError = ERROR_INSUFFICIENT_BUFFER
     const closeCallsBeforeLocalFreeFailure = closeCount
