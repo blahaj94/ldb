@@ -3,7 +3,7 @@ type: rule
 status: active
 enforcement: approval-required
 scope: repository
-last-reviewed: 2026-09-07
+last-reviewed: 2026-09-12
 ---
 
 # LDB Document Guide
@@ -30,45 +30,40 @@ AI는 사용자가 요청하거나 실행을 허용한 범위에서 Rule 변경�
 
 ## Reading route
 
-아래 역할별 시작점과 연결된 읽기·출력·인계·기록 기준은 [PR #99의 사용자 승인](https://github.com/blahaj94/ldb/pull/99#issuecomment-5559860989)과 merge를 반영한 active Rule이다. 기존 active Rule의 승인 상태와 의무는 유지하며, 이후 변경의 승인은 [`change-control.md`](rules/change-control.md#approval-evidence)를 따른다.
+읽기·출력·인계·기록 기준의 기존 근거는 [PR #99의 사용자 승인](https://github.com/blahaj94/ldb/pull/99#issuecomment-5559860989)과 merge다. 단독 직접 수행, Runner와 검증 재사용의 근거는 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)에 보존한다. 해당 수행 조건과 재검토 기준은 [`agent-workflow.md`](rules/agent-workflow.md#수행-모드-선택)에 있다.
+
+아래 작업별 읽기 안내와 `AGENTS.md`, `code-quality.md`의 연결 변경은 [Issue #438](https://github.com/blahaj94/ldb/issues/438)의 채택 범위다. 이를 포함한 PR의 사용자 merge 후 적용하며, 기존 승인과 실행 의무는 유지한다. 승인 절차는 [`change-control.md`](rules/change-control.md#approval-evidence)를 따른다.
 
 ```yaml
 status: active
 enforcement: approval-required
-rationale: 역할에 필요한 context부터 확인하고 재독·출력·인계·기록의 중복 비용을 줄인다.
-evidence: "https://github.com/blahaj94/ldb/pull/99#issuecomment-5559860989"
+rationale: 역할마다 반복된 문서 목록 대신 현재 판단에 필요한 본문을 선택해 사전 읽기 비용을 줄인다.
+evidence: "https://github.com/blahaj94/ldb/issues/438#issuecomment-5646425943"
 exceptions: 적용되는 Rule·AC·승인·보안·검증 의무는 생략하지 않고 불확실하면 관련 본문을 확인한다.
-review-after: 승인 후 서로 다른 역할의 Execution Issue 3개에서 누락과 재독·인계 비용을 확인한다.
+review-after: merge 후 문서 수정, 코드 수정, 리뷰 작업에서 누락과 불필요한 읽기를 각각 확인한다. 관측하지 못한 유형은 검증됐다고 간주하지 않는다.
 ```
 
 ### 역할별 시작점
 
-Project의 목표나 내부 작업을 지정받았으면 [`목표별 계획과 작업 착수`](rules/task-planning.md)의 승인 상태와 진입 절차를 먼저 확인한다. 개발 착수 시 현재 Execution Issue contract를 확인한 뒤 아래 문서·절에서 시작한다. 이어서 작업 topic과 path에 적용되는 Rule 본문을 확인한다. 시작점은 읽기의 순서이며 적용되는 의무의 상한이 아니다. 동일 revision의 재확인 조건은 [`AGENTS.md`](../AGENTS.md#context), 조회 범위와 출력 제한은 [`Context budget`](rules/code-quality.md#context-budget)을 따른다.
+역할에 고정된 읽기 순서 대신 현재 작업에 해당하는 행에서 필요한 절을 선택한다. 현재 Issue contract와 변경 대상이 출발점이며, 여러 조건이 겹치면 각 조건에 적용되는 본문을 함께 확인한다. 동일 revision의 재확인 조건은 [`AGENTS.md`](../AGENTS.md#context), 조회 범위와 출력 제한은 [`Context budget`](rules/code-quality.md#context-budget)을 따른다.
 
-| 역할·작업 | 시작 문서·절 |
+| 현재 필요한 판단 | 읽을 문서와 범위 |
 | --- | --- |
-| 목표 논의와 Project 작업 선택 | [`task-planning.md`](rules/task-planning.md)의 기록별 책임·Project의 크기와 범위·사용자의 실행 지시에서 PR까지. 실행 Issue가 정해지면 아래 해당 역할 route로 이어간다. |
-| Planner | [`agent-workflow.md`](rules/agent-workflow.md)의 역할과 단일 책임·Execution Issue·Planning과 model tier·Escalation, [`change-control.md`](rules/change-control.md)의 Approval required·Approval evidence·Issue and preflight. 배정할 때 [`agent-execution.md`](rules/agent-execution.md)의 Worker roster와 상태·배정 절차·병렬 가능성·Handoff와 context |
-| 단독 직접 수행 parent | [`agent-workflow.md`의 수행 모드 선택](rules/agent-workflow.md#수행-모드-선택)과 [Code Worker runtime mapping](rules/agent-workflow.md#code-worker-runtime-mapping), [`agent-execution.md`의 수행 모드와 소유권](rules/agent-execution.md#수행-모드와-소유권). 이어서 아래 Code Worker 또는 Code 없는 문서 작업 route의 해당 의무 확인 |
-| 실행 전담 Runner | 현재 실행 packet과 [`agent-runner.md`](rules/agent-runner.md)의 범위와 권한·실행 packet·실행·대기·취소·재시도·고정 결과 형식, [`agent-execution.md`의 실행 보조 기록](rules/agent-execution.md#실행-보조-기록). 판단 owner는 [`testing.md`의 검증 evidence 재사용](rules/testing.md#검증-evidence-재사용) 확인 |
-| Code Worker | [`agent-workflow.md`](rules/agent-workflow.md)의 [Worker](rules/agent-workflow.md#worker)·[Code Worker runtime mapping](rules/agent-workflow.md#code-worker-runtime-mapping)·[Escalation](rules/agent-workflow.md#escalation), [`convention.md`](../convention.md#읽기-안내)의 적용 범위·규칙 본문, [`change-control.md`](rules/change-control.md)의 Approval required·Approval evidence·Issue and preflight·Branch, worktree, and parallel work·Commit and PR order, [`testing.md`](rules/testing.md)의 Red-Green workflow·Required evidence·Test integrity·Validation, [`code-quality.md`](rules/code-quality.md)의 Logic budget·Maintainability·Context budget. 배정·인계에는 [`agent-execution.md`](rules/agent-execution.md)의 해당 절 |
-| Code 없는 문서 작업 | 이 문서의 Document class·Document maintenance, [`change-control.md`](rules/change-control.md)의 승인·preflight·branch·commit·PR 절, 변경 대상의 Rule 본문과 [`code-quality.md`](rules/code-quality.md)의 Context budget. Rule 변경안을 작성할 때 [Experimental Rule lifecycle](rules/code-quality.md#experimental-rule-lifecycle) 확인. `convention.md` 전문은 필요하지 않으며 code 예시를 수정하면 해당 작성 기준 확인 |
-| Read-only Reviewer | Issue AC·통합 diff·validation evidence·짧은 Worker summary와 diff에 적용되는 Rule 본문, [`agent-workflow.md`](rules/agent-workflow.md)의 Reviewer·Escalation. Code review는 [`convention.md`](../convention.md#review에서-확인할-것)의 checklist에서 해당 규칙 본문으로 확장하고 [`change-control.md`](rules/change-control.md)의 승인 기준·[`testing.md`](rules/testing.md)의 evidence·integrity·validation 기준 확인 |
-| 통합 담당 | 채택할 result·base·diff·validation evidence, [`agent-execution.md`](rules/agent-execution.md)의 Branch와 통합·진행, 대기와 완료·PR handoff, [`change-control.md`](rules/change-control.md)의 Branch, worktree, and parallel work·Commit and PR order와 [`testing.md`](rules/testing.md)의 Validation |
+| Project 목표나 작업을 실행 Issue로 연결 | [`task-planning.md`](rules/task-planning.md)의 해당 목표 선택·착수 절 |
+| 작업 착수, 변경 승인, branch와 PR 준비 | [`change-control.md`](rules/change-control.md)의 승인·Issue/preflight·branch/worktree·commit/PR 절 |
+| 역할과 수행 모드 선택, 배정·인계·통합 | [`agent-workflow.md`](rules/agent-workflow.md)의 해당 역할·수행 모드·Escalation, [`agent-execution.md`](rules/agent-execution.md)의 해당 소유권·배정·인계·통합 절. 실행 전담 Runner는 [`agent-runner.md`](rules/agent-runner.md) |
+| 코드 작성·수정 | [`convention.md`](../convention.md#읽기-안내)의 적용 본문, [`testing.md`](rules/testing.md)의 Red-Green·evidence·integrity·validation, [`code-quality.md`](rules/code-quality.md)의 logic budget·유지보수성. 승인과 runtime 조건은 위 착수·역할 행과 아래 topic에서 확인 |
+| 코드 없는 문서 변경 | 이 문서의 [Document class](#document-class)·[Document maintenance](#document-maintenance)와 변경 대상 Rule 본문. Rule 변경안은 [Experimental Rule lifecycle](rules/code-quality.md#experimental-rule-lifecycle). Code 예시를 수정할 때만 해당 convention 확인 |
+| 읽기 전용 리뷰 | Issue AC, 통합 diff, validation evidence와 짧은 Worker 결과를 기준으로 적용 Rule 확인. [`Reviewer`](rules/agent-workflow.md#reviewer)·[`Escalation`](rules/agent-workflow.md#escalation), 코드 리뷰는 [`convention.md`](../convention.md#review에서-확인할-것)의 해당 본문과 승인·testing 기준 확인 |
 
-단독 직접 수행·Runner route와 검증 재사용은 [PR #106의 사용자 승인](https://github.com/blahaj94/ldb/pull/106#issuecomment-5561177716)을 반영한다. 수행 조건은 [`수행 모드 선택`](rules/agent-workflow.md#수행-모드-선택)을, 재검토는 [`실행 효율 계약의 재검토`](rules/agent-workflow.md#실행-효율-계약의-재검토)를 따른다.
-
-Code 작성·수정에서는 적용되는 convention 본문, approval boundary와 testing 의무를 모두 확인한다. Code 예시는 의미가 불명확하거나 해당 pattern을 다룰 때 읽으며 관련 없는 운영 절은 그 역할·작업을 맡을 때 확장한다. Read-only Reviewer가 수정을 맡으면 먼저 Worker 배정과 해당 작성 route를 따른다.
+읽기 전용 Reviewer가 수정을 맡으면 먼저 Worker 배정과 해당 작성 기준을 확인한다. 문서 작업도 착수·승인·worktree·검증 의무를 따르며, 관련 없는 코드 예시나 운영 절을 미리 읽지 않는다.
 
 ### Topic별 확장
 
 | 작업                             | Required document                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
-| Code 작성·수정·review       | 위 역할별 시작점과 [`convention.md`](../convention.md#읽기-안내)에 따라 `change-control.md`, `testing.md`, `code-quality.md`의 적용 본문 확인 |
 | 코드 단계·문자열·분기·체인·함수 입력 작성·검토 | [`rules/code-expression.md`](rules/code-expression.md). PR #146의 승인·merge를 반영한 active Rule |
 | Web·Desktop UI의 SEED 기준·공용 자산·Example·시각 검증 | [`rules/design-system.md`](rules/design-system.md); package·peer·CSS 책임은 [`Shared UI boundary`](architecture/overview.md#shared-ui-boundary) |
-| 큰 작업 분해와 역할·Issue contract | `docs/rules/agent-workflow.md`                                                       |
-| Worker 배정·상태·handoff·통합   | `docs/rules/agent-execution.md`                                                       |
 | app 또는 package boundary 변경   | `docs/architecture/overview.md`                                                       |
 | 공통 로직 재사용, 자체 구현 또는 공통 package 분리 판단 | [코드 재사용과 공통 패키지 분리 기준](rules/code-reuse.md), 개별 변경의 승인은 `change-control.md` |
 | 실행 command 또는 file 위치 확인 | `docs/reference/repository-map.md`                                                    |
