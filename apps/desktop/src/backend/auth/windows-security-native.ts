@@ -427,6 +427,8 @@ function currentUserSid(api: WindowsApi): {
   if (!api.openProcessToken(processHandle, TOKEN_QUERY, token) || token[0] == null) {
     throw nativeError(api)
   }
+  let result: { pointer: WindowsNativePointer; sddl: string; storage: Buffer } | null = null
+  let closeFailed = false
   try {
     const requiredLength = [0]
     api.getTokenInformation(token[0], TOKEN_USER_CLASS, null, 0, requiredLength)
@@ -456,12 +458,17 @@ function currentUserSid(api: WindowsApi): {
     }
     // The token buffer owns the SID pointer. Keep that ownership attached to
     // the returned value until all EqualSid/ACL checks have completed.
-    return { pointer: sidPointer, sddl: stringSid, storage: tokenData }
+    result = { pointer: sidPointer, sddl: stringSid, storage: tokenData }
   } finally {
-    if (!api.closeHandle(token[0])) {
-      throw nativeError(api)
-    }
+    closeFailed = !api.closeHandle(token[0])
   }
+  if (closeFailed) {
+    throw nativeError(api)
+  }
+  if (result == null) {
+    throw new Error('Current Windows token SID is unavailable.')
+  }
+  return result
 }
 
 function isSecureDacl(
@@ -590,16 +597,20 @@ function inspectHandle(
   if (securityResult !== ERROR_SUCCESS || descriptor[0] == null) {
     return 'unavailable'
   }
+  let inspection: WindowsNativePathInspection = 'unavailable'
+  let releaseFailed = false
   try {
     const currentSid = currentUserSid(api)
-    return isSecureDacl(api, descriptor[0], owner[0], currentSid.pointer, policy)
+    inspection = isSecureDacl(api, descriptor[0], owner[0], currentSid.pointer, policy)
       ? 'trusted'
       : 'untrusted'
   } finally {
-    if (api.localFree(descriptor[0]) != null) {
-      throw new Error('Windows security descriptor could not be released.')
-    }
+    releaseFailed = api.localFree(descriptor[0]) != null
   }
+  if (releaseFailed) {
+    throw new Error('Windows security descriptor could not be released.')
+  }
+  return inspection
 }
 
 function inspectPath(
@@ -704,21 +715,30 @@ export function createWindowsSecurityNative(
     createDirectory: (path) => {
       const currentApi = nativeApi()
       const attributes = privateSecurityAttributes(currentApi)
+      let result: 'created' | 'already-exists' | null = null
+      let releaseFailed = false
       try {
         const created = currentApi.createDirectory(path, attributes.value)
         if (created) {
-          return 'created'
+          result = 'created'
+        } else {
+          const errorCode = currentApi.getLastError()
+          if (errorCode === ERROR_ALREADY_EXISTS || errorCode === ERROR_FILE_EXISTS) {
+            result = 'already-exists'
+          } else {
+            throw nativeError(currentApi)
+          }
         }
-        const errorCode = currentApi.getLastError()
-        if (errorCode === ERROR_ALREADY_EXISTS || errorCode === ERROR_FILE_EXISTS) {
-          return 'already-exists'
-        }
-        throw nativeError(currentApi)
       } finally {
-        if (currentApi.localFree(attributes.descriptor) != null) {
-          throw new Error('Windows security descriptor could not be released.')
-        }
+        releaseFailed = currentApi.localFree(attributes.descriptor) != null
       }
+      if (releaseFailed) {
+        throw new Error('Windows security descriptor could not be released.')
+      }
+      if (result == null) {
+        throw new Error('Windows directory creation result is unavailable.')
+      }
+      return result
     },
     openRead: (path) => {
       const currentApi = nativeApi()
@@ -747,6 +767,8 @@ export function createWindowsSecurityNative(
       const attributes = privateSecurityAttributes(currentApi)
       let createdHandle: WindowsNativeHandle | null = null
       let handleIsOpen = false
+      let releaseFailed = false
+      let result: WindowsNativeHandle | null = null
       try {
         const handle = currentApi.createFile(
           path,
@@ -769,15 +791,20 @@ export function createWindowsSecurityNative(
           currentApi.closeHandle(handle)
           throw error
         }
-        return handle
+        result = handle
       } finally {
-        if (currentApi.localFree(attributes.descriptor) != null) {
-          if (handleIsOpen && createdHandle != null) {
-            currentApi.closeHandle(createdHandle)
-          }
-          throw new Error('Windows security descriptor could not be released.')
-        }
+        releaseFailed = currentApi.localFree(attributes.descriptor) != null
       }
+      if (releaseFailed) {
+        if (handleIsOpen && createdHandle != null) {
+          currentApi.closeHandle(createdHandle)
+        }
+        throw new Error('Windows security descriptor could not be released.')
+      }
+      if (result == null) {
+        throw new Error('Windows exclusive file handle is unavailable.')
+      }
+      return result
     },
     remove: (path) => {
       const currentApi = nativeApi()
@@ -793,6 +820,7 @@ export function createWindowsSecurityNative(
       if (isInvalidHandle(handle)) {
         throw nativeError(currentApi)
       }
+      let closeFailed = false
       try {
         assertTrustedHandle(currentApi, handle, 'file', 'private')
         const disposition = Buffer.from([1])
@@ -807,9 +835,10 @@ export function createWindowsSecurityNative(
           throw nativeError(currentApi)
         }
       } finally {
-        if (!currentApi.closeHandle(handle)) {
-          throw nativeError(currentApi)
-        }
+        closeFailed = !currentApi.closeHandle(handle)
+      }
+      if (closeFailed) {
+        throw nativeError(currentApi)
       }
     },
     syncDirectory: (path, policy = 'private') => {
@@ -826,15 +855,17 @@ export function createWindowsSecurityNative(
       if (isInvalidHandle(handle)) {
         throw nativeError(currentApi)
       }
+      let closeFailed = false
       try {
         assertTrustedHandle(currentApi, handle, 'directory', policy)
         if (!currentApi.flushFileBuffers(handle)) {
           throw nativeError(currentApi)
         }
       } finally {
-        if (!currentApi.closeHandle(handle)) {
-          throw nativeError(currentApi)
-        }
+        closeFailed = !currentApi.closeHandle(handle)
+      }
+      if (closeFailed) {
+        throw nativeError(currentApi)
       }
     },
     closeHandle: (handle) => nativeApi().closeHandle(handle),

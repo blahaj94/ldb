@@ -11,6 +11,9 @@ const FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 const FILE_ALL_ACCESS = 0x001f01ff
 const DELETE_ACCESS = 0x00010000
 const ERROR_INSUFFICIENT_BUFFER = 122
+type TestWindowsLibrary = Readonly<{
+  func(...args: unknown[]): (...runtimeArgs: unknown[]) => unknown
+}>
 
 type SecurityFixture = {
   api: WindowsSecurityApi
@@ -143,7 +146,7 @@ function createSecurityFixture(): SecurityFixture {
 describe('Windows security native boundary', () => {
   it('binds the complete Win32 call signatures required by the adapter', () => {
     const declarations: Array<{ library: string; name: string; args: unknown[] }> = []
-    const loader = (library: string) => ({
+    const loader = (library: string): TestWindowsLibrary => ({
       func: (...args: unknown[]) => {
         declarations.push({ library, name: String(args[1]), args })
         return (() => undefined) as (...runtimeArgs: unknown[]) => unknown
@@ -189,7 +192,7 @@ describe('Windows security native boundary', () => {
       values.push(args.length)
       arities.set(name, values)
     }
-    const loader = (library: string) => ({
+    const loader = (library: string): TestWindowsLibrary => ({
       func: (...definition: unknown[]) => {
         const name = String(definition[1])
         return (...args: unknown[]): unknown => {

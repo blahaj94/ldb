@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { clearCredential } from '../credential-operations'
+import type { CredentialStore } from '../types'
 import { CONTEXT, REFRESH_0, REFRESH_1 } from './credential-store-test-fixture'
 import {
   createWindowsCredentialStore,
@@ -94,7 +95,8 @@ function createWindowsFixture(): WindowsFixture {
     list: vi.fn(async () =>
       [...stores.keys()]
         .filter((path) => path.startsWith(`${DIRECTORY}\\`))
-        .map((path) => path.slice(`${DIRECTORY}\\`.length))),
+        .map((path) => path.slice(`${DIRECTORY}\\`.length))
+    ),
     openRead: vi.fn(async (path) => createHandle(path, stores, state)),
     createExclusive: vi.fn(async (path) => {
       if (stores.has(path)) {
@@ -140,7 +142,7 @@ function createWindowsFixture(): WindowsFixture {
 function createStore(
   fixture: WindowsFixture,
   overrides: Partial<WindowsCredentialStoreOptions> = {}
-) {
+): CredentialStore {
   return createWindowsCredentialStore({
     userDataPath: fixture.paths.userData,
     context: CONTEXT,

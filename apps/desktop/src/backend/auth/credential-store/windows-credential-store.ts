@@ -14,7 +14,9 @@ export type WindowsCredentialStoreOptions = Readonly<{
   platform?: NodeJS.Platform
 }>
 
-export function createWindowsCredentialStore(options: WindowsCredentialStoreOptions): CredentialStore {
+export function createWindowsCredentialStore(
+  options: WindowsCredentialStoreOptions
+): CredentialStore {
   const isWindows = (options.platform ?? process.platform) === 'win32'
   if (!isWindows) {
     return createUnavailableCredentialStore()

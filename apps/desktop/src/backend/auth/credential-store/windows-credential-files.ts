@@ -77,11 +77,7 @@ export class WindowsCredentialFiles implements CredentialFileOperations {
 
   async prepare(): Promise<void> {
     assertUsableCapabilities(this.native.capabilities)
-    for (const path of [
-      this.userDataPath,
-      join(this.userDataPath, 'auth'),
-      this.directory
-    ]) {
+    for (const path of [this.userDataPath, join(this.userDataPath, 'auth'), this.directory]) {
       const inspection = await this.native.inspect(path, 'directory')
       if (inspection.status === 'missing') {
         await this.native.createDirectory(path)
