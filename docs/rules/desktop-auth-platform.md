@@ -108,7 +108,7 @@ Windows profile과 credential native boundary는 현재 process token에서 얻�
 
 Missing directory는 current SID를 명시한 private security descriptor와 `bInheritHandle=false`인 security attributes로 생성한다. Credential temp file은 같은 directory에서 `CREATE_NEW`와 `FILE_FLAG_WRITE_THROUGH`로 만들고, `WriteFile`·`FlushFileBuffers` 후 같은 handle의 `SetFileInformationByHandle(FileRenameInfo)`로 교체한 뒤 같은 handle flush를 수행한다. 삭제도 검증한 handle에 `FileDispositionInfo`를 적용한다. `FlushFileBuffers`의 directory 호출이나 delete/namespace 성공은 일반 filesystem과 power-loss durability의 증거로 간주하지 않는다.
 
-이 계약을 구현한 Koffi/Win32 binding은 존재하지만, 현재 release capability는 Windows OS·선택 CPU에서의 ABI, ACL/reparse, packaged native module과 power-loss evidence가 없으므로 `unknown`이다. `unknown` 또는 `unavailable`이면 profile side effect, safeStorage, network mutation 전에 `storageBlocked`로 fail closed한다. 선택한 target OS/CPU package에서 native variant·PE architecture와 실제 profile/credential E2E를 확인하기 전에는 Windows login persistence를 검증됐다고 표시하지 않는다.
+이 계약을 구현한 Koffi/Win32 binding은 존재하지만, 현재 release capability는 Windows OS·선택 CPU에서의 ABI, ACL/reparse, packaged native module과 power-loss evidence가 없으므로 `unknown`이다. Windows profile capability가 `unknown` 또는 `unavailable`이면 `setPath`, name, app identity setter 전에 profile preparation이 실패하고 main은 `preparation-failed` fallback으로 간다. Profile 적용 후 credential store capability가 `unavailable`일 때만 `storageBlocked`로 fail closed한다. 선택한 target OS/CPU package에서 native variant·PE architecture와 실제 profile/credential E2E를 확인하기 전에는 Windows login persistence를 검증됐다고 표시하지 않는다.
 
 ## Protocol 및 browser launch 선택
 

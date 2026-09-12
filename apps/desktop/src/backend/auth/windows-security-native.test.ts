@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createWindowsSecurityApiForTesting,
   createWindowsSecurityNative,
+  getWindowsSecurityBindingContractForTesting,
   type WindowsSecurityApi
 } from './windows-security-native'
 
@@ -14,6 +15,18 @@ const ERROR_INSUFFICIENT_BUFFER = 122
 type TestWindowsLibrary = Readonly<{
   func(...args: unknown[]): (...runtimeArgs: unknown[]) => unknown
 }>
+
+function writeTokenUserBuffer(target: Buffer, sidData: Buffer): void {
+  const sidOffset = process.arch === 'ia32' ? 4 : 8
+  target.fill(0)
+  sidData.copy(target, sidOffset)
+  const sidPointer = koffi.address(target.subarray(sidOffset, sidOffset + sidData.length))
+  if (process.arch === 'ia32') {
+    target.writeUInt32LE(Number(sidPointer), 0)
+  } else {
+    target.writeBigUInt64LE(sidPointer, 0)
+  }
+}
 
 type SecurityFixture = {
   api: WindowsSecurityApi
@@ -36,14 +49,13 @@ function createSecurityFixture(): SecurityFixture {
   const otherSidData = Buffer.from([
     1, 4, 0, 0, 0, 0, 0, 5, 21, 0, 0, 0, 52, 0, 0, 0, 53, 0, 0, 0, 54, 0, 0, 0
   ])
-  const currentSidPointer = koffi.address(currentSidData)
   const otherSidPointer = koffi.address(otherSidData)
-  const tokenData = Buffer.alloc(process.arch === 'ia32' ? 4 : 8)
-  if (process.arch === 'ia32') {
-    tokenData.writeUInt32LE(Number(currentSidPointer), 0)
-  } else {
-    tokenData.writeBigUInt64LE(currentSidPointer, 0)
-  }
+  const sidOffset = process.arch === 'ia32' ? 4 : 8
+  const tokenData = Buffer.alloc(sidOffset + currentSidData.length)
+  writeTokenUserBuffer(tokenData, currentSidData)
+  const currentSidPointer = koffi.address(
+    tokenData.subarray(sidOffset, sidOffset + currentSidData.length)
+  )
   let attributes = FILE_ATTRIBUTE_DIRECTORY
   let daclPresent = 1
   let aceCount = 1
@@ -91,7 +103,7 @@ function createSecurityFixture(): SecurityFixture {
         returnLength[0] = tokenData.length
         return false
       }
-      tokenData.copy(data)
+      writeTokenUserBuffer(data, currentSidData)
       return true
     },
     getAclInformation: (_dacl, information) => {
@@ -104,13 +116,11 @@ function createSecurityFixture(): SecurityFixture {
     },
     isValidSid: () => true,
     equalSid: (left, right) => {
-      if (left === currentSidPointer && right === currentSidPointer) {
-        return true
-      }
-      if (left === otherSidPointer && right === currentSidPointer) {
+      const currentSidCast = typeof right === 'object' && right != null
+      if (left === currentSidPointer && currentSidCast) {
         return ownerIsCurrent
       }
-      return aceIsCurrent && left !== currentSidPointer && right === currentSidPointer
+      return typeof left === 'object' && left != null && currentSidCast && aceIsCurrent
     },
     localFree: () => null,
     openProcessToken: (_process, _access, token) => {
@@ -163,19 +173,19 @@ describe('Windows security native boundary', () => {
     expect(declaration('ReadFile')[3]).toHaveLength(5)
     expect(declaration('WriteFile')[3]).toHaveLength(5)
     expect(declaration('SetFileInformationByHandle')[3]).toHaveLength(4)
+    expect(getWindowsSecurityBindingContractForTesting().getAceOutputTypeName).toMatch(/\*\*$/)
   })
 
   it('routes adapter calls through a strict fake DLL with required NULLs and sizes', () => {
     const currentSidData = Buffer.from([
       1, 4, 0, 0, 0, 0, 0, 5, 21, 0, 0, 0, 42, 0, 0, 0, 43, 0, 0, 0, 44, 0, 0, 0
     ])
-    const currentSidPointer = koffi.address(currentSidData)
-    const tokenData = Buffer.alloc(process.arch === 'ia32' ? 4 : 8)
-    if (process.arch === 'ia32') {
-      tokenData.writeUInt32LE(Number(currentSidPointer), 0)
-    } else {
-      tokenData.writeBigUInt64LE(currentSidPointer, 0)
-    }
+    const sidOffset = process.arch === 'ia32' ? 4 : 8
+    const tokenData = Buffer.alloc(sidOffset + currentSidData.length)
+    writeTokenUserBuffer(tokenData, currentSidData)
+    const currentSidPointer = koffi.address(
+      tokenData.subarray(sidOffset, sidOffset + currentSidData.length)
+    )
     const aceData = Buffer.alloc(8 + currentSidData.length)
     aceData[0] = 0
     aceData.writeUInt16LE(aceData.length, 2)
@@ -186,6 +196,8 @@ describe('Windows security native boundary', () => {
     let returnInvalidHandle = false
     let failLocalFree = false
     let closeCount = 0
+    let createdHandleCloseCount = 0
+    const equalSidCurrentArguments: unknown[] = []
     let handleKind: 'directory' | 'file' = 'directory'
     const record = (name: string, args: unknown[]): void => {
       const values = arities.get(name) ?? []
@@ -213,6 +225,9 @@ describe('Windows security native boundary', () => {
           switch (name) {
             case 'CloseHandle':
               closeCount += 1
+              if (args[0] === 103n) {
+                createdHandleCloseCount += 1
+              }
               return true
             case 'CreateFileW':
               if (args[6] !== null) {
@@ -246,14 +261,20 @@ describe('Windows security native boundary', () => {
                 ;(args[4] as number[])[0] = tokenData.length
                 return false
               }
-              tokenData.copy(args[2] as Buffer)
+              writeTokenUserBuffer(args[2] as Buffer, currentSidData)
               return true
             case 'GetLengthSid':
               return currentSidData.length
             case 'IsValidSid':
               return true
             case 'EqualSid':
-              return args[0] === currentSidPointer || args[1] === currentSidPointer
+              equalSidCurrentArguments.push(args[1])
+              return (
+                (args[0] === currentSidPointer ||
+                  (typeof args[0] === 'object' && args[0] != null)) &&
+                typeof args[1] === 'object' &&
+                args[1] != null
+              )
             case 'GetSecurityDescriptorDacl':
               ;(args[1] as number[])[0] = 1
               ;(args[2] as Array<unknown>)[0] = 102n
@@ -271,7 +292,7 @@ describe('Windows security native boundary', () => {
               ;(args[2] as Array<unknown>)[0] = 105n
               return true
             case 'LocalFree':
-              return failLocalFree ? 106n : null
+              return failLocalFree && args[0] === 107n ? 106n : null
             case 'ConvertStringSecurityDescriptorToSecurityDescriptorW':
               ;(args[2] as Array<unknown>)[0] = 107n
               return true
@@ -325,15 +346,31 @@ describe('Windows security native boundary', () => {
     expect(arities.get('ReadFile')?.every((arity) => arity === 5)).toBe(true)
     expect(arities.get('WriteFile')?.every((arity) => arity === 5)).toBe(true)
     expect(arities.get('SetFileInformationByHandle')?.every((arity) => arity === 4)).toBe(true)
+    expect(equalSidCurrentArguments.length).toBeGreaterThan(0)
+    expect(
+      equalSidCurrentArguments.every((value) => typeof value === 'object' && value != null)
+    ).toBe(true)
 
+    const fileInfoCallsBeforeInvalidHandle =
+      arities.get('GetFileInformationByHandleEx')?.length ?? 0
+    const securityInfoCallsBeforeInvalidHandle = arities.get('GetSecurityInfo')?.length ?? 0
+    const closeCallsBeforeInvalidHandle = closeCount
     returnInvalidHandle = true
     expect(() => native.openRead(String.raw`C:\Users\Alice\LdbProfile\missing`)).toThrow()
+    expect(arities.get('GetFileInformationByHandleEx')?.length ?? 0).toBe(
+      fileInfoCallsBeforeInvalidHandle
+    )
+    expect(arities.get('GetSecurityInfo')?.length ?? 0).toBe(securityInfoCallsBeforeInvalidHandle)
+    expect(closeCount).toBe(closeCallsBeforeInvalidHandle)
     returnInvalidHandle = false
+    const closeCallsBeforeLocalFreeFailure = closeCount
+    const createdHandleCloseCallsBeforeLocalFreeFailure = createdHandleCloseCount
     failLocalFree = true
     expect(() =>
       native.createExclusive(String.raw`C:\Users\Alice\LdbProfile\cleanup.tmp`)
     ).toThrow()
-    expect(closeCount).toBeGreaterThan(2)
+    expect(closeCount).toBe(closeCallsBeforeLocalFreeFailure + 3)
+    expect(createdHandleCloseCount).toBe(createdHandleCloseCallsBeforeLocalFreeFailure + 1)
   })
 
   it.each([
@@ -366,5 +403,15 @@ describe('Windows security native boundary', () => {
 
     fixture.set({ attributes: FILE_ATTRIBUTE_DIRECTORY })
     expect(native.inspect(String.raw`C:\Users\Alice\LdbProfile`, 'file')).toBe('untrusted')
+  })
+
+  it('does not trust an ancestor ACL owned by a foreign SID', () => {
+    const fixture = createSecurityFixture()
+    fixture.set({ ownerIsCurrent: false })
+    const native = createWindowsSecurityNative({ api: fixture.api })
+
+    expect(native.inspect(String.raw`C:\Users\Alice\LdbProfile`, 'directory', 'ancestor')).toBe(
+      'untrusted'
+    )
   })
 })

@@ -2,7 +2,7 @@
 type: reference
 status: active
 enforcement: autonomous
-scope: desktop macOS credential adapter and isolated validation
+scope: desktop macOS and Windows credential adapters and isolated validation
 last-reviewed: 2026-09-12
 ---
 
@@ -10,13 +10,11 @@ last-reviewed: 2026-09-12
 
 `apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`와 `windows-credential-store.ts`의 adapter는 공통 `CredentialStore` protocol을 구현한다. 제품 main은 완전하고 유효한 trusted runtime 설정이 있을 때 OS adapter를 auth HTTP, coordinator와 같은 tuple로 구성한다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
 
-Main은 Electron에 적용·read-back 확인한 trusted config 하나를 bootstrap에 전달한다. Runtime effects의 `createDependencies(config)`가 그 config의 `userDataPath`, `environment`, exact HTTPS `apiOrigin`으로 store context를 만들고 기본 Electron `safeStorage`와 함께 adapter에 전달한다. Context의 `clientId`는 `"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. Runtime 값은 renderer가 아니라 process 설정에서만 읽지만, 실제 dev/test/prod 값과 package 주입은 현재 `electron-builder.yml`에 고정되어 있지 않다. 현재 builder identity도 배포용 trusted tuple로 확정한 값이 아니다. 제품 composition entry는 OS allowlist 없이 실행되지만 현재 credential 구현은 macOS 전용이다. 기본 host가 macOS가 아니면 암호화·파일 작업 전에 `unavailable`을 반환하고 coordinator가 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`로 끝낸다. 이를 Windows/Linux 지원 성공으로 해석하지 않는다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
-
-현재 Windows adapter도 composition에 연결되어 있지만 native capability는 ACL/SID, selected OS/CPU ABI, packaged native module, namespace durability evidence가 없어서 `unknown`으로 닫혀 있다. Windows에서 profile 또는 credential file을 안전하다고 확인하기 전에는 safeStorage·network mutation에 도달하지 않고 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`을 반환한다. Windows boundary dependency는 `koffi` **3.2.1**이다.
+Main은 Electron에 적용·read-back 확인한 trusted config 하나를 bootstrap에 전달한다. Runtime effects의 `createDependencies(config)`가 그 config의 `userDataPath`, `environment`, exact HTTPS `apiOrigin`으로 store context를 만들고 기본 Electron `safeStorage`와 함께 OS adapter에 전달한다. Context의 `clientId`는 `"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. Runtime 값은 renderer가 아니라 process 설정에서만 읽지만, 실제 dev/test/prod 값과 package 주입은 현재 `electron-builder.yml`에 고정되어 있지 않다. 현재 builder identity도 배포용 trusted tuple로 확정한 값이 아니다. 제품 composition entry는 OS allowlist 없이 실행되며 `darwin`은 macOS adapter, `win32`는 Windows adapter, 그 밖의 host는 `unavailable` adapter를 선택한다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
 
 ## Windows capability와 packaging gate
 
-Windows 구현은 현재 composition에 연결되어 있지만, default native capability는 ACL/SID, selected OS/CPU ABI, packaged native module, namespace durability evidence가 없어서 `unknown`으로 닫혀 있다. 따라서 profile 또는 credential file을 안전하다고 확인하기 전에는 safeStorage·network mutation에 도달하지 않고 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`을 반환한다. 이 Mac host의 테스트는 Windows API 호출이나 Windows login persistence를 증명하지 않는다.
+Windows 구현은 현재 composition에 연결되어 있지만, default native capability는 ACL/SID, selected OS/CPU ABI, packaged native module, namespace durability evidence가 없어서 `unknown`으로 닫혀 있다. Windows profile capability가 `unknown` 또는 `unavailable`이면 `setPath`, name, app identity setter 전에 main의 profile preparation이 실패하고 `preparation-failed` fallback으로 간다. Profile 적용 후 store capability가 `unavailable`일 때만 safeStorage·network mutation 전에 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`을 반환한다. 이 Mac host의 테스트는 Windows API 호출이나 Windows login persistence를 증명하지 않는다. Windows boundary dependency는 `koffi` **3.2.1**이다.
 
 `pnpm-lock.yaml` entry만으로 Windows packaging 성공을 주장하지 않는다. `npmRebuild:false`를 유지한 채 선택된 target OS/CPU에서 `node_modules/@koromix/koffi-win32-*`의 정확한 variant와 packaged app의 PE architecture를 확인해야 한다. 모든 CPU variant를 임의로 설치하거나 지원 OS/CPU를 이 reference에서 확정하지 않는다. Electron-builder의 `.node` smart unpack은 바이너리 누락이나 잘못된 target variant를 해결하지 않으므로 package evidence는 별도 release gate다.
 

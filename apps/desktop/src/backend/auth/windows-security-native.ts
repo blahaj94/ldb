@@ -2,6 +2,7 @@ import koffi from 'koffi'
 
 export type WindowsNativeHandle = bigint
 type WindowsNativePointer = WindowsNativeHandle | ReturnType<typeof koffi.as>
+type WindowsSidStorage = Buffer
 
 export type WindowsNativePathInspection =
   'missing' | 'trusted' | 'reparse' | 'untrusted' | 'unavailable'
@@ -86,24 +87,25 @@ function invalidHandleValue(): WindowsNativeHandle {
   return process.arch === 'ia32' ? 0xffffffffn : 0xffffffffffffffffn
 }
 
-const HANDLE = koffi.pointer('LdbWindowsHandle', koffi.opaque())
-const SID = koffi.pointer('LdbWindowsSid', koffi.opaque())
-const ACL = koffi.pointer('LdbWindowsAcl', koffi.opaque())
-const SECURITY_DESCRIPTOR = koffi.pointer('LdbWindowsSecurityDescriptor', koffi.opaque())
-const SECURITY_ATTRIBUTES = koffi.struct('LdbWindowsSecurityAttributes', {
+const HANDLE = koffi.pointer(koffi.opaque())
+const SID = koffi.pointer(koffi.opaque())
+const ACL = koffi.pointer(koffi.opaque())
+const SECURITY_DESCRIPTOR = koffi.pointer(koffi.opaque())
+const SECURITY_ATTRIBUTES = koffi.struct({
   nLength: 'uint32_t',
   lpSecurityDescriptor: SECURITY_DESCRIPTOR,
   bInheritHandle: 'int32_t'
 })
-const FILE_ATTRIBUTE_TAG_INFO = koffi.struct('LdbWindowsFileAttributeTagInfo', {
+const FILE_ATTRIBUTE_TAG_INFO = koffi.struct({
   FileAttributes: 'uint32_t',
   ReparseTag: 'uint32_t'
 })
-const ACL_SIZE_INFORMATION = koffi.struct('LdbWindowsAclSizeInformation', {
+const ACL_SIZE_INFORMATION = koffi.struct({
   AceCount: 'uint32_t',
   AclBytesInUse: 'uint32_t',
   AclBytesFree: 'uint32_t'
 })
+const GET_ACE_OUTPUT_POINTER = koffi.pointer(koffi.opaque(), 2)
 
 export type WindowsSecurityApi = Readonly<{
   closeHandle(handle: WindowsNativeHandle): boolean
@@ -281,7 +283,7 @@ function bindWindowsApi(loadLibrary: WindowsLibraryLoader): WindowsApi {
   const getAce = advapi32.func('__stdcall', 'GetAce', 'bool', [
     ACL,
     'uint32_t',
-    koffi.out(koffi.pointer(koffi.opaque(), 2))
+    koffi.out(GET_ACE_OUTPUT_POINTER)
   ]) as WindowsApi['getAce']
   const isValidSid = advapi32.func('__stdcall', 'IsValidSid', 'bool', [
     SID
@@ -368,6 +370,12 @@ export function createWindowsSecurityApiForTesting(
   return bindWindowsApi(loadLibrary)
 }
 
+export function getWindowsSecurityBindingContractForTesting(): Readonly<{
+  getAceOutputTypeName: string
+}> {
+  return { getAceOutputTypeName: GET_ACE_OUTPUT_POINTER.name }
+}
+
 function getApi(): WindowsApi {
   return createWindowsApi()
 }
@@ -398,6 +406,10 @@ function readPointer(data: Buffer): WindowsNativeHandle {
   return process.arch === 'ia32' ? BigInt(data.readUInt32LE(0)) : data.readBigUInt64LE(0)
 }
 
+function sidPointer(storage: WindowsSidStorage): ReturnType<typeof koffi.as> {
+  return koffi.as(storage, SID) as ReturnType<typeof koffi.as>
+}
+
 function sidString(data: Buffer): string | null {
   if (data.length < 8 || data[0] !== 1) {
     return null
@@ -418,16 +430,15 @@ function sidString(data: Buffer): string | null {
 }
 
 function currentUserSid(api: WindowsApi): {
-  pointer: WindowsNativePointer
+  storage: WindowsSidStorage
   sddl: string
-  storage: Buffer
 } {
   const token = [null] as Array<WindowsNativeHandle | null>
   const processHandle = api.getCurrentProcess()
   if (!api.openProcessToken(processHandle, TOKEN_QUERY, token) || token[0] == null) {
     throw nativeError(api)
   }
-  let result: { pointer: WindowsNativePointer; sddl: string; storage: Buffer } | null = null
+  let result: { storage: WindowsSidStorage; sddl: string } | null = null
   let closeFailed = false
   try {
     const requiredLength = [0]
@@ -441,24 +452,28 @@ function currentUserSid(api: WindowsApi): {
     if (!api.getTokenInformation(token[0], TOKEN_USER_CLASS, tokenData, tokenData.length, [0])) {
       throw nativeError(api)
     }
-    const sidPointer = readPointer(tokenData)
-    const sidLength = api.getLengthSid(sidPointer)
+    const tokenSidPointer = readPointer(tokenData)
+    const sidLength = api.getLengthSid(tokenSidPointer)
     if (
-      sidPointer === 0n ||
+      tokenSidPointer === 0n ||
       sidLength < 8 ||
       sidLength > MAX_SID_SIZE ||
-      !api.isValidSid(sidPointer)
+      !api.isValidSid(tokenSidPointer)
     ) {
       throw new Error('Current Windows token SID is invalid.')
     }
-    const sidData = Buffer.from(koffi.decode(sidPointer, 'uint8_t', sidLength))
-    const stringSid = sidString(sidData)
+    const storage = Buffer.from(koffi.decode(tokenSidPointer, 'uint8_t', sidLength))
+    const ownedSid = sidPointer(storage)
+    if (!api.isValidSid(ownedSid)) {
+      throw new Error('Copied Windows token SID is invalid.')
+    }
+    const stringSid = sidString(storage)
     if (stringSid == null) {
       throw new Error('Current Windows token SID could not be encoded.')
     }
-    // The token buffer owns the SID pointer. Keep that ownership attached to
-    // the returned value until all EqualSid/ACL checks have completed.
-    result = { pointer: sidPointer, sddl: stringSid, storage: tokenData }
+    // Keep the copied SID Buffer alive and cast it at each EqualSid call. The
+    // TOKEN_USER output buffer is not retained as the ownership boundary.
+    result = { storage, sddl: stringSid }
   } finally {
     closeFailed = !api.closeHandle(token[0])
   }
@@ -475,10 +490,10 @@ function isSecureDacl(
   api: WindowsApi,
   descriptor: WindowsNativeHandle,
   owner: WindowsNativePointer | null,
-  currentSid: WindowsNativePointer,
+  currentSid: WindowsSidStorage,
   policy: WindowsSecurityPolicy
 ): boolean {
-  if (owner == null || !api.isValidSid(owner)) {
+  if (owner == null || !api.isValidSid(owner) || !api.equalSid(owner, sidPointer(currentSid))) {
     return false
   }
   const present = [0]
@@ -498,9 +513,6 @@ function isSecureDacl(
   }
   const aceCount = aclInformation.AceCount
   if (typeof aceCount !== 'number' || aceCount < 1 || aceCount > 4096) {
-    return false
-  }
-  if (policy === 'private' && !api.equalSid(owner, currentSid)) {
     return false
   }
   for (let index = 0; index < aceCount; index += 1) {
@@ -529,7 +541,7 @@ function isSecureDacl(
     if (aceSidLength <= 0 || aceSize !== 8 + aceSidLength) {
       return false
     }
-    const isCurrentSid = api.equalSid(aceSid, currentSid)
+    const isCurrentSid = api.equalSid(aceSid, sidPointer(currentSid))
     if (policy === 'private') {
       if (
         aceCount !== 1 ||
@@ -601,7 +613,7 @@ function inspectHandle(
   let releaseFailed = false
   try {
     const currentSid = currentUserSid(api)
-    inspection = isSecureDacl(api, descriptor[0], owner[0], currentSid.pointer, policy)
+    inspection = isSecureDacl(api, descriptor[0], owner[0], currentSid.storage, policy)
       ? 'trusted'
       : 'untrusted'
   } finally {
