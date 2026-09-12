@@ -347,6 +347,166 @@ describe('Windows directory enumeration', () => {
   )
 })
 
+describe('Windows directory flush', () => {
+  it('opens the checked directory with GENERIC_WRITE required by FlushFileBuffers', () => {
+    const fixture = createSecurityFixture()
+    const createFile = vi.fn(fixture.api.createFile)
+    const flushFileBuffers = vi.fn(fixture.api.flushFileBuffers)
+    const closeHandle = vi.fn(fixture.api.closeHandle)
+    const native = createWindowsSecurityNative({
+      api: { ...fixture.api, createFile, flushFileBuffers, closeHandle }
+    })
+
+    native.syncDirectory('directory')
+
+    const desiredAccess = createFile.mock.calls[0][1]
+    expect(desiredAccess & 0x40000000).toBe(0x40000000)
+    const encodedAccess = Buffer.alloc(4)
+    koffi.encode(encodedAccess, 'uint32_t', desiredAccess)
+    expect(encodedAccess.readUInt32LE()).toBe(0xc0020080)
+    expect(createFile).toHaveBeenCalledExactlyOnceWith(
+      'directory',
+      desiredAccess,
+      7,
+      null,
+      3,
+      0x2200000,
+      null
+    )
+    expect(flushFileBuffers).toHaveBeenCalledExactlyOnceWith(103n)
+    expect(
+      closeHandle.mock.calls.filter(([handle]) => {
+        const isDirectoryHandle = handle === 103n
+        return isDirectoryHandle
+      })
+    ).toHaveLength(1)
+  })
+})
+
+describe('Windows directory flush failure guards', () => {
+  it.each([null, 0xffffffffffffffffn])(
+    'rejects invalid handle %s before inspection or flush',
+    (handle) => {
+      const fixture = createSecurityFixture()
+      const inspect = vi.fn(fixture.api.getFileInformationByHandleEx)
+      const flush = vi.fn(fixture.api.flushFileBuffers)
+      const close = vi.fn(fixture.api.closeHandle)
+      const native = createWindowsSecurityNative({
+        api: {
+          ...fixture.api,
+          createFile: () => handle,
+          getFileInformationByHandleEx: inspect,
+          flushFileBuffers: flush,
+          closeHandle: close
+        }
+      })
+
+      expect(() => native.syncDirectory('directory')).toThrow()
+      expect(inspect).not.toHaveBeenCalled()
+      expect(flush).not.toHaveBeenCalled()
+      expect(close).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    { attributes: FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT },
+    { attributes: 0 },
+    { ownerIsCurrent: false },
+    { daclPresent: 0 },
+    { aceIsCurrent: false }
+  ])('rejects unsafe directory before flush: %j', (inspection) => {
+    const fixture = createSecurityFixture()
+    fixture.set(inspection)
+    const flush = vi.fn(fixture.api.flushFileBuffers)
+    const close = vi.fn(fixture.api.closeHandle)
+    const native = createWindowsSecurityNative({
+      api: {
+        ...fixture.api,
+        flushFileBuffers: flush,
+        closeHandle: close
+      }
+    })
+
+    expect(() => native.syncDirectory('directory')).toThrow()
+    expect(flush).not.toHaveBeenCalled()
+    expect(
+      close.mock.calls.filter(([handle]) => {
+        const isDirectoryHandle = handle === 103n
+        return isDirectoryHandle
+      })
+    ).toHaveLength(1)
+  })
+
+  it.each(['failure', 'exception'] as const)(
+    'closes the checked directory after flush %s',
+    (failure) => {
+      const fixture = createSecurityFixture()
+      const close = vi.fn(fixture.api.closeHandle)
+      const flush = vi.fn(() => {
+        const shouldThrow = failure === 'exception'
+        if (shouldThrow) {
+          throw new Error('Synthetic flush exception.')
+        }
+        return false
+      })
+      const native = createWindowsSecurityNative({
+        api: {
+          ...fixture.api,
+          flushFileBuffers: flush,
+          closeHandle: close
+        }
+      })
+
+      expect(() => native.syncDirectory('directory')).toThrow()
+      expect(flush).toHaveBeenCalledExactlyOnceWith(103n)
+      expect(
+        close.mock.calls.filter(([handle]) => {
+          const isCreatedHandle = handle === 103n
+          return isCreatedHandle
+        })
+      ).toHaveLength(1)
+    }
+  )
+
+  it.each(['flush', 'disposition'] as const)(
+    'rejects close failure after successful %s',
+    (operation) => {
+      const fixture = createSecurityFixture()
+      const isDeletion = operation === 'disposition'
+      fixture.set({ attributes: isDeletion ? 0 : FILE_ATTRIBUTE_DIRECTORY })
+      const close = vi.fn((handle) => {
+        const isCreatedHandle = handle === 103n
+        return !isCreatedHandle
+      })
+      const flush = vi.fn(fixture.api.flushFileBuffers)
+      const disposition = vi.fn(fixture.api.setFileInformationByHandle)
+      const native = createWindowsSecurityNative({
+        api: {
+          ...fixture.api,
+          flushFileBuffers: flush,
+          setFileInformationByHandle: disposition,
+          closeHandle: close
+        }
+      })
+
+      expect(() =>
+        isDeletion ? native.remove('file') : native.syncDirectory('directory')
+      ).toThrow()
+      if (isDeletion) {
+        expect(disposition).toHaveBeenCalledExactlyOnceWith(103n, 4, Buffer.from([1]), 1)
+      } else {
+        expect(flush).toHaveBeenCalledExactlyOnceWith(103n)
+      }
+      expect(
+        close.mock.calls.filter(([handle]) => {
+          const isCreatedHandle = handle === 103n
+          return isCreatedHandle
+        })
+      ).toHaveLength(1)
+    }
+  )
+})
+
 describe('Windows security native boundary', () => {
   it('binds the complete Win32 call signatures required by the adapter', () => {
     const declarations: Array<{ library: string; name: string; args: unknown[] }> = []
@@ -366,6 +526,8 @@ describe('Windows security native boundary', () => {
     expect(declaration('GetAclInformation')[3]).toHaveLength(4)
     expect(declaration('ReadFile')[3]).toHaveLength(5)
     expect(declaration('WriteFile')[3]).toHaveLength(5)
+    expect(declaration('FlushFileBuffers').slice(0, 2)).toEqual(['__stdcall', 'FlushFileBuffers'])
+    expect(declaration('FlushFileBuffers')[3]).toEqual([declaration('CreateFileW')[2]])
     expect(declaration('SetFileInformationByHandle')[3]).toHaveLength(4)
     expect(getWindowsSecurityBindingContractForTesting().getAceOutputTypeName).toMatch(/\*\*$/)
     const directoryDeclarations = declarations.filter((entry) => {

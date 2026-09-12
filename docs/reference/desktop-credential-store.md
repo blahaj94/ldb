@@ -18,6 +18,14 @@ Windows 구현은 현재 composition에 연결되어 있지만, default native c
 
 `pnpm-lock.yaml` entry만으로 Windows packaging 성공을 주장하지 않는다. `npmRebuild:false`를 유지한 채 선택된 target OS/CPU에서 `node_modules/@koromix/koffi-win32-*`의 정확한 variant와 packaged app의 PE architecture를 확인해야 한다. 모든 CPU variant를 임의로 설치하거나 지원 OS/CPU를 이 reference에서 확정하지 않는다. Electron-builder의 `.node` smart unpack은 바이너리 누락이나 잘못된 target variant를 해결하지 않으므로 package evidence는 별도 release gate다.
 
+## Windows flush 호출과 실패 경계
+
+`windows-security-native.ts`의 directory sync 후보는 기존 읽기, attribute와 security 검사 권한에 `GENERIC_WRITE`를 더해 HANDLE을 엽니다. [FlushFileBuffers의 접근 권한 계약](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers)에 필요한 권한이며, 열린 HANDLE의 SID/owner/DACL, directory type과 reparse 검사를 통과한 뒤 같은 HANDLE을 flush합니다. Flush 실패나 예외에서도 HANDLE을 닫고, flush 또는 deletion disposition 이후 close 실패를 성공으로 반환하지 않습니다. 이 호출의 성공을 directory 생성이나 삭제의 namespace 내구성 보장으로 해석하지 않습니다.
+
+Windows 파일 교체에서 write 또는 첫 file flush 실패는 rename을 시작하지 않고 `failed`입니다. Rename 호출 이후 file flush, directory sync 또는 close 실패는 `unknown`이며 marker가 복원을 차단합니다. Marker 삭제 뒤 directory sync 실패는 재확립 결과에 따라 `save-failed`와 `clear-unconfirmed`로 나뉩니다. 재확립도 실패하면 새 credential만 남아 다음 실행에서 복원될 가능성을 유지합니다.
+
+Native 테스트는 실제 Koffi 3.2.1의 `uint32_t` encode로 JavaScript의 signed 접근 mask가 필요한 DWORD 값을 보존하는지 확인합니다. 주입 테스트는 flush 권한과 인수, 잘못된 HANDLE, 보안 검사 거절, flush 실패/예외와 close 실패를 검증합니다. Store 테스트는 위 교체 실패와 marker 재확립의 두 결과를 기존 공통 protocol을 통해 확인합니다. 실제 Win32 호출, DPAPI와 namespace 내구성 검증은 별도 gate로 남습니다.
+
 ## Windows 파일 목록 조회
 
 `windows-security-native.ts`는 `CreateFileW`로 연 directory HANDLE의 private owner/SID/DACL, directory type과 reparse 여부를 기존 검사로 확인한 뒤 `GetFileInformationByHandleEx`를 호출한다. 첫 호출은 `FileFullDirectoryRestartInfo`, 후속 호출은 `FileFullDirectoryInfo`이며 같은 HANDLE을 사용한다. Koffi binding은 32-bit `BOOL`, HANDLE, class, raw byte 출력 pointer와 byte 크기를 선언한다. 기존 file attribute 구조체 binding과 분리해 가변 길이 결과를 구조체 하나로 잘못 해석하지 않는다.
