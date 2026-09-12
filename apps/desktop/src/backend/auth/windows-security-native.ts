@@ -997,7 +997,7 @@ export function createWindowsSecurityNative(
       const currentApi = nativeApi()
       const handle = currentApi.createFile(
         path,
-        GENERIC_READ | FILE_READ_ATTRIBUTES | READ_CONTROL,
+        GENERIC_READ | GENERIC_WRITE | FILE_READ_ATTRIBUTES | READ_CONTROL,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         null,
         OPEN_EXISTING,
