@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { clearCredential } from '../credential-operations'
+import { clearCredential, finalizeCredentialTransition } from '../credential-operations'
 import type { CredentialStore } from '../types'
 import { CONTEXT, REFRESH_0, REFRESH_1 } from './credential-store-test-fixture'
 import {
@@ -258,6 +258,83 @@ describe('Windows CredentialStore native boundary', () => {
     expect(fixture.safeStorage.isEncryptionAvailable).not.toHaveBeenCalled()
     expect(fixture.native.inspect).not.toHaveBeenCalled()
   })
+
+  it.each(['write', 'initial-flush', 'post-rename-flush', 'directory-sync', 'close'] as const)(
+    'preserves replacement outcome and marker after %s failure',
+    async (failure) => {
+      const fixture = createWindowsFixture()
+      const store = createStore(fixture)
+      await store.inspect()
+      await store.establishTransition('refresh')
+      const rename = vi.fn<WindowsCredentialFileHandle['rename']>()
+      const close = vi.fn<WindowsCredentialFileHandle['close']>()
+      const error = new Error('Synthetic replacement failure.')
+      vi.mocked(fixture.native.createExclusive).mockImplementationOnce(async (path) => {
+        const handle = createHandle(path, fixture.stores, fixture)
+        rename.mockImplementation(handle.rename)
+        close.mockImplementation(handle.close)
+        const flush = vi.fn(handle.flush)
+        if (failure === 'initial-flush') {
+          flush.mockRejectedValueOnce(error)
+        }
+        if (failure === 'post-rename-flush') {
+          flush.mockResolvedValueOnce(undefined).mockRejectedValueOnce(error)
+        }
+        if (failure === 'close') {
+          close.mockRejectedValueOnce(error)
+        }
+        return {
+          ...handle,
+          write: failure === 'write' ? vi.fn().mockRejectedValue(error) : handle.write,
+          flush,
+          rename,
+          close
+        }
+      })
+      if (failure === 'directory-sync') {
+        vi.mocked(fixture.native.syncDirectory).mockRejectedValueOnce(error)
+      }
+      const isBeforeRename = failure === 'write' || failure === 'initial-flush'
+
+      expect(await store.commitCredential(REFRESH_1)).toBe(isBeforeRename ? 'failed' : 'unknown')
+      expect(rename).toHaveBeenCalledTimes(isBeforeRename ? 0 : 1)
+      expect(close).toHaveBeenCalledOnce()
+      expect(fixture.stores.has(`${DIRECTORY}\\credential.v1`)).toBe(!isBeforeRename)
+      fixture.safeStorage.decryptString.mockClear()
+      expect(await createStore(fixture).inspect()).toEqual({ status: 'recovery-required' })
+      expect(fixture.safeStorage.decryptString).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([true, false])(
+    'distinguishes marker removal sync failure with reestablishment=%s',
+    async (canReestablish) => {
+      const fixture = createWindowsFixture()
+      const store = createStore(fixture)
+      await store.inspect()
+      await store.establishTransition('refresh')
+      await store.commitCredential(REFRESH_1)
+      vi.mocked(fixture.native.syncDirectory).mockRejectedValueOnce(
+        new Error('Synthetic marker deletion sync failure.')
+      )
+      if (!canReestablish) {
+        vi.mocked(fixture.native.createExclusive).mockRejectedValueOnce(
+          new Error('Synthetic marker reestablishment failure.')
+        )
+      }
+
+      expect(await finalizeCredentialTransition(store, 'refresh')).toBe(
+        canReestablish ? 'save-failed' : 'clear-unconfirmed'
+      )
+      expect(fixture.native.remove).toHaveBeenCalledWith(`${DIRECTORY}\\transition.v1`)
+      expect(fixture.stores.has(`${DIRECTORY}\\transition.v1`)).toBe(canReestablish)
+      expect(await createStore(fixture).inspect()).toEqual(
+        canReestablish
+          ? { status: 'recovery-required' }
+          : { status: 'ready', refreshToken: REFRESH_1 }
+      )
+    }
+  )
 
   it('reuses common marker and credential protocol through the Windows boundary', async () => {
     const fixture = createWindowsFixture()

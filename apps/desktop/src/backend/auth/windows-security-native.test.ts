@@ -375,6 +375,112 @@ describe('Windows directory flush', () => {
   })
 })
 
+describe('Windows directory flush failure guards', () => {
+  it.each([null, 0xffffffffffffffffn])(
+    'rejects invalid handle %s before inspection or flush',
+    (handle) => {
+      const fixture = createSecurityFixture()
+      const inspect = vi.fn(fixture.api.getFileInformationByHandleEx)
+      const flush = vi.fn(fixture.api.flushFileBuffers)
+      const close = vi.fn(fixture.api.closeHandle)
+      const native = createWindowsSecurityNative({
+        api: {
+          ...fixture.api,
+          createFile: () => handle,
+          getFileInformationByHandleEx: inspect,
+          flushFileBuffers: flush,
+          closeHandle: close
+        }
+      })
+
+      expect(() => native.syncDirectory('directory')).toThrow()
+      expect(inspect).not.toHaveBeenCalled()
+      expect(flush).not.toHaveBeenCalled()
+      expect(close).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    { attributes: FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT },
+    { attributes: 0 },
+    { ownerIsCurrent: false },
+    { daclPresent: 0 },
+    { aceIsCurrent: false }
+  ])('rejects unsafe directory before flush: %j', (inspection) => {
+    const fixture = createSecurityFixture()
+    fixture.set(inspection)
+    const flush = vi.fn(fixture.api.flushFileBuffers)
+    const close = vi.fn(fixture.api.closeHandle)
+    const native = createWindowsSecurityNative({
+      api: {
+        ...fixture.api,
+        flushFileBuffers: flush,
+        closeHandle: close
+      }
+    })
+
+    expect(() => native.syncDirectory('directory')).toThrow()
+    expect(flush).not.toHaveBeenCalled()
+    expect(close.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+
+  it.each(['failure', 'exception'] as const)(
+    'closes the checked directory after flush %s',
+    (failure) => {
+      const fixture = createSecurityFixture()
+      const close = vi.fn(fixture.api.closeHandle)
+      const flush = vi.fn(() => {
+        const shouldThrow = failure === 'exception'
+        if (shouldThrow) {
+          throw new Error('Synthetic flush exception.')
+        }
+        return false
+      })
+      const native = createWindowsSecurityNative({
+        api: {
+          ...fixture.api,
+          flushFileBuffers: flush,
+          closeHandle: close
+        }
+      })
+
+      expect(() => native.syncDirectory('directory')).toThrow()
+      expect(flush).toHaveBeenCalledExactlyOnceWith(103n)
+      expect(close.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+    }
+  )
+
+  it.each(['flush', 'disposition'] as const)(
+    'rejects close failure after successful %s',
+    (operation) => {
+      const fixture = createSecurityFixture()
+      const isDeletion = operation === 'disposition'
+      fixture.set({ attributes: isDeletion ? 0 : FILE_ATTRIBUTE_DIRECTORY })
+      const close = vi.fn((handle) => handle !== 103n)
+      const flush = vi.fn(fixture.api.flushFileBuffers)
+      const disposition = vi.fn(fixture.api.setFileInformationByHandle)
+      const native = createWindowsSecurityNative({
+        api: {
+          ...fixture.api,
+          flushFileBuffers: flush,
+          setFileInformationByHandle: disposition,
+          closeHandle: close
+        }
+      })
+
+      expect(() =>
+        isDeletion ? native.remove('file') : native.syncDirectory('directory')
+      ).toThrow()
+      if (isDeletion) {
+        expect(disposition).toHaveBeenCalledExactlyOnceWith(103n, 4, Buffer.from([1]), 1)
+      } else {
+        expect(flush).toHaveBeenCalledExactlyOnceWith(103n)
+      }
+      expect(close.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+    }
+  )
+})
+
 describe('Windows security native boundary', () => {
   it('binds the complete Win32 call signatures required by the adapter', () => {
     const declarations: Array<{ library: string; name: string; args: unknown[] }> = []
