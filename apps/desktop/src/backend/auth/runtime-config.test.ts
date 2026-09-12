@@ -47,7 +47,7 @@ function createRuntimeProfileRoot(): string {
 
 describe('desktop auth runtime config', () => {
   it('validates a complete trusted tuple without supplying defaults', () => {
-    expect(readAuthRuntimeConfig(validEnvironment)).toEqual({
+    expect(readAuthRuntimeConfig(validEnvironment, posix)).toEqual({
       apiOrigin: 'https://api.synthetic.test',
       returnTarget: 'ldb-synthetic://auth/return',
       environment: 'test',
@@ -71,7 +71,7 @@ describe('desktop auth runtime config', () => {
     { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: 'relative/profile' },
     { ...validEnvironment, LDB_AUTH_USER_DATA_PATH: '/' }
   ])('rejects incomplete or invalid values without a production fallback: %j', (environment) => {
-    expect(readAuthRuntimeConfig(environment)).toBeNull()
+    expect(readAuthRuntimeConfig(environment, posix)).toBeNull()
   })
 
   it.each([
@@ -85,7 +85,7 @@ describe('desktop auth runtime config', () => {
     const environment: Record<string, string | undefined> = { ...validEnvironment }
     delete environment[missingKey]
 
-    expect(readAuthRuntimeConfig(environment)).toBeNull()
+    expect(readAuthRuntimeConfig(environment, posix)).toBeNull()
   })
 
   it('rejects non-native separators under Windows path semantics', () => {
