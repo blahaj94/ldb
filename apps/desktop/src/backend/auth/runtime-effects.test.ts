@@ -124,6 +124,43 @@ describe('desktop auth runtime effects', () => {
     expect(openExternal).not.toHaveBeenCalled()
   })
 
+  it('selects the Windows adapter and keeps the native gate closed until verified', async () => {
+    const fetch = vi.fn()
+    const safeStorage = {
+      isEncryptionAvailable: vi.fn(() => {
+        throw new Error('Synthetic safeStorage access')
+      }),
+      encryptString: vi.fn(() => {
+        throw new Error('Synthetic safeStorage access')
+      }),
+      decryptString: vi.fn(() => {
+        throw new Error('Synthetic safeStorage access')
+      })
+    }
+    const effects = createAuthRuntimeEffects({
+      safeStorage,
+      platform: 'win32',
+      fetch,
+      showMessageBox: vi.fn(async () => undefined),
+      openExternal: vi.fn(async () => undefined)
+    })
+    const runtime = await bootstrapAuthRuntime({ config, effects })
+    if (runtime == null) {
+      throw new Error('Synthetic auth runtime should be available')
+    }
+
+    await runtime.start()
+
+    expect(runtime.coordinator.getSnapshot()).toMatchObject({
+      phase: 'storageBlocked',
+      notice: 'SECURE_STORAGE_UNAVAILABLE'
+    })
+    expect(safeStorage.isEncryptionAvailable).not.toHaveBeenCalled()
+    expect(safeStorage.encryptString).not.toHaveBeenCalled()
+    expect(safeStorage.decryptString).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('keeps auth rollback detection isolated from search clock reads', () => {
     let wallMs = 1_000
     let monotonicMs = 50

@@ -11,7 +11,7 @@ import type {
   WindowsPathInspection
 } from './windows-credential-files'
 
-type WindowsFixture = Readonly<{
+type WindowsFixture = {
   native: WindowsCredentialNative
   safeStorage: Readonly<{
     isEncryptionAvailable: ReturnType<typeof vi.fn<() => boolean>>
@@ -24,7 +24,7 @@ type WindowsFixture = Readonly<{
   failAfterRename: boolean
   failAfterDelete: boolean
   setInspection(path: string, inspection: WindowsPathInspection): void
-}>
+}
 
 const USER_DATA_PATH = String.raw`C:\Users\Alice\LdbProfile`
 const DIRECTORY = String.raw`C:\Users\Alice\LdbProfile\auth\test`
@@ -32,7 +32,6 @@ const DIRECTORY = String.raw`C:\Users\Alice\LdbProfile\auth\test`
 function createHandle(
   path: string,
   stores: Map<string, Buffer>,
-  mode: 'read' | 'write',
   fixture: { failAfterRename: boolean }
 ): WindowsCredentialFileHandle {
   return {
@@ -60,8 +59,7 @@ function createWindowsFixture(): WindowsFixture {
   const stores = new Map<string, Buffer>()
   const directories = new Set<string>()
   const inspections = new Map<string, WindowsPathInspection>()
-  let failAfterRename = false
-  let failAfterDelete = false
+  const state = { failAfterRename: false, failAfterDelete: false }
   const safeStorage = {
     isEncryptionAvailable: vi.fn(() => true),
     encryptString: vi.fn((plaintext: string) => Buffer.from(`ciphertext:${plaintext}`)),
@@ -79,7 +77,7 @@ function createWindowsFixture(): WindowsFixture {
       fileMutation: 'confirmed',
       namespaceMutation: 'confirmed'
     },
-    inspect: async (path, kind) => {
+    inspect: vi.fn<WindowsCredentialNative['inspect']>(async (path, kind) => {
       const configured = inspections.get(path)
       if (configured != null) {
         return configured
@@ -88,27 +86,30 @@ function createWindowsFixture(): WindowsFixture {
         return directories.has(path) ? { status: 'trusted-directory' } : { status: 'missing' }
       }
       return stores.has(path) ? { status: 'trusted-file' } : { status: 'missing' }
-    },
-    createDirectory: async (path) => {
+    }),
+    createDirectory: vi.fn<WindowsCredentialNative['createDirectory']>(async (path) => {
       directories.add(path)
       return 'created'
-    },
-    list: async () => [...stores.keys()].filter((path) => path.startsWith(`${DIRECTORY}\\`)),
-    openRead: async (path) => createHandle(path, stores, 'read', { failAfterRename }),
-    createExclusive: async (path) => {
+    }),
+    list: vi.fn(async () =>
+      [...stores.keys()]
+        .filter((path) => path.startsWith(`${DIRECTORY}\\`))
+        .map((path) => path.slice(`${DIRECTORY}\\`.length))),
+    openRead: vi.fn(async (path) => createHandle(path, stores, state)),
+    createExclusive: vi.fn(async (path) => {
       if (stores.has(path)) {
         throw new Error('Synthetic exclusive creation conflict.')
       }
       stores.set(path, Buffer.alloc(0))
-      return createHandle(path, stores, 'write', { failAfterRename })
-    },
-    remove: async (path) => {
+      return createHandle(path, stores, state)
+    }),
+    remove: vi.fn(async (path) => {
       stores.delete(path)
-      if (failAfterDelete) {
+      if (state.failAfterDelete) {
         throw new Error('Synthetic delete result is unknown.')
       }
-    },
-    syncDirectory: async () => undefined
+    }),
+    syncDirectory: vi.fn(async () => undefined)
   }
   const paths = { userData: USER_DATA_PATH, directory: DIRECTORY }
   const fixture = {
@@ -118,16 +119,16 @@ function createWindowsFixture(): WindowsFixture {
     directories,
     paths,
     get failAfterRename() {
-      return failAfterRename
+      return state.failAfterRename
     },
     set failAfterRename(value: boolean) {
-      failAfterRename = value
+      state.failAfterRename = value
     },
     get failAfterDelete() {
-      return failAfterDelete
+      return state.failAfterDelete
     },
     set failAfterDelete(value: boolean) {
-      failAfterDelete = value
+      state.failAfterDelete = value
     },
     setInspection(path: string, inspection: WindowsPathInspection) {
       inspections.set(path, inspection)
@@ -153,13 +154,12 @@ function createStore(
 describe('Windows CredentialStore native boundary', () => {
   it('rejects before safeStorage or native calls on unsupported hosts', async () => {
     const fixture = createWindowsFixture()
-    const native = vi.mocked(fixture.native)
     const store = createStore(fixture, { platform: 'linux' })
 
     expect(await store.inspect()).toEqual({ status: 'unavailable' })
     expect(await store.establishTransition('exchange')).toBe('failed')
     expect(fixture.safeStorage.isEncryptionAvailable).not.toHaveBeenCalled()
-    expect(native.inspect).not.toHaveBeenCalled()
+    expect(fixture.native.inspect).not.toHaveBeenCalled()
   })
 
   it('reuses common marker and credential protocol through the Windows boundary', async () => {

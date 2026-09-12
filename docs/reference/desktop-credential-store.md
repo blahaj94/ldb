@@ -8,14 +8,23 @@ last-reviewed: 2026-09-12
 
 # Desktop credential store
 
-`apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`의 `createMacOsCredentialStore`는 기존 `CredentialStore`를 구현한다. 제품 main은 완전하고 유효한 trusted runtime 설정이 있을 때 이 adapter를 auth HTTP, coordinator와 같은 tuple로 구성한다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
+`apps/desktop/src/backend/auth/credential-store/macos-credential-store.ts`와 `windows-credential-store.ts`의 adapter는 공통 `CredentialStore` protocol을 구현한다. 제품 main은 완전하고 유효한 trusted runtime 설정이 있을 때 OS adapter를 auth HTTP, coordinator와 같은 tuple로 구성한다. 저장 정책은 [platform](../rules/desktop-auth-platform.md), generation·writer·HTTP·복구 종료 정책은 [lifecycle](../rules/desktop-auth-lifecycle.md)과 기존 coordinator가 소유한다.
 
 Main은 Electron에 적용·read-back 확인한 trusted config 하나를 bootstrap에 전달한다. Runtime effects의 `createDependencies(config)`가 그 config의 `userDataPath`, `environment`, exact HTTPS `apiOrigin`으로 store context를 만들고 기본 Electron `safeStorage`와 함께 adapter에 전달한다. Context의 `clientId`는 `"desktop"`이며 environment는 경로 구성에 안전한 소문자·숫자·하이픈 최대 32자다. Runtime 값은 renderer가 아니라 process 설정에서만 읽지만, 실제 dev/test/prod 값과 package 주입은 현재 `electron-builder.yml`에 고정되어 있지 않다. 현재 builder identity도 배포용 trusted tuple로 확정한 값이 아니다. 제품 composition entry는 OS allowlist 없이 실행되지만 현재 credential 구현은 macOS 전용이다. 기본 host가 macOS가 아니면 암호화·파일 작업 전에 `unavailable`을 반환하고 coordinator가 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`로 끝낸다. 이를 Windows/Linux 지원 성공으로 해석하지 않는다. `files`와 `platform` 주입은 전용 test에서 Node IO의 실패와 환경을 제어하기 위한 경계다.
+
+현재 Windows adapter도 composition에 연결되어 있지만 native capability는 ACL/SID, selected OS/CPU ABI, packaged native module, namespace durability evidence가 없어서 `unknown`으로 닫혀 있다. Windows에서 profile 또는 credential file을 안전하다고 확인하기 전에는 safeStorage·network mutation에 도달하지 않고 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`을 반환한다. Windows boundary dependency는 `koffi` **3.2.1**이다.
+
+## Windows capability와 packaging gate
+
+Windows 구현은 현재 composition에 연결되어 있지만, default native capability는 ACL/SID, selected OS/CPU ABI, packaged native module, namespace durability evidence가 없어서 `unknown`으로 닫혀 있다. 따라서 profile 또는 credential file을 안전하다고 확인하기 전에는 safeStorage·network mutation에 도달하지 않고 `storageBlocked/SECURE_STORAGE_UNAVAILABLE`을 반환한다. 이 Mac host의 테스트는 Windows API 호출이나 Windows login persistence를 증명하지 않는다.
+
+`pnpm-lock.yaml` entry만으로 Windows packaging 성공을 주장하지 않는다. `npmRebuild:false`를 유지한 채 선택된 target OS/CPU에서 `node_modules/@koromix/koffi-win32-*`의 정확한 variant와 packaged app의 PE architecture를 확인해야 한다. 모든 CPU variant를 임의로 설치하거나 지원 OS/CPU를 이 reference에서 확정하지 않는다. Electron-builder의 `.node` smart unpack은 바이너리 누락이나 잘못된 target variant를 해결하지 않으므로 package evidence는 별도 release gate다.
 
 ## 파일과 결과
 
 - `credential-record.ts`가 최대 16,384-byte strict UTF-8/JSON, exact field·version·context, canonical base64 ciphertext와 canonical refresh를 검사한다. 암호화 payload는 동일 context·version·refresh 하나이며 access·profile·pending은 저장하지 않는다.
 - `macos-credential-files.ts`는 `userDataPath/auth/<environment>/`를 사용한다. UserData root와 auth directory는 현재 user 소유의 0700 directory, record/temp는 0600 regular file이어야 한다. 기존 권한을 임의로 바꾸지 않는다. 마지막 경로 요소에는 no-follow open을 사용하며 symlink·잘못된 type/owner/mode는 거절한다.
+- `windows-credential-files.ts`는 같은 path layout을 사용하지만 Node mode bits를 보안 근거로 삼지 않는다. Win32 opened handle에서 reparse/type와 token current SID·owner/DACL을 확인하고, private ACL이 아니면 거절한다. Temp는 `CREATE_NEW`와 write-through로 만들고 write/flush 뒤 같은 handle의 `FileRenameInfo`로 교체한다. Native capability가 `unknown`이면 이 path는 실행되지 않는다.
 - `transition.v1`에는 version·임의 local operation ID·종류만 둔다. Exclusive temp 생성→file sync→동일 directory rename→directory sync를 확인한 marker만 이 instance의 mutation 자격으로 사용한다. 재확립은 새 marker를 먼저 flush한 뒤 이전 marker temp를 제거하고 삭제 sync까지 확인한다.
 - Credential 교체도 exclusive temp→file sync→rename→directory sync이며 이전 사본을 만들지 않는다. Local clear는 확립된 clear marker 아래 credential와 소유 temp를 지우고 sync한다. 이후 marker 삭제·directory sync는 별도 port 호출이다.
 
@@ -33,7 +42,7 @@ Main은 Electron에 적용·read-back 확인한 trusted config 하나를 bootstr
 Repository root에서 실행한다.
 
 ```sh
-pnpm --filter @ldb/desktop exec vitest run src/backend/auth/credential-store/macos-credential-store.test.ts src/backend/auth/credential-store/macos-credential-lifecycle.test.ts
+pnpm --filter @ldb/desktop exec vitest run src/backend/auth/credential-store/windows-credential-store.test.ts src/backend/auth/windows-security-native.test.ts src/backend/auth/credential-store/macos-credential-store.test.ts src/backend/auth/credential-store/macos-credential-lifecycle.test.ts
 pnpm --filter @ldb/desktop exec tsc --noEmit -p scripts/credential-store-native/tsconfig.json --composite false
 node apps/desktop/scripts/credential-store-native.mjs --prepare-only
 node apps/desktop/scripts/credential-store-native.mjs

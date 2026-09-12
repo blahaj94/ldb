@@ -8,10 +8,21 @@ import {
   readAuthRuntimeConfig
 } from './runtime-config'
 import type { AuthRuntimeConfig, AuthRuntimeProfileApplication } from './runtime-config'
+import type { WindowsProfileSecurity } from './windows-profile-native'
 
 type RuntimeProfileFilesystemDouble = {
   lstatSync: typeof fs.lstatSync
   statSync: typeof fs.statSync
+  realpathSync(path: string): string
+  mkdirSync(path: string, options: { mode: number }): void
+  openSync(path: string, flags: number): number
+  fsyncSync(fd: number): void
+  closeSync(fd: number): void
+}
+
+type WindowsRuntimeFilesystemDouble = {
+  windows: WindowsProfileSecurity
+  lstatSync: typeof fs.lstatSync
   realpathSync(path: string): string
   mkdirSync(path: string, options: { mode: number }): void
   openSync(path: string, flags: number): number
@@ -456,6 +467,130 @@ describe('desktop auth runtime config', () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('uses the Windows profile security boundary before applying Electron settings', () => {
+    const path = String.raw`C:\Users\Alice\LdbProfile`
+    const calls: string[] = []
+    const security: WindowsProfileSecurity = {
+      capabilities: { profileProtection: 'confirmed', namespaceMutation: 'confirmed' },
+      inspectDirectory: (currentPath, role) => {
+        calls.push(`inspect:${role}:${currentPath}`)
+        return 'trusted'
+      },
+      createDirectory: () => {
+        throw new Error('Unexpected Windows profile creation')
+      },
+      syncDirectory: (currentPath) => calls.push(`sync:${currentPath}`)
+    }
+    const filesystem: WindowsRuntimeFilesystemDouble = {
+      windows: security,
+      lstatSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      realpathSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      mkdirSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      openSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      fsyncSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      closeSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      }
+    }
+    const application = {
+      setPath: (name: 'userData', value: string) => calls.push(`path:${name}:${value}`),
+      getPath: () => path,
+      setName: (value: string) => calls.push(`name:${value}`),
+      setAppUserModelId: (value: string) => calls.push(`identity:${value}`)
+    }
+    const config: AuthRuntimeConfig = {
+      apiOrigin: validEnvironment.LDB_AUTH_API_ORIGIN,
+      returnTarget: validEnvironment.LDB_AUTH_RETURN_TARGET,
+      environment: validEnvironment.LDB_AUTH_ENVIRONMENT,
+      providers: ['google'],
+      appIdentity: validEnvironment.LDB_AUTH_APP_IDENTITY,
+      userDataPath: path
+    }
+    const applyWithWindows = applyAuthRuntimeProfile as unknown as (
+      application: AuthRuntimeProfileApplication,
+      config: AuthRuntimeConfig,
+      filesystem: WindowsRuntimeFilesystemDouble,
+      pathSemantics: typeof win32,
+      platform: NodeJS.Platform
+    ) => void
+
+    expect(() => applyWithWindows(application, config, filesystem, win32, 'win32')).not.toThrow()
+    expect(calls.at(-3)).toBe(`path:userData:${path}`)
+    expect(calls.at(-2)).toBe('name:com.synthetic.ldb')
+    expect(calls.at(-1)).toBe('identity:com.synthetic.ldb')
+    expect(calls.filter((call) => call.startsWith('inspect:'))).not.toHaveLength(0)
+    expect(calls.filter((call) => call.startsWith('sync:'))).toHaveLength(2)
+  })
+
+  it('rejects Windows profile preparation when ACL or namespace capability is unknown', () => {
+    const path = String.raw`C:\Users\Alice\LdbProfile`
+    const calls: string[] = []
+    const security: WindowsProfileSecurity = {
+      capabilities: { profileProtection: 'unknown', namespaceMutation: 'unknown' },
+      inspectDirectory: () => {
+        calls.push('inspect')
+        return 'trusted'
+      },
+      createDirectory: () => 'already-exists',
+      syncDirectory: () => calls.push('sync')
+    }
+    const application = {
+      setPath: () => calls.push('path'),
+      getPath: () => path,
+      setName: () => calls.push('name'),
+      setAppUserModelId: () => calls.push('identity')
+    }
+    const config: AuthRuntimeConfig = {
+      apiOrigin: validEnvironment.LDB_AUTH_API_ORIGIN,
+      returnTarget: validEnvironment.LDB_AUTH_RETURN_TARGET,
+      environment: validEnvironment.LDB_AUTH_ENVIRONMENT,
+      providers: ['google'],
+      appIdentity: validEnvironment.LDB_AUTH_APP_IDENTITY,
+      userDataPath: path
+    }
+    const filesystem: WindowsRuntimeFilesystemDouble = {
+      windows: security,
+      lstatSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      realpathSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      mkdirSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      openSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      fsyncSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      },
+      closeSync: () => {
+        throw new Error('POSIX profile filesystem must not be used')
+      }
+    }
+    const applyWithWindows = applyAuthRuntimeProfile as unknown as (
+      application: AuthRuntimeProfileApplication,
+      config: AuthRuntimeConfig,
+      filesystem: WindowsRuntimeFilesystemDouble,
+      pathSemantics: typeof win32,
+      platform: NodeJS.Platform
+    ) => void
+
+    expect(() => applyWithWindows(application, config, filesystem, win32, 'win32')).toThrow()
+    expect(calls).toEqual([])
   })
 
   it.each([

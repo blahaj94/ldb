@@ -21,6 +21,12 @@ Path component는 root에서 leaf 방향으로 `lstat`한다. 기존 component�
 
 POSIX UID를 조회할 수 없는 환경에서는 mode bits로 owner·ACL을 추정하지 않는다. Windows에서는 mode bits로 Windows ACL 또는 reparse-point 안전성을 보장한다고 주장하지 않으며, 해당 native 검증은 별도 platform gate다. group/other write가 있는 directory는 sticky bit를 이유로 예외 허용하지 않는다.
 
+### Windows profile path
+
+Windows에서는 `windows-profile-native.ts`가 user token의 current SID, opened-handle의 reparse/type, owner와 DACL을 확인한다. Final profile은 current SID에만 private access를 허용하고, ancestor는 다른 principal이 `DELETE`, `FILE_DELETE_CHILD`, `WRITE_DAC`, `WRITE_OWNER` 또는 generic write/all을 갖는 경우 거절한다. Missing component는 current SID를 명시한 private security descriptor와 handle inheritance disabled security attributes로 만든 뒤 다시 확인한다. Native ACL/reparse 검사나 namespace durability capability가 `unknown`이면 `setPath`, name, app identity setter를 호출하지 않는다.
+
+Windows Koffi/Win32 실행은 이 Mac host의 테스트로 증명하지 않는다. 선택된 Windows OS/CPU에서 native module variant·PE architecture, profile ACL, reparse race와 directory/namespace durability를 별도 release evidence로 확인해야 하며, 현재 구현의 default capability gate는 그 전까지 fail closed다.
+
 검사 실패, 비 directory, symlink, canonical spelling 불일치, filesystem 오류와 Electron read-back 불일치는 fail closed다. Profile path가 안전하다고 확인되기 전에 `mkdir` 외의 profile 적용 side effect를 시작하지 않으며, `setPath`가 시작된 뒤의 name·identity·read-back 실패는 부분 적용 fatal error로 분류한다.
 
 ## 보장 범위
