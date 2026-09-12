@@ -1,5 +1,5 @@
 import koffi, { type TypeObject } from 'koffi'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createWindowsSecurityApiForTesting,
   createWindowsSecurityNative,
@@ -77,6 +77,7 @@ function createSecurityFixture(): SecurityFixture {
       information.FileAttributes = attributes
       return true
     },
+    getDirectoryEntries: () => false,
     getCurrentProcess: () => 104n,
     getLastError: () => ERROR_INSUFFICIENT_BUFFER,
     getLengthSid: () => currentSidData.length,
@@ -154,6 +155,198 @@ function createSecurityFixture(): SecurityFixture {
   return { api, set }
 }
 
+function directoryBatch(names: string[]): Buffer {
+  const entries = names.map((name) => {
+    const filename = Buffer.from(name, 'utf16le')
+    const entry = Buffer.alloc(Math.ceil((68 + filename.length) / 8) * 8)
+    entry.writeUInt32LE(entry.length, 0)
+    entry.writeUInt32LE(filename.length, 60)
+    filename.copy(entry, 68)
+    return entry
+  })
+  entries.at(-1)?.writeUInt32LE(0, 0)
+  return Buffer.concat(entries)
+}
+
+type EnumerationFixture = SecurityFixture & {
+  native: ReturnType<typeof createWindowsSecurityNative>
+  query: ReturnType<typeof vi.fn<WindowsSecurityApi['getDirectoryEntries']>>
+  closeHandle: ReturnType<typeof vi.fn<WindowsSecurityApi['closeHandle']>>
+  createFile: ReturnType<typeof vi.fn<WindowsSecurityApi['createFile']>>
+}
+
+function createEnumerationFixture(batches: Buffer[], terminalError = 18): EnumerationFixture {
+  const fixture = createSecurityFixture()
+  let batchIndex = 0
+  let lastError = ERROR_INSUFFICIENT_BUFFER
+  const query = vi.fn((_handle: bigint, _class: number, buffer: Buffer, size: number) => {
+    expect(size).toBe(buffer.byteLength)
+    expect(koffi.address(buffer) % 8n).toBe(0n)
+    const batch = batches[batchIndex++]
+    const hasBatch = batch != null
+    if (!hasBatch) {
+      lastError = terminalError
+      return false
+    }
+    batch.copy(buffer)
+    return true
+  })
+  const closeHandle = vi.fn<WindowsSecurityApi['closeHandle']>(() => true)
+  const createFile = vi.fn(fixture.api.createFile)
+  const api = {
+    ...fixture.api,
+    createFile,
+    closeHandle,
+    getLastError: () => lastError,
+    getDirectoryEntries: query
+  }
+  return {
+    ...fixture,
+    native: createWindowsSecurityNative({ api }),
+    query,
+    closeHandle,
+    createFile
+  }
+}
+
+describe('Windows directory enumeration', () => {
+  it('reads all batches on the checked directory handle and skips only dot entries', () => {
+    const fixture = createEnumerationFixture([
+      directoryBatch(['.', '..', 'credential.v1', '한글.txt']),
+      directoryBatch(['transition.v1'])
+    ])
+
+    expect(fixture.native.list(String.raw`C:\LdbProfile\auth\test`)).toEqual([
+      'credential.v1',
+      '한글.txt',
+      'transition.v1'
+    ])
+    expect(fixture.query.mock.calls.map((call) => call[1])).toEqual([15, 14, 14])
+    expect(fixture.query.mock.calls.map((call) => call[0])).toEqual([103n, 103n, 103n])
+    expect(fixture.createFile).toHaveBeenCalledWith(
+      String.raw`C:\LdbProfile\auth\test`,
+      0x20081,
+      7,
+      null,
+      3,
+      0x2200000,
+      null
+    )
+    expect(fixture.closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+
+  it('returns an empty directory only after the explicit enumeration end', () => {
+    const fixture = createEnumerationFixture([])
+
+    expect(fixture.native.list('directory')).toEqual([])
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it.each([null, 0xffffffffffffffffn])(
+    'rejects an invalid open handle %s without using it',
+    (handle) => {
+      const fixture = createEnumerationFixture([])
+      fixture.createFile.mockReturnValue(handle)
+
+      expect(() => fixture.native.list('directory')).toThrow()
+      expect(fixture.query).not.toHaveBeenCalled()
+      expect(fixture.closeHandle).not.toHaveBeenCalled()
+    }
+  )
+
+  it('closes the directory handle if the query throws', () => {
+    const fixture = createEnumerationFixture([])
+    fixture.query.mockImplementation(() => {
+      throw new Error('Synthetic query failure.')
+    })
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it('clears the reused buffer so an incomplete batch cannot reuse stale names', () => {
+    const fixture = createEnumerationFixture([
+      directoryBatch(['credential.v1', 'transition.v1']),
+      Buffer.alloc(4)
+    ])
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).toHaveBeenCalledTimes(2)
+    expect(fixture.query.mock.calls[0][2]).toBe(fixture.query.mock.calls[1][2])
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it('rejects a next offset that leaves an incomplete header at the buffer end', () => {
+    const fixture = createEnumerationFixture([])
+    fixture.query.mockImplementation((_handle, _class, buffer) => {
+      directoryBatch(['credential.v1']).copy(buffer)
+      buffer.writeUInt32LE(buffer.byteLength - 8, 0)
+      return true
+    })
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).toHaveBeenCalledOnce()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it.each([2, 3, 5, 38, 87, 122, 234])('throws on error %s after a partial batch', (error) => {
+    const fixture = createEnumerationFixture([directoryBatch(['credential.v1'])], error)
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).toHaveBeenCalledTimes(2)
+    expect(fixture.closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+
+  it.each([
+    { attributes: FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT },
+    { attributes: 0 },
+    { ownerIsCurrent: false },
+    { daclPresent: 0 },
+    { aceIsCurrent: false }
+  ])('rejects an unsafe directory before querying: %j', (inspection) => {
+    const fixture = createEnumerationFixture([])
+    fixture.set(inspection)
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.query).not.toHaveBeenCalled()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it('does not expose a completed list when its directory handle cannot close', () => {
+    const fixture = createEnumerationFixture([directoryBatch(['credential.v1'])])
+    fixture.closeHandle.mockImplementation((handle) => handle !== 103n)
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.closeHandle.mock.calls.filter(([handle]) => handle === 103n)).toHaveLength(1)
+  })
+
+  it.each([
+    ['zero name length', (data: Buffer) => data.writeUInt32LE(0, 60)],
+    ['odd name length', (data: Buffer) => data.writeUInt32LE(3, 60)],
+    ['name past buffer', (data: Buffer) => data.writeUInt32LE(0xfffffffe, 60)],
+    ['overlapping next entry', (data: Buffer) => data.writeUInt32LE(8, 0)],
+    ['unaligned next entry', (data: Buffer) => data.writeUInt32LE(71, 0)],
+    ['next entry past buffer', (data: Buffer) => data.writeUInt32LE(0xfffffff8, 0)]
+  ])('rejects %s and releases the directory handle', (_label, corrupt) => {
+    const batch = directoryBatch(['credential.v1'])
+    corrupt(batch)
+    const fixture = createEnumerationFixture([batch])
+
+    expect(() => fixture.native.list('directory')).toThrow()
+    expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+  })
+
+  it.each(['a/b', 'a\\b', 'a\0b', 'a:b', '\ud800', 'credential.v1.', 'credential.v1 '])(
+    'rejects an unsafe returned filename %j',
+    (name) => {
+      const fixture = createEnumerationFixture([directoryBatch([name])])
+
+      expect(() => fixture.native.list('directory')).toThrow()
+      expect(fixture.closeHandle).toHaveBeenCalledWith(103n)
+    }
+  )
+})
+
 describe('Windows security native boundary', () => {
   it('binds the complete Win32 call signatures required by the adapter', () => {
     const declarations: Array<{ library: string; name: string; args: unknown[] }> = []
@@ -175,6 +368,24 @@ describe('Windows security native boundary', () => {
     expect(declaration('WriteFile')[3]).toHaveLength(5)
     expect(declaration('SetFileInformationByHandle')[3]).toHaveLength(4)
     expect(getWindowsSecurityBindingContractForTesting().getAceOutputTypeName).toMatch(/\*\*$/)
+    const directoryDeclarations = declarations.filter((entry) => {
+      const hasFunction = entry.name === 'GetFileInformationByHandleEx'
+      const hasDirectoryResult = entry.args[2] === 'int32_t'
+      return hasFunction && hasDirectoryResult
+    })
+    expect(directoryDeclarations).toHaveLength(1)
+    const directoryDeclaration = directoryDeclarations[0]
+    expect(directoryDeclaration.library).toBe('kernel32.dll')
+    expect(directoryDeclaration.args[0]).toBe('__stdcall')
+    const directoryArguments = directoryDeclaration.args[3] as Parameters<typeof koffi.proto>[3]
+    const prototype = koffi.proto('__stdcall', null, 'int32_t', directoryArguments).proto
+    expect(prototype?.result).toMatchObject({ primitive: 'Int32', size: 4 })
+    expect(prototype?.arguments).toMatchObject([
+      { direction: 'Input', type: { primitive: 'Pointer', ref: { primitive: 'Void' } } },
+      { direction: 'Input', type: { primitive: 'UInt32', size: 4 } },
+      { direction: 'Output', type: { primitive: 'Pointer', ref: { primitive: 'UInt8' } } },
+      { direction: 'Input', type: { primitive: 'UInt32', size: 4 } }
+    ])
   })
 
   it('routes adapter calls through a strict fake DLL with required NULLs and sizes', () => {

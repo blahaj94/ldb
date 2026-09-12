@@ -11,6 +11,7 @@ import type {
   WindowsCredentialNative,
   WindowsPathInspection
 } from './windows-credential-files'
+import { WindowsCredentialFiles } from './windows-credential-files'
 
 type WindowsFixture = {
   native: WindowsCredentialNative
@@ -154,6 +155,100 @@ function createStore(
 }
 
 describe('Windows CredentialStore native boundary', () => {
+  it('selects only owned temporaries and preserves credential, marker and unrelated files during marker cleanup', async () => {
+    const fixture = createWindowsFixture()
+    const credentialTemp = '.credential.v1.00000000-0000-0000-0000-000000000001.tmp'
+    const markerTemp = '.transition.v1.00000000-0000-0000-0000-000000000002.tmp'
+    const preserved = [
+      'credential.v1',
+      credentialTemp,
+      'notes.txt',
+      '.credential.v1.not-a-uuid.tmp',
+      `${markerTemp}.bak`
+    ]
+    for (const name of [...preserved, markerTemp]) {
+      fixture.stores.set(`${DIRECTORY}\\${name}`, Buffer.from('synthetic record'))
+    }
+    const files = new WindowsCredentialFiles(USER_DATA_PATH, 'test', fixture.native)
+
+    expect(await files.ownedTemporaries()).toEqual([credentialTemp, markerTemp])
+    expect(await files.replace('transition.v1', Buffer.from('synthetic marker'))).toBe('confirmed')
+    expect(fixture.native.remove).toHaveBeenCalledExactlyOnceWith(`${DIRECTORY}\\${markerTemp}`)
+    for (const name of [...preserved, 'transition.v1']) {
+      expect(fixture.stores.has(`${DIRECTORY}\\${name}`)).toBe(true)
+    }
+  })
+
+  it('finishes enumeration before any deletion and leaves all files on an incomplete list', async () => {
+    const fixture = createWindowsFixture()
+    const temporary = '.credential.v1.00000000-0000-0000-0000-000000000001.tmp'
+    for (const name of ['credential.v1', 'transition.v1', temporary]) {
+      fixture.stores.set(`${DIRECTORY}\\${name}`, Buffer.from('synthetic record'))
+    }
+    let rejectList: (error: Error) => void = () => undefined
+    vi.mocked(fixture.native.list).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectList = reject
+        })
+    )
+    const files = new WindowsCredentialFiles(USER_DATA_PATH, 'test', fixture.native)
+    const clearing = files.clear()
+    await vi.waitFor(() => expect(fixture.native.list).toHaveBeenCalledOnce())
+    expect(fixture.native.remove).not.toHaveBeenCalled()
+    rejectList(new Error('Synthetic failure after partial native results.'))
+
+    expect(await clearing).toBe('failed')
+    expect(fixture.native.remove).not.toHaveBeenCalled()
+    expect(fixture.stores.size).toBe(3)
+    vi.mocked(fixture.native.list).mockRejectedValue(new Error('Synthetic enumeration failure.'))
+    expect(await createStore(fixture).inspect()).toEqual({ status: 'unavailable' })
+  })
+
+  it('clears credential and owned temporaries while preserving marker and unrelated files', async () => {
+    const fixture = createWindowsFixture()
+    const owned = [
+      'credential.v1',
+      '.credential.v1.00000000-0000-0000-0000-000000000001.tmp',
+      '.transition.v1.00000000-0000-0000-0000-000000000002.tmp'
+    ]
+    const preserved = ['transition.v1', 'notes.txt', '.transition.v1.invalid.tmp']
+    for (const name of [...owned, ...preserved]) {
+      fixture.stores.set(`${DIRECTORY}\\${name}`, Buffer.from('synthetic record'))
+    }
+    const files = new WindowsCredentialFiles(USER_DATA_PATH, 'test', fixture.native)
+
+    expect(await files.clear()).toBe('confirmed')
+    expect([...fixture.stores.keys()].sort()).toEqual(
+      preserved.map((name) => `${DIRECTORY}\\${name}`).sort()
+    )
+  })
+
+  it.each(['reparse', 'untrusted'] as const)(
+    'refuses to delete an owned temporary with %s protection',
+    async (status) => {
+      const fixture = createWindowsFixture()
+      const path = `${DIRECTORY}\\.credential.v1.00000000-0000-0000-0000-000000000001.tmp`
+      fixture.stores.set(path, Buffer.from('synthetic record'))
+      fixture.setInspection(path, { status })
+      const files = new WindowsCredentialFiles(USER_DATA_PATH, 'test', fixture.native)
+
+      expect(await files.clear()).toBe('failed')
+      expect(fixture.native.remove).not.toHaveBeenCalled()
+      expect(fixture.stores.has(path)).toBe(true)
+    }
+  )
+
+  it('reports an owned temporary as recovery-required without decrypting a credential', async () => {
+    const fixture = createWindowsFixture()
+    fixture.stores.set(
+      `${DIRECTORY}\\.credential.v1.00000000-0000-0000-0000-000000000001.tmp`,
+      Buffer.from('synthetic')
+    )
+
+    expect(await createStore(fixture).inspect()).toEqual({ status: 'recovery-required' })
+    expect(fixture.safeStorage.decryptString).not.toHaveBeenCalled()
+  })
   it('rejects before safeStorage or native calls on unsupported hosts', async () => {
     const fixture = createWindowsFixture()
     const store = createStore(fixture, { platform: 'linux' })

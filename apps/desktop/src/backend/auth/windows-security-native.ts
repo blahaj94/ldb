@@ -22,6 +22,7 @@ export type WindowsSecurityNative = Readonly<{
     policy?: WindowsSecurityPolicy
   ): WindowsNativePathInspection
   createDirectory(path: string): 'created' | 'already-exists'
+  list(path: string): string[]
   openRead(path: string): WindowsNativeHandle
   createExclusive(path: string): WindowsNativeHandle
   remove(path: string): void
@@ -45,6 +46,12 @@ const ERROR_ALREADY_EXISTS = 183
 const ERROR_FILE_EXISTS = 80
 const ERROR_INSUFFICIENT_BUFFER = 122
 const ERROR_SUCCESS = 0
+const ERROR_NO_MORE_FILES = 18
+const FILE_LIST_DIRECTORY = 0x00000001
+const FILE_FULL_DIRECTORY_INFO_CLASS = 14
+const FILE_FULL_DIRECTORY_RESTART_INFO_CLASS = 15
+const DIRECTORY_BUFFER_BYTES = 64 * 1024
+const DIRECTORY_ENTRY_HEADER_BYTES = 68
 const GENERIC_READ = 0x80000000
 const GENERIC_WRITE = 0x40000000
 const READ_CONTROL = 0x00020000
@@ -125,6 +132,12 @@ export type WindowsSecurityApi = Readonly<{
     informationClass: number,
     information: Record<string, unknown>,
     informationSize: number
+  ): boolean
+  getDirectoryEntries(
+    handle: WindowsNativeHandle,
+    informationClass: number,
+    buffer: Buffer,
+    bufferSize: number
   ): boolean
   getCurrentProcess(): WindowsNativeHandle
   getLastError(): number
@@ -231,6 +244,12 @@ function bindWindowsApi(loadLibrary: WindowsLibraryLoader): WindowsApi {
     'bool',
     [HANDLE, 'uint32_t', koffi.out(koffi.pointer(FILE_ATTRIBUTE_TAG_INFO)), 'uint32_t']
   ) as WindowsApi['getFileInformationByHandleEx']
+  const getDirectoryEntries = kernel32.func(
+    '__stdcall',
+    'GetFileInformationByHandleEx',
+    'int32_t',
+    [HANDLE, 'uint32_t', koffi.out(koffi.pointer('uint8_t')), 'uint32_t']
+  ) as WindowsApi['getDirectoryEntries']
   const getCurrentProcess = kernel32.func(
     '__stdcall',
     'GetCurrentProcess',
@@ -338,6 +357,7 @@ function bindWindowsApi(loadLibrary: WindowsLibraryLoader): WindowsApi {
     createFile,
     flushFileBuffers,
     getFileInformationByHandleEx,
+    getDirectoryEntries,
     getCurrentProcess,
     getLastError,
     getLengthSid,
@@ -736,6 +756,103 @@ function renameInfo(destination: string): Buffer {
   return information
 }
 
+function readDirectoryBatch(buffer: Buffer): string[] {
+  const names: string[] = []
+  const decoder = new TextDecoder('utf-16le', { fatal: true, ignoreBOM: true })
+  let offset = 0
+  while (true) {
+    const hasHeader = offset + DIRECTORY_ENTRY_HEADER_BYTES <= buffer.byteLength
+    if (!hasHeader) {
+      throw new Error('Windows directory entry header is incomplete.')
+    }
+    const nextOffset = buffer.readUInt32LE(offset)
+    const filenameBytes = buffer.readUInt32LE(offset + 60)
+    const isEmptyName = filenameBytes === 0
+    const isOddLength = filenameBytes % 2 !== 0
+    const nameEnd = offset + DIRECTORY_ENTRY_HEADER_BYTES + filenameBytes
+    const exceedsBuffer = nameEnd > buffer.byteLength
+    const isInvalidLength = isEmptyName || isOddLength || exceedsBuffer
+    if (isInvalidLength) {
+      throw new Error('Windows directory filename length is invalid.')
+    }
+    const isLastEntry = nextOffset === 0
+    if (!isLastEntry) {
+      const isAligned = nextOffset % 8 === 0
+      const overlapsName = offset + nextOffset < nameEnd
+      const lacksNextHeader = offset + nextOffset + DIRECTORY_ENTRY_HEADER_BYTES > buffer.byteLength
+      const isInvalidNext = !isAligned || overlapsName || lacksNextHeader
+      if (isInvalidNext) {
+        throw new Error('Windows directory entry offset is invalid.')
+      }
+    }
+    const name = decoder.decode(buffer.subarray(offset + DIRECTORY_ENTRY_HEADER_BYTES, nameEnd))
+    const isDotEntry = name === '.' || name === '..'
+    if (!isDotEntry) {
+      const hasNull = name.includes('\0')
+      const hasUnsafeCharacter = /[\\/:]/u.test(name)
+      const hasAliasedEnding = /[. ]$/u.test(name)
+      const isUnsafeName = hasNull || hasUnsafeCharacter || hasAliasedEnding
+      if (isUnsafeName) {
+        throw new Error('Windows directory filename is unsafe.')
+      }
+      names.push(name)
+    }
+    if (isLastEntry) {
+      return names
+    }
+    offset += nextOffset
+  }
+}
+
+function listDirectory(api: WindowsApi, path: string): string[] {
+  const handle = api.createFile(
+    path,
+    FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | READ_CONTROL,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    null,
+    OPEN_EXISTING,
+    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+    null
+  )
+  const isOpenInvalid = isInvalidHandle(handle)
+  if (isOpenInvalid) {
+    throw nativeError(api)
+  }
+  const names: string[] = []
+  let closeFailed = false
+  try {
+    assertTrustedHandle(api, handle, 'directory', 'private')
+    // FILE_FULL_DIR_INFO requires 8-byte alignment. Koffi passes this Buffer's
+    // actual address synchronously; retain its backing storage for every call.
+    const storage = Buffer.alloc(DIRECTORY_BUFFER_BYTES + 7)
+    const alignmentOffset = Number((8n - (koffi.address(storage) % 8n)) % 8n)
+    const buffer = storage.subarray(alignmentOffset, alignmentOffset + DIRECTORY_BUFFER_BYTES)
+    let informationClass = FILE_FULL_DIRECTORY_RESTART_INFO_CLASS
+    while (true) {
+      // The API supplies no byte count. Clear stale records before each call,
+      // and reject failed/overflow queries rather than consuming partial data.
+      buffer.fill(0)
+      const succeeded = api.getDirectoryEntries(handle, informationClass, buffer, buffer.byteLength)
+      if (!succeeded) {
+        const errorCode = api.getLastError()
+        const isEnumerationComplete = errorCode === ERROR_NO_MORE_FILES
+        if (isEnumerationComplete) {
+          break
+        }
+        throw new Error(`Windows directory enumeration failed (${errorCode}).`)
+      }
+      names.push(...readDirectoryBatch(buffer))
+      informationClass = FILE_FULL_DIRECTORY_INFO_CLASS
+    }
+  } finally {
+    closeFailed = !api.closeHandle(handle)
+  }
+  if (closeFailed) {
+    throw new Error('Windows directory handle could not be closed.')
+  }
+  return names
+}
+
 export function createWindowsSecurityNative(
   options: WindowsSecurityNativeOptions = {}
 ): WindowsSecurityNative {
@@ -746,6 +863,7 @@ export function createWindowsSecurityNative(
   }
   return {
     inspect: (path, kind, policy = 'private') => inspectPath(nativeApi(), path, kind, policy),
+    list: (path) => listDirectory(nativeApi(), path),
     createDirectory: (path) => {
       const currentApi = nativeApi()
       const attributes = privateSecurityAttributes(currentApi)

@@ -68,9 +68,7 @@ export function createWindowsCredentialNative(): WindowsCredentialNative {
     },
     inspect: async (path, kind) => mapInspection(native.inspect(path, kind), kind),
     createDirectory: async (path) => native.createDirectory(path),
-    list: async () => {
-      throw new Error('Windows credential directory enumeration is unavailable.')
-    },
+    list: async (path) => native.list(path),
     openRead: async (path) => createHandle(native, native.openRead(path)),
     createExclusive: async (path) => createHandle(native, native.createExclusive(path)),
     remove: async (path) => native.remove(path),
