@@ -12,27 +12,37 @@ type Fixture = {
   inspectReparse?: ReparseInspection
 }
 
+async function assertPlainDirectory(
+  path: string,
+  inspectReparse?: ReparseInspection
+): Promise<void> {
+  const information = await lstat(path)
+  const isReparse = information.isSymbolicLink()
+  const isDirectory = information.isDirectory()
+  const isInvalidDirectory = isReparse || !isDirectory
+  if (isInvalidDirectory) {
+    throw new Error('Fixture ancestor is reparse or not a directory.')
+  }
+  const hasNativeInspection = inspectReparse != null
+  if (hasNativeInspection) {
+    const isNativeReparse = inspectReparse(path)
+    if (isNativeReparse) {
+      throw new Error('Fixture ancestor is reparse.')
+    }
+  }
+}
+
 async function assertPlainAncestors(
   path: string,
   inspectReparse?: ReparseInspection
 ): Promise<void> {
   let current = path
-  for (;;) {
-    const information = await lstat(current)
-    const isReparse = information.isSymbolicLink()
-    const isDirectory = information.isDirectory()
-    if (isReparse || !isDirectory) {
-      throw new Error('Fixture ancestor is reparse or not a directory.')
-    }
-    const hasNativeInspection = inspectReparse != null
-    if (hasNativeInspection && inspectReparse(current)) {
-      throw new Error('Fixture ancestor is reparse.')
-    }
+  let hasUncheckedAncestor = true
+  while (hasUncheckedAncestor) {
+    await assertPlainDirectory(current, inspectReparse)
     const parent = dirname(current)
     const isVolumeRoot = parent === current
-    if (isVolumeRoot) {
-      return
-    }
+    hasUncheckedAncestor = !isVolumeRoot
     current = parent
   }
 }
